@@ -1,0 +1,22 @@
+# 空场景配置：只创建世界、重力和默认地面。
+# 关节控制 smoke test 通常使用这个环境，启动成本最低。
+env:
+  name: empty_scene
+  # 世界重力 Z 分量，单位 m/s^2。
+  gravity_z: -9.81
+  # 是否添加 Isaac 默认地面。
+  add_ground: true
+  # 物理步频，决定 world physics_dt。
+  physics_frequency: 400.0
+  # GUI 渲染步频；headless 模式下脚本通常使用 physics_dt。
+  render_frequency: 100.0
+
+solver:
+  # PhysX solver 类型。空场景也显式配置，便于和其他场景保持一致。
+  type: TGS
+  # 对 arm、hand 或两者覆盖迭代次数。
+  apply_scope: arm_hand
+  arm_position_iterations: 48
+  arm_velocity_iterations: 4
+  hand_position_iterations: 48
+  hand_velocity_iterations: 4

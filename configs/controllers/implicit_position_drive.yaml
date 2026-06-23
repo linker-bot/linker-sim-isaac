@@ -1,0 +1,11 @@
+# AR5 + LinkerHand L6 默认控制器聚合配置。
+# run_* 脚本默认读取这个文件，再分别加载机械臂和灵巧手的独立参数文件。
+controller:
+  # 当前执行入口使用 implicit position drive；velocity/effort 参数在子文件中预留。
+  type: implicit_position_drive
+
+profiles:
+  # 机械臂控制、材料和刚体参数。
+  arm: configs/controllers/arm_controller.yaml
+  # 灵巧手控制、材料和刚体参数。
+  hand: configs/controllers/hand_controller.yaml

@@ -1,0 +1,15 @@
+# TCP 直线轨迹配置预留。
+trajectory:
+  type: cartesian_line
+  duration: 2.0
+  sample_hz: 100.0
+  interpolation: smoothstep
+  tcp:
+    # 使用法兰作为 TCP；后续可扩展 pinch/custom。
+    type: flange
+  # current 表示以当前 TCP 位置为起点。
+  start_position: current
+  # 世界坐标目标位置，单位 m。
+  target_position: [0.25, -0.55, 0.45]
+  # 目标姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 degree。
+  target_rpy_deg: [0.0, 115.0, -90.0]

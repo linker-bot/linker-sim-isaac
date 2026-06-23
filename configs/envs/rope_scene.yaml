@@ -1,0 +1,20 @@
+# 绳体抓取场景配置。
+# env 控制仿真世界，solver 控制机器人刚体的 PhysX 迭代次数。
+# 绳体对象参数已拆到 configs/objects/capsule_rope.yaml。
+env:
+  name: rope_scene
+  gravity_z: -9.81
+  add_ground: true
+  # 绳体接触和抓取对物理步频敏感，因此默认高于 empty_scene。
+  physics_frequency: 600.0
+  render_frequency: 100.0
+
+solver:
+  # PhysX solver 类型，TGS 对关节链和接触通常更稳定。
+  type: TGS
+  # 对 arm、hand 或两者覆盖迭代次数。
+  apply_scope: arm_hand
+  arm_position_iterations: 48
+  arm_velocity_iterations: 4
+  hand_position_iterations: 48
+  hand_velocity_iterations: 4

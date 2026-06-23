@@ -1,0 +1,41 @@
+# LinkerHand L6 灵巧手控制器、材料和刚体参数。
+target: hand
+
+implicit_position_drive:
+  # 灵巧手 master/主动关节 position drive 参数。
+  active_joints:
+    stiffness: 1000.0
+    damping: 50.0
+    max_force: 100.0
+    joint_friction: 0.5
+  # 灵巧手 mimic/follower 关节 position drive 参数。
+  follower_joints:
+    stiffness: 50000.0
+    damping: 50.0
+    max_force: 100.0
+    joint_friction: 0.5
+
+velocity_control:
+  # 速度控制暂未接入运行脚本，参数先按主动/从动关节保留。
+  active_joints:
+    damping: 20.0
+    max_force: 100.0
+  follower_joints:
+    damping: 40.0
+    max_force: 100.0
+
+effort_control:
+  # effort 控制暂未接入运行脚本，limit 用于后续力/力矩限幅。
+  active_joints:
+    effort_limit: 100.0
+  follower_joints:
+    effort_limit: 100.0
+
+physx:
+  material:
+    contact_static_friction: 0.8
+    contact_dynamic_friction: 0.6
+    contact_restitution: 0.0
+  rigid_body:
+    linear_damping: 0.0
+    angular_damping: 0.1

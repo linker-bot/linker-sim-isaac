@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkerhand-simulation"
+version = "0.1.0"
+description = "Isaac Sim manipulation utilities for AR5 and LinkerHand L6 experiments"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pyyaml",
+  "scipy",
+]
+
+[project.optional-dependencies]
+visualization = [
+  "foxglove-sdk",
+]
+
+[tool.setuptools.packages.find]
+where = ["source"]
+
+[tool.pytest.ini_options]
+pythonpath = ["source"]
+testpaths = ["tests"]

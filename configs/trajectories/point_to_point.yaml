@@ -1,0 +1,12 @@
+# TCP 点到点轨迹配置预留。
+trajectory:
+  type: cartesian_point_to_point
+  duration: 3.0
+  sample_hz: 100.0
+  interpolation: smoothstep
+  tcp:
+    type: flange
+  # 世界坐标目标位置，单位 m。
+  target_position: [0.2, -0.5, 0.3]
+  # 目标姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 degree。
+  target_rpy_deg: [0.0, 115.0, -90.0]

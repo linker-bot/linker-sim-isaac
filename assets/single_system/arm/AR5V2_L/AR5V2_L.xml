@@ -1,0 +1,404 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco
+  model="AR5V2_L_arm"
+>
+  <!-- 由清洗后的 URDF 生成：AR5V2_L.urdf。 -->
+  <!-- mesh 文件位于assets/mesh/arm/AR5V2_L/。 -->
+  <!-- 惯性说明：URDF 完整惯性矩阵已分解为 quat + diaginertia，便于物理引擎和可视化工具读取。 -->
+  <!-- 编译器与仿真选项。 -->
+  <compiler
+    angle="degree"
+    meshdir="."
+  />
+  <!-- gravity="0 0 -9.81" -->
+  <option
+    timestep="0.001"
+    gravity="0 0 -9.81"
+  />
+  <!-- 默认参数：所有生成的 joint 和 geom 共用；URDF dynamics 会覆盖默认关节阻尼。 -->
+  <default
+  >
+    <joint
+      limited="true"
+      damping="0."
+    />
+    <geom
+      condim="3"
+      friction="0.0 0.00 0.00"
+    />
+  </default>
+  <!-- mesh 资产：从源 URDF package 复制而来。 -->
+  <asset
+  >
+    <mesh
+      name="AR5V2_L_arm_base"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_base.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link1"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link1.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link2"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link2.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link3"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link3.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link4"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link4.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link5"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link5.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link6"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link6.stl"
+      scale="0.001 0.001 0.001"
+    />
+    <mesh
+      name="AR5V2_L_arm_link7"
+      file="../../../mesh/arm/AR5V2_L/AR5V2_L_arm_link7.stl"
+      scale="0.001 0.001 0.001"
+    />
+  </asset>
+  <!-- 运动学树：body 嵌套关系遵循 URDF 的父子关节关系。 -->
+  <worldbody
+  >
+    <!-- 根 link：AR5V2_L_arm_base -->
+    <body
+      name="AR5V2_L_arm_base"
+    >
+      <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+      <geom
+        name="AR5V2_L_arm_base_visual_0"
+        type="mesh"
+        mesh="AR5V2_L_arm_base"
+        contype="0"
+        conaffinity="0"
+      />
+      <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+      <geom
+        name="AR5V2_L_arm_base_collision_0"
+        type="mesh"
+        mesh="AR5V2_L_arm_base"
+        rgba="0.8 0.8 0.8 0.25"
+      />
+      <!-- 关节 AR5V2_L_arm_joint_1：AR5V2_L_arm_base -> AR5V2_L_arm_link1，类型 revolute。 -->
+      <body
+        name="AR5V2_L_arm_link1"
+      >
+        <joint
+          name="AR5V2_L_arm_joint_1"
+          type="hinge"
+          axis="0 0 1"
+          limited="true"
+          range="-178.000798213 178.000798213"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="2.166"
+          diaginertia="0.00260865127768 0.00317729694845 0.00332249177387"
+          pos="-0.000184 0.001568 0.172804"
+          quat="0.507212632241 -0.492463268519 -0.505771616986 0.494378747829"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="AR5V2_L_arm_link1_visual_0"
+          type="mesh"
+          mesh="AR5V2_L_arm_link1"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="AR5V2_L_arm_link1_collision_0"
+          type="mesh"
+          mesh="AR5V2_L_arm_link1"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 AR5V2_L_arm_joint_2：AR5V2_L_arm_link1 -> AR5V2_L_arm_link2，类型 revolute。 -->
+        <body
+          name="AR5V2_L_arm_link2"
+          pos="0 0 0.1745"
+        >
+          <joint
+            name="AR5V2_L_arm_joint_2"
+            type="hinge"
+            axis="0 1 0"
+            limited="true"
+            range="-120.000280612 120.000280612"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="1.903"
+            diaginertia="0.00299043451855 0.00681281702423 0.00779803845722"
+            pos="-1.7e-05 0.001795 0.106689"
+            quat="0.705808667119 -0.0450958401491 -0.705398384971 0.0470490074443"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="AR5V2_L_arm_link2_visual_0"
+            type="mesh"
+            mesh="AR5V2_L_arm_link2"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="AR5V2_L_arm_link2_collision_0"
+            type="mesh"
+            mesh="AR5V2_L_arm_link2"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 AR5V2_L_arm_joint_3：AR5V2_L_arm_link2 -> AR5V2_L_arm_link3，类型 revolute。 -->
+          <body
+            name="AR5V2_L_arm_link3"
+            pos="0 0 0.332"
+          >
+            <joint
+              name="AR5V2_L_arm_joint_3"
+              type="hinge"
+              axis="0 0 1"
+              limited="true"
+              range="-178.000798213 178.000798213"
+            />
+            <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+            <inertial
+              mass="1.845"
+              diaginertia="0.00273280691597 0.00591604014503 0.00644578293901"
+              pos="0.008227 -0.001273 -0.020611"
+              quat="0.00159087307759 -0.673026354472 -0.00732429270255 -0.73958052303"
+            />
+            <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+            <geom
+              name="AR5V2_L_arm_link3_visual_0"
+              type="mesh"
+              mesh="AR5V2_L_arm_link3"
+              contype="0"
+              conaffinity="0"
+            />
+            <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+            <geom
+              name="AR5V2_L_arm_link3_collision_0"
+              type="mesh"
+              mesh="AR5V2_L_arm_link3"
+              rgba="0.8 0.8 0.8 0.25"
+            />
+            <!-- 关节 AR5V2_L_arm_joint_4：AR5V2_L_arm_link3 -> AR5V2_L_arm_link4，类型 revolute。 -->
+            <body
+              name="AR5V2_L_arm_link4"
+              pos="0.0105 0 0"
+            >
+              <joint
+                name="AR5V2_L_arm_joint_4"
+                type="hinge"
+                axis="0 1 0"
+                limited="true"
+                range="-60.0001403061 144.998429214"
+              />
+              <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+              <inertial
+                mass="1.037"
+                diaginertia="0.00135637896524 0.00248452938615 0.00295956164861"
+                pos="-0.009242 -0.002172 0.084042"
+                quat="0.101662648333 -0.673522741394 -0.0354006587534 0.731285591352"
+              />
+              <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+              <geom
+                name="AR5V2_L_arm_link4_visual_0"
+                type="mesh"
+                mesh="AR5V2_L_arm_link4"
+                contype="0"
+                conaffinity="0"
+              />
+              <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+              <geom
+                name="AR5V2_L_arm_link4_collision_0"
+                type="mesh"
+                mesh="AR5V2_L_arm_link4"
+                rgba="0.8 0.8 0.8 0.25"
+              />
+              <!-- 关节 AR5V2_L_arm_joint_5：AR5V2_L_arm_link4 -> AR5V2_L_arm_link5，类型 revolute。 -->
+              <body
+                name="AR5V2_L_arm_link5"
+                pos="-0.0105 0 0.278"
+              >
+                <joint
+                  name="AR5V2_L_arm_joint_5"
+                  type="hinge"
+                  axis="0 0 1"
+                  limited="true"
+                  range="-178.000798213 178.000798213"
+                />
+                <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+                <inertial
+                  mass="1.279"
+                  diaginertia="0.00157480850191 0.00200790111148 0.00242017038662"
+                  pos="-0.000756 0.000723 -0.086764"
+                  quat="0.723267183836 0.0147797211465 -0.684664050118 -0.0888891394068"
+                />
+                <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+                <geom
+                  name="AR5V2_L_arm_link5_visual_0"
+                  type="mesh"
+                  mesh="AR5V2_L_arm_link5"
+                  contype="0"
+                  conaffinity="0"
+                />
+                <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+                <geom
+                  name="AR5V2_L_arm_link5_collision_0"
+                  type="mesh"
+                  mesh="AR5V2_L_arm_link5"
+                  rgba="0.8 0.8 0.8 0.25"
+                />
+                <!-- 关节 AR5V2_L_arm_joint_6：AR5V2_L_arm_link5 -> AR5V2_L_arm_link6，类型 revolute。 -->
+                <body
+                  name="AR5V2_L_arm_link6"
+                >
+                  <joint
+                    name="AR5V2_L_arm_joint_6"
+                    type="hinge"
+                    axis="0 1 0"
+                    limited="true"
+                    range="-54.9982187546 54.9982187546"
+                  />
+                  <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+                  <inertial
+                    mass="0.906"
+                    diaginertia="0.000614276769943 0.000747795466232 0.000758997763825"
+                    pos="-0.005104 0.000251 5.6e-05"
+                    quat="0.0212948322494 -0.99976143073 -0.00320528696201 0.00365210606041"
+                  />
+                  <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+                  <geom
+                    name="AR5V2_L_arm_link6_visual_0"
+                    type="mesh"
+                    mesh="AR5V2_L_arm_link6"
+                    contype="0"
+                    conaffinity="0"
+                  />
+                  <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+                  <geom
+                    name="AR5V2_L_arm_link6_collision_0"
+                    type="mesh"
+                    mesh="AR5V2_L_arm_link6"
+                    rgba="0.8 0.8 0.8 0.25"
+                  />
+                  <!-- 关节 AR5V2_L_arm_joint_7：AR5V2_L_arm_link6 -> AR5V2_L_arm_link7，类型 revolute。 -->
+                  <body
+                    name="AR5V2_L_arm_link7"
+                  >
+                    <joint
+                      name="AR5V2_L_arm_joint_7"
+                      type="hinge"
+                      axis="1 0 0"
+                      limited="true"
+                      range="-54.9982187546 54.9982187546"
+                    />
+                    <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+                    <inertial
+                      mass="0.33"
+                      diaginertia="0.000409986380333 0.000490030591627 0.000686553028041"
+                      pos="-0.001562 -0.000366 0.05392"
+                      quat="0.632557697773 0.634890326041 0.309668603875 -0.317632474194"
+                    />
+                    <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+                    <geom
+                      name="AR5V2_L_arm_link7_visual_0"
+                      type="mesh"
+                      mesh="AR5V2_L_arm_link7"
+                      contype="0"
+                      conaffinity="0"
+                    />
+                    <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+                    <geom
+                      name="AR5V2_L_arm_link7_collision_0"
+                      type="mesh"
+                      mesh="AR5V2_L_arm_link7"
+                      rgba="0.8 0.8 0.8 0.25"
+                    />
+                    <!-- 关节 AR5V2_L_arm_flan_joint：AR5V2_L_arm_link7 -> AR5V2_L_arm_flan_link，类型 fixed。 -->
+                    <body
+                      name="AR5V2_L_arm_flan_link"
+                      pos="0 0 0.09"
+                    >
+                      <!-- 占位惯性：避免 PhysX 对零质量 fixed link 使用 fallback 小球惯量。 -->
+                      <inertial
+                        mass="1e-016"
+                        diaginertia="1e-18 1e-18 1e-18"
+                      />
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <!-- 执行器：每个可动关节对应一个 motor，并使用 URDF 的 effort 限制。 -->
+  <actuator
+  >
+    <motor
+      name="AR5V2_L_arm_joint_1_motor"
+      joint="AR5V2_L_arm_joint_1"
+      ctrllimited="true"
+      ctrlrange="-108 108"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_2_motor"
+      joint="AR5V2_L_arm_joint_2"
+      ctrllimited="true"
+      ctrlrange="-108 108"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_3_motor"
+      joint="AR5V2_L_arm_joint_3"
+      ctrllimited="true"
+      ctrlrange="-66 66"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_4_motor"
+      joint="AR5V2_L_arm_joint_4"
+      ctrllimited="true"
+      ctrlrange="-66 66"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_5_motor"
+      joint="AR5V2_L_arm_joint_5"
+      ctrllimited="true"
+      ctrlrange="-19 19"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_6_motor"
+      joint="AR5V2_L_arm_joint_6"
+      ctrllimited="true"
+      ctrlrange="-19 19"
+      gear="1"
+    />
+    <motor
+      name="AR5V2_L_arm_joint_7_motor"
+      joint="AR5V2_L_arm_joint_7"
+      ctrllimited="true"
+      ctrlrange="-19 19"
+      gear="1"
+    />
+  </actuator>
+</mujoco>

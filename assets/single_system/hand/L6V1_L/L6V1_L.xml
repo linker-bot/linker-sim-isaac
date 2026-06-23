@@ -1,0 +1,652 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco
+  model="L6V1_L_hand"
+>
+  <!-- 由清洗后的 URDF 生成：L6V1_L.urdf。 -->
+  <!-- mesh 文件位于assets/mesh/hand/L6V1_L/。 -->
+  <!-- 惯性说明：URDF 完整惯性矩阵已分解为 quat + diaginertia，便于物理引擎和可视化工具读取。 -->
+  <!-- 编译器与仿真选项。 -->
+  <compiler
+    angle="radian"
+    meshdir="."
+  />
+  <option
+    timestep="0.001"
+    gravity="0 0 -9.81"
+  />
+  <!-- 默认参数：所有生成的 joint 和 geom 共用；URDF dynamics 会覆盖默认关节阻尼。 -->
+  <default
+  >
+    <joint
+      limited="true"
+      damping="0.05"
+    />
+    <geom
+      condim="3"
+      friction="1.0 0.005 0.0001"
+    />
+  </default>
+  <!-- mesh 资产：从源 URDF package 复制而来。 -->
+  <asset
+  >
+    <mesh
+      name="L6V1_L_hand_base_link"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_base_link.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_thumb_metacarpals_base1"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_metacarpals_base1.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_thumb_metacarpals"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_metacarpals.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_thumb_distal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_distal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_index_proximal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_index_proximal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_index_distal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_index_distal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_middle_proximal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_middle_proximal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_middle_distal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_middle_distal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_ring_proximal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_ring_proximal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_ring_distal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_ring_distal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_pinky_proximal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_pinky_proximal.stl"
+    />
+    <mesh
+      name="L6V1_L_hand_pinky_distal"
+      file="../../../mesh/hand/L6V1_L/L6V1_L_hand_pinky_distal.stl"
+    />
+  </asset>
+  <!-- 运动学树：body 嵌套关系遵循 URDF 的父子关节关系。 -->
+  <worldbody
+  >
+    <!-- 根 link：L6V1_L_hand_base_link -->
+    <body
+      name="L6V1_L_hand_base_link"
+    >
+      <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+      <inertial
+        mass="0.4185"
+        diaginertia="0.000228936011594 0.000356517960576 0.000501146027831"
+        pos="0.00199 -0.00091 0.058381"
+        quat="0.716675486793 0.0605190421688 -0.694775998755 -6.09800402655e-05"
+      />
+      <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+      <geom
+        name="L6V1_L_hand_base_link_visual_0"
+        type="mesh"
+        mesh="L6V1_L_hand_base_link"
+        contype="0"
+        conaffinity="0"
+      />
+      <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+      <geom
+        name="L6V1_L_hand_base_link_collision_0"
+        type="mesh"
+        mesh="L6V1_L_hand_base_link"
+        rgba="0.8 0.8 0.8 0.25"
+      />
+      <!-- 关节 L6V1_L_hand_thumb_cmc_roll：L6V1_L_hand_base_link -> L6V1_L_hand_thumb_metacarpals_base1，类型 revolute。 -->
+      <body
+        name="L6V1_L_hand_thumb_metacarpals_base1"
+        pos="0.0078133 -0.029898 0.026692"
+        quat="0.999847691535 -0.0174526138857 0 0"
+      >
+        <joint
+          name="L6V1_L_hand_thumb_cmc_roll"
+          type="hinge"
+          axis="0 0 1"
+          limited="true"
+          range="-0.087266 1.256637"
+          damping="0.02"
+          frictionloss="0.05416667"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="0.01"
+          diaginertia="1.87992525039e-07 4.28030369083e-07 5.06087105878e-07"
+          pos="0.0018663 -0.0066406 0.001533"
+          quat="0.893802859783 -0.0948162308651 -0.0754170860189 -0.431785355639"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="L6V1_L_hand_thumb_metacarpals_base1_visual_0"
+          type="mesh"
+          mesh="L6V1_L_hand_thumb_metacarpals_base1"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="L6V1_L_hand_thumb_metacarpals_base1_collision_0"
+          type="mesh"
+          mesh="L6V1_L_hand_thumb_metacarpals_base1"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 L6V1_L_hand_thumb_cmc_pitch：L6V1_L_hand_thumb_metacarpals_base1 -> L6V1_L_hand_thumb_metacarpals，类型 revolute。 -->
+        <body
+          name="L6V1_L_hand_thumb_metacarpals"
+          pos="0.0057298 -0.01332 0.0027456"
+          quat="0.833276684891 0.515656434586 0.104912634375 0.169533911169"
+        >
+          <joint
+            name="L6V1_L_hand_thumb_cmc_pitch"
+            type="hinge"
+            axis="-1 0 0"
+            limited="true"
+            range="0 0.837758"
+            damping="0.02"
+            frictionloss="0.0375"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="0.065"
+            diaginertia="3.63103216455e-06 3.62821829378e-05 3.64101518078e-05"
+            pos="4.57272561701e-06 0.00442250630583 0.0463354138089"
+            quat="0.0414382386626 -0.704848611245 -0.100088181932 -0.701037562075"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="L6V1_L_hand_thumb_metacarpals_visual_0"
+            type="mesh"
+            mesh="L6V1_L_hand_thumb_metacarpals"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="L6V1_L_hand_thumb_metacarpals_collision_0"
+            type="mesh"
+            mesh="L6V1_L_hand_thumb_metacarpals"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 L6V1_L_hand_thumb_dip：L6V1_L_hand_thumb_metacarpals -> L6V1_L_hand_thumb_distal，类型 revolute。 -->
+          <body
+            name="L6V1_L_hand_thumb_distal"
+            pos="0 0.0061 0.0827"
+          >
+            <joint
+              name="L6V1_L_hand_thumb_dip"
+              type="hinge"
+              axis="-1 0 0"
+              limited="true"
+              range="0 0.963287"
+            />
+            <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+            <inertial
+              mass="0.018"
+              diaginertia="8.89726883912e-07 1.78347820876e-06 1.84194998677e-06"
+              pos="-0.000167504033734 -0.00295134246551 0.0120017495624"
+              quat="0.565880478789 0.42092500129 -0.471964441391 0.529009445168"
+            />
+            <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+            <geom
+              name="L6V1_L_hand_thumb_distal_visual_0"
+              type="mesh"
+              mesh="L6V1_L_hand_thumb_distal"
+              contype="0"
+              conaffinity="0"
+            />
+            <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+            <geom
+              name="L6V1_L_hand_thumb_distal_collision_0"
+              type="mesh"
+              mesh="L6V1_L_hand_thumb_distal"
+              rgba="0.8 0.8 0.8 0.25"
+            />
+            <!-- 关节 L6V1_L_hand_thumb_tip_fixed：L6V1_L_hand_thumb_distal -> L6V1_L_hand_thumb_tip，类型 fixed。 -->
+            <body
+              name="L6V1_L_hand_thumb_tip"
+              pos="0 0.0035 0.026"
+              quat="0.707105482511 0 0 0.707108079859"
+            />
+          </body>
+        </body>
+      </body>
+      <!-- 关节 L6V1_L_hand_index_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_index_proximal，类型 revolute。 -->
+      <body
+        name="L6V1_L_hand_index_proximal"
+        pos="-0.00066821 -0.028967 0.11722"
+      >
+        <joint
+          name="L6V1_L_hand_index_mcp_pitch"
+          type="hinge"
+          axis="0 1 0"
+          limited="true"
+          range="0 1.134464"
+          damping="0.01"
+          frictionloss="0.04"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="0.008553"
+          diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
+          pos="0.001776 -0.00011 0.012556"
+          quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="L6V1_L_hand_index_proximal_visual_0"
+          type="mesh"
+          mesh="L6V1_L_hand_index_proximal"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="L6V1_L_hand_index_proximal_collision_0"
+          type="mesh"
+          mesh="L6V1_L_hand_index_proximal"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 L6V1_L_hand_index_dip：L6V1_L_hand_index_proximal -> L6V1_L_hand_index_distal，类型 revolute。 -->
+        <body
+          name="L6V1_L_hand_index_distal"
+          pos="0.00093749 0 0.028002"
+        >
+          <joint
+            name="L6V1_L_hand_index_dip"
+            type="hinge"
+            axis="0 1 0"
+            limited="true"
+            range="0 1.277039"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="0.018408"
+            diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
+            pos="0.0134 0.002262 0.016992"
+            quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="L6V1_L_hand_index_distal_visual_0"
+            type="mesh"
+            mesh="L6V1_L_hand_index_distal"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="L6V1_L_hand_index_distal_collision_0"
+            type="mesh"
+            mesh="L6V1_L_hand_index_distal"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 L6V1_L_hand_index_tip_fixed：L6V1_L_hand_index_distal -> L6V1_L_hand_index_tip，类型 fixed。 -->
+          <body
+            name="L6V1_L_hand_index_tip"
+            pos="0.0341 0 0.034"
+          />
+        </body>
+      </body>
+      <!-- 关节 L6V1_L_hand_middle_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_middle_proximal，类型 revolute。 -->
+      <body
+        name="L6V1_L_hand_middle_proximal"
+        pos="-0.00066821 -0.0089013 0.12322"
+      >
+        <joint
+          name="L6V1_L_hand_middle_mcp_pitch"
+          type="hinge"
+          axis="0 1 0"
+          limited="true"
+          range="0 1.134464"
+          damping="0.01"
+          frictionloss="0.02708333"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="0.008553"
+          diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
+          pos="0.001776 -0.00011 0.012556"
+          quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="L6V1_L_hand_middle_proximal_visual_0"
+          type="mesh"
+          mesh="L6V1_L_hand_middle_proximal"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="L6V1_L_hand_middle_proximal_collision_0"
+          type="mesh"
+          mesh="L6V1_L_hand_middle_proximal"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 L6V1_L_hand_middle_dip：L6V1_L_hand_middle_proximal -> L6V1_L_hand_middle_distal，类型 revolute。 -->
+        <body
+          name="L6V1_L_hand_middle_distal"
+          pos="0.00093749 0 0.028002"
+        >
+          <joint
+            name="L6V1_L_hand_middle_dip"
+            type="hinge"
+            axis="0 1 0"
+            limited="true"
+            range="0 1.277039"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="0.018408"
+            diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
+            pos="0.0134 0.002262 0.016992"
+            quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="L6V1_L_hand_middle_distal_visual_0"
+            type="mesh"
+            mesh="L6V1_L_hand_middle_distal"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="L6V1_L_hand_middle_distal_collision_0"
+            type="mesh"
+            mesh="L6V1_L_hand_middle_distal"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 L6V1_L_hand_middle_tip_fixed：L6V1_L_hand_middle_distal -> L6V1_L_hand_middle_tip，类型 fixed。 -->
+          <body
+            name="L6V1_L_hand_middle_tip"
+            pos="0.0341 0 0.034"
+          />
+        </body>
+      </body>
+      <!-- 关节 L6V1_L_hand_ring_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_ring_proximal，类型 revolute。 -->
+      <body
+        name="L6V1_L_hand_ring_proximal"
+        pos="-0.00067368 0.010717 0.11822"
+      >
+        <joint
+          name="L6V1_L_hand_ring_mcp_pitch"
+          type="hinge"
+          axis="0 1 0"
+          limited="true"
+          range="0 1.134464"
+          damping="0.01"
+          frictionloss="0.02291667"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="0.008553"
+          diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
+          pos="0.001776 -0.00011 0.012556"
+          quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="L6V1_L_hand_ring_proximal_visual_0"
+          type="mesh"
+          mesh="L6V1_L_hand_ring_proximal"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="L6V1_L_hand_ring_proximal_collision_0"
+          type="mesh"
+          mesh="L6V1_L_hand_ring_proximal"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 L6V1_L_hand_ring_dip：L6V1_L_hand_ring_proximal -> L6V1_L_hand_ring_distal，类型 revolute。 -->
+        <body
+          name="L6V1_L_hand_ring_distal"
+          pos="0.00093749 0 0.028002"
+        >
+          <joint
+            name="L6V1_L_hand_ring_dip"
+            type="hinge"
+            axis="0 1 0"
+            limited="true"
+            range="0 1.277039"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="0.018408"
+            diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
+            pos="0.0134 0.002262 0.016992"
+            quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="L6V1_L_hand_ring_distal_visual_0"
+            type="mesh"
+            mesh="L6V1_L_hand_ring_distal"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="L6V1_L_hand_ring_distal_collision_0"
+            type="mesh"
+            mesh="L6V1_L_hand_ring_distal"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 L6V1_L_hand_ring_tip_fixed：L6V1_L_hand_ring_distal -> L6V1_L_hand_ring_tip，类型 fixed。 -->
+          <body
+            name="L6V1_L_hand_ring_tip"
+            pos="0.0341 0 0.034"
+          />
+        </body>
+      </body>
+      <!-- 关节 L6V1_L_hand_pinky_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_pinky_proximal，类型 revolute。 -->
+      <body
+        name="L6V1_L_hand_pinky_proximal"
+        pos="-0.00067852 0.029814 0.11424"
+      >
+        <joint
+          name="L6V1_L_hand_pinky_mcp_pitch"
+          type="hinge"
+          axis="0 1 0"
+          limited="true"
+          range="0 1.134464"
+          damping="0.01"
+          frictionloss="0.01"
+        />
+        <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+        <inertial
+          mass="0.008553"
+          diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
+          pos="0.001776 -0.00011 0.012556"
+          quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+        />
+        <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+        <geom
+          name="L6V1_L_hand_pinky_proximal_visual_0"
+          type="mesh"
+          mesh="L6V1_L_hand_pinky_proximal"
+          contype="0"
+          conaffinity="0"
+        />
+        <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+        <geom
+          name="L6V1_L_hand_pinky_proximal_collision_0"
+          type="mesh"
+          mesh="L6V1_L_hand_pinky_proximal"
+          rgba="0.8 0.8 0.8 0.25"
+        />
+        <!-- 关节 L6V1_L_hand_pinky_dip：L6V1_L_hand_pinky_proximal -> L6V1_L_hand_pinky_distal，类型 revolute。 -->
+        <body
+          name="L6V1_L_hand_pinky_distal"
+          pos="0.00093749 0 0.028002"
+        >
+          <joint
+            name="L6V1_L_hand_pinky_dip"
+            type="hinge"
+            axis="0 1 0"
+            limited="true"
+            range="0 1.277039"
+          />
+          <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
+          <inertial
+            mass="0.018408"
+            diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
+            pos="0.0134 0.002262 0.016992"
+            quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+          />
+          <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
+          <geom
+            name="L6V1_L_hand_pinky_distal_visual_0"
+            type="mesh"
+            mesh="L6V1_L_hand_pinky_distal"
+            contype="0"
+            conaffinity="0"
+          />
+          <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
+          <geom
+            name="L6V1_L_hand_pinky_distal_collision_0"
+            type="mesh"
+            mesh="L6V1_L_hand_pinky_distal"
+            rgba="0.8 0.8 0.8 0.25"
+          />
+          <!-- 关节 L6V1_L_hand_pinky_tip_fixed：L6V1_L_hand_pinky_distal -> L6V1_L_hand_pinky_tip，类型 fixed。 -->
+          <body
+            name="L6V1_L_hand_pinky_tip"
+            pos="0.0341 0 0.034"
+          />
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <!-- 关节联动约束：保留 URDF/MuJoCo 的 mimic/equality 关系。 -->
+  <equality
+  >
+    <joint
+      name="L6V1_L_hand_couple_index"
+      joint1="L6V1_L_hand_index_dip"
+      joint2="L6V1_L_hand_index_mcp_pitch"
+      polycoef="0 1.125676 0 0 0 0"
+    />
+    <joint
+      name="L6V1_L_hand_couple_middle"
+      joint1="L6V1_L_hand_middle_dip"
+      joint2="L6V1_L_hand_middle_mcp_pitch"
+      polycoef="0 1.125676 0 0 0 0"
+    />
+    <joint
+      name="L6V1_L_hand_couple_ring"
+      joint1="L6V1_L_hand_ring_dip"
+      joint2="L6V1_L_hand_ring_mcp_pitch"
+      polycoef="0 1.125676 0 0 0 0"
+    />
+    <joint
+      name="L6V1_L_hand_couple_pinky"
+      joint1="L6V1_L_hand_pinky_dip"
+      joint2="L6V1_L_hand_pinky_mcp_pitch"
+      polycoef="0 1.125676 0 0 0 0"
+    />
+    <joint
+      name="L6V1_L_hand_couple_thumb"
+      joint1="L6V1_L_hand_thumb_dip"
+      joint2="L6V1_L_hand_thumb_cmc_pitch"
+      polycoef="0 1.226495 0 0 0 0"
+    />
+  </equality>
+  <!-- 执行器：每个可动关节对应一个 motor，并使用 URDF 的 effort 限制。 -->
+  <actuator
+  >
+    <motor
+      name="L6V1_L_hand_thumb_cmc_roll_motor"
+      joint="L6V1_L_hand_thumb_cmc_roll"
+      ctrllimited="true"
+      ctrlrange="-0.588 0.588"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_thumb_cmc_pitch_motor"
+      joint="L6V1_L_hand_thumb_cmc_pitch"
+      ctrllimited="true"
+      ctrlrange="-1.008 1.008"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_thumb_dip_motor"
+      joint="L6V1_L_hand_thumb_dip"
+      ctrllimited="true"
+      ctrlrange="-0 0"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_index_mcp_pitch_motor"
+      joint="L6V1_L_hand_index_mcp_pitch"
+      ctrllimited="true"
+      ctrlrange="-0.574 0.574"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_index_dip_motor"
+      joint="L6V1_L_hand_index_dip"
+      ctrllimited="true"
+      ctrlrange="-0 0"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_middle_mcp_pitch_motor"
+      joint="L6V1_L_hand_middle_mcp_pitch"
+      ctrllimited="true"
+      ctrlrange="-0.574 0.574"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_middle_dip_motor"
+      joint="L6V1_L_hand_middle_dip"
+      ctrllimited="true"
+      ctrlrange="-0 0"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_ring_mcp_pitch_motor"
+      joint="L6V1_L_hand_ring_mcp_pitch"
+      ctrllimited="true"
+      ctrlrange="-0.574 0.574"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_ring_dip_motor"
+      joint="L6V1_L_hand_ring_dip"
+      ctrllimited="true"
+      ctrlrange="-0 0"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_pinky_mcp_pitch_motor"
+      joint="L6V1_L_hand_pinky_mcp_pitch"
+      ctrllimited="true"
+      ctrlrange="-0.574 0.574"
+      gear="1"
+    />
+    <motor
+      name="L6V1_L_hand_pinky_dip_motor"
+      joint="L6V1_L_hand_pinky_dip"
+      ctrllimited="true"
+      ctrlrange="-0 0"
+      gear="1"
+    />
+  </actuator>
+</mujoco>
