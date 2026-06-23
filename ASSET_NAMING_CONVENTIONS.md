@@ -1,32 +1,64 @@
 # 资产命名规范
 
-本文档定义机器人、末端执行器、传感器、环境对象和组合系统的通用命名格式。目标是让文件名、目录名和配置中的资产标识具备可读性、可排序性和可扩展性。
+本文档规定 `assets/`、配置文件和资产内部实体的命名方式。目标是让文件路径、URDF/MJCF/USD 实体名、配置关节名和 Isaac runtime DOF 名保持一致。
 
-## 总体原则
+## 核心规则
 
-- 使用 ASCII 字符，避免空格、中文、括号和特殊符号。
-- 使用小写或大写需在同一项目内保持一致；型号名可保留厂商原始大小写。
-- 不在正式资产标识、URDF/MJCF/USD 实体名和配置关节名中使用连字符 `-`；Isaac importer 可能把 `-` 自动转换为 `_`，导致运行时 DOF 名与配置不一致。
-- 设备系列和版本写成紧凑字段，例如 `AR5V2`、`L6V1`。
-- 使用下划线 `_` 分隔不同组件或不同语义段。
+- 只使用 ASCII 字符。
+- 正式资产名、目录名、文件名、关节名、link/body 名和配置键不使用连字符 `-`。
+- 设备系列和版本写成紧凑字段，例如 `AR5V2`、`L6V1`、`D435`。
+- 使用下划线 `_` 分隔左右侧、组件、类别和语义段。
 - 文件名应与所在资产目录的主标识一致。
-- 不把临时状态写进正式资产名，例如 `new`、`test`、`final`、`copy`。
+- 不在正式资产名中使用 `new`、`test`、`final`、`copy` 等临时状态词。
+- 如果确实需要导出给某个工具链的特殊命名，应生成导出副本，不反向污染主资产命名。
 
-## 推荐格式
+不使用连字符的原因：Isaac importer 可能把 `-` 自动转换成 `_`，这会导致配置中的关节名和 articulation 暴露的 DOF 名不一致。
 
-单体系统：
+## 单体系统
+
+格式：
 
 ```text
 <device-family><device-version>_<side-or-variant>
 ```
 
-组合系统：
+示例：
+
+```text
+AR5V2_L
+AR5V2_R
+L6V1_L
+L6V1_R
+```
+
+字段说明：
+
+- `device-family`：设备系列，例如 `AR5`、`L6`、`D435`。
+- `device-version`：硬件或资产版本，例如 `V1`、`V2`。
+- `side-or-variant`：左右侧、安装方向或几何变体，例如 `L`、`R`、`front`、`short`。
+
+## 组合系统
+
+格式：
 
 ```text
 <component-a>_<component-b>[_<component-c>...]
 ```
 
-环境对象：
+组合时不要拆开单体组件内部字段。
+
+示例：
+
+```text
+AR5V2_L6V1_L
+mobilebaseV1_AR5V2_L6V1_L
+```
+
+如果组合系统包含左右侧信息，优先让每个组件自己携带侧别，而不是在末尾追加一个全局侧别。
+
+## 环境对象
+
+格式：
 
 ```text
 <object-family><object-version>_<variant>
@@ -35,46 +67,22 @@
 示例：
 
 ```text
-AR5V2_L
-L6V1_L
-AR5V2_L6V1_L
 capsuleropeV1_default
-depthcameraD435_front
+tableV1_lab
+boxendpointV1_left
 ```
 
-## 字段说明
+对象资产如果由脚本生成，配置文件中应显式写出输出路径，例如：
 
-`device-family`  
-设备系列或产品族，例如 `AR5`、`L6`、`D435`。
-
-`device-version`  
-硬件、模型或资产版本，例如 `V1`、`V2`、`R3`。
-
-`side-or-variant`  
-左右手、左右臂、安装方向或几何变体，例如 `L`、`R`、`front`、`short`。
-
-`component`  
-组合系统中的单个设备完整标识。组合时不要拆开组件内部字段。
-
-## 分隔符规则
-
-设备系列、型号和版本在组件内部保持紧凑，不额外使用分隔符：
-
-```text
-AR5V2
-L6V1
-cameraD435
+```yaml
+object:
+  name: capsuleropeV1_default
+  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
 
-下划线 `_` 表示左右侧、组件之间或语义段之间的分隔：
+## 目录结构
 
-```text
-AR5V2_L
-AR5V2_L6V1_L
-mobilebaseV1_AR5V2_L6V1_L
-```
-
-## 目录结构建议
+推荐目录结构：
 
 ```text
 assets/
@@ -92,29 +100,15 @@ assets/
     <object-name>/
 ```
 
-单体资产目录示例：
-
-```text
-assets/single_system/arm/AR5V2_L/
-  AR5V2_L.urdf
-  AR5V2_L.xml
-  AR5V2_L.xrdf
-```
-
-组合资产目录示例：
-
-```text
-assets/combined_system/AR5V2_L6V1_L/
-  AR5V2_L6V1_L.urdf
-  AR5V2_L6V1_L.xml
-  AR5V2_L6V1_L.xrdf
-```
-
-mesh 目录示例：
+当前项目示例：
 
 ```text
 assets/mesh/arm/AR5V2_L/
 assets/mesh/hand/L6V1_L/
+assets/single_system/arm/AR5V2_L/
+assets/single_system/hand/L6V1_L/
+assets/combined_system/AR5V2_L6V1_L/
+assets/dynamic_env_objects/capsuleropeV1_default/
 ```
 
 ## 文件命名
@@ -129,68 +123,115 @@ assets/mesh/hand/L6V1_L/
 <asset-name>.xrdf
 ```
 
+示例：
+
+```text
+AR5V2_L.urdf
+AR5V2_L.xml
+AR5V2_L.xrdf
+AR5V2_L6V1_L.xml
+capsuleropeV1_default.usda
+```
+
 派生文件在主名前追加用途后缀：
 
 ```text
-AR5V2_L_lula.yaml
+AR5V2_L_lula_robot_description.yaml
 AR5V2_L_collision.usda
 AR5V2_L_visual.usda
 AR5V2_L6V1_L_calibrated.xml
 ```
 
-mesh 文件优先使用对应 link/body 的规范名，便于从 URDF/MJCF 直接追踪到几何文件；如需保留 CAD 原始名，应在配置或注释中说明来源。
+mesh 文件优先使用对应 link/body 的规范名：
+
+```text
+AR5V2_L_arm_link1.stl
+L6V1_R_hand_thumb_metacarpals_base1.stl
+```
+
+如需保留 CAD 原始文件名，应放在独立来源目录或在配置/注释中说明，不作为主运行资产名。
 
 ## 资产内部实体名
 
-URDF、MJCF、XRDF 和 USD 内部的 `robot`、`model`、`link`、`joint`、`body`、`actuator`、`mesh` 等实体名应使用稳定前缀：
+URDF、MJCF、XRDF 和 USD 内部的 `robot`、`model`、`link`、`joint`、`body`、`actuator`、`mesh` 等实体名使用稳定前缀。
+
+格式：
 
 ```text
 <single-system-name>_<category>_<local-name>
 ```
 
-其中 `category` 建议使用 `arm`、`hand`、`gripper`、`sensor`、`tool` 等类别词，`local-name` 使用设备内部的局部语义名。
+常用 `category`：
+
+- `arm`
+- `hand`
+- `gripper`
+- `sensor`
+- `tool`
+- `base`
 
 示例：
 
 ```text
 AR5V2_L_arm
+AR5V2_L_arm_base
 AR5V2_L_arm_joint_1
 AR5V2_L_arm_flan_link
 L6V1_R_hand
+L6V1_R_hand_base_link
 L6V1_R_hand_thumb_metacarpals_base1
 L6V1_R_hand_index_mcp_pitch
 ```
 
-这类前缀让组合系统中的同名局部结构不会冲突，例如左手和右手都可以有 `thumb_tip`，但组合后分别是：
+组合系统中禁止只使用局部名，例如 `thumb_tip`、`joint_1`。应保留完整前缀：
 
 ```text
 L6V1_L_hand_thumb_tip
 L6V1_R_hand_thumb_tip
+AR5V2_L_arm_joint_1
+AR5V2_R_arm_joint_1
 ```
 
-实体名中不要使用连字符。这样配置里的关节名、资产描述里的关节名和 Isaac runtime 暴露的 DOF 名可以保持一致。
+## 关节命名
 
-## 版本与变体
-
-硬件版本写在组件内部：
+机械臂关节：
 
 ```text
-AR5V2
-L6V1
+<single-system-name>_arm_joint_<index>
 ```
 
-资产修订版本可作为后缀：
+示例：
 
 ```text
-AR5V2_L_assetr1
-AR5V2_L6V1_L_assetr2
+AR5V2_L_arm_joint_1
+AR5V2_L_arm_joint_7
 ```
 
-如果版本会被代码读取，建议在配置文件中单独提供结构化字段，而不是只依赖文件名解析。
+灵巧手关节：
+
+```text
+<single-system-name>_hand_<finger>_<joint-role>
+```
+
+示例：
+
+```text
+L6V1_L_hand_thumb_cmc_roll
+L6V1_L_hand_thumb_cmc_pitch
+L6V1_L_hand_index_mcp_pitch
+L6V1_L_hand_index_dip
+```
+
+mimic/equality 名称也保留完整前缀：
+
+```text
+L6V1_L_hand_couple_index
+L6V1_L_hand_couple_thumb
+```
 
 ## 配置引用
 
-配置文件中的路径应引用最终资产文件，而不是中间目录：
+配置文件应引用最终运行资产，而不是中间目录：
 
 ```yaml
 robot:
@@ -198,24 +239,64 @@ robot:
   asset_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
 ```
 
-如果一个系统需要多个描述文件，保持同一目录、同一前缀：
+同一系统的多个描述文件保持同目录、同前缀：
 
 ```yaml
 ik:
   robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
   base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+  flange_frame: AR5V2_L_arm_flan_link
 ```
 
-## 何时使用额外转换
+关节组和轨迹目标必须使用资产内部真实关节名：
 
-仅在目标环境要求全小写或全下划线时，在导出副本中做额外转换，例如 Python module 名、某些代码生成标识符或特定工具链限制：
+```yaml
+controlled_joints:
+  - AR5V2_L_arm_joint_1
+  - L6V1_L_hand_thumb_cmc_roll
+```
+
+## 版本和修订
+
+硬件版本写入组件名：
 
 ```text
+AR5V2
+L6V1
+```
+
+资产修订建议写成后缀：
+
+```text
+AR5V2_L_assetr1
+AR5V2_L6V1_L_assetr2
+```
+
+如果版本需要被代码读取，应在 YAML 中单独提供结构化字段，不依赖文件名解析。
+
+## 特殊导出
+
+主资产命名保持本规范。如果某个工具链要求全小写、全下划线或其它限制，可以只对导出副本转换：
+
+```text
+ar5v2_l6v1_l
 AR5_V2_L6_V1_L
 ```
 
-文件目录、资产内部实体名和普通配置路径优先使用本项目统一格式：
+转换后的名字不应回写到主资产目录、URDF/MJCF 实体名或默认配置。
 
-```text
-AR5V2_L6V1_L
+## 提交前检查
+
+改动资产命名后，至少检查：
+
+- `assets/` 路径中没有旧命名残留。
+- URDF/MJCF/XML 可解析。
+- URDF/MJCF 中引用的 mesh 文件存在。
+- 关节组、轨迹目标、TCP frame、IK 描述里的名称同步更新。
+- `scripts/run_pinch_grasp.py --no-grasp --short-smoke` 能通过导入和 controller 初始化。
+
+常用扫描命令：
+
+```bash
+rg "AR5-V2|L6-V1|capsule-rope" assets configs source scripts tests README.md ASSET_NAMING_CONVENTIONS.md
 ```
