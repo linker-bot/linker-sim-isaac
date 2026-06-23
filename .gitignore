@@ -2,20 +2,65 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+env_isaaclab/
+
+# Tool and test caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.venv/
-venv/
-env/
-ENV/
-env_isaaclab/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+cover/
+.hypothesis/
+.pyre/
+.pytype/
 
-# Simulation logs and generated outputs
+# Build/runtime logs and generated outputs
 logs/
 test/outputs/
 tem-file/
 *.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter / docs / local app data
+.ipynb_checkpoints/
+docs/_build/
+/site
+instance/
+.webassets-cache
 
 # Local editor and OS files
 .DS_Store
@@ -24,7 +69,17 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+.spyderproject
+.spyproject
+.ropeproject
 
 # Local agent/tool state
 .agents/
 .codex/
+
+# Misc Python project managers
+.pdm.toml
+.pdm-python
+.pdm-build/
+__pypackages__/
+.pypirc
