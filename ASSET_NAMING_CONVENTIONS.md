@@ -136,7 +136,7 @@ capsuleropeV1_default.usda
 派生文件在主名前追加用途后缀：
 
 ```text
-AR5V2_L_lula_robot_description.yaml
+AR5V2_L_collision_model.yaml
 AR5V2_L_collision.usda
 AR5V2_L_visual.usda
 AR5V2_L6V1_L_calibrated.xml
@@ -242,9 +242,9 @@ robot:
 同一系统的多个描述文件保持同目录、同前缀：
 
 ```yaml
-ik:
-  robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+cumotion:
+  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   flange_frame: AR5V2_L_arm_flan_link
 ```
 

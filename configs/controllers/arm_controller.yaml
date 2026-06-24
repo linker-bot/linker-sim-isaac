@@ -1,4 +1,4 @@
-# AR5 机械臂控制器、材料和刚体参数。
+# 机械臂控制器、材料和刚体参数。
 target: arm
 
 implicit_position_drive:
@@ -8,7 +8,7 @@ implicit_position_drive:
     damping: 50.0
     max_force: 100.0
     joint_friction: 0.5
-  # 机械臂从动关节参数；AR5 当前没有 mimic follower，保留字段方便扩展。
+  # 机械臂从动关节参数；当前示例臂没有 mimic follower，保留字段方便扩展。
   follower_joints:
     stiffness: 1000.0
     damping: 50.0

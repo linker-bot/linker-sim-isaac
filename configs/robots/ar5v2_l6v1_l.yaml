@@ -6,7 +6,7 @@ robot:
   asset_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
   prim_path: /World/AR5V2_L6V1_L
 
-# 机械臂 7 个主动关节。IK 结果会按这个顺序写回 articulation target。
+# 示例机械臂主动关节；运行时 IK 写回顺序由 cuMotion C-space 关节名决定。
 arm_joints:
   - AR5V2_L_arm_joint_1
   - AR5V2_L_arm_joint_2
@@ -41,10 +41,10 @@ controlled_joints:
   - L6V1_L_hand_ring_mcp_pitch
   - L6V1_L_hand_pinky_mcp_pitch
 
-ik:
-  # 默认使用 cuMotion 求解 AR5 臂的 TCP IK。
-  robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+cumotion:
+  # 使用 cuMotion 求解机械臂 TCP IK。
+  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   flange_frame: AR5V2_L_arm_flan_link
 
 tcp:

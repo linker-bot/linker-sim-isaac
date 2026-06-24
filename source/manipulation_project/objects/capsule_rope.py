@@ -12,10 +12,10 @@ from pathlib import Path
 from manipulation_project.utils.paths import repo_path
 
 
-def _float_tuple(values, fallback: tuple[float, ...]) -> tuple[float, ...]:
+def _float_tuple(values, default: tuple[float, ...]) -> tuple[float, ...]:
     """把 YAML list/tuple 转成 float tuple。"""
 
-    return tuple(float(value) for value in values) if values is not None else fallback
+    return tuple(float(value) for value in values) if values is not None else default
 
 
 @dataclass(frozen=True)
@@ -76,15 +76,16 @@ class CapsuleRopeConfig:
         """从 YAML 映射构造绳体对象配置。
 
         参数:
-            data: 完整对象配置，通常包含 ``object`` 和 ``rope`` 两个子 mapping。
-                也兼容旧的直接 ``rope`` mapping。
+            data: 完整对象配置，必须包含 ``object`` 和 ``rope`` 两个子 mapping。
         返回:
             ``CapsuleRopeConfig``；缺失或显式设为 ``null`` 的 ``radius`` 和
             ``twist_limit_deg`` 会根据 ``length/segments`` 自动估算。
         """
 
-        object_cfg = dict(data.get("object") or {})
-        rope = dict(data.get("rope") or data)
+        if "object" not in data or "rope" not in data:
+            raise ValueError("Capsule rope config must contain top-level object and rope sections")
+        object_cfg = dict(data["object"])
+        rope = dict(data["rope"])
         default_length = float(rope.get("length", cls.length))
         default_segments = int(rope.get("segments", cls.segments))
         default_radius = default_length / default_segments * 0.15
@@ -92,14 +93,14 @@ class CapsuleRopeConfig:
         radius = rope.get("radius")
         twist_limit_deg = rope.get("twist_limit_deg")
         return cls(
-            asset_path=str(object_cfg.get("asset_path", rope.get("asset_path", cls.asset_path))),
-            prim_path=str(object_cfg.get("prim_path", rope.get("prim_path", cls.prim_path))),
-            root_path=str(object_cfg.get("root_path", rope.get("root_path", cls.root_path))),
+            asset_path=str(object_cfg.get("asset_path", cls.asset_path)),
+            prim_path=str(object_cfg.get("prim_path", cls.prim_path)),
+            root_path=str(object_cfg.get("root_path", cls.root_path)),
             segments=default_segments,
             length=default_length,
             radius=default_radius if radius is None else float(radius),
             shape=str(rope.get("shape", cls.shape)),
-            total_mass=float(rope.get("total_mass", rope.get("mass", cls.total_mass))),
+            total_mass=float(rope.get("total_mass", cls.total_mass)),
             center=_float_tuple(rope.get("center"), cls.center),
             endpoint_box_mass=float(rope.get("endpoint_box_mass", cls.endpoint_box_mass)),
             endpoint_box_size=_float_tuple(rope.get("endpoint_box_size"), cls.endpoint_box_size),
@@ -115,12 +116,8 @@ class CapsuleRopeConfig:
             twist_stiffness=float(rope.get("twist_stiffness", cls.twist_stiffness)),
             twist_damping=float(rope.get("twist_damping", cls.twist_damping)),
             disable_adjacent_collisions=bool(rope.get("disable_adjacent_collisions", cls.disable_adjacent_collisions)),
-            solver_position_iterations=int(
-                rope.get("solver_position_iterations", rope.get("rope_solver_position_iterations", cls.solver_position_iterations))
-            ),
-            solver_velocity_iterations=int(
-                rope.get("solver_velocity_iterations", rope.get("rope_solver_velocity_iterations", cls.solver_velocity_iterations))
-            ),
+            solver_position_iterations=int(rope.get("solver_position_iterations", cls.solver_position_iterations)),
+            solver_velocity_iterations=int(rope.get("solver_velocity_iterations", cls.solver_velocity_iterations)),
             endpoint_color=_float_tuple(rope.get("endpoint_color"), cls.endpoint_color),
             rope_color=_float_tuple(rope.get("rope_color"), cls.rope_color),
             env_static_friction=float(rope.get("env_static_friction", cls.env_static_friction)),

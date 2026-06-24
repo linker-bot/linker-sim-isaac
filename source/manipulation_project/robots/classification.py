@@ -1,39 +1,54 @@
 """机器人部件分类工具。
 
-本模块按关节/刚体名称把 AR5 机械臂和 LinkerHand L6 灵巧手分组。
-这些规则被 controller、USD/PhysX 覆盖和 solver 设置复用，避免不同模块各自
-维护一套前缀判断。
+本模块按资产命名规范中的 ``<single-system-name>_<category>_<local-name>``
+格式把关节/刚体名称分组。``category`` 使用 ``arm``、``hand`` 等稳定字段，
+因此控制器、USD/PhysX 覆盖和 solver 设置不需要绑定具体设备型号。
 """
 
 from __future__ import annotations
 
 
-ARM_NAME_PREFIXES = ("AR5V2_L_arm_", "AR5V2_R_arm_")
-HAND_NAME_PREFIXES = ("L6V1_L_hand_", "L6V1_R_hand_")
+KNOWN_COMPONENTS = frozenset({"arm", "hand", "gripper", "sensor", "tool", "base"})
+
+
+def component_token_from_name(name: str) -> str | None:
+    """从规范实体名中提取部件字段。
+
+    命名规范要求内部实体名形如
+    ``<single-system-name>_<category>_<local-name>``，其中单体系统名自身可能
+    带侧别字段。因此这里从左到右查找已知 category token，而不是匹配具体
+    设备型号前缀。
+    """
+
+    tokens = [token for token in str(name).split("_") if token]
+    for token in tokens:
+        if token in KNOWN_COMPONENTS:
+            return token
+    return None
 
 
 def is_arm_name(name: str) -> bool:
-    """判断名称是否属于 AR5 机械臂。
+    """判断名称是否属于机械臂。
 
     参数:
         name: USD prim 名或 articulation DOF 名。
     返回:
-        名称是否匹配已知 AR5 左/右臂前缀。
+        名称是否包含规范 category ``arm``。
     """
 
-    return any(str(name).startswith(prefix) for prefix in ARM_NAME_PREFIXES)
+    return component_token_from_name(name) == "arm"
 
 
 def is_hand_name(name: str) -> bool:
-    """判断名称是否属于 LinkerHand L6 灵巧手。
+    """判断名称是否属于灵巧手。
 
     参数:
         name: USD prim 名或 articulation DOF 名。
     返回:
-        名称是否匹配已知 L6 左/右手前缀。
+        名称是否包含规范 category ``hand``。
     """
 
-    return any(str(name).startswith(prefix) for prefix in HAND_NAME_PREFIXES)
+    return component_token_from_name(name) == "hand"
 
 
 def component_for_name(name: str) -> str:
@@ -45,8 +60,5 @@ def component_for_name(name: str) -> str:
         分类字符串；未知名称返回 ``default``，调用方可使用回退参数。
     """
 
-    if is_arm_name(name):
-        return "arm"
-    if is_hand_name(name):
-        return "hand"
-    return "default"
+    component = component_token_from_name(name)
+    return component if component in {"arm", "hand"} else "default"

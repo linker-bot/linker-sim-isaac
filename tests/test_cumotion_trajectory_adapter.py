@@ -33,4 +33,4 @@ def test_joint_trajectory_from_cumotion_samples_eval_all() -> None:
     np.testing.assert_allclose(trajectory.times, [0.0, 0.5, 1.0])
     np.testing.assert_allclose(trajectory.positions[-1], [1.0, 2.0])
     np.testing.assert_allclose(trajectory.velocities[1], [1.0, 1.0])
-    assert trajectory.points[0].phase == "planned"
+    assert trajectory.phases[0] == "planned"

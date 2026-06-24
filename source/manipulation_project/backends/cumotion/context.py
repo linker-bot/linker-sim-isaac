@@ -14,7 +14,7 @@ class CuMotionConfig:
 
     xrdf_path: str | Path
     urdf_path: str | Path
-    flange_frame: str = "AR5V2_L_arm_flan_link"
+    flange_frame: str
     default_tcp_frame: str | None = None
     cspace_seeds: np.ndarray | None = None
     position_tolerance: float = 0.005

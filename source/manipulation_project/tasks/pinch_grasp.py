@@ -1,6 +1,6 @@
 """夹捏抓取任务流程。
 
-该任务面向 AR5 + LinkerHand L6 + rope endpoint box 的 scripted demo：
+该任务面向机械臂 + 灵巧手 + rope endpoint box 的 scripted demo：
 先根据闭合手型从 MJCF 运动链计算 thumb/index 夹捏中心 TCP，再把这个 TCP 写入
 临时 URDF 供 IK 后端求解，最后把 approach、grasp、lift、wiggle 等阶段合成为
 完整 articulation DOF 目标并在 Isaac 中执行。
@@ -14,34 +14,14 @@ import tempfile
 
 import numpy as np
 
-from manipulation_project.assets.asset_paths import DEFAULT_ARM_JOINT_NAMES
 from manipulation_project.backends.cumotion.context import CuMotionConfig, CuMotionContext
+from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.planning.requests import IKRequest
-from manipulation_project.ik.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import MimicFollowerTargetMapper, expand_targets_with_mjcf_equalities
-from manipulation_project.tcp.pinch_tcp import make_pinch_tcp
+from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
 from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
-
-
-DEFAULT_PRE_PINCH_HAND_TARGETS = {
-    "L6V1_L_hand_thumb_cmc_roll": 0.95,
-    "L6V1_L_hand_thumb_cmc_pitch": 0.28,
-    "L6V1_L_hand_index_mcp_pitch": 0.25,
-    "L6V1_L_hand_middle_mcp_pitch": 0.2,
-    "L6V1_L_hand_ring_mcp_pitch": 0.18,
-    "L6V1_L_hand_pinky_mcp_pitch": 0.15,
-}
-
-DEFAULT_CLOSED_PINCH_HAND_TARGETS = {
-    "L6V1_L_hand_thumb_cmc_roll": 0.95,
-    "L6V1_L_hand_thumb_cmc_pitch": 0.7,
-    "L6V1_L_hand_index_mcp_pitch": 0.85,
-    "L6V1_L_hand_middle_mcp_pitch": 0.45,
-    "L6V1_L_hand_ring_mcp_pitch": 0.4,
-    "L6V1_L_hand_pinky_mcp_pitch": 0.35,
-}
 
 
 @dataclass(frozen=True)
@@ -58,6 +38,7 @@ class PinchGraspConfig:
         prep/move/approach/close/lift/wiggle/final/post...: 各阶段持续时间，单位 s。
         wiggle_axis: 抬升后摆动方向，世界坐标向量。
         ik_*: 传给 IK 求解器的容差、迭代次数和种子。
+        tcp_frame_name: 写入临时 URDF 的 pinch TCP frame 名。
         pre_pinch_hand_targets: 预夹捏手型的稀疏关节目标，单位 rad。
         closed_pinch_hand_targets: 闭合夹捏手型的稀疏关节目标，单位 rad。
     输出:
@@ -89,6 +70,7 @@ class PinchGraspConfig:
     ik_bfgs_max_iterations: int = 80
     ik_orientation_weight: float = 0.25
     ik_seeds: tuple[tuple[float, ...], ...] = ((-1.57, 0.8, 0.0, 0.8, 0.0, 0.0, 0.0),)
+    tcp_frame_name: str = DEFAULT_PINCH_TCP_FRAME
     pre_pinch_hand_targets: dict[str, float] | None = None
     closed_pinch_hand_targets: dict[str, float] | None = None
 
@@ -97,12 +79,14 @@ class PinchGraspConfig:
         """从 YAML 字典构造配置。
 
         参数:
-            data: 可以是完整任务配置，也可以已经是 ``grasp`` 子字典。
+            data: 完整任务配置，必须包含 ``grasp`` 子字典。
         返回:
-            ``PinchGraspConfig``，缺失字段会使用类默认值或默认手型。
+            ``PinchGraspConfig``，缺失字段会使用类默认值；手型目标必须由配置提供。
         """
 
-        grasp = data.get("grasp", data)
+        if "grasp" not in data:
+            raise ValueError("Pinch grasp config must contain top-level grasp section")
+        grasp = data["grasp"]
         return cls(
             endpoint=str(grasp.get("endpoint", cls.endpoint)),
             target_world_offset=tuple(float(value) for value in grasp.get("target_world_offset", cls.target_world_offset)),
@@ -128,8 +112,9 @@ class PinchGraspConfig:
             ik_bfgs_max_iterations=int(grasp.get("ik_bfgs_max_iterations", cls.ik_bfgs_max_iterations)),
             ik_orientation_weight=float(grasp.get("ik_orientation_weight", cls.ik_orientation_weight)),
             ik_seeds=tuple(tuple(float(v) for v in seed) for seed in grasp.get("ik_seeds", cls.ik_seeds)),
-            pre_pinch_hand_targets=dict(grasp.get("pre_pinch_hand_targets", DEFAULT_PRE_PINCH_HAND_TARGETS)),
-            closed_pinch_hand_targets=dict(grasp.get("closed_pinch_hand_targets", DEFAULT_CLOSED_PINCH_HAND_TARGETS)),
+            tcp_frame_name=str(grasp.get("tcp_frame_name", cls.tcp_frame_name)),
+            pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"]) if "pre_pinch_hand_targets" in grasp else None,
+            closed_pinch_hand_targets=dict(grasp["closed_pinch_hand_targets"]) if "closed_pinch_hand_targets" in grasp else None,
         )
 
     @property
@@ -140,7 +125,9 @@ class PinchGraspConfig:
             ``关节名 -> 目标位置(rad)`` 的新字典，调用方可安全修改。
         """
 
-        return dict(self.pre_pinch_hand_targets or DEFAULT_PRE_PINCH_HAND_TARGETS)
+        if self.pre_pinch_hand_targets is None:
+            raise ValueError("pre_pinch_hand_targets must be provided for the selected hand")
+        return dict(self.pre_pinch_hand_targets)
 
     @property
     def closed_targets(self) -> dict[str, float]:
@@ -150,7 +137,9 @@ class PinchGraspConfig:
             ``关节名 -> 目标位置(rad)`` 的新字典，调用方可安全修改。
         """
 
-        return dict(self.closed_pinch_hand_targets or DEFAULT_CLOSED_PINCH_HAND_TARGETS)
+        if self.closed_pinch_hand_targets is None:
+            raise ValueError("closed_pinch_hand_targets must be provided for the selected hand")
+        return dict(self.closed_pinch_hand_targets)
 
     def validate(self) -> None:
         """检查配置取值是否满足任务执行要求。
@@ -186,6 +175,12 @@ class PinchGraspConfig:
             raise ValueError("wiggle_cycles cannot be negative")
         if self.ik_max_iterations <= 0 or self.ik_bfgs_max_iterations <= 0:
             raise ValueError("IK iteration counts must be positive")
+        if not self.tcp_frame_name:
+            raise ValueError("tcp_frame_name cannot be empty")
+        if not self.pre_pinch_hand_targets:
+            raise ValueError("pre_pinch_hand_targets must be provided for the selected hand")
+        if not self.closed_pinch_hand_targets:
+            raise ValueError("closed_pinch_hand_targets must be provided for the selected hand")
         if np.linalg.norm(np.asarray(self.wiggle_axis, dtype=float)) <= 0.0:
             raise ValueError("wiggle_axis must be non-zero")
 
@@ -411,7 +406,7 @@ def hold_joint_target(
 
 
 class PinchGraspTask:
-    """AR5+L6 对 rope 端点 box 的脚本化夹捏任务。
+    """机械臂+灵巧手对 rope 端点 box 的脚本化夹捏任务。
 
     输入:
         初始化时传入抓取配置、rope 场景配置、MJCF 路径、IK 机器人描述和基础 URDF。
@@ -427,33 +422,31 @@ class PinchGraspTask:
         rope_config: CapsuleRopeConfig,
         mjcf_path: str | Path,
         parent_frame: str,
-        ik_robot_description: str | Path | None = None,
-        ik_base_urdf: str | Path | None = None,
-        tcp_frame_name: str = "ar5_l6_pinch_tcp",
+        cumotion_xrdf_path: str | Path,
+        cumotion_urdf_path: str | Path,
+        tcp_frame_name: str | None = None,
     ) -> None:
         """保存任务配置和 IK/TCP 资源路径。
 
         参数:
             config: 夹捏抓取配置。
             rope_config: rope 对象配置，用于定位端点。
-            mjcf_path: AR5+L6 MJCF 文件路径，用于计算 pinch TCP 和 mimic 关系。
+            mjcf_path: 组合 MJCF 文件路径，用于计算 pinch TCP 和 mimic 关系。
             parent_frame: pinch TCP 固连到的父 link 名称，通常是手掌基座。
-            ik_robot_description: cuMotion XRDF 机器人描述文件。
-            ik_base_urdf: 未附加 TCP 的基础 URDF。
+            cumotion_xrdf_path: cuMotion XRDF 文件。
+            cumotion_urdf_path: 未附加 TCP 的基础 URDF。
             tcp_frame_name: 写入临时 URDF 的 TCP frame 名称。
         返回:
-            无返回值；缺少 IK 描述文件时抛出 ``ValueError``。
+            无返回值。
         """
 
         self.config = config
         self.rope_config = rope_config
         self.mjcf_path = Path(mjcf_path)
-        if ik_robot_description is None or ik_base_urdf is None:
-            raise ValueError("PinchGraspTask requires ik_robot_description and ik_base_urdf")
-        self.ik_robot_description = Path(ik_robot_description)
-        self.ik_base_urdf = Path(ik_base_urdf)
+        self.cumotion_xrdf_path = Path(cumotion_xrdf_path)
+        self.cumotion_urdf_path = Path(cumotion_urdf_path)
         self.parent_frame = parent_frame
-        self.tcp_frame_name = tcp_frame_name
+        self.tcp_frame_name = tcp_frame_name or config.tcp_frame_name
 
     def plan(self, robot) -> dict[str, object]:
         """规划抓取各阶段的 IK 解和完整 DOF 目标。
@@ -462,20 +455,13 @@ class PinchGraspTask:
             robot: Isaac articulation，需提供 ``dof_names`` 和当前关节位置。
         返回:
             字典，包含:
-            ``arm_indices``: AR5 七轴在完整 DOF 中的索引；
+            ``arm_indices``: cuMotion C-space 关节在完整 DOF 中的索引；
             ``*_all``: 各阶段完整 DOF 位置目标；
             ``wiggle_all_targets``/``post_joint_sweep_targets``: 后续阶段目标列表；
             ``ik``: TCP 位置、求解后端、各阶段误差和成功标志。
         """
 
         self.config.validate()
-        dof_names = list(robot.dof_names)
-        dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
-        missing_arm = [name for name in DEFAULT_ARM_JOINT_NAMES if name not in dof_index_by_name]
-        if missing_arm:
-            raise ValueError(f"AR5 arm joints not found in articulation: {missing_arm}")
-        arm_indices = np.asarray([dof_index_by_name[name] for name in DEFAULT_ARM_JOINT_NAMES], dtype=int)
-
         # 先用闭合手型计算 thumb/index 的几何夹捏中心。这里需要展开 mimic follower，
         # 否则 MJCF 运动链里从动关节会停在 0，TCP 会偏离实际闭合指尖中心。
         closed_geometry_targets = expand_targets_with_mjcf_equalities(self.config.closed_targets, self.mjcf_path)
@@ -500,15 +486,14 @@ class PinchGraspTask:
 
         target_orientation = rpy_xyz_deg_to_quat_wxyz(self.config.target_rpy_deg)
         ik_orientation = target_orientation if self.config.use_orientation else None
-        first_seed = np.asarray(self.config.ik_seeds[0], dtype=float)
         # IK 后端只认识机器人描述里的 frame。这里临时写一个“附加 pinch TCP”的 URDF，
         # 避免改动仓库里的基础 URDF，同时让求解器直接以夹捏中心作为末端。
-        with tempfile.TemporaryDirectory(prefix="ar5_l6_ik_tcp_") as temp_dir:
-            tcp_urdf = Path(temp_dir) / f"{self.ik_base_urdf.stem}_{self.tcp_frame_name}.urdf"
-            write_tcp_urdf(self.ik_base_urdf, tcp_urdf, tcp)
+        with tempfile.TemporaryDirectory(prefix="pinch_ik_tcp_") as temp_dir:
+            tcp_urdf = Path(temp_dir) / f"{self.cumotion_urdf_path.stem}_{self.tcp_frame_name}.urdf"
+            write_tcp_urdf(self.cumotion_urdf_path, tcp_urdf, tcp)
             context = CuMotionContext(
                 CuMotionConfig(
-                    xrdf_path=self.ik_robot_description,
+                    xrdf_path=self.cumotion_xrdf_path,
                     urdf_path=tcp_urdf,
                     flange_frame=self.parent_frame,
                     default_tcp_frame=self.tcp_frame_name,
@@ -520,15 +505,24 @@ class PinchGraspTask:
                     orientation_tolerance=self.config.ik_orientation_tolerance,
                 )
             )
+            ik_joint_names = context.joint_names()
+            dof_names = list(robot.dof_names)
+            dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
+            missing_ik_joints = [name for name in ik_joint_names if name not in dof_index_by_name]
+            if missing_ik_joints:
+                raise ValueError(f"cuMotion joints not found in articulation: {missing_ik_joints}")
+            arm_indices = np.asarray([dof_index_by_name[name] for name in ik_joint_names], dtype=int)
+            current_cspace = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)[arm_indices]
             solver = context.make_inverse_kinematics(
                 tcp_frame_name=self.tcp_frame_name,
             )
-            # IK 使用上一阶段解作为 warm start，保持关节轨迹连续，也减少求解器跳解概率。
+            # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
+            # 保持关节轨迹连续，也减少求解器跳解概率。
             approach = solver.solve(
                 IKRequest(
                     target_position=approach_world,
                     target_orientation=ik_orientation,
-                    warm_start=first_seed,
+                    warm_start=current_cspace,
                     position_tolerance=self.config.ik_position_tolerance,
                     orientation_tolerance=self.config.ik_orientation_tolerance,
                 )
@@ -566,7 +560,7 @@ class PinchGraspTask:
                 wiggles.append((target, result))
                 warm = result.joint_positions
 
-        # 把 7 轴 IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
+        # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
         # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
         initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
         pre_pinch_all = target_vector_from_mapping(dof_names, self.config.pre_targets, base=initial_all)
@@ -605,7 +599,6 @@ class PinchGraspTask:
                 "approach_world": approach_world,
                 "lifted_world": lifted_world,
                 "tcp_xyz": tcp.xyz,
-                "backend": solver.backend,
                 "approach_success": approach.success,
                 "approach_error": approach.position_error,
                 "grasp_success": grasp.success,

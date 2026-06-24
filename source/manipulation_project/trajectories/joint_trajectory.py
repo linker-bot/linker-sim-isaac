@@ -12,6 +12,7 @@ import numpy as np
 
 from manipulation_project.trajectories.base import JointTrajectory
 from manipulation_project.trajectories.interpolation import interpolation_fn
+from manipulation_project.utils.timing import differentiate_samples
 
 
 def build_joint_target_trajectory(
@@ -33,7 +34,7 @@ def build_joint_target_trajectory(
         duration_s: 轨迹持续时间，单位 s；为 0 时只返回目标点。
         sample_dt: 采样时间间隔，单位 s。
         interpolation: 插值函数名称。
-        phase: 写入每个 ``TrajectoryPoint`` 的阶段名。
+        phase: 写入每个采样行的阶段名。
     返回:
         ``JointTrajectory``，包含时间、位置、速度、加速度和 jerk 采样矩阵。
     """
@@ -51,12 +52,9 @@ def build_joint_target_trajectory(
 
     fn = interpolation_fn(interpolation)
     if duration_s == 0:
-        return JointTrajectory.from_samples(
+        return joint_trajectory_from_positions(
             times=np.asarray([0.0], dtype=float),
             positions=target.reshape(1, -1),
-            velocities=np.zeros((1, target.size), dtype=float),
-            accelerations=np.zeros((1, target.size), dtype=float),
-            jerks=np.zeros((1, target.size), dtype=float),
             phases=(phase,),
             joint_names=tuple(joint_names),
         )
@@ -70,25 +68,59 @@ def build_joint_target_trajectory(
         scale = fn(alpha)
         positions[step] = start + scale * (target - start)
 
-    velocities = _differentiate(positions, times)
-    accelerations = _differentiate(velocities, times)
-    jerks = _differentiate(accelerations, times)
-    return JointTrajectory.from_samples(
+    return joint_trajectory_from_positions(
         times=times,
         positions=positions,
-        velocities=velocities,
-        accelerations=accelerations,
-        jerks=jerks,
         phases=tuple(phase for _ in range(times.size)),
         joint_names=tuple(joint_names),
     )
 
 
-def _differentiate(values: np.ndarray, times: np.ndarray) -> np.ndarray:
-    if values.shape[0] == 1:
-        return np.zeros_like(values)
-    result = np.zeros_like(values)
-    for index in range(1, values.shape[0]):
-        dt = max(1.0e-12, float(times[index] - times[index - 1]))
-        result[index] = (values[index] - values[index - 1]) / dt
-    return result
+def joint_trajectory_from_positions(
+    *,
+    times: np.ndarray,
+    positions: np.ndarray,
+    joint_names: Sequence[str],
+    phases: Sequence[str] | None = None,
+    phase: str = "trajectory",
+    differentiate: bool = True,
+) -> JointTrajectory:
+    """从位置采样矩阵构造完整 ``JointTrajectory``。
+
+    这是项目里“positions + times -> position/velocity/acceleration/jerk 轨迹”的
+    通用入口。调用方只需要准备好采样时间、位置矩阵和关节名；速度、加速度和 jerk
+    默认由有限差分自动生成。
+    """
+
+    times_array = np.asarray(times, dtype=float).reshape(-1)
+    positions_array = np.asarray(positions, dtype=float)
+    if positions_array.ndim != 2:
+        raise ValueError("positions must have shape (N, dof)")
+    if positions_array.shape[0] != times_array.size:
+        raise ValueError("times length must match positions rows")
+
+    if phases is None:
+        phases_tuple = tuple(phase for _ in range(times_array.size))
+    else:
+        phases_tuple = tuple(str(value) for value in phases)
+        if len(phases_tuple) != times_array.size:
+            raise ValueError("phases length must match trajectory samples")
+
+    if differentiate:
+        velocities = differentiate_samples(positions_array, times_array)
+        accelerations = differentiate_samples(velocities, times_array)
+        jerks = differentiate_samples(accelerations, times_array)
+    else:
+        velocities = None
+        accelerations = None
+        jerks = None
+
+    return JointTrajectory.from_samples(
+        times=times_array,
+        positions=positions_array,
+        velocities=velocities,
+        accelerations=accelerations,
+        jerks=jerks,
+        phases=phases_tuple,
+        joint_names=tuple(joint_names),
+    )

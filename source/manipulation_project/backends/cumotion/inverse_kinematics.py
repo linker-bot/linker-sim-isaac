@@ -21,8 +21,6 @@ def _seed_list(seeds: np.ndarray) -> list[np.ndarray]:
 class CuMotionInverseKinematics:
     """使用 cuMotion 求解 TCP 逆运动学。"""
 
-    backend = "cumotion"
-
     def __init__(self, context, *, tcp_frame_name: str | None = None) -> None:
         if tcp_frame_name is None:
             raise ValueError("tcp_frame_name is required for cuMotion IK")

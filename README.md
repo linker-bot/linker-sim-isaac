@@ -1,17 +1,15 @@
 # LinkerHand Simulation
 
-这是一个基于 Isaac Sim / Isaac Lab 的机械臂、灵巧手和绳体操作仿真工程。项目当前围绕 AR5 机械臂、LinkerHand L6 灵巧手和 capsule/box 近似绳体搭建，用于验证运动算法、IK、TCP 定义、mimic 关节同步、PhysX 参数和基础抓取流程。
-
-`tem-file/` 只保留历史脚本和临时输出，不属于当前工程结构，已加入 `.gitignore`。
+这是一个基于 Isaac Sim / Isaac Lab 的机械臂、灵巧手和绳体操作仿真工程。项目当前围绕 AR5 机械臂、LinkerHand L6 灵巧手和 capsule/box 近似绳体搭建，用于验证 cuMotion 运动解算、TCP 定义、mimic 关节同步、PhysX 参数和基础抓取流程。
 
 ## 当前能力
 
-- 资产导入：支持 AR5、L6、AR5+L6 组合 MJCF/URDF/XRDF 资产。
-- 运动解算：只使用 cuMotion，覆盖 IK、obstacle-aware IK、后续路径规划和轨迹适配。
-- 控制器：核心为 Isaac/PhysX implicit position drive，机械臂和灵巧手参数分文件配置。
-- Mimic 关节：软件层解析 MJCF `equality/joint` 的 `polycoef` 多项式并同步 follower drive 目标。
-- TCP：支持 AR5 法兰 TCP、自定义固定 TCP、thumb/index 闭合夹捏中心 TCP。
-- 任务脚本：提供关节目标 smoke 和 AR5+L6 绳端夹捏抓取 demo。
+- 资产导入：支持 AR5、L6、AR5+L6 组合 MJCF/URDF/XRDF/USD 资产。
+- 运动解算：统一使用 cuMotion，当前提供 FK、几何 IK、obstacle-aware IK、碰撞世界适配和 cuMotion 轨迹适配。
+- 控制器：使用 Isaac/PhysX implicit position drive，机械臂和灵巧手参数分文件配置。
+- Mimic 关节：解析 MJCF `equality/joint` 的 `polycoef` 多项式关系，并在软件层同步 follower drive 目标。
+- TCP：支持法兰 TCP、自定义固定 TCP、thumb/index 闭合夹捏中心 TCP。
+- 任务脚本：提供关节目标 smoke、TCP 笛卡尔直线运动和 AR5+L6 绳端夹捏抓取 demo。
 - 日志和可视化：支持关节跟踪 CSV，Foxglove MCAP/WebSocket 可选用于调试回放。
 
 ## 目录结构
@@ -19,47 +17,53 @@
 ```text
 .
 ├── assets/
-│   ├── mesh/                 # 各设备 mesh，按 arm/hand 和单体系统名分目录
+│   ├── mesh/                 # 设备 mesh，按 arm/hand 和系统名分目录
 │   ├── single_system/        # 单体 URDF/MJCF/XRDF/USD 资产
 │   ├── combined_system/      # 复合系统资产
 │   ├── static_env_objects/   # 静态环境对象资产
-│   └── dynamic_env_objects/  # 动态环境对象资产，例如 capsule rope
+│   └── dynamic_env_objects/  # 动态对象资产，例如 capsule rope
 ├── configs/
-│   ├── controllers/          # 控制器、材料、刚体参数
-│   ├── envs/                 # 空场景、桌面、绳体场景
+│   ├── controllers/          # arm/hand drive、材料、刚体参数
+│   ├── envs/                 # empty/table/rope 场景
 │   ├── logging/              # CSV 日志配置
-│   ├── objects/              # 可生成对象的参数，例如 capsule rope
-│   ├── robots/               # 机器人资产、关节组、IK 资源
-│   └── trajectories/         # 关节、笛卡尔、pinch grasp 任务配置
-├── scripts/                  # Isaac Sim 实际运行入口
+│   ├── objects/              # 可生成对象配置，例如 capsule rope
+│   ├── robots/               # 机器人资产、关节组、cuMotion XRDF/URDF
+│   └── trajectories/         # joint target 和 pinch grasp 配置
+├── scripts/                  # Isaac Sim 运行入口
 ├── source/manipulation_project/
-│   ├── app/                  # SimulationApp 启动和 CLI 工具
+│   ├── app/                  # SimulationApp 启动
 │   ├── assets/               # 资产导入、USD/PhysX 覆盖、solver 设置
+│   ├── backends/cumotion/    # cuMotion 后端、FK/IK、碰撞世界、轨迹适配
 │   ├── controllers/          # implicit drive 和控制器配置解析
 │   ├── envs/                 # World 和场景构建
-│   ├── backends/             # cuMotion 解算后端
-│   ├── ik/                   # 兼容入口和临时 TCP URDF
-│   ├── planning/             # 解算请求、结果和碰撞对象数据结构
 │   ├── logging/              # CSV 和关节跟踪日志
-│   ├── objects/              # 对象资产生成和引用
+│   ├── objects/              # 绳体对象资产生成和引用
+│   ├── planning/             # 解算请求、结果、碰撞对象数据结构
 │   ├── robots/               # 关节组、mimic/equality、状态容器
-│   ├── tasks/                # 任务流程
+│   ├── tasks/                # 关节目标和 pinch grasp 任务流程
 │   ├── tcp/                  # TCP frame 和夹捏中心计算
-│   ├── trajectories/         # 插值和轨迹采样
+│   ├── trajectories/         # 矩阵轨迹容器和插值
 │   ├── utils/                # 配置、路径、旋转、数学、计时工具
 │   └── visualization/        # 相机、marker、Foxglove 日志封装
 ├── tests/                    # 不启动 Isaac Sim 的轻量测试
 ├── ASSET_NAMING_CONVENTIONS.md
+├── CUMOTION_PLANNING.md
 ├── pyproject.toml
 └── README.md
 ```
 
 ## 环境约定
 
-- 使用 Isaac Sim / Isaac Lab 对应的 Python 环境运行脚本，当前示例默认环境目录为 `env_isaaclab/`。
-- Python 包源码位于 `source/`，从仓库根目录运行脚本时建议设置 `PYTHONPATH=source`。
-- 基础 Python 依赖见 `pyproject.toml`：`numpy`、`pyyaml`、`scipy`。
-- Foxglove 可视化是可选能力，需要额外安装 `foxglove-sdk`。
+- 使用 Isaac Sim / Isaac Lab 对应的 Python 环境运行脚本，示例默认环境目录为 `env_isaaclab/`。
+- 从仓库根目录运行脚本，并设置 `PYTHONPATH=source`。
+- 依赖统一声明在 `pyproject.toml`；`requirements.txt` 安装项目的完整依赖集合。
+- cuMotion、Isaac Sim 和 torch 版本与当前 Isaac Python 环境对齐；后端导入失败时会直接报安装错误。
+
+安装完整依赖：
+
+```bash
+env_isaaclab/bin/python -m pip install -r requirements.txt
+```
 
 ## 快速运行
 
@@ -75,10 +79,22 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py
 ```
 
+运行 TCP 直线运动：
+
+```bash
+PYTHONPATH=source env_isaaclab/bin/python scripts/run_tcp_line.py
+```
+
 带 GUI 观察关节目标：
 
 ```bash
 PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py --gui --hold
+```
+
+导入 AR5+L6 和绳体并保持初始姿态：
+
+```bash
+PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp --short-smoke
 ```
 
 运行绳端夹捏抓取 demo：
@@ -87,42 +103,253 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py --gui --ho
 PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --gui
 ```
 
-快速 headless smoke：
+常用覆盖参数：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp --short-smoke
+PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py \
+  --joint AR5V2_L_arm_joint_1 0.5 \
+  --duration 1.0 \
+  --sample-hz 200
+
+PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
+  --endpoint right \
+  --physics-frequency 240 \
+  --gui
 ```
 
-脚本默认读取 `configs/` 中的配置，并将关节跟踪日志写到 `logs/joint_tracking/`。
+运行日志默认写入 `logs/joint_tracking/`。
 
-## 关键配置
+## 架构边界
 
-- `configs/robots/ar5v2_l6v1_l.yaml`：AR5+L6 组合资产、关节组、IK 资源和 TCP frame。
-- `configs/robots/ar5v2_l.yaml`：单独 AR5 机械臂资产和 IK 资源。
-- `configs/controllers/arm_controller.yaml`：机械臂 drive、速度、effort、材料和刚体参数。
-- `configs/controllers/hand_controller.yaml`：灵巧手 drive、速度、effort、材料和刚体参数。
-- `configs/envs/rope_scene.yaml`：绳体抓取场景、步频、重力和 PhysX solver 设置。
-- `configs/objects/capsule_rope.yaml`：绳体资产生成参数和 USD 输出路径。
-- `configs/trajectories/joint_target.yaml`：关节目标 smoke 的稀疏目标。
-- `configs/trajectories/pinch_grasp.yaml`：夹捏抓取阶段、手型、IK 容差和摆动参数。
-- `configs/logging/default_logger.yaml`：关节跟踪 CSV 日志配置。
+当前运动计算链路如下：
 
-配置读取工具在 `source/manipulation_project/utils/config.py`，相对路径默认按仓库根目录解析。
+```text
+config/script
+-> task
+-> planning request/result
+-> backends/cumotion
+-> cuMotion
+-> trajectory/controller/logging
+```
 
-## 资产和命名
+`tasks/` 描述任务目标和执行阶段，例如关节目标或 pinch grasp。`planning/` 提供后端无关的数据结构，例如 `IKRequest`、`MotionRequest`、`IKResult`、`CollisionObject`。`backends/cumotion/` 是唯一直接调用 cuMotion Python API 的层，负责机器人模型加载、FK、IK、碰撞世界和轨迹适配。
 
-当前正式命名不使用连字符 `-`，避免 Isaac importer 把 `-` 自动转换为 `_` 后造成配置关节名和 runtime DOF 名不一致。更多规则见 `ASSET_NAMING_CONVENTIONS.md`。
+### cuMotion 后端
 
-当前默认运行资产：
+核心入口位于 `source/manipulation_project/backends/cumotion/`：
 
-- 左臂：`assets/single_system/arm/AR5V2_L/`
-- 右臂：`assets/single_system/arm/AR5V2_R/`
-- 左手：`assets/single_system/hand/L6V1_L/`
-- 右手：`assets/single_system/hand/L6V1_R/`
-- 左臂+左手组合：`assets/combined_system/AR5V2_L6V1_L/`
-- 绳体对象：`assets/dynamic_env_objects/capsuleropeV1_default/`
+- `context.py`：`CuMotionConfig` 和 `CuMotionContext`，加载 XRDF + URDF，缓存 robot description 和 kinematics。
+- `forward_kinematics.py`：封装 FK、frame 查询和关节名查询。
+- `inverse_kinematics.py`：封装单点 IK；`IKRequest.avoid_collisions=True` 时使用 cuMotion collision-free IK。
+- `collision_world.py`：把项目 `CollisionObject` 转成 cuMotion `World` obstacle。
+- `pose_adapter.py`：在项目 numpy pose/quaternion 和 cuMotion pose 类型之间转换。
+- `tcp_urdf_builder.py`：复制 URDF 并临时追加 fixed TCP link/joint。
+- `trajectory_adapter.py`：将 cuMotion `Trajectory.eval_all()` 采样成项目 `JointTrajectory`。
 
-右侧 AR5/L6 当前提供单体 URDF 和 mesh。若要运行右臂 IK 或右手 MJCF 组合资产，需要继续生成对应 XRDF/MJCF 描述。
+`CuMotionConfig` 的主要字段：
+
+```python
+CuMotionConfig(
+    xrdf_path="assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf",
+    urdf_path="assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+    flange_frame="AR5V2_L_arm_flan_link",
+    default_tcp_frame="ar5_l6_pinch_tcp",
+    cspace_seeds=...,
+    position_tolerance=0.005,
+    orientation_tolerance=0.75,
+    ccd_max_iterations=180,
+    bfgs_max_iterations=80,
+    orientation_weight=0.25,
+)
+```
+
+### Planning 数据结构
+
+`source/manipulation_project/planning/` 当前提供稳定的数据结构：
+
+- `IKRequest`：单个 TCP 目标，包含位置、可选姿态、warm start、容差、碰撞开关和障碍物。
+- `MotionRequest`：路径级请求结构，包含当前关节、目标关节或目标 TCP pose、碰撞对象和模式字段。
+- `IKResult` / `MotionResult`：保存求解输出、成功状态、误差、状态和诊断。
+- `CollisionObject`：后端无关障碍物描述，支持 `box/cuboid`、`sphere`、`capsule` 的尺寸和 padding。
+
+obstacle-aware IK 约束的是“求出的目标构型”或离散 waypoint 构型。它不是连续路径级避障；当前项目尚未接入连续路径级避障 planner。
+
+### TCP
+
+TCP 相关代码位于 `source/manipulation_project/tcp/`：
+
+- `flange_tcp.py`：直接使用法兰 link 作为 TCP。
+- `custom_tcp.py`：在任意父 frame 下定义固定 `xyz/rpy` 偏移。
+- `pinch_tcp.py`：读取 MJCF body 链，在闭合手型下计算 thumb tip 和 index tip 中点。
+
+Pinch grasp 会先根据闭合手型计算夹捏中心，再用 `backends/cumotion/tcp_urdf_builder.py` 生成临时 URDF。这样 cuMotion 可以直接以夹捏中心 link 作为 IK frame。
+
+### Trajectory
+
+`JointTrajectory` 位于 `source/manipulation_project/trajectories/base.py`，内部按 cuMotion 轨迹语义保存矩阵：
+
+- `times`: shape `(N,)`
+- `positions`: shape `(N, dof)`
+- `velocities`: shape `(N, dof)`
+- `accelerations`: shape `(N, dof)`
+- `jerks`: shape `(N, dof)`
+- `phases`: 每个采样行的阶段名
+
+关节目标轨迹由 `trajectories/joint_trajectory.py` 生成，支持 `linear`、`smoothstep` 和 `smootherstep` 插值。控制器执行时直接读取矩阵采样行。
+
+## 配置
+
+项目配置采用固定顶层结构。解析函数会要求当前结构存在，例如 robot 配置必须包含 `robot`，rope 配置必须包含 `object` 和 `rope`，抓取配置必须包含 `grasp`，轨迹配置必须包含 `trajectory`，环境配置必须包含 `env`。
+
+### 机器人
+
+`configs/robots/ar5v2_l6v1_l.yaml` 描述组合资产、控制关节和 cuMotion 机器人资源：
+
+```yaml
+robot:
+  name: ar5v2_l6v1_l
+  asset_type: mjcf
+  asset_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
+  prim_path: /World/AR5V2_L6V1_L
+
+controlled_joints:
+  - AR5V2_L_arm_joint_1
+  - AR5V2_L_arm_joint_2
+
+cumotion:
+  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+  flange_frame: AR5V2_L_arm_flan_link
+
+tcp:
+  type: flange
+  frame_name: AR5V2_L_arm_flan_link
+```
+
+### 控制器
+
+`configs/controllers/arm_controller.yaml` 和 `configs/controllers/hand_controller.yaml` 分别配置：
+
+- `implicit_position_drive.active_joints`
+- `implicit_position_drive.follower_joints`
+- `velocity_control`
+- `effort_control`
+- `physx.material`
+- `physx.rigid_body`
+
+脚本通过 `--controller-config configs/controllers` 读取目录，目录内必须包含 `arm_controller.yaml` 和 `hand_controller.yaml`。
+
+### 环境和 solver
+
+`configs/envs/*.yaml` 使用：
+
+```yaml
+env:
+  name: rope_scene
+  gravity_z: -9.81
+  add_ground: true
+  physics_frequency: 200.0
+  render_frequency: 60.0
+
+solver:
+  type: TGS
+  apply_scope: arm_hand
+  arm_position_iterations: 24
+  arm_velocity_iterations: 4
+  hand_position_iterations: 24
+  hand_velocity_iterations: 4
+```
+
+`solver` 用于覆盖机器人 articulation 的 PhysX solver iteration。外部自定义场景可以省略 `solver`，脚本会保留 PhysX 默认值。
+
+### 绳体对象
+
+`configs/objects/capsule_rope.yaml` 包含资产输出和绳体参数：
+
+```yaml
+object:
+  name: capsuleropeV1_default
+  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  prim_path: /World/CapsuleRope
+  root_path: /CapsuleRope
+
+rope:
+  segments: 18
+  length: 0.75
+  radius: null
+  center: [0.4, -0.55, 0.05]
+  total_mass: 0.2
+  shape: capsule
+```
+
+修改绳体参数后，需要重新运行 `scripts/build_capsule_rope_asset.py` 生成 USD。
+
+### 任务配置
+
+`configs/trajectories/joint_target.yaml` 定义稀疏关节目标：
+
+```yaml
+trajectory:
+  type: joint_target
+  duration: 2.0
+  sample_hz: 200.0
+  interpolation: smoothstep
+  targets:
+    AR5V2_L_arm_joint_1: 0.4
+```
+
+`configs/trajectories/pinch_grasp.yaml` 定义抓取目标、阶段时长、手型和 IK 参数：
+
+```yaml
+grasp:
+  endpoint: left
+  target_world_offset: [0.02, 0.0, 0.03]
+  target_rpy_deg: [0.0, 115.0, -90.0]
+  use_orientation: true
+  approach_distance: 0.10
+  lift_height: 0.4
+  ik_position_tolerance: 0.005
+  ik_orientation_tolerance: 0.75
+  ik_seeds:
+    - [-1.57, 0.8, 0.0, 0.8, 0.0, 0.0, 0.0]
+```
+
+## 执行流程
+
+### 关节目标
+
+`scripts/run_joint_target.py` 的流程：
+
+1. 读取 robot/controller/trajectory/env 配置。
+2. 导入 MJCF/URDF 机器人资产。
+3. 应用 USD/PhysX drive、材料、刚体和 solver 覆盖。
+4. 构造 `ImplicitDriveController`。
+5. 将稀疏目标展开为命令关节 `JointTrajectory`。
+6. 按采样行下发 position/velocity drive 目标并记录 CSV。
+
+### Pinch Grasp
+
+`scripts/run_pinch_grasp.py` 的流程：
+
+1. 读取 AR5+L6、rope、grasp、controller、env 配置。
+2. 引用 capsule rope USD。
+3. 导入 AR5+L6 组合 MJCF 并配置 implicit drive。
+4. 用闭合手型和 MJCF body 链计算 thumb/index 夹捏中心 TCP。
+5. 临时复制 AR5 URDF 并追加 pinch TCP link。
+6. 创建 `CuMotionContext` 和 `CuMotionInverseKinematics`。
+7. 求解 approach、grasp、lift、wiggle 的 TCP IK。
+8. 将 IK 结果写入完整 articulation DOF 目标，并同步 mimic follower。
+9. 分阶段执行 prep、move、approach、close、lift、wiggle、hold，并记录 CSV。
+
+## Mimic 关节
+
+LinkerHand L6 的 follower 关节通过 MJCF `equality/joint` 表达。`robots/mimic.py` 解析 `polycoef`：
+
+```text
+dependent = a0 + a1 * master + a2 * master^2 + ...
+```
+
+运行时不依赖 importer 的实时硬约束同步 follower，而是在软件层根据 master 实际状态更新 follower position drive 目标；速度目标通过多项式导数计算。
 
 ## 坐标、姿态和单位
 
@@ -131,49 +358,34 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp 
 - 配置中的 RPY 使用固定轴 XYZ 顺序，即外旋 XYZ；在 SciPy 中对应小写 `"xyz"`。
 - 距离单位为 m，角度配置通常为 degree，关节位置为 rad，关节速度为 rad/s。
 
-## Mimic 关节
+## 资产和命名
 
-LinkerHand L6 的从动关节通过 MJCF `equality/joint` 描述。`robots/mimic.py` 会解析 `polycoef` 多项式关系：
+当前正式命名不使用连字符 `-`，避免 Isaac importer 把 `-` 转成 `_` 后造成配置关节名和 runtime DOF 名不一致。更多规则见 `ASSET_NAMING_CONVENTIONS.md`。
 
-```text
-dependent = a0 + a1 * master + a2 * master^2 + ...
-```
+当前默认资产：
 
-当前实现不依赖 PhysX/MJCF importer 的硬约束实时约束 mimic 关节，而是在软件层同步 follower 的 position drive 目标；速度目标通过多项式导数计算。线性 mimic 只是该多项式的一阶特例。
+- 左臂：`assets/single_system/arm/AR5V2_L/`
+- 右臂：`assets/single_system/arm/AR5V2_R/`
+- 左手：`assets/single_system/hand/L6V1_L/`
+- 右手：`assets/single_system/hand/L6V1_R/`
+- 左臂+左手组合：`assets/combined_system/AR5V2_L6V1_L/`
+- 绳体对象：`assets/dynamic_env_objects/capsuleropeV1_default/`
 
-## TCP 和 IK
+右侧 AR5/L6 当前提供单体 URDF 和 mesh；组合运行资产需要继续生成对应 MJCF/XRDF 描述。
 
-TCP 实现在 `source/manipulation_project/tcp/`：
+## 日志和 Foxglove
 
-- `flange_tcp.py`：直接使用 AR5 法兰 link。
-- `custom_tcp.py`：在任意父 frame 下添加固定 `xyz/rpy` 偏移。
-- `pinch_tcp.py`：读取 MJCF body 链，在闭合手型下计算 thumb tip 和 index tip 中点。
+关节跟踪日志使用 CSV，默认路径在 `logs/joint_tracking/`。`visualization/foxglove_logger.py` 提供可选 Foxglove 输出：
 
-运动解算后端位于 `manipulation_project.backends.cumotion`，旧的
-`manipulation_project.ik.solver_factory.make_ik_solver()` 仅作为 cuMotion 兼容入口保留。
-cuMotion 使用 `assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf` 和 URDF；不可用时直接报错，
-不再回退到其它后端。
-
-IK 后端通常要求目标 frame 已经在 URDF 中存在。`ik/tcp_urdf_builder.py` 会复制基础 URDF，并临时追加 fixed TCP link/joint。
-`planning.requests.IKRequest` 支持 `avoid_collisions` 开关，可在单点 IK 时消费项目
-`CollisionObject` 并通过 cuMotion world 约束目标构型。
-
-`trajectories.JointTrajectory` 内部按 cuMotion 轨迹语义保存 `times`、`positions`、
-`velocities`、`accelerations` 和 `jerks` 采样矩阵，同时保留迭代 `TrajectoryPoint` 的旧接口。
-
-## Foxglove 可视化
-
-Foxglove 用于调试和回放仿真数据，不替代 Isaac Sim 的真实场景渲染。封装位于 `visualization/foxglove_logger.py`，支持：
-
-- 离线写 MCAP；
+- 离线 MCAP；
 - 本地 WebSocket live server；
 - `JointStates` 曲线；
-- TCP、轨迹点和其它调试点的 `SceneUpdate` marker。
+- TCP、轨迹点和调试点的 `SceneUpdate` marker。
 
-安装可选依赖：
+Foxglove 依赖已经包含在完整依赖安装中：
 
 ```bash
-env_isaaclab/bin/python -m pip install foxglove-sdk
+env_isaaclab/bin/python -m pip install -r requirements.txt
 ```
 
 最小示例：
@@ -211,17 +423,10 @@ print("yaml ok")
 PY
 ```
 
-如果环境安装了 `pytest`：
+运行轻量测试：
 
 ```bash
 PYTHONPATH=source env_isaaclab/bin/python -m pytest -q
 ```
 
-当前轻量测试覆盖插值、轨迹采样、MJCF mimic 解析、配置加载、pinch TCP 计算、临时 TCP URDF 写入和 Foxglove logger 基本行为。
-
-## 后续方向
-
-- 补齐右臂/右手组合运行资产和对应 IK 描述。
-- 补齐 `MoveTcpToPoseTask` 和 `MoveTcpLineTask` 的完整 Isaac 执行流程。
-- 增加 cuMotion 安装版本记录和自动 smoke check。
-- 将 visualization 中的 marker/debug draw 接入 TCP 目标、IK 误差和轨迹可视化。
+当前轻量测试覆盖控制器配置、插值、cuMotion 轨迹适配、MJCF mimic 解析、配置加载、pinch TCP 计算、临时 TCP URDF 写入和 Foxglove logger 基本行为。

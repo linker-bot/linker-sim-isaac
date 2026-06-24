@@ -1,6 +1,6 @@
 """MJCF equality/mimic 关系解析与运行时目标映射。
 
-LinkerHand L6 的某些从动关节通过 MJCF ``<equality><joint ...>`` 描述 mimic
+灵巧手的某些从动关节通过 MJCF ``<equality><joint ...>`` 描述 mimic
 关系。Isaac 导入后不一定会自动帮控制器维护这些从动目标，因此这里把 MJCF
 里的多项式关系解析出来，在运行时显式生成 follower 关节的目标位置和速度。
 """

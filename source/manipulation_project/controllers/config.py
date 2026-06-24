@@ -54,46 +54,25 @@ def _section(data: Mapping[str, Any], key: str) -> dict[str, Any]:
     return dict(value)
 
 
-def load_controller_profiles(path_or_config: str | Path | Mapping[str, Any]) -> ControllerProfiles:
+def load_controller_profiles(config_dir: str | Path) -> ControllerProfiles:
     """读取并展开 arm/hand 控制器配置。
 
     参数:
-        path_or_config: controllers 目录路径，或包含 ``arm``/``hand`` 文件路径的 mapping。
+        config_dir: controllers 目录路径，目录内必须包含 ``arm_controller.yaml`` 和
+            ``hand_controller.yaml``。
     返回:
         ``ControllerProfiles``，包含 arm 和 hand 两个 profile。
     """
 
-    if isinstance(path_or_config, (str, Path)):
-        path = repo_path(path_or_config)
-        if path.is_dir():
-            return ControllerProfiles(
-                arm=_load_profile_from_path("arm", path / "arm_controller.yaml"),
-                hand=_load_profile_from_path("hand", path / "hand_controller.yaml"),
-            )
-        raise ValueError(
-            f"Controller config {path} is no longer a supported entry point. "
-            "Pass configs/controllers or a mapping with arm/hand profile paths."
-        )
-
-    config = dict(path_or_config)
-    if "profiles" in config and isinstance(config["profiles"], Mapping):
-        profiles = config["profiles"]
-        return ControllerProfiles(
-            arm=_load_profile_from_reference("arm", profiles.get("arm")),
-            hand=_load_profile_from_reference("hand", profiles.get("hand")),
-        )
+    if not isinstance(config_dir, (str, Path)):
+        raise TypeError(f"Controller config must be a directory path, got {type(config_dir).__name__}")
+    path = repo_path(config_dir)
+    if not path.is_dir():
+        raise ValueError(f"Controller config must be a directory containing arm_controller.yaml and hand_controller.yaml: {path}")
     return ControllerProfiles(
-        arm=_load_profile_from_reference("arm", config.get("arm")),
-        hand=_load_profile_from_reference("hand", config.get("hand")),
+        arm=_load_profile_from_path("arm", path / "arm_controller.yaml"),
+        hand=_load_profile_from_path("hand", path / "hand_controller.yaml"),
     )
-
-
-def _load_profile_from_reference(name: str, reference: Any) -> ControllerProfile:
-    if reference is None:
-        raise ValueError(f"Controller profiles must define {name!r}")
-    if not isinstance(reference, (str, Path)):
-        raise ValueError(f"Controller profile {name!r} must be a path, got {type(reference).__name__}")
-    return _load_profile_from_path(name, repo_path(reference))
 
 
 def _load_profile_from_path(name: str, path: Path) -> ControllerProfile:

@@ -1,4 +1,4 @@
-# LinkerHand L6 灵巧手控制器、材料和刚体参数。
+# 灵巧手控制器、材料和刚体参数。
 target: hand
 
 implicit_position_drive:

@@ -20,7 +20,7 @@ def configure_visuals() -> None:
 
     - 在 ``/World/KeyLight`` 创建一盏主方向光，用来提供清晰的主体照明。
     - 在 ``/World/FillLight`` 创建一盏 DomeLight，用来补环境亮度，减少全黑阴影。
-    - 调整默认 perspective viewport 的相机位置，使 AR5/L6 和绳体区域更容易被看到。
+    - 调整默认 perspective viewport 的相机位置，使机器人和绳体区域更容易被看到。
 
     参数:
         无，直接操作当前 Omni/USD context。

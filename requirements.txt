@@ -1,5 +1,0 @@
-# Install the project package plus runtime dependencies from pyproject.toml.
--e .
-
-# Test runner used by the lightweight test suite.
-pytest

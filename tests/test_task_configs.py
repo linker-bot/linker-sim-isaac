@@ -21,8 +21,13 @@ def test_default_robot_config_paths_exist() -> None:
 def test_robot_configs_are_cumotion_only() -> None:
     for path in sorted(Path("configs/robots").glob("*.yaml")):
         config = load_yaml(path)
+        assert "cumotion" in config
+        assert config["cumotion"].get("xrdf_path")
+        assert config["cumotion"].get("urdf_path")
+        assert "robot_description" not in config["cumotion"]
+        assert "base_urdf" not in config["cumotion"]
         assert "lula" not in config
-        assert config.get("ik", {}).get("backend") is None
+        assert "ik" not in config
 
 
 def test_right_side_urdf_assets_exist() -> None:
@@ -75,6 +80,29 @@ def test_default_rope_and_grasp_configs() -> None:
     assert target[2] > left_center[2]
 
 
+def test_task_configs_reject_obsolete_shapes() -> None:
+    try:
+        RobotAssetConfig.from_mapping({"asset_path": "assets/example.xml"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("RobotAssetConfig accepted config without top-level robot section")
+
+    try:
+        CapsuleRopeConfig.from_mapping({"segments": 18, "length": 0.75})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("CapsuleRopeConfig accepted config without object/rope sections")
+
+    try:
+        PinchGraspConfig.from_mapping({"endpoint": "left"})
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("PinchGraspConfig accepted config without top-level grasp section")
+
+
 def test_env_configs_provide_solver_settings() -> None:
     """所有项目内置场景都应显式提供 PhysX solver 设置。"""
 
@@ -95,7 +123,7 @@ def test_env_configs_provide_solver_settings() -> None:
 
 
 def test_solver_settings_are_optional_in_scripts() -> None:
-    """外部自定义场景没写 solver 时，脚本不应主动覆盖 PhysX 默认值。"""
+    """外部自定义场景没写 solver 时，脚本不主动覆盖 PhysX 默认值。"""
 
     import importlib.util
 

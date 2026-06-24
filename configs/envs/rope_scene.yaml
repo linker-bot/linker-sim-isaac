@@ -6,7 +6,7 @@ env:
   gravity_z: -9.81
   add_ground: true
   # 绳体接触和抓取对物理步频敏感，因此默认高于 empty_scene。
-  physics_frequency: 600.0
+  physics_frequency: 200.0
   # 渲染/画面更新频率
   render_frequency: 60.0
 
@@ -15,7 +15,7 @@ solver:
   type: TGS
   # 对 arm、hand 或两者覆盖迭代次数。
   apply_scope: arm_hand
-  arm_position_iterations: 32
+  arm_position_iterations: 24
   arm_velocity_iterations: 4
-  hand_position_iterations: 32
+  hand_position_iterations: 24
   hand_velocity_iterations: 4

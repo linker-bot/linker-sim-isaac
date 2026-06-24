@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""运行 AR5 + LinkerHand L6 的绳端夹捏抓取 demo。
+"""运行机械臂 + 灵巧手的绳端夹捏抓取 demo。
 
-脚本会读取 capsule rope USD 资产、导入 AR5+L6、配置 implicit drive、构造 pinch TCP，并通过 IK
+脚本会读取 capsule rope USD 资产、导入机器人、配置 implicit drive、构造 pinch TCP，并通过 IK
 规划和执行 approach / grasp / lift / wiggle 等阶段。
 """
 
@@ -79,20 +79,21 @@ def solver_settings(env_config: dict) -> SolverIterationConfig | None:
     )
 
 
-def robot_ik_settings(robot_config: dict) -> dict:
-    """读取 cuMotion IK 配置。"""
+def robot_cumotion_settings(robot_config: dict) -> dict:
+    """读取 cuMotion 机器人模型配置。"""
 
-    robot_ik = dict(robot_config.get("ik") or {})
-    if not robot_ik:
-        raise ValueError("Robot config must provide ik.robot_description, ik.base_urdf and ik.flange_frame")
-    missing = [key for key in ("robot_description", "base_urdf") if not robot_ik.get(key)]
+    settings = dict(robot_config.get("cumotion") or {})
+    if "ik" in robot_config:
+        raise ValueError("Robot config must use cumotion.xrdf_path and cumotion.urdf_path, not ik.*")
+    obsolete_keys = sorted(key for key in ("robot_description", "base_urdf") if key in settings)
+    if obsolete_keys:
+        raise ValueError(f"Robot cuMotion config uses obsolete key(s): {obsolete_keys}; use xrdf_path and urdf_path")
+    if not settings:
+        raise ValueError("Robot config must provide cumotion.xrdf_path and cumotion.urdf_path")
+    missing = [key for key in ("xrdf_path", "urdf_path", "flange_frame") if not settings.get(key)]
     if missing:
-        raise ValueError(f"Robot IK config is missing required key(s): {missing}")
-    if str(robot_ik.get("backend", "cumotion")).lower() not in {"", "cumotion"}:
-        raise ValueError("Only cuMotion IK is supported")
-    robot_ik.pop("backend", None)
-    robot_ik.setdefault("flange_frame", "AR5V2_L_arm_flan_link")
-    return robot_ik
+        raise ValueError(f"Robot cuMotion config is missing required key(s): {missing}")
+    return settings
 
 
 def short_smoke_config(config: PinchGraspConfig) -> PinchGraspConfig:
@@ -154,7 +155,7 @@ def main() -> None:
 
     robot_asset = RobotAssetConfig.from_mapping(robot_config)
     controlled_joints = list(robot_config.get("controlled_joints", ["all"]))
-    robot_ik = robot_ik_settings(robot_config)
+    robot_cumotion = robot_cumotion_settings(robot_config)
 
     rope_config = CapsuleRopeConfig.from_mapping(rope_config_data)
     grasp_config = PinchGraspConfig.from_mapping(grasp_config_data)
@@ -163,7 +164,9 @@ def main() -> None:
     if args.short_smoke:
         grasp_config = short_smoke_config(grasp_config)
 
-    env = env_config.get("env", env_config)
+    if "env" not in env_config:
+        raise ValueError("Environment config must contain top-level env section")
+    env = env_config["env"]
     physics_frequency = float(args.physics_frequency if args.physics_frequency is not None else env.get("physics_frequency", 600.0))
     render_frequency = float(args.render_frequency if args.render_frequency is not None else env.get("render_frequency", 100.0))
     gravity_z = float(args.gravity_z if args.gravity_z is not None else env.get("gravity_z", -9.81))
@@ -259,9 +262,9 @@ def main() -> None:
                     config=grasp_config,
                     rope_config=rope_config,
                     mjcf_path=asset_path,
-                    ik_robot_description=repo_path(robot_ik["robot_description"]),
-                    ik_base_urdf=repo_path(robot_ik["base_urdf"]),
-                    parent_frame=str(robot_ik["flange_frame"]),
+                    cumotion_xrdf_path=repo_path(robot_cumotion["xrdf_path"]),
+                    cumotion_urdf_path=repo_path(robot_cumotion["urdf_path"]),
+                    parent_frame=str(robot_cumotion["flange_frame"]),
                 )
                 result = task.run(
                     robot=robot,

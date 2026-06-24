@@ -1,4 +1,4 @@
-# 单独 AR5 机械臂配置。
+# 单独机械臂示例配置。
 robot:
   # Isaac 场景中的机器人名称。
   name: ar5v2_l
@@ -9,7 +9,7 @@ robot:
   # 导入到 USD stage 的根 prim 路径。
   prim_path: /World/AR5V2_L
 
-# 控制器实际下发目标的关节。单臂配置只包含 7 个 AR5 关节。
+# 控制器实际下发目标的关节。
 controlled_joints:
   - AR5V2_L_arm_joint_1
   - AR5V2_L_arm_joint_2
@@ -19,10 +19,10 @@ controlled_joints:
   - AR5V2_L_arm_joint_6
   - AR5V2_L_arm_joint_7
 
-ik:
-  # cuMotion XRDF，描述 C-space、默认关节和工具 frame。
-  robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  # 基础 URDF。任务会临时复制并追加 TCP link。
-  base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
-  # AR5 法兰 link；pinch TCP 会固定在这个 parent frame 下。
+cumotion:
+  # XRDF 描述 cuMotion C-space、默认关节和工具 frame。
+  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+  # URDF 描述机器人 link/joint；任务会临时复制并追加 TCP link。
+  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+  # 机械臂法兰 link；pinch TCP 会固定在这个 parent frame 下。
   flange_frame: AR5V2_L_arm_flan_link

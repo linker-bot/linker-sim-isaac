@@ -20,9 +20,24 @@ def test_controller_profiles_split_arm_and_hand() -> None:
     assert physx["hand"].follower_drive_stiffness_seed == 50000.0
 
 
+def test_controller_profiles_require_directory_entrypoint() -> None:
+    try:
+        load_controller_profiles({"arm": "configs/controllers/arm_controller.yaml", "hand": "configs/controllers/hand_controller.yaml"})
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("load_controller_profiles accepted mapping entrypoint")
+
+
 def test_robot_name_classification_supports_left_and_right() -> None:
     assert component_for_name("AR5V2_L_arm_link1") == "arm"
     assert component_for_name("AR5V2_R_arm_link1") == "arm"
     assert component_for_name("L6V1_L_hand_index_mcp_pitch") == "hand"
     assert component_for_name("L6V1_R_hand_index_mcp_pitch") == "hand"
     assert component_for_name("world") == "default"
+
+
+def test_robot_name_classification_uses_category_token_not_device_prefix() -> None:
+    assert component_for_name("UR10V3_R_arm_joint_2") == "arm"
+    assert component_for_name("DexHandV2_L_hand_index_mcp") == "hand"
+    assert component_for_name("mobilebaseV1_base_link") == "default"

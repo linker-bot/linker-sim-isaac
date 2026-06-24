@@ -20,6 +20,12 @@ dev = [
 visualization = [
   "foxglove-sdk",
 ]
+simulation = [
+  # Isaac Sim provides the isaacsim, omni, and pxr Python modules used by the runtime scripts.
+  "isaacsim[all]==5.1.0.0",
+  "cumotion==1.1.0",
+  "torch==2.7.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["source"]

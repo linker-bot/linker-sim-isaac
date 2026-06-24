@@ -1,4 +1,4 @@
-"""从 L6 手 MJCF 运动树计算夹捏中心 TCP。
+"""从灵巧手 MJCF 运动树计算夹捏中心 TCP。
 
 夹捏 TCP 的位置不是一个固定常量，而是由 thumb/index 指尖在“闭合手型”下的位置决定。
 本模块读取 MJCF body/joint 层级，沿手掌基座到指尖的 body chain 做正运动学，
@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -17,10 +18,29 @@ from manipulation_project.tcp.tcp_frame import TcpFrame
 from manipulation_project.utils.math_utils import axis_angle_to_matrix, make_transform, quat_wxyz_to_matrix
 
 
-DEFAULT_HAND_BASE_BODY = "L6V1_L_hand_base_link"
-DEFAULT_THUMB_TIP_BODY = "L6V1_L_hand_thumb_tip"
-DEFAULT_INDEX_TIP_BODY = "L6V1_L_hand_index_tip"
-DEFAULT_PINCH_TCP_FRAME = "ar5_l6_pinch_tcp"
+DEFAULT_PINCH_TCP_FRAME = "pinch_tcp"
+
+
+def infer_hand_body_names(hand_targets: Mapping[str, float]) -> tuple[str, str, str]:
+    """按命名规范从手部关节名推导手掌和指尖 body 名。
+
+    约定关节名形如 ``<single-system-name>_hand_<finger>_<joint-role>``，
+    body 名对应 ``<single-system-name>_hand_base_link``、
+    ``<single-system-name>_hand_thumb_tip`` 和
+    ``<single-system-name>_hand_index_tip``。
+    """
+
+    for joint_name in hand_targets:
+        name = str(joint_name)
+        if "_hand_" not in name:
+            continue
+        system_name = name.split("_hand_", 1)[0]
+        return (
+            f"{system_name}_hand_base_link",
+            f"{system_name}_hand_thumb_tip",
+            f"{system_name}_hand_index_tip",
+        )
+    raise ValueError("Cannot infer hand body names because no target joint name contains '_hand_'")
 
 
 def parse_vec3(text: str | None, default=(0.0, 0.0, 0.0)) -> np.ndarray:
@@ -149,18 +169,18 @@ def fingertip_pinch_local_offset(
     mjcf_path: str | Path,
     hand_targets: dict[str, float],
     *,
-    hand_base_body: str = DEFAULT_HAND_BASE_BODY,
-    thumb_tip_body: str = DEFAULT_THUMB_TIP_BODY,
-    index_tip_body: str = DEFAULT_INDEX_TIP_BODY,
+    hand_base_body: str | None = None,
+    thumb_tip_body: str | None = None,
+    index_tip_body: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """计算闭合手型下的夹捏中心和两指尖位置。
 
     参数:
-        mjcf_path: AR5+L6 MJCF 文件路径。
+        mjcf_path: 组合 MJCF 文件路径。
         hand_targets: 手部主动关节目标，单位 rad；函数内部会展开 mimic follower。
-        hand_base_body: 手掌基座 body 名称。
-        thumb_tip_body: 拇指 tip body 名称。
-        index_tip_body: 食指 tip body 名称。
+        hand_base_body: 手掌基座 body 名称；为空时按手部关节名前缀推导。
+        thumb_tip_body: 拇指 tip body 名称；为空时按手部关节名前缀推导。
+        index_tip_body: 食指 tip body 名称；为空时按手部关节名前缀推导。
     返回:
         ``(pinch_center, thumb_tip, index_tip)``，三者都是手掌基座坐标系下的
         shape ``(3,)`` 位置数组，单位 m。
@@ -168,6 +188,10 @@ def fingertip_pinch_local_offset(
 
     path = Path(mjcf_path)
     expanded_targets = expand_targets_with_mjcf_equalities(hand_targets, path)
+    inferred_base, inferred_thumb, inferred_index = infer_hand_body_names(hand_targets)
+    hand_base_body = hand_base_body or inferred_base
+    thumb_tip_body = thumb_tip_body or inferred_thumb
+    index_tip_body = index_tip_body or inferred_index
     root = ET.parse(path).getroot()
     thumb_chain = body_chain_between(root, hand_base_body, thumb_tip_body)
     index_chain = body_chain_between(root, hand_base_body, index_tip_body)
@@ -183,17 +207,27 @@ def make_pinch_tcp(
     *,
     parent_frame: str,
     frame_name: str = DEFAULT_PINCH_TCP_FRAME,
+    hand_base_body: str | None = None,
+    thumb_tip_body: str | None = None,
+    index_tip_body: str | None = None,
 ) -> TcpFrame:
     """创建位于闭合夹捏中心的 TCP frame。
 
     参数:
-        mjcf_path: AR5+L6 MJCF 文件路径。
+        mjcf_path: 组合 MJCF 文件路径。
         hand_targets: 用于计算闭合几何的手部目标，单位 rad。
         parent_frame: TCP 固连到的父 frame 名称，通常是手掌基座 link。
         frame_name: 新 TCP frame 名称。
+        hand_base_body/thumb_tip_body/index_tip_body: 可选 body 名覆盖；为空时按手部关节名前缀推导。
     返回:
         ``TcpFrame``，其 ``xyz`` 是夹捏中心相对 ``parent_frame`` 的偏移，单位 m。
     """
 
-    pinch_center, _thumb_tip, _index_tip = fingertip_pinch_local_offset(mjcf_path, hand_targets)
+    pinch_center, _thumb_tip, _index_tip = fingertip_pinch_local_offset(
+        mjcf_path,
+        hand_targets,
+        hand_base_body=hand_base_body,
+        thumb_tip_body=thumb_tip_body,
+        index_tip_body=index_tip_body,
+    )
     return TcpFrame.from_xyz_rpy(frame_name=frame_name, parent_frame=parent_frame, xyz=pinch_center)

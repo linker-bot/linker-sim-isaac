@@ -1,4 +1,4 @@
-"""AR5/L6 刚体的 PhysX solver 迭代次数覆盖。
+"""机器人刚体的 PhysX solver 迭代次数覆盖。
 
 复杂接触、细小灵巧手和绳体交互都容易受 solver 迭代次数影响。
 这里把迭代次数按 arm/hand 分组配置，便于在不同实验中快速调整稳定性。
@@ -17,8 +17,8 @@ class SolverIterationConfig:
 
     输入字段:
         solver_type: ``PGS`` 或 ``TGS``。
-        arm_position_iterations/arm_velocity_iterations: AR5 刚体迭代次数。
-        hand_position_iterations/hand_velocity_iterations: L6 手刚体迭代次数。
+        arm_position_iterations/arm_velocity_iterations: 机械臂刚体迭代次数。
+        hand_position_iterations/hand_velocity_iterations: 灵巧手刚体迭代次数。
         apply_scope: 应用范围，支持 ``arm``、``hand``、``arm_hand``、``articulation``。
     输出:
         传给 ``apply_solver_iteration_overrides`` 后写入 stage。
@@ -33,24 +33,24 @@ class SolverIterationConfig:
 
 
 def is_hand_prim_name(name: str) -> bool:
-    """判断 prim 名是否属于 L6 手。
+    """判断 prim 名是否属于灵巧手。
 
     参数:
         name: USD prim 名称。
     返回:
-        名称是否以 L6 手前缀开头。
+        名称是否包含规范 category ``hand``。
     """
 
     return is_hand_name(name)
 
 
 def is_arm_prim_name(name: str) -> bool:
-    """判断 prim 名是否属于 AR5 机械臂。
+    """判断 prim 名是否属于机械臂。
 
     参数:
         name: USD prim 名称。
     返回:
-        名称是否以 AR5 前缀开头。
+        名称是否包含规范 category ``arm``。
     """
 
     return is_arm_name(name)

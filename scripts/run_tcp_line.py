@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""运行固定时长的关节目标运动。
+"""运行 TCP 笛卡尔直线运动 demo。
 
-该脚本是项目的最小实际运动 smoke/demo 入口：导入机器人资产，构造 implicit
-position drive 控制器，从配置文件读取稀疏关节目标，然后在 Isaac Sim 中执行并记录
-CSV 跟踪日志。
+脚本导入机器人资产，读取 cuMotion FK/IK 模型，从当前 TCP 位姿生成一条 base
+坐标系下的直线 TCP 轨迹，再转成 implicit drive 控制器可执行的关节目标轨迹。
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import os
 import sys
 from pathlib import Path
@@ -25,32 +25,25 @@ from manipulation_project.app.launch import launch_simulation_app
 from manipulation_project.assets.robot_loader import RobotAssetConfig, import_robot_asset
 from manipulation_project.assets.solver_overrides import SolverIterationConfig, apply_solver_iteration_overrides
 from manipulation_project.assets.usd_overrides import apply_robot_usd_overrides, disable_robot_gravity
+from manipulation_project.backends.cumotion.context import CuMotionConfig
 from manipulation_project.controllers.config import implicit_drive_settings, load_controller_profiles, physx_override_configs
 from manipulation_project.controllers.implicit_drive_controller import ImplicitDriveController
 from manipulation_project.envs.scene_builder import build_world, configure_visuals
 from manipulation_project.execution.joint_trajectory_executor import execute_joint_trajectory
-from manipulation_project.tasks.move_joint_targets import (
-    MoveJointTargetsConfig,
-    build_command_trajectory_from_sparse_targets,
-)
+from manipulation_project.tasks.move_tcp_line import MoveTcpLineConfig, build_tcp_line_command_trajectory
 from manipulation_project.utils.config import load_yaml
 from manipulation_project.utils.paths import repo_path
 
 
 def parse_args() -> argparse.Namespace:
-    """解析命令行参数。
-
-    返回:
-        argparse namespace。
-    """
+    """解析命令行参数。"""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml"))
     parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers"))
-    parser.add_argument("--trajectory-config", type=Path, default=Path("configs/trajectories/joint_target.yaml"))
+    parser.add_argument("--trajectory-config", type=Path, default=Path("configs/trajectories/tcp_line.yaml"))
     parser.add_argument("--env-config", type=Path, default=Path("configs/envs/empty_scene.yaml"))
-    parser.add_argument("--log", type=Path, default=Path("logs/joint_tracking/run_joint_target.csv"))
-    parser.add_argument("--joint", nargs=2, action="append", metavar=("NAME", "RAD"), help="覆盖或追加目标关节")
+    parser.add_argument("--log", type=Path, default=Path("logs/joint_tracking/run_tcp_line.csv"))
     parser.add_argument("--duration", type=float, default=None)
     parser.add_argument("--sample-hz", type=float, default=None)
     parser.add_argument("--physics-frequency", type=float, default=None)
@@ -67,12 +60,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def solver_settings(env_config: dict) -> SolverIterationConfig | None:
-    """从环境配置构造机器人 solver iteration 覆盖设置。
-
-    返回:
-        配置中存在 ``solver`` 时返回 ``SolverIterationConfig``；不存在时返回
-        ``None``，表示保持 Isaac/PhysX 默认 solver 设置。
-    """
+    """从环境配置构造机器人 solver iteration 覆盖设置。"""
 
     solver = env_config.get("solver")
     if solver is None:
@@ -118,6 +106,21 @@ def apply_robot_asset_overrides(asset: RobotAssetConfig, args: argparse.Namespac
     return result
 
 
+def robot_cumotion_settings(robot_config: dict) -> dict:
+    """读取 cuMotion 机器人模型配置。"""
+
+    settings = dict(robot_config.get("cumotion") or {})
+    if "ik" in robot_config:
+        raise ValueError("Robot config must use cumotion.xrdf_path and cumotion.urdf_path, not ik.*")
+    obsolete_keys = sorted(key for key in ("robot_description", "base_urdf") if key in settings)
+    if obsolete_keys:
+        raise ValueError(f"Robot cuMotion config uses obsolete key(s): {obsolete_keys}; use xrdf_path and urdf_path")
+    missing = [key for key in ("xrdf_path", "urdf_path", "flange_frame") if not settings.get(key)]
+    if missing:
+        raise ValueError(f"Robot cuMotion config is missing required key(s): {missing}")
+    return settings
+
+
 def main() -> None:
     """脚本主入口。"""
 
@@ -125,11 +128,6 @@ def main() -> None:
         sys.stdout.reconfigure(line_buffering=True)
 
     args = parse_args()
-    if args.duration is not None and args.duration < 0:
-        raise ValueError("--duration cannot be negative")
-    if args.sample_hz is not None and args.sample_hz <= 0:
-        raise ValueError("--sample-hz must be positive")
-
     robot_config_data = load_yaml(args.robot_config)
     controller_profiles = load_controller_profiles(args.controller_config)
     trajectory_config_data = load_yaml(args.trajectory_config)
@@ -137,25 +135,32 @@ def main() -> None:
 
     robot_asset = apply_robot_asset_overrides(RobotAssetConfig.from_mapping(robot_config_data), args)
     controlled_joints = args.controlled_joints or list(robot_config_data.get("controlled_joints", ["all"]))
+    robot_cumotion = robot_cumotion_settings(robot_config_data)
 
-    if "trajectory" not in trajectory_config_data:
-        raise ValueError("Trajectory config must contain top-level trajectory section")
-    trajectory = trajectory_config_data["trajectory"]
-    targets = {str(name): float(value) for name, value in dict(trajectory.get("targets", {})).items()}
-    if args.joint:
-        for name, value in args.joint:
-            targets[str(name)] = float(value)
-    if not targets:
-        raise ValueError("No joint targets were provided in config or via --joint")
-
-    duration_s = float(args.duration if args.duration is not None else trajectory.get("duration", 2.0))
-    sample_hz = float(args.sample_hz if args.sample_hz is not None else trajectory.get("sample_hz", 200.0))
-    task_config = MoveJointTargetsConfig(
-        targets=targets,
-        duration_s=duration_s,
-        sample_hz=sample_hz,
-        interpolation=str(trajectory.get("interpolation", "smoothstep")),
+    tcp_line_config = MoveTcpLineConfig.from_mapping(trajectory_config_data)
+    if tcp_line_config.tcp_frame_name is None:
+        tcp_line_config = MoveTcpLineConfig(
+            tcp_frame_name=str(robot_cumotion["flange_frame"]),
+            start_position=tcp_line_config.start_position,
+            target_position=tcp_line_config.target_position,
+            target_offset=tcp_line_config.target_offset,
+            orientation_mode=tcp_line_config.orientation_mode,
+            target_orientation=tcp_line_config.target_orientation,
+            target_rpy_deg=tcp_line_config.target_rpy_deg,
+            duration_s=tcp_line_config.duration_s,
+            sample_hz=tcp_line_config.sample_hz,
+            ik_position_tolerance=tcp_line_config.ik_position_tolerance,
+            ik_orientation_tolerance=tcp_line_config.ik_orientation_tolerance,
+            ik_max_iterations=tcp_line_config.ik_max_iterations,
+            ik_bfgs_max_iterations=tcp_line_config.ik_bfgs_max_iterations,
+            ik_orientation_weight=tcp_line_config.ik_orientation_weight,
+            phase=tcp_line_config.phase,
     )
+    if args.duration is not None:
+        tcp_line_config = replace(tcp_line_config, duration_s=float(args.duration))
+    if args.sample_hz is not None:
+        tcp_line_config = replace(tcp_line_config, sample_hz=float(args.sample_hz))
+    tcp_line_config.validate()
 
     if "env" not in env_config_data:
         raise ValueError("Environment config must contain top-level env section")
@@ -196,16 +201,17 @@ def main() -> None:
         )
         if not args.enable_robot_gravity:
             disabled = disable_robot_gravity(imported_root_path)
-            print(f"RUN_JOINT_TARGET_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}", flush=True)
+            print(f"RUN_TCP_LINE_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}", flush=True)
         else:
-            print("RUN_JOINT_TARGET_GRAVITY robot_gravity=true", flush=True)
-        print(f"RUN_JOINT_TARGET_SOLVER {solver_counts}", flush=True)
+            print("RUN_TCP_LINE_GRAVITY robot_gravity=true", flush=True)
+        print(f"RUN_TCP_LINE_SOLVER {solver_counts}", flush=True)
 
         robot = world.scene.add(SingleArticulation(prim_path=articulation_path, name=robot_asset.name))
         world.reset()
         world.get_physics_context().set_gravity(gravity_z)
         if not args.enable_robot_gravity:
             robot.disable_gravity()
+        robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
 
         controller = ImplicitDriveController(
             robot,
@@ -217,24 +223,39 @@ def main() -> None:
 
         dof_names = list(robot.dof_names)
         current_positions = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)
-        command_trajectory = build_command_trajectory_from_sparse_targets(
+        cumotion_config = CuMotionConfig(
+            xrdf_path=repo_path(robot_cumotion["xrdf_path"]),
+            urdf_path=repo_path(robot_cumotion["urdf_path"]),
+            flange_frame=str(robot_cumotion["flange_frame"]),
+            default_tcp_frame=tcp_line_config.tcp_frame_name,
+            ccd_max_iterations=tcp_line_config.ik_max_iterations,
+            bfgs_max_iterations=tcp_line_config.ik_bfgs_max_iterations,
+            orientation_weight=tcp_line_config.ik_orientation_weight,
+            position_tolerance=tcp_line_config.ik_position_tolerance,
+            orientation_tolerance=tcp_line_config.ik_orientation_tolerance,
+        )
+        command_trajectory, diagnostics = build_tcp_line_command_trajectory(
             dof_names=dof_names,
             command_indices=controller.command_indices,
             current_positions=current_positions,
-            config=task_config,
+            config=tcp_line_config,
+            cumotion_config=cumotion_config,
         )
 
         print(
-            "RUN_JOINT_TARGET_IMPORTED "
+            "RUN_TCP_LINE_IMPORTED "
             f"asset_type={robot_asset.asset_type} asset={asset_path} "
             f"prim_path={articulation_path} num_dof={robot.num_dof}",
             flush=True,
         )
-        print("RUN_JOINT_TARGET_DOF_NAMES " + ", ".join(dof_names), flush=True)
+        print("RUN_TCP_LINE_DOF_NAMES " + ", ".join(dof_names), flush=True)
         print(
-            "RUN_JOINT_TARGET_TRAJECTORY "
-            f"duration_s={duration_s:.6g} sample_hz={sample_hz:.6g} "
-            f"points={len(command_trajectory)} targets={targets}",
+            "RUN_TCP_LINE_TRAJECTORY "
+            f"tcp_frame={tcp_line_config.tcp_frame_name} "
+            f"start={diagnostics.start_position.tolist()} "
+            f"target={diagnostics.target_position.tolist()} "
+            f"duration_s={tcp_line_config.duration_s:.6g} sample_hz={tcp_line_config.sample_hz:.6g} "
+            f"points={len(command_trajectory)} max_ik_error={diagnostics.max_position_error:.6g}",
             flush=True,
         )
 
@@ -249,7 +270,7 @@ def main() -> None:
             simulation_app=simulation_app,
             hold=args.hold,
         )
-        print(f"RUN_JOINT_TARGET_OK log={repo_path(args.log)}", flush=True)
+        print(f"RUN_TCP_LINE_OK log={repo_path(args.log)}", flush=True)
     finally:
         simulation_app.close()
 

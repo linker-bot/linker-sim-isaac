@@ -38,12 +38,14 @@ class RobotAssetConfig:
         """从 YAML 映射构造导入配置。
 
         参数:
-            data: 完整配置或 ``robot`` 子配置字典。
+            data: 完整配置，必须包含 ``robot`` 子配置字典。
         返回:
             ``RobotAssetConfig``；路径字段会通过 ``repo_path`` 解析。
         """
 
-        robot = data.get("robot", data)
+        if "robot" not in data:
+            raise ValueError("Robot config must contain top-level robot section")
+        robot = data["robot"]
         return cls(
             asset_type=str(robot.get("asset_type", "mjcf")).lower(),
             asset_path=repo_path(robot["asset_path"]),
