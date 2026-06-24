@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 
 from manipulation_project.backends.cumotion.forward_kinematics import ForwardKinematicsPose
@@ -39,6 +41,7 @@ class _FakeInverseKinematics:
 
 class _FakeContext:
     def __init__(self) -> None:
+        self.config = SimpleNamespace(position_tolerance=0.012, orientation_tolerance=0.034)
         self.solver = _FakeInverseKinematics()
 
     def joint_names(self) -> list[str]:
@@ -92,6 +95,8 @@ def test_build_tcp_line_command_trajectory_warm_starts_each_waypoint() -> None:
     np.testing.assert_allclose(context.solver.requests[1].warm_start, [3.1, 4.1])
     np.testing.assert_allclose(context.solver.requests[0].target_orientation, [1.0, 0.0, 0.0, 0.0])
     np.testing.assert_allclose(context.solver.requests[1].target_orientation, [1.0, 0.0, 0.0, 0.0])
+    assert context.solver.requests[0].position_tolerance == 0.012
+    assert context.solver.requests[0].orientation_tolerance == 0.034
 
 
 def test_build_tcp_line_command_trajectory_slerps_target_orientation() -> None:

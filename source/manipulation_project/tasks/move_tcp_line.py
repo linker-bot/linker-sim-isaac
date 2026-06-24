@@ -13,9 +13,9 @@ import numpy as np
 
 from manipulation_project.backends.cumotion.context import CuMotionConfig, CuMotionContext
 from manipulation_project.planning.requests import IKRequest
-from manipulation_project.trajectories.base import JointTrajectory
-from manipulation_project.trajectories.cartesian_pose import sample_cartesian_pose_line
-from manipulation_project.trajectories.joint_trajectory import joint_trajectory_from_positions
+from manipulation_project.trajectories.cartesian_waypoints import sample_cartesian_pose_line
+from manipulation_project.trajectories.joint_trajectory_builder import joint_trajectory_from_positions
+from manipulation_project.trajectories.types import JointTrajectory
 from manipulation_project.utils.rotations import normalize_quat_wxyz, rpy_xyz_deg_to_quat_wxyz
 from manipulation_project.utils.timing import sample_times
 
@@ -46,11 +46,6 @@ class MoveTcpLineConfig:
     target_rpy_deg: tuple[float, float, float] | None = None
     duration_s: float = 2.0
     sample_hz: float = 100.0
-    ik_position_tolerance: float = 0.005
-    ik_orientation_tolerance: float = 0.75
-    ik_max_iterations: int = 180
-    ik_bfgs_max_iterations: int = 80
-    ik_orientation_weight: float = 0.25
     phase: str = "tcp_line"
 
     @classmethod
@@ -83,11 +78,6 @@ class MoveTcpLineConfig:
             target_rpy_deg=_optional_vector3(trajectory.get("target_rpy_deg")),
             duration_s=float(trajectory.get("duration", cls.duration_s)),
             sample_hz=float(trajectory.get("sample_hz", cls.sample_hz)),
-            ik_position_tolerance=float(trajectory.get("ik_position_tolerance", cls.ik_position_tolerance)),
-            ik_orientation_tolerance=float(trajectory.get("ik_orientation_tolerance", cls.ik_orientation_tolerance)),
-            ik_max_iterations=int(trajectory.get("ik_max_iterations", cls.ik_max_iterations)),
-            ik_bfgs_max_iterations=int(trajectory.get("ik_bfgs_max_iterations", cls.ik_bfgs_max_iterations)),
-            ik_orientation_weight=float(trajectory.get("ik_orientation_weight", cls.ik_orientation_weight)),
             phase=str(trajectory.get("phase", cls.phase)),
         )
 
@@ -108,10 +98,6 @@ class MoveTcpLineConfig:
             raise ValueError("duration cannot be negative")
         if self.sample_hz <= 0:
             raise ValueError("sample_hz must be positive")
-        if self.ik_position_tolerance < 0 or self.ik_orientation_tolerance < 0:
-            raise ValueError("IK tolerances cannot be negative")
-        if self.ik_max_iterations <= 0 or self.ik_bfgs_max_iterations <= 0:
-            raise ValueError("IK iteration counts must be positive")
 
 
 @dataclass(frozen=True)
@@ -187,6 +173,8 @@ def build_tcp_line_command_trajectory(
     # slerp。若 orientation_mode=none，waypoint orientation 会是 None，IKRequest
     # 会只约束位置。
     solver = context.make_inverse_kinematics(tcp_frame_name=config.tcp_frame_name)
+    position_tolerance = float(context.config.position_tolerance)
+    orientation_tolerance = float(context.config.orientation_tolerance)
     times = sample_times(config.duration_s, config.sample_hz)
     waypoints = sample_cartesian_pose_line(
         times=times,
@@ -212,8 +200,8 @@ def build_tcp_line_command_trajectory(
                 target_orientation=waypoint.orientation,
                 tcp_frame_name=config.tcp_frame_name,
                 warm_start=warm_start,
-                position_tolerance=config.ik_position_tolerance,
-                orientation_tolerance=config.ik_orientation_tolerance,
+                position_tolerance=position_tolerance,
+                orientation_tolerance=orientation_tolerance,
             )
         )
         if not result.success:

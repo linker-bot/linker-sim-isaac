@@ -12,7 +12,7 @@ import numpy as np
 
 from manipulation_project.execution.joint_trajectory_executor import execute_joint_trajectory
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.trajectories.joint_trajectory import build_joint_target_trajectory
+from manipulation_project.trajectories.joint_trajectory_builder import build_joint_target_trajectory
 
 
 # 兼容旧脚本/外部调用：执行器已经迁移到 execution 层。

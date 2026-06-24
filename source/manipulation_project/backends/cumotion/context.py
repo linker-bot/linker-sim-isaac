@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+
+from manipulation_project.utils.paths import repo_path
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,66 @@ class CuMotionConfig:
     ccd_max_iterations: int = 180
     bfgs_max_iterations: int = 80
     orientation_weight: float = 0.25
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "CuMotionConfig":
+        """从 robot YAML 或 cumotion 子映射构造后端配置。
+
+        配置文件中的路径按仓库根目录解析；求解器容差、迭代次数和可选 seed
+        都属于 ``cumotion``，任务配置只负责描述任务意图。
+        """
+
+        settings = data.get("cumotion", data)
+        if not isinstance(settings, Mapping):
+            raise ValueError("cuMotion config must be a mapping")
+        missing = [key for key in ("xrdf_path", "urdf_path", "flange_frame") if not settings.get(key)]
+        if missing:
+            raise ValueError(f"cuMotion config is missing required key(s): {missing}")
+
+        config = cls(
+            xrdf_path=repo_path(settings["xrdf_path"]),
+            urdf_path=repo_path(settings["urdf_path"]),
+            flange_frame=str(settings["flange_frame"]),
+            default_tcp_frame=str(settings.get("default_tcp_frame") or settings["flange_frame"]),
+            cspace_seeds=_optional_seeds(settings.get("cspace_seeds")),
+            position_tolerance=float(settings.get("position_tolerance", cls.position_tolerance)),
+            orientation_tolerance=float(settings.get("orientation_tolerance", cls.orientation_tolerance)),
+            ccd_max_iterations=int(settings.get("ccd_max_iterations", cls.ccd_max_iterations)),
+            bfgs_max_iterations=int(settings.get("bfgs_max_iterations", cls.bfgs_max_iterations)),
+            orientation_weight=float(settings.get("orientation_weight", cls.orientation_weight)),
+        )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        """检查 cuMotion 后端配置字段。"""
+
+        if not str(self.xrdf_path):
+            raise ValueError("xrdf_path cannot be empty")
+        if not str(self.urdf_path):
+            raise ValueError("urdf_path cannot be empty")
+        if not self.flange_frame:
+            raise ValueError("flange_frame cannot be empty")
+        if self.default_tcp_frame is not None and not self.default_tcp_frame:
+            raise ValueError("default_tcp_frame cannot be empty")
+        if self.position_tolerance < 0 or self.orientation_tolerance < 0:
+            raise ValueError("cuMotion tolerances cannot be negative")
+        if self.ccd_max_iterations <= 0 or self.bfgs_max_iterations <= 0:
+            raise ValueError("cuMotion iteration counts must be positive")
+        if self.orientation_weight < 0:
+            raise ValueError("orientation_weight cannot be negative")
+        _optional_seeds(self.cspace_seeds)
+
+
+def _optional_seeds(value) -> np.ndarray | None:
+    """解析可选 C-space seed 数组。"""
+
+    if value is None:
+        return None
+    seeds = np.asarray(value, dtype=float)
+    if seeds.ndim not in {1, 2} or seeds.size == 0:
+        raise ValueError("cspace_seeds must be a non-empty 1D or 2D array")
+    return seeds
 
 
 class CuMotionContext:

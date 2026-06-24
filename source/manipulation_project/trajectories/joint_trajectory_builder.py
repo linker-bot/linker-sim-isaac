@@ -1,4 +1,4 @@
-"""关节空间轨迹生成。
+"""关节空间轨迹构造。
 
 输入是一组起始/目标关节位置，输出是按固定采样间隔离散化的 ``JointTrajectory``。
 轨迹内部按 cuMotion 风格保存时间、位置、速度、加速度和 jerk 矩阵。
@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from manipulation_project.trajectories.base import JointTrajectory
+from manipulation_project.trajectories.types import JointTrajectory
 from manipulation_project.trajectories.interpolation import interpolation_fn
 from manipulation_project.utils.timing import differentiate_samples
 

@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from manipulation_project.trajectories.base import JointTrajectory
+from manipulation_project.trajectories.types import JointTrajectory
 
 
 def joint_trajectory_from_cumotion(

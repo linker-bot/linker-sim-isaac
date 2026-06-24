@@ -6,6 +6,7 @@ from xml.etree import ElementTree as ET
 from manipulation_project.assets.asset_paths import DEFAULT_AR5_RIGHT_URDF, DEFAULT_L6_RIGHT_URDF
 from manipulation_project.assets.robot_loader import RobotAssetConfig
 from manipulation_project.assets.solver_overrides import SolverIterationConfig
+from manipulation_project.backends.cumotion.context import CuMotionConfig
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, grasp_target_position
 from manipulation_project.utils.config import load_yaml
@@ -22,8 +23,15 @@ def test_robot_configs_are_cumotion_only() -> None:
     for path in sorted(Path("configs/robots").glob("*.yaml")):
         config = load_yaml(path)
         assert "cumotion" in config
-        assert config["cumotion"].get("xrdf_path")
-        assert config["cumotion"].get("urdf_path")
+        cumotion = CuMotionConfig.from_mapping(config)
+        assert Path(cumotion.xrdf_path).is_file()
+        assert Path(cumotion.urdf_path).is_file()
+        assert cumotion.flange_frame
+        assert cumotion.default_tcp_frame
+        assert cumotion.position_tolerance >= 0.0
+        assert cumotion.orientation_tolerance >= 0.0
+        assert cumotion.ccd_max_iterations > 0
+        assert cumotion.bfgs_max_iterations > 0
         assert "robot_description" not in config["cumotion"]
         assert "base_urdf" not in config["cumotion"]
         assert "lula" not in config
@@ -127,7 +135,7 @@ def test_solver_settings_are_optional_in_scripts() -> None:
 
     import importlib.util
 
-    for script_path in (Path("scripts/run_pinch_grasp.py"), Path("scripts/run_joint_target.py")):
+    for script_path in (Path("scripts/run_pinch_grasp.py"),):
         spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)

@@ -28,17 +28,10 @@ grasp:
   # 抓取后额外扫动第 1 轴，帮助观察动态响应。
   post_joint_sweep_duration: 2.0
   post_joint_sweep_targets: [2.1, -2.1]
-  # IK 容差和迭代参数。
-  ik_position_tolerance: 0.002
-  ik_orientation_tolerance: 0.01
-  ik_max_iterations: 180
-  ik_bfgs_max_iterations: 80
-  ik_orientation_weight: 0.25
+  # 从 approach 点下沉到抓取点时，TCP 直线 IK waypoint 的采样频率。
+  approach_line_sample_hz: 100.0
   # 写入临时 cuMotion URDF 的 TCP frame 名。
   tcp_frame_name: pinch_tcp
-  # IK seed，顺序必须与 robot config 中的 cuMotion C-space 关节一致。
-  ik_seeds:
-    - [-1.57, 0.8, 0.0, 0.8, 0.0, 0.0, 0.0]
   # 接近目标前的半开手型。
   pre_pinch_hand_targets:
     L6V1_L_hand_thumb_cmc_roll: 0.95

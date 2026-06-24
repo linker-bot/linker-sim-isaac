@@ -14,9 +14,4 @@ trajectory:
   orientation_mode: current
   duration: 2.0
   sample_hz: 100.0
-  ik_position_tolerance: 0.005
-  ik_orientation_tolerance: 0.75
-  ik_max_iterations: 180
-  ik_bfgs_max_iterations: 80
-  ik_orientation_weight: 0.25
   phase: tcp_line

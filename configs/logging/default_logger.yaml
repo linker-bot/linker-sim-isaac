@@ -1,6 +1,6 @@
 # 日志默认配置。
 logging:
   # 关节跟踪 CSV 输出路径；相对路径以仓库根目录为基准。
-  joint_tracking_path: logs/joint_tracking/run_joint_target.csv
+  joint_tracking_path: logs/joint_tracking/run_pinch_grasp.csv
   # flush 周期，秒。脚本会换算成物理步数，避免每行都刷盘。
   flush_interval_s: 0.05

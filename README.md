@@ -73,24 +73,6 @@ env_isaaclab/bin/python -m pip install -r requirements.txt
 PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 ```
 
-运行关节目标 smoke：
-
-```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py
-```
-
-运行 TCP 直线运动：
-
-```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_tcp_line.py
-```
-
-带 GUI 观察关节目标：
-
-```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py --gui --hold
-```
-
 导入 AR5+L6 和绳体并保持初始姿态：
 
 ```bash
@@ -106,11 +88,6 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --gui
 常用覆盖参数：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_joint_target.py \
-  --joint AR5V2_L_arm_joint_1 0.5 \
-  --duration 1.0 \
-  --sample-hz 200
-
 PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
   --endpoint right \
   --physics-frequency 240 \
@@ -154,7 +131,6 @@ CuMotionConfig(
     urdf_path="assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
     flange_frame="AR5V2_L_arm_flan_link",
     default_tcp_frame="ar5_l6_pinch_tcp",
-    cspace_seeds=...,
     position_tolerance=0.005,
     orientation_tolerance=0.75,
     ccd_max_iterations=180,
@@ -298,7 +274,7 @@ trajectory:
     AR5V2_L_arm_joint_1: 0.4
 ```
 
-`configs/trajectories/pinch_grasp.yaml` 定义抓取目标、阶段时长、手型和 IK 参数：
+`configs/trajectories/pinch_grasp.yaml` 定义抓取目标、阶段时长和手型：
 
 ```yaml
 grasp:
@@ -308,24 +284,26 @@ grasp:
   use_orientation: true
   approach_distance: 0.10
   lift_height: 0.4
-  ik_position_tolerance: 0.005
-  ik_orientation_tolerance: 0.75
-  ik_seeds:
-    - [-1.57, 0.8, 0.0, 0.8, 0.0, 0.0, 0.0]
+  tcp_frame_name: pinch_tcp
+```
+
+cuMotion IK 求解器默认参数放在 `configs/robots/*.yaml` 的 `cumotion` 段：
+
+```yaml
+cumotion:
+  position_tolerance: 0.002
+  orientation_tolerance: 0.01
 ```
 
 ## 执行流程
 
 ### 关节目标
 
-`scripts/run_joint_target.py` 的流程：
+`source/manipulation_project/tasks/move_joint_targets.py` 提供关节目标任务原语：
 
-1. 读取 robot/controller/trajectory/env 配置。
-2. 导入 MJCF/URDF 机器人资产。
-3. 应用 USD/PhysX drive、材料、刚体和 solver 覆盖。
-4. 构造 `ImplicitDriveController`。
-5. 将稀疏目标展开为命令关节 `JointTrajectory`。
-6. 按采样行下发 position/velocity drive 目标并记录 CSV。
+1. 读取稀疏关节目标、时长、采样率和插值方式。
+2. 将稀疏目标展开为命令关节 `JointTrajectory`。
+3. 作为更高层任务的一段执行，例如 `PinchGraspTask.execution_tasks()` 中的阶段任务。
 
 ### Pinch Grasp
 

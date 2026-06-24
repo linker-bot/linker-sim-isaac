@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.trajectories.cartesian_pose import sample_cartesian_pose_line
+from manipulation_project.trajectories.cartesian_waypoints import sample_cartesian_pose_line
 from manipulation_project.utils.timing import sample_times
 
 

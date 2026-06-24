@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import tempfile
 
@@ -20,6 +20,18 @@ from manipulation_project.planning.requests import IKRequest
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import MimicFollowerTargetMapper, expand_targets_with_mjcf_equalities
+from manipulation_project.tasks.move_tcp_line import MoveTcpLineConfig, build_tcp_line_command_trajectory
+from manipulation_project.tasks.primitives import (
+    ExecutableTask,
+    HoldTask,
+    MoveFullJointTrajectoryTask,
+    MoveJointTargetTask,
+    TaskRuntime,
+    hold_joint_target,
+    move_full_joint_trajectory,
+    move_joint_target,
+    step_joint_target,
+)
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
 from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
 
@@ -35,9 +47,10 @@ class PinchGraspConfig:
         use_orientation: IK 是否约束 TCP 姿态；为假时只约束位置。
         approach_distance: 抓取前从目标正上方接近的高度差，单位 m。
         lift_height: 抓住后抬升高度，单位 m。
+        approach_line_sample_hz: 从 approach 点下沉到抓取点的 TCP 直线 IK 采样频率。
         prep/move/approach/close/lift/wiggle/final/post...: 各阶段持续时间，单位 s。
         wiggle_axis: 抬升后摆动方向，世界坐标向量。
-        ik_*: 传给 IK 求解器的容差、迭代次数和种子。
+        cuMotion 后端参数从 robot config 的 ``cumotion`` 段读取。
         tcp_frame_name: 写入临时 URDF 的 pinch TCP frame 名。
         pre_pinch_hand_targets: 预夹捏手型的稀疏关节目标，单位 rad。
         closed_pinch_hand_targets: 闭合夹捏手型的稀疏关节目标，单位 rad。
@@ -52,6 +65,7 @@ class PinchGraspConfig:
     use_orientation: bool = True
     approach_distance: float = 0.10
     lift_height: float = 0.4
+    approach_line_sample_hz: float = 100.0
     prep_duration: float = 1.0
     move_duration: float = 3.0
     approach_duration: float = 1.2
@@ -64,12 +78,6 @@ class PinchGraspConfig:
     final_hold_duration: float = 5.0
     post_joint_sweep_duration: float = 2.0
     post_joint_sweep_targets: tuple[float, ...] = (2.1, -2.1)
-    ik_position_tolerance: float = 0.005
-    ik_orientation_tolerance: float = 0.75
-    ik_max_iterations: int = 180
-    ik_bfgs_max_iterations: int = 80
-    ik_orientation_weight: float = 0.25
-    ik_seeds: tuple[tuple[float, ...], ...] = ((-1.57, 0.8, 0.0, 0.8, 0.0, 0.0, 0.0),)
     tcp_frame_name: str = DEFAULT_PINCH_TCP_FRAME
     pre_pinch_hand_targets: dict[str, float] | None = None
     closed_pinch_hand_targets: dict[str, float] | None = None
@@ -94,6 +102,7 @@ class PinchGraspConfig:
             use_orientation=bool(grasp.get("use_orientation", cls.use_orientation)),
             approach_distance=float(grasp.get("approach_distance", cls.approach_distance)),
             lift_height=float(grasp.get("lift_height", cls.lift_height)),
+            approach_line_sample_hz=float(grasp.get("approach_line_sample_hz", cls.approach_line_sample_hz)),
             prep_duration=float(grasp.get("prep_duration", cls.prep_duration)),
             move_duration=float(grasp.get("move_duration", cls.move_duration)),
             approach_duration=float(grasp.get("approach_duration", cls.approach_duration)),
@@ -106,12 +115,6 @@ class PinchGraspConfig:
             final_hold_duration=float(grasp.get("final_hold_duration", cls.final_hold_duration)),
             post_joint_sweep_duration=float(grasp.get("post_joint_sweep_duration", cls.post_joint_sweep_duration)),
             post_joint_sweep_targets=tuple(float(value) for value in grasp.get("post_joint_sweep_targets", cls.post_joint_sweep_targets)),
-            ik_position_tolerance=float(grasp.get("ik_position_tolerance", cls.ik_position_tolerance)),
-            ik_orientation_tolerance=float(grasp.get("ik_orientation_tolerance", cls.ik_orientation_tolerance)),
-            ik_max_iterations=int(grasp.get("ik_max_iterations", cls.ik_max_iterations)),
-            ik_bfgs_max_iterations=int(grasp.get("ik_bfgs_max_iterations", cls.ik_bfgs_max_iterations)),
-            ik_orientation_weight=float(grasp.get("ik_orientation_weight", cls.ik_orientation_weight)),
-            ik_seeds=tuple(tuple(float(v) for v in seed) for seed in grasp.get("ik_seeds", cls.ik_seeds)),
             tcp_frame_name=str(grasp.get("tcp_frame_name", cls.tcp_frame_name)),
             pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"]) if "pre_pinch_hand_targets" in grasp else None,
             closed_pinch_hand_targets=dict(grasp["closed_pinch_hand_targets"]) if "closed_pinch_hand_targets" in grasp else None,
@@ -147,7 +150,7 @@ class PinchGraspConfig:
         输入:
             使用 dataclass 当前字段值。
         返回:
-            无返回值；发现非法端点、负时长或无效 IK 参数时抛出 ``ValueError``。
+            无返回值；发现非法端点、负时长或无效手型/TCP 参数时抛出 ``ValueError``。
         """
 
         if self.endpoint not in {"left", "right"}:
@@ -155,6 +158,7 @@ class PinchGraspConfig:
         nonnegative = {
             "approach_distance": self.approach_distance,
             "lift_height": self.lift_height,
+            "approach_line_sample_hz": self.approach_line_sample_hz,
             "prep_duration": self.prep_duration,
             "move_duration": self.move_duration,
             "approach_duration": self.approach_duration,
@@ -164,17 +168,14 @@ class PinchGraspConfig:
             "wiggle_duration": self.wiggle_duration,
             "final_hold_duration": self.final_hold_duration,
             "post_joint_sweep_duration": self.post_joint_sweep_duration,
-            "ik_position_tolerance": self.ik_position_tolerance,
-            "ik_orientation_tolerance": self.ik_orientation_tolerance,
-            "ik_orientation_weight": self.ik_orientation_weight,
         }
         for name, value in nonnegative.items():
             if value < 0:
                 raise ValueError(f"{name} cannot be negative")
         if self.wiggle_cycles < 0:
             raise ValueError("wiggle_cycles cannot be negative")
-        if self.ik_max_iterations <= 0 or self.ik_bfgs_max_iterations <= 0:
-            raise ValueError("IK iteration counts must be positive")
+        if self.approach_line_sample_hz <= 0:
+            raise ValueError("approach_line_sample_hz must be positive")
         if not self.tcp_frame_name:
             raise ValueError("tcp_frame_name cannot be empty")
         if not self.pre_pinch_hand_targets:
@@ -218,198 +219,11 @@ def grasp_target_position(config: PinchGraspConfig, rope_config: CapsuleRopeConf
     )
 
 
-def step_joint_target(
-    *,
-    robot,
-    world,
-    articulation_action_type,
-    driven_indices: np.ndarray,
-    target_all: np.ndarray,
-    render: bool,
-    step: int,
-    phase: str,
-    target_velocity_all: np.ndarray | None = None,
-    drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
-) -> int:
-    """下发一帧完整 DOF 目标，并推进一个 physics step。
-
-    参数:
-        robot: Isaac articulation 对象。
-        world: Isaac world，用于 ``step`` 和读取 physics dt。
-        articulation_action_type: Isaac action 类型构造器。
-        driven_indices: 实际受驱动的 DOF 索引。
-        target_all: 完整 DOF 位置目标，单位 rad。
-        render: 是否渲染当前仿真步。
-        step: 全局日志步号。
-        phase: 当前任务阶段名。
-        target_velocity_all: 可选完整 DOF 速度目标，单位 rad/s。
-        drive_logger: 可选关节跟踪日志器。
-        follower_mapper: 可选 mimic follower 映射器，会用实际 master 状态更新 follower。
-    返回:
-        下一帧的全局步号，即 ``step + 1``。
-    """
-
-    command_target_all = np.asarray(target_all, dtype=float).copy()
-    if target_velocity_all is None:
-        command_velocity_all = np.zeros(robot.num_dof, dtype=float)
-    else:
-        command_velocity_all = np.asarray(target_velocity_all, dtype=float).copy()
-    if follower_mapper is not None:
-        follower_mapper.apply_from_actual(
-            command_target_all,
-            command_velocity_all,
-            np.asarray(robot.get_joint_positions(), dtype=float),
-            np.asarray(robot.get_joint_velocities(), dtype=float),
-        )
-    driven_position = command_target_all[driven_indices]
-    driven_velocity = command_velocity_all[driven_indices]
-    robot.apply_action(
-        articulation_action_type(
-            joint_positions=driven_position,
-            joint_velocities=driven_velocity,
-            joint_indices=driven_indices,
-        )
-    )
-    world.step(render=render)
-    if drive_logger is not None:
-        actual_position = np.asarray(robot.get_joint_positions(), dtype=float)[driven_indices]
-        actual_velocity = np.asarray(robot.get_joint_velocities(), dtype=float)[driven_indices]
-        drive_logger.write(
-            step=step,
-            time_s=(step + 1) * float(world.get_physics_dt()),
-            phase=phase,
-            drive_update=True,
-            desired_position=driven_position,
-            actual_position=actual_position,
-            desired_velocity=driven_velocity,
-            actual_velocity=actual_velocity,
-        )
-    return step + 1
-
-
-def move_joint_target(
-    *,
-    robot,
-    world,
-    articulation_action_type,
-    driven_indices: np.ndarray,
-    start_all: np.ndarray,
-    target_all: np.ndarray,
-    duration: float,
-    phase: str,
-    simulation_app,
-    render: bool,
-    step: int,
-    drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
-) -> int:
-    """用 smoothstep 在两个完整 DOF 目标之间平滑移动。
-
-    参数:
-        robot/world/articulation_action_type: Isaac 执行所需对象。
-        driven_indices: 下发 action 时包含的 DOF 索引。
-        start_all: 起始完整 DOF 目标，单位 rad。
-        target_all: 终止完整 DOF 目标，单位 rad。
-        duration: 移动时长，单位 s；会按 world physics dt 离散化。
-        phase: 写入日志的阶段名。
-        simulation_app: 可选 Isaac app，用于检测窗口是否仍在运行。
-        render: 是否渲染。
-        step: 输入的全局步号。
-        drive_logger: 可选关节跟踪日志器。
-        follower_mapper: 可选 mimic follower 映射器。
-    返回:
-        执行完本阶段后的全局步号。
-    """
-
-    physics_dt = float(world.get_physics_dt())
-    steps = max(1, int(round(duration / physics_dt)))
-    delta = target_all - start_all
-    for local_step in range(steps):
-        if simulation_app is not None and not simulation_app.is_running():
-            break
-        alpha = (local_step + 1) / steps
-        smooth = alpha * alpha * (3.0 - 2.0 * alpha)
-        smooth_rate = (6.0 * alpha * (1.0 - alpha) / duration) if duration > 0 else 0.0
-        command = start_all + smooth * delta
-        velocity = smooth_rate * delta
-        step = step_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            target_all=command,
-            target_velocity_all=velocity,
-            render=render,
-            step=step,
-            phase=phase,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-    robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
-    return step
-
-
-def hold_joint_target(
-    *,
-    robot,
-    world,
-    articulation_action_type,
-    driven_indices: np.ndarray,
-    target_all: np.ndarray,
-    duration: float,
-    phase: str,
-    simulation_app,
-    render: bool,
-    step: int,
-    drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
-) -> int:
-    """保持一个完整 DOF 目标一段时间。
-
-    参数:
-        robot/world/articulation_action_type: Isaac 执行所需对象。
-        driven_indices: 下发 action 时包含的 DOF 索引。
-        target_all: 需要保持的完整 DOF 位置目标，单位 rad。
-        duration: 保持时长，单位 s；为 0 时一直保持到 app 结束。
-        phase: 写入日志的阶段名。
-        simulation_app: 可选 Isaac app。
-        render: 是否渲染。
-        step: 输入的全局步号。
-        drive_logger: 可选关节跟踪日志器。
-        follower_mapper: 可选 mimic follower 映射器。
-    返回:
-        保持阶段结束后的全局步号。
-    """
-
-    physics_dt = float(world.get_physics_dt())
-    total_steps = max(1, int(round(duration / physics_dt))) if duration > 0 else None
-    local_step = 0
-    while total_steps is None or local_step < total_steps:
-        if simulation_app is not None and not simulation_app.is_running():
-            break
-        step = step_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            target_all=target_all,
-            render=render,
-            step=step,
-            phase=phase,
-            target_velocity_all=np.zeros(robot.num_dof, dtype=float),
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        local_step += 1
-    return step
-
-
 class PinchGraspTask:
     """机械臂+灵巧手对 rope 端点 box 的脚本化夹捏任务。
 
     输入:
-        初始化时传入抓取配置、rope 场景配置、MJCF 路径、IK 机器人描述和基础 URDF。
+        初始化时传入抓取配置、rope 场景配置、MJCF 路径和 cuMotion 后端配置。
     输出:
         ``plan`` 返回可执行的目标数组和 IK 诊断信息；``run`` 会实际推进仿真并返回同一份
         plan 字典，额外带 ``steps``。
@@ -421,9 +235,7 @@ class PinchGraspTask:
         config: PinchGraspConfig,
         rope_config: CapsuleRopeConfig,
         mjcf_path: str | Path,
-        parent_frame: str,
-        cumotion_xrdf_path: str | Path,
-        cumotion_urdf_path: str | Path,
+        cumotion_config: CuMotionConfig,
         tcp_frame_name: str | None = None,
     ) -> None:
         """保存任务配置和 IK/TCP 资源路径。
@@ -432,9 +244,7 @@ class PinchGraspTask:
             config: 夹捏抓取配置。
             rope_config: rope 对象配置，用于定位端点。
             mjcf_path: 组合 MJCF 文件路径，用于计算 pinch TCP 和 mimic 关系。
-            parent_frame: pinch TCP 固连到的父 link 名称，通常是手掌基座。
-            cumotion_xrdf_path: cuMotion XRDF 文件。
-            cumotion_urdf_path: 未附加 TCP 的基础 URDF。
+            cumotion_config: cuMotion 后端配置，通常来自 robot config 的 ``cumotion`` 段。
             tcp_frame_name: 写入临时 URDF 的 TCP frame 名称。
         返回:
             无返回值。
@@ -443,9 +253,9 @@ class PinchGraspTask:
         self.config = config
         self.rope_config = rope_config
         self.mjcf_path = Path(mjcf_path)
-        self.cumotion_xrdf_path = Path(cumotion_xrdf_path)
-        self.cumotion_urdf_path = Path(cumotion_urdf_path)
-        self.parent_frame = parent_frame
+        self.cumotion_config = cumotion_config
+        self.cumotion_config.validate()
+        self.parent_frame = cumotion_config.flange_frame
         self.tcp_frame_name = tcp_frame_name or config.tcp_frame_name
 
     def plan(self, robot) -> dict[str, object]:
@@ -489,20 +299,14 @@ class PinchGraspTask:
         # IK 后端只认识机器人描述里的 frame。这里临时写一个“附加 pinch TCP”的 URDF，
         # 避免改动仓库里的基础 URDF，同时让求解器直接以夹捏中心作为末端。
         with tempfile.TemporaryDirectory(prefix="pinch_ik_tcp_") as temp_dir:
-            tcp_urdf = Path(temp_dir) / f"{self.cumotion_urdf_path.stem}_{self.tcp_frame_name}.urdf"
-            write_tcp_urdf(self.cumotion_urdf_path, tcp_urdf, tcp)
+            base_urdf_path = Path(self.cumotion_config.urdf_path)
+            tcp_urdf = Path(temp_dir) / f"{base_urdf_path.stem}_{self.tcp_frame_name}.urdf"
+            write_tcp_urdf(base_urdf_path, tcp_urdf, tcp)
             context = CuMotionContext(
-                CuMotionConfig(
-                    xrdf_path=self.cumotion_xrdf_path,
+                replace(
+                    self.cumotion_config,
                     urdf_path=tcp_urdf,
-                    flange_frame=self.parent_frame,
                     default_tcp_frame=self.tcp_frame_name,
-                    cspace_seeds=np.asarray(self.config.ik_seeds, dtype=float),
-                    ccd_max_iterations=self.config.ik_max_iterations,
-                    bfgs_max_iterations=self.config.ik_bfgs_max_iterations,
-                    orientation_weight=self.config.ik_orientation_weight,
-                    position_tolerance=self.config.ik_position_tolerance,
-                    orientation_tolerance=self.config.ik_orientation_tolerance,
                 )
             )
             ik_joint_names = context.joint_names()
@@ -523,26 +327,38 @@ class PinchGraspTask:
                     target_position=approach_world,
                     target_orientation=ik_orientation,
                     warm_start=current_cspace,
-                    position_tolerance=self.config.ik_position_tolerance,
-                    orientation_tolerance=self.config.ik_orientation_tolerance,
+                    position_tolerance=context.config.position_tolerance,
+                    orientation_tolerance=context.config.orientation_tolerance,
                 )
             )
-            grasp = solver.solve(
-                IKRequest(
-                    target_position=pinch_world,
-                    target_orientation=ik_orientation,
-                    warm_start=approach.joint_positions,
-                    position_tolerance=self.config.ik_position_tolerance,
-                    orientation_tolerance=self.config.ik_orientation_tolerance,
-                )
+            initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
+            pre_pinch_all = target_vector_from_mapping(dof_names, self.config.pre_targets, base=initial_all)
+            approach_all = pre_pinch_all.copy()
+            set_joint_targets_by_indices(approach_all, arm_indices, approach.joint_positions)
+            approach_line_config = MoveTcpLineConfig(
+                tcp_frame_name=self.tcp_frame_name,
+                start_position=None,
+                target_position=tuple(float(value) for value in pinch_world),
+                orientation_mode="current",
+                duration_s=self.config.approach_duration,
+                sample_hz=self.config.approach_line_sample_hz,
+                phase="approach_box",
             )
+            grasp_line_trajectory, grasp_line_diagnostics = build_tcp_line_command_trajectory(
+                dof_names=dof_names,
+                command_indices=np.arange(len(dof_names), dtype=int),
+                current_positions=approach_all,
+                config=approach_line_config,
+                context=context,
+            )
+            grasp_joint_positions = np.asarray(grasp_line_trajectory.positions[-1], dtype=float)[arm_indices]
             lift = solver.solve(
                 IKRequest(
                     target_position=lifted_world,
                     target_orientation=ik_orientation,
-                    warm_start=grasp.joint_positions,
-                    position_tolerance=self.config.ik_position_tolerance,
-                    orientation_tolerance=self.config.ik_orientation_tolerance,
+                    warm_start=grasp_joint_positions,
+                    position_tolerance=context.config.position_tolerance,
+                    orientation_tolerance=context.config.orientation_tolerance,
                 )
             )
             wiggles = []
@@ -553,8 +369,8 @@ class PinchGraspTask:
                         target_position=target,
                         target_orientation=ik_orientation,
                         warm_start=warm,
-                        position_tolerance=self.config.ik_position_tolerance,
-                        orientation_tolerance=self.config.ik_orientation_tolerance,
+                        position_tolerance=context.config.position_tolerance,
+                        orientation_tolerance=context.config.orientation_tolerance,
                     )
                 )
                 wiggles.append((target, result))
@@ -562,12 +378,7 @@ class PinchGraspTask:
 
         # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
         # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
-        initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
-        pre_pinch_all = target_vector_from_mapping(dof_names, self.config.pre_targets, base=initial_all)
-        approach_all = pre_pinch_all.copy()
-        set_joint_targets_by_indices(approach_all, arm_indices, approach.joint_positions)
-        grasp_open_all = pre_pinch_all.copy()
-        set_joint_targets_by_indices(grasp_open_all, arm_indices, grasp.joint_positions)
+        grasp_open_all = np.asarray(grasp_line_trajectory.positions[-1], dtype=float).copy()
         grasp_closed_all = target_vector_from_mapping(dof_names, self.config.closed_targets, base=grasp_open_all)
         lifted_all = grasp_closed_all.copy()
         set_joint_targets_by_indices(lifted_all, arm_indices, lift.joint_positions)
@@ -589,6 +400,7 @@ class PinchGraspTask:
             "initial_all": initial_all,
             "pre_pinch_all": pre_pinch_all,
             "approach_all": approach_all,
+            "approach_line_trajectory": grasp_line_trajectory,
             "grasp_open_all": grasp_open_all,
             "grasp_closed_all": grasp_closed_all,
             "lifted_all": lifted_all,
@@ -601,13 +413,89 @@ class PinchGraspTask:
                 "tcp_xyz": tcp.xyz,
                 "approach_success": approach.success,
                 "approach_error": approach.position_error,
-                "grasp_success": grasp.success,
-                "grasp_error": grasp.position_error,
+                "grasp_success": True,
+                "grasp_error": grasp_line_diagnostics.max_position_error,
+                "approach_line_start": grasp_line_diagnostics.start_position,
+                "approach_line_target": grasp_line_diagnostics.target_position,
+                "approach_line_max_error": grasp_line_diagnostics.max_position_error,
                 "lift_success": lift.success,
                 "lift_error": lift.position_error,
                 "wiggles": [(world_target, result.success, result.position_error) for world_target, result in wiggles],
             },
         }
+
+    def execution_tasks(self, plan: dict[str, object]) -> list[ExecutableTask]:
+        """把抓取 plan 拆成可顺序执行的任务原语列表。"""
+
+        tasks: list[ExecutableTask] = [
+            MoveJointTargetTask(
+                start_all=plan["initial_all"],
+                target_all=plan["pre_pinch_all"],
+                duration=self.config.prep_duration,
+                phase="pre_pinch",
+            ),
+            MoveJointTargetTask(
+                start_all=plan["pre_pinch_all"],
+                target_all=plan["approach_all"],
+                duration=self.config.move_duration,
+                phase="move_to_approach",
+            ),
+            MoveFullJointTrajectoryTask(
+                trajectory=plan["approach_line_trajectory"],
+                phase="approach_box",
+            ),
+            MoveJointTargetTask(
+                start_all=plan["grasp_open_all"],
+                target_all=plan["grasp_closed_all"],
+                duration=self.config.close_duration,
+                phase="close_fingers",
+            ),
+            MoveJointTargetTask(
+                start_all=plan["grasp_closed_all"],
+                target_all=plan["lifted_all"],
+                duration=self.config.lift_duration,
+                phase="lift",
+            ),
+        ]
+        previous_target = plan["lifted_all"]
+        for index, wiggle_all in enumerate(plan["wiggle_all_targets"], start=1):
+            tasks.append(
+                MoveJointTargetTask(
+                    start_all=previous_target,
+                    target_all=wiggle_all,
+                    duration=self.config.wiggle_duration,
+                    phase=f"wiggle_{index}",
+                )
+            )
+            previous_target = wiggle_all
+        if plan["wiggle_all_targets"]:
+            tasks.append(
+                MoveJointTargetTask(
+                    start_all=previous_target,
+                    target_all=plan["lifted_all"],
+                    duration=self.config.wiggle_duration,
+                    phase="wiggle_return_center",
+                )
+            )
+        tasks.append(
+            HoldTask(
+                target_all=plan["lifted_all"],
+                duration=self.config.final_hold_duration,
+                phase="final",
+            )
+        )
+        previous_target = plan["lifted_all"]
+        for index, sweep_all in enumerate(plan["post_joint_sweep_targets"], start=1):
+            tasks.append(
+                MoveJointTargetTask(
+                    start_all=previous_target,
+                    target_all=sweep_all,
+                    duration=self.config.post_joint_sweep_duration,
+                    phase=f"post_joint_1_sweep_{index}",
+                )
+            )
+            previous_target = sweep_all
+        return tasks
 
     def run(
         self,
@@ -637,148 +525,19 @@ class PinchGraspTask:
         """
 
         plan = self.plan(robot)
+        runtime = TaskRuntime(
+            robot=robot,
+            world=world,
+            articulation_action_type=articulation_action_type,
+            driven_indices=driven_indices,
+            simulation_app=simulation_app,
+            render=render,
+            drive_logger=drive_logger,
+            follower_mapper=follower_mapper,
+        )
         step = 0
-        step = move_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            start_all=plan["initial_all"],
-            target_all=plan["pre_pinch_all"],
-            duration=self.config.prep_duration,
-            phase="pre_pinch",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        step = move_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            start_all=plan["pre_pinch_all"],
-            target_all=plan["approach_all"],
-            duration=self.config.move_duration,
-            phase="move_to_approach",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        step = move_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            start_all=plan["approach_all"],
-            target_all=plan["grasp_open_all"],
-            duration=self.config.approach_duration,
-            phase="approach_box",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        step = move_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            start_all=plan["grasp_open_all"],
-            target_all=plan["grasp_closed_all"],
-            duration=self.config.close_duration,
-            phase="close_fingers",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        step = move_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            start_all=plan["grasp_closed_all"],
-            target_all=plan["lifted_all"],
-            duration=self.config.lift_duration,
-            phase="lift",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        previous_target = plan["lifted_all"]
-        for index, wiggle_all in enumerate(plan["wiggle_all_targets"], start=1):
-            step = move_joint_target(
-                robot=robot,
-                world=world,
-                articulation_action_type=articulation_action_type,
-                driven_indices=driven_indices,
-                start_all=previous_target,
-                target_all=wiggle_all,
-                duration=self.config.wiggle_duration,
-                phase=f"wiggle_{index}",
-                simulation_app=simulation_app,
-                render=render,
-                step=step,
-                drive_logger=drive_logger,
-                follower_mapper=follower_mapper,
-            )
-            previous_target = wiggle_all
-        if plan["wiggle_all_targets"]:
-            step = move_joint_target(
-                robot=robot,
-                world=world,
-                articulation_action_type=articulation_action_type,
-                driven_indices=driven_indices,
-                start_all=previous_target,
-                target_all=plan["lifted_all"],
-                duration=self.config.wiggle_duration,
-                phase="wiggle_return_center",
-                simulation_app=simulation_app,
-                render=render,
-                step=step,
-                drive_logger=drive_logger,
-                follower_mapper=follower_mapper,
-            )
-        step = hold_joint_target(
-            robot=robot,
-            world=world,
-            articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
-            target_all=plan["lifted_all"],
-            duration=self.config.final_hold_duration,
-            phase="final",
-            simulation_app=simulation_app,
-            render=render,
-            step=step,
-            drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
-        )
-        previous_target = plan["lifted_all"]
-        for index, sweep_all in enumerate(plan["post_joint_sweep_targets"], start=1):
-            step = move_joint_target(
-                robot=robot,
-                world=world,
-                articulation_action_type=articulation_action_type,
-                driven_indices=driven_indices,
-                start_all=previous_target,
-                target_all=sweep_all,
-                duration=self.config.post_joint_sweep_duration,
-                phase=f"post_joint_1_sweep_{index}",
-                simulation_app=simulation_app,
-                render=render,
-                step=step,
-                drive_logger=drive_logger,
-                follower_mapper=follower_mapper,
-            )
-            previous_target = sweep_all
+        for task in self.execution_tasks(plan):
+            step = task.run(runtime, step)
         plan["steps"] = step
         return plan
 

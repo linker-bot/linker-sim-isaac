@@ -26,3 +26,10 @@ cumotion:
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   # 机械臂法兰 link；pinch TCP 会固定在这个 parent frame 下。
   flange_frame: AR5V2_L_arm_flan_link
+  default_tcp_frame: AR5V2_L_arm_flan_link
+  # cuMotion IK 默认求解参数。
+  position_tolerance: 0.001
+  orientation_tolerance: 0.1
+  ccd_max_iterations: 180
+  bfgs_max_iterations: 80
+  orientation_weight: 0.25
