@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+  "pytest",
+]
 visualization = [
   "foxglove-sdk",
 ]
