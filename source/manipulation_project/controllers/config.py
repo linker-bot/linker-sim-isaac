@@ -1,7 +1,8 @@
 """控制器 YAML 配置解析。
 
-项目允许把机械臂和灵巧手的控制参数拆成独立文件，再通过一个聚合配置引用。
-本模块把这些 YAML 统一解析成 runtime controller 和 USD/PhysX 覆盖所需的数据。
+项目将机械臂和灵巧手的控制、材料、刚体参数拆成独立 YAML 文件。
+本模块从 controllers 目录或显式 profile 映射读取这些文件，并转换成 runtime
+controller 和 USD/PhysX 覆盖所需的数据。
 """
 
 from __future__ import annotations
@@ -53,79 +54,52 @@ def _section(data: Mapping[str, Any], key: str) -> dict[str, Any]:
     return dict(value)
 
 
-def _path_from_reference(reference: Any) -> Path:
-    if not isinstance(reference, (str, Path)):
-        raise ValueError(f"Controller config reference must be a path, got {type(reference).__name__}")
-    return repo_path(reference)
-
-
 def load_controller_profiles(path_or_config: str | Path | Mapping[str, Any]) -> ControllerProfiles:
     """读取并展开 arm/hand 控制器配置。
 
     参数:
-        path_or_config: YAML 路径或已经读取出的 mapping。
+        path_or_config: controllers 目录路径，或包含 ``arm``/``hand`` 文件路径的 mapping。
     返回:
         ``ControllerProfiles``，包含 arm 和 hand 两个 profile。
     """
 
-    config = load_yaml(path_or_config) if isinstance(path_or_config, (str, Path)) else dict(path_or_config)
+    if isinstance(path_or_config, (str, Path)):
+        path = repo_path(path_or_config)
+        if path.is_dir():
+            return ControllerProfiles(
+                arm=_load_profile_from_path("arm", path / "arm_controller.yaml"),
+                hand=_load_profile_from_path("hand", path / "hand_controller.yaml"),
+            )
+        raise ValueError(
+            f"Controller config {path} is no longer a supported entry point. "
+            "Pass configs/controllers or a mapping with arm/hand profile paths."
+        )
 
-    profiles = config.get("profiles")
-    if isinstance(profiles, Mapping):
+    config = dict(path_or_config)
+    if "profiles" in config and isinstance(config["profiles"], Mapping):
+        profiles = config["profiles"]
         return ControllerProfiles(
             arm=_load_profile_from_reference("arm", profiles.get("arm")),
             hand=_load_profile_from_reference("hand", profiles.get("hand")),
         )
-
-    # 兼容旧版单文件配置：同一套参数同时用于 arm 和 hand。
-    legacy = _legacy_profile_mapping(config)
     return ControllerProfiles(
-        arm=_profile_from_mapping("arm", legacy),
-        hand=_profile_from_mapping("hand", legacy),
+        arm=_load_profile_from_reference("arm", config.get("arm")),
+        hand=_load_profile_from_reference("hand", config.get("hand")),
     )
 
 
 def _load_profile_from_reference(name: str, reference: Any) -> ControllerProfile:
     if reference is None:
         raise ValueError(f"Controller profiles must define {name!r}")
-    data = load_yaml(_path_from_reference(reference))
-    return _profile_from_mapping(name, data)
+    if not isinstance(reference, (str, Path)):
+        raise ValueError(f"Controller profile {name!r} must be a path, got {type(reference).__name__}")
+    return _load_profile_from_path(name, repo_path(reference))
 
 
-def _legacy_profile_mapping(config: Mapping[str, Any]) -> dict[str, Any]:
-    controller = _section(config, "controller") if "controller" in config else dict(config)
-    physx = _section(config, "physx")
-    active = {
-        "stiffness": controller.get("stiffness", 1000.0),
-        "damping": controller.get("damping", 50.0),
-        "max_force": controller.get("max_force", 100.0),
-        "joint_friction": controller.get("joint_friction", 0.5),
-    }
-    follower = {
-        "stiffness": controller.get("follower_stiffness", controller.get("stiffness", 1000.0)),
-        "damping": controller.get("follower_damping", controller.get("damping", 50.0)),
-        "max_force": controller.get("follower_max_force", controller.get("max_force", 100.0)),
-        "joint_friction": controller.get("joint_friction", 0.5),
-    }
-    return {
-        "implicit_position_drive": {
-            "active_joints": active,
-            "follower_joints": follower,
-        },
-        "velocity_control": {},
-        "effort_control": {},
-        "physx": {
-            "material": {
-                "contact_static_friction": physx.get("contact_static_friction", 0.8),
-                "contact_dynamic_friction": physx.get("contact_dynamic_friction", 0.6),
-                "contact_restitution": physx.get("contact_restitution", 0.0),
-            },
-            "rigid_body": {
-                "linear_damping": physx.get("rigid_body_linear_damping", 0.0),
-                "angular_damping": physx.get("rigid_body_angular_damping", 0.1),
-            },
-        },
-    }
+def _load_profile_from_path(name: str, path: Path) -> ControllerProfile:
+    if not path.is_file():
+        raise FileNotFoundError(f"Controller profile {name!r} was not found: {path}")
+    return _profile_from_mapping(name, load_yaml(path))
 
 
 def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfile:

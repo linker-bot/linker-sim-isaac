@@ -97,7 +97,6 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp 
 
 - `configs/robots/ar5_l6.yaml`：AR5+L6 组合资产、关节组、IK 资源和 TCP frame。
 - `configs/robots/ar5_arm.yaml`：单独 AR5 机械臂资产和 IK 资源。
-- `configs/controllers/implicit_position_drive.yaml`：默认控制器聚合入口。
 - `configs/controllers/arm_controller.yaml`：机械臂 drive、速度、effort、材料和刚体参数。
 - `configs/controllers/hand_controller.yaml`：灵巧手 drive、速度、effort、材料和刚体参数。
 - `configs/envs/rope_scene.yaml`：绳体抓取场景、步频、重力和 PhysX solver 设置。

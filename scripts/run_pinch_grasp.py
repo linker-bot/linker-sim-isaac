@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5_l6.yaml"))
-    parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers/implicit_position_drive.yaml"))
+    parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers"))
     parser.add_argument("--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml"))
     parser.add_argument("--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml"))
     parser.add_argument("--grasp-config", type=Path, default=Path("configs/trajectories/pinch_grasp.yaml"))

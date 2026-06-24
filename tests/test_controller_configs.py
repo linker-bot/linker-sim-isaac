@@ -5,7 +5,7 @@ from manipulation_project.robots.classification import component_for_name
 
 
 def test_controller_profiles_split_arm_and_hand() -> None:
-    profiles = load_controller_profiles("configs/controllers/implicit_position_drive.yaml")
+    profiles = load_controller_profiles("configs/controllers")
     assert profiles.arm.name == "arm"
     assert profiles.hand.name == "hand"
     assert profiles.arm.velocity_control

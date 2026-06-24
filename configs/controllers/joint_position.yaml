@@ -1,8 +1,0 @@
-# 关节位置控制聚合配置。
-# 当前和 implicit_position_drive 使用同一套 arm/hand 子配置，保留该文件名用于兼容旧入口。
-controller:
-  type: implicit_position_drive
-
-profiles:
-  arm: configs/controllers/arm_controller.yaml
-  hand: configs/controllers/hand_controller.yaml
