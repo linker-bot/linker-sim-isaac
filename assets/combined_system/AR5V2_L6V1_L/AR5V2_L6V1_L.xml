@@ -319,7 +319,7 @@
                     type="hinge"
                     axis="0 1 0"
                     limited="true"
-                    range="-0.9599 0.9599"
+                    range="-1.2 1.2"
                   />
                   <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                   <inertial
@@ -352,7 +352,7 @@
                       type="hinge"
                       axis="1 0 0"
                       limited="true"
-                      range="-0.9599 0.9599"
+                      range="-1.2 1.2"
                     />
                     <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                     <inertial

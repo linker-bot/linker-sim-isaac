@@ -57,16 +57,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_01>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.04583333333333335, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.05625000000000002, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -75,16 +75,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_02>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.08750000000000002, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.11875000000000002, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -93,16 +93,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_03>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.12916666666666668, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.18125000000000002, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -111,16 +111,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_04>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.17083333333333334, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.24375000000000002, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -129,16 +129,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_05>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.21250000000000002, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.30625, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -147,16 +147,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_06>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.25416666666666665, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.36875, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -165,16 +165,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_07>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.29583333333333334, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.43125, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -183,16 +183,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_08>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.3375, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.49375, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -201,16 +201,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_09>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.37916666666666665, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.55625, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -219,16 +219,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_10>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.42083333333333334, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.61875, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -237,16 +237,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_11>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.4625, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.68125, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -255,124 +255,16 @@ def Xform "CapsuleRope" (
         )
         {
             uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_12>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.5041666666666667, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_12" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_13>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.5458333333333333, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_13" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_14>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.5875, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_14" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_15>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.6291666666666667, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_15" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_16>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.6708333333333333, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_16" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
-            rel material:binding = </CapsuleRope/Looks/RopeMaterial>
-            prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_17>
-            float physics:mass = 0.011111111
-            float physxRigidBody:angularDamping = 0.12
-            float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.7125, -0.55, 0.05)
-            uniform token[] xformOpOrder = ["xformOp:translate"]
-        }
-
-        def Capsule "segment_17" (
-            prepend apiSchemas = ["PhysicsCollisionAPI", "PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI", "MaterialBindingAPI", "PhysicsFilteredPairsAPI"]
-        )
-        {
-            uniform token axis = "X"
-            double height = 0.029166666666666667
+            double height = 0.04375
             rel material:binding = </CapsuleRope/Looks/RopeMaterial>
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/right_box>
-            float physics:mass = 0.011111111
+            float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
             int physxRigidBody:solverPositionIterationCount = 48
             int physxRigidBody:solverVelocityIterationCount = 4
-            double radius = 0.0062499999999999995
-            double3 xformOp:translate = (0.7541666666666667, -0.55, 0.05)
+            double radius = 0.009375
+            double3 xformOp:translate = (0.74375, -0.55, 0.05)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
     }
@@ -380,14 +272,9 @@ def Xform "CapsuleRope" (
     def Scope "Joints"
     {
         def PhysicsJoint "left_box_to_segment_00" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -398,8 +285,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -413,20 +300,15 @@ def Xform "CapsuleRope" (
             rel physics:body0 = </CapsuleRope/Bodies/left_box>
             rel physics:body1 = </CapsuleRope/Bodies/segment_00>
             point3f physics:localPos0 = (0.02, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_00_to_segment_01" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -437,8 +319,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -451,21 +333,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_00>
             rel physics:body1 = </CapsuleRope/Bodies/segment_01>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_01_to_segment_02" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -476,8 +353,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -490,21 +367,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_01>
             rel physics:body1 = </CapsuleRope/Bodies/segment_02>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_02_to_segment_03" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -515,8 +387,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -529,21 +401,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_02>
             rel physics:body1 = </CapsuleRope/Bodies/segment_03>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_03_to_segment_04" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -554,8 +421,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -568,21 +435,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_03>
             rel physics:body1 = </CapsuleRope/Bodies/segment_04>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_04_to_segment_05" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -593,8 +455,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -607,21 +469,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_04>
             rel physics:body1 = </CapsuleRope/Bodies/segment_05>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_05_to_segment_06" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -632,8 +489,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -646,21 +503,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_05>
             rel physics:body1 = </CapsuleRope/Bodies/segment_06>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_06_to_segment_07" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -671,8 +523,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -685,21 +537,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_06>
             rel physics:body1 = </CapsuleRope/Bodies/segment_07>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_07_to_segment_08" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -710,8 +557,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -724,21 +571,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_07>
             rel physics:body1 = </CapsuleRope/Bodies/segment_08>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_08_to_segment_09" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -749,8 +591,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -763,21 +605,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_08>
             rel physics:body1 = </CapsuleRope/Bodies/segment_09>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_09_to_segment_10" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -788,8 +625,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -802,21 +639,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_09>
             rel physics:body1 = </CapsuleRope/Bodies/segment_10>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
         def PhysicsJoint "segment_10_to_segment_11" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -827,8 +659,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -841,21 +673,16 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_10>
             rel physics:body1 = </CapsuleRope/Bodies/segment_11>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
+            point3f physics:localPos1 = (-0.03125, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
         }
 
-        def PhysicsJoint "segment_11_to_segment_12" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
+        def PhysicsJoint "segment_11_to_right_box" (
+            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
         )
         {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
             float drive:rotY:physics:damping = 0.1
             float drive:rotY:physics:stiffness = 0.1
             float drive:rotY:physics:targetPosition = 0
@@ -866,8 +693,8 @@ def Xform "CapsuleRope" (
             float drive:rotZ:physics:targetPosition = 0
             float drive:rotZ:physics:targetVelocity = 0
             uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
+            float limit:rotX:physics:high = -1
+            float limit:rotX:physics:low = 1
             float limit:rotY:physics:high = 120
             float limit:rotY:physics:low = -120
             float limit:rotZ:physics:high = 120
@@ -879,242 +706,8 @@ def Xform "CapsuleRope" (
             float limit:transZ:physics:high = -1
             float limit:transZ:physics:low = 1
             rel physics:body0 = </CapsuleRope/Bodies/segment_11>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_12>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_12_to_segment_13" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_12>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_13>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_13_to_segment_14" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_13>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_14>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_14_to_segment_15" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_14>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_15>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_15_to_segment_16" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_15>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_16>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_16_to_segment_17" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_16>
-            rel physics:body1 = </CapsuleRope/Bodies/segment_17>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
-            point3f physics:localPos1 = (-0.020833334, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
-        }
-
-        def PhysicsJoint "segment_17_to_right_box" (
-            prepend apiSchemas = ["PhysicsLimitAPI:transX", "PhysicsLimitAPI:transY", "PhysicsLimitAPI:transZ", "PhysicsLimitAPI:rotX", "PhysicsDriveAPI:rotX", "PhysicsLimitAPI:rotY", "PhysicsDriveAPI:rotY", "PhysicsLimitAPI:rotZ", "PhysicsDriveAPI:rotZ"]
-        )
-        {
-            float drive:rotX:physics:damping = 0.05
-            float drive:rotX:physics:stiffness = 0.1
-            float drive:rotX:physics:targetPosition = 0
-            float drive:rotX:physics:targetVelocity = 0
-            uniform token drive:rotX:physics:type = "force"
-            float drive:rotY:physics:damping = 0.1
-            float drive:rotY:physics:stiffness = 0.1
-            float drive:rotY:physics:targetPosition = 0
-            float drive:rotY:physics:targetVelocity = 0
-            uniform token drive:rotY:physics:type = "force"
-            float drive:rotZ:physics:damping = 0.1
-            float drive:rotZ:physics:stiffness = 0.1
-            float drive:rotZ:physics:targetPosition = 0
-            float drive:rotZ:physics:targetVelocity = 0
-            uniform token drive:rotZ:physics:type = "force"
-            float limit:rotX:physics:high = 31.11111
-            float limit:rotX:physics:low = -31.11111
-            float limit:rotY:physics:high = 120
-            float limit:rotY:physics:low = -120
-            float limit:rotZ:physics:high = 120
-            float limit:rotZ:physics:low = -120
-            float limit:transX:physics:high = -1
-            float limit:transX:physics:low = 1
-            float limit:transY:physics:high = -1
-            float limit:transY:physics:low = 1
-            float limit:transZ:physics:high = -1
-            float limit:transZ:physics:low = 1
-            rel physics:body0 = </CapsuleRope/Bodies/segment_17>
             rel physics:body1 = </CapsuleRope/Bodies/right_box>
-            point3f physics:localPos0 = (0.020833334, 0, 0)
+            point3f physics:localPos0 = (0.03125, 0, 0)
             point3f physics:localPos1 = (-0.02, 0, 0)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)

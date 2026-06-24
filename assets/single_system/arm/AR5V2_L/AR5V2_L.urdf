@@ -195,7 +195,7 @@
   <joint name="AR5V2_L_arm_joint_6" type="revolute">
     <parent link="AR5V2_L_arm_link5" />
     <child link="AR5V2_L_arm_link6" />
-    <limit effort="19" lower="-0.9599" upper="0.9599" velocity="4.1887902047863905" />
+    <limit effort="19" lower="-1.2" upper="1.2" velocity="4.1887902047863905" />
     <axis xyz="0 1 0" />
     <origin rpy="0.0 0.0 0" xyz="0.0 0.0 0.0" />
   </joint>
@@ -223,7 +223,7 @@
   <joint name="AR5V2_L_arm_joint_7" type="revolute">
     <parent link="AR5V2_L_arm_link6" />
     <child link="AR5V2_L_arm_link7" />
-    <limit effort="19" lower="-0.9599" upper="0.9599" velocity="4.1887902047863905" />
+    <limit effort="19" lower="-1.2" upper="1.2" velocity="4.1887902047863905" />
     <axis xyz="1 0 0" />
     <origin rpy="0.0 0.0 0" xyz="0.0 0.0 0.0" />
   </joint>
