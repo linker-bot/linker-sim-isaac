@@ -86,49 +86,6 @@ class MjcfJointEquality:
 
 @dataclass(frozen=True)
 class MimicFollowerControl:
-    """从“命令数组槽位”到“从动 DOF”的运行时映射。
-
-    输入字段:
-        dependent_joint/master_joint: 从动/主动关节名。
-        dependent_index: 从动关节在完整 DOF 数组中的下标。
-        master_slot: 主动关节在命令数组中的槽位。
-        polycoef: MJCF 多项式系数。
-    输出:
-        供 ``follower_targets_from_masters`` 计算 follower 目标。
-    """
-
-    dependent_joint: str
-    master_joint: str
-    dependent_index: int
-    master_slot: int
-    polycoef: tuple[float, ...]
-
-    def evaluate_position(self, master_position: float) -> float:
-        """按多项式计算 follower 位置。
-
-        参数:
-            master_position: 主动关节位置，单位 rad。
-        返回:
-            从动关节位置，单位 rad。
-        """
-
-        return evaluate_polycoef(self.polycoef, master_position)
-
-    def evaluate_velocity(self, master_position: float, master_velocity: float) -> float:
-        """按多项式导数计算 follower 速度。
-
-        参数:
-            master_position: 主动关节位置，单位 rad。
-            master_velocity: 主动关节速度，单位 rad/s。
-        返回:
-            从动关节速度，单位 rad/s。
-        """
-
-        return float(evaluate_polycoef_derivative(self.polycoef, master_position) * float(master_velocity))
-
-
-@dataclass(frozen=True)
-class ActualFollowerControl:
     """从“实际主动 DOF 状态”到“从动 DOF 目标”的运行时映射。
 
     输入字段:
@@ -136,7 +93,7 @@ class ActualFollowerControl:
         dependent_index/master_index: 两者在完整 DOF 数组中的下标。
         polycoef: MJCF 多项式系数。
     输出:
-        供 ``ActualFollowerTargetMapper`` 原地更新完整 follower 目标数组。
+        供 ``MimicFollowerTargetMapper`` 原地更新完整 follower 目标数组。
     """
 
     dependent_joint: str
@@ -167,7 +124,6 @@ class ActualFollowerControl:
         """
 
         return float(evaluate_polycoef_derivative(self.polycoef, master_position) * float(master_velocity))
-
 
 def parse_mjcf_joint_equalities(path: str | Path | None) -> list[MjcfJointEquality]:
     """读取 MJCF 文件中的 ``equality/joint`` mimic 关系。
@@ -274,57 +230,25 @@ def expand_targets_with_mjcf_equalities(targets: dict[str, float], path: str | P
 def resolve_mimic_follower_controls(
     dof_names: list[str],
     mjcf_path: str | Path | None,
-    command_joint_indices: np.ndarray,
 ) -> list[MimicFollowerControl]:
-    """生成基于命令槽位的 follower 控制映射。
-
-    参数:
-        dof_names: 完整 DOF 名称列表。
-        mjcf_path: MJCF 文件路径。
-        command_joint_indices: 控制器命令子空间对应的完整 DOF 索引。
-    返回:
-        ``MimicFollowerControl`` 列表；缺少 master 或 follower 的关系会被跳过。
-    """
-
-    dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
-    command_slot_by_name = {dof_names[int(index)]: slot for slot, index in enumerate(command_joint_indices)}
-    controls: list[MimicFollowerControl] = []
-    for equality in parse_mjcf_joint_equalities(mjcf_path):
-        dependent_index = dof_index_by_name.get(equality.dependent_joint)
-        master_slot = command_slot_by_name.get(equality.master_joint)
-        if dependent_index is None or master_slot is None:
-            continue
-        controls.append(
-            MimicFollowerControl(
-                dependent_joint=equality.dependent_joint,
-                master_joint=equality.master_joint,
-                dependent_index=int(dependent_index),
-                master_slot=int(master_slot),
-                polycoef=equality.polycoef,
-            )
-        )
-    return controls
-
-
-def resolve_actual_follower_controls(dof_names: list[str], mjcf_path: str | Path | None) -> list[ActualFollowerControl]:
     """生成基于完整 DOF 实际状态的 follower 映射。
 
     参数:
         dof_names: 完整 DOF 名称列表。
         mjcf_path: MJCF 文件路径。
     返回:
-        ``ActualFollowerControl`` 列表；只包含 master/follower 都存在的关系。
+        ``MimicFollowerControl`` 列表；只包含 master/follower 都存在的关系。
     """
 
     dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
-    controls: list[ActualFollowerControl] = []
+    controls: list[MimicFollowerControl] = []
     for equality in parse_mjcf_joint_equalities(mjcf_path):
         dependent_index = dof_index_by_name.get(equality.dependent_joint)
         master_index = dof_index_by_name.get(equality.master_joint)
         if dependent_index is None or master_index is None:
             continue
         controls.append(
-            ActualFollowerControl(
+            MimicFollowerControl(
                 dependent_joint=equality.dependent_joint,
                 master_joint=equality.master_joint,
                 dependent_index=int(dependent_index),
@@ -335,36 +259,7 @@ def resolve_actual_follower_controls(dof_names: list[str], mjcf_path: str | Path
     return controls
 
 
-def follower_targets_from_masters(
-    master_positions: np.ndarray,
-    master_velocities: np.ndarray,
-    follower_controls: list[MimicFollowerControl],
-) -> tuple[np.ndarray, np.ndarray]:
-    """由主动关节命令计算从动关节的位置和速度目标。
-
-    参数:
-        master_positions: 命令子空间中的主动关节位置数组，单位 rad。
-        master_velocities: 命令子空间中的主动关节速度数组，单位 rad/s。
-        follower_controls: ``resolve_mimic_follower_controls`` 的结果。
-    返回:
-        ``(positions, velocities)``，均按 ``follower_controls`` 顺序排列。
-    """
-
-    positions = np.asarray(
-        [control.evaluate_position(master_positions[control.master_slot]) for control in follower_controls],
-        dtype=float,
-    )
-    velocities = np.asarray(
-        [
-            control.evaluate_velocity(master_positions[control.master_slot], master_velocities[control.master_slot])
-            for control in follower_controls
-        ],
-        dtype=float,
-    )
-    return positions, velocities
-
-
-class ActualFollowerTargetMapper:
+class MimicFollowerTargetMapper:
     """根据主动关节实际状态原地更新从动关节目标数组。
 
     输入:
@@ -384,7 +279,7 @@ class ActualFollowerTargetMapper:
             无返回值；解析结果保存在 ``self.controls``。
         """
 
-        self.controls = resolve_actual_follower_controls(dof_names, mjcf_path)
+        self.controls = resolve_mimic_follower_controls(dof_names, mjcf_path)
 
     @property
     def relations(self) -> list[dict[str, float | int | str | tuple[float, ...]]]:

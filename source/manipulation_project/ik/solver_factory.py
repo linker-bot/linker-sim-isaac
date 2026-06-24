@@ -1,4 +1,4 @@
-"""IK 后端选择工厂。"""
+"""cuMotion IK 创建入口。"""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Protocol
 
 import numpy as np
 
-from manipulation_project.ik.ik_request import IKRequest
-from manipulation_project.ik.ik_result import IKResult
+from manipulation_project.planning.requests import IKRequest
+from manipulation_project.planning.results import IKResult
 
 
 class IKSolver(Protocol):
@@ -46,65 +46,52 @@ class IKSolver(Protocol):
         """
 
 
-def is_cumotion_available() -> bool:
-    """检查当前 Python 环境是否安装了 cuMotion。
-
-    参数:
-        无。
-    返回:
-        能 import ``cumotion`` 时为 ``True``，否则为 ``False``。
-    """
-
-    try:
-        import cumotion  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
 def make_ik_solver(
-    backend: str,
-    robot_description_path: str | Path,
-    urdf_path: str | Path,
+    backend_or_robot_description_path: str | Path,
+    robot_description_path: str | Path | None = None,
+    urdf_path: str | Path | None = None,
     *,
-    frame_name: str,
-    default_cspace_seeds: np.ndarray | None = None,
+    tcp_frame_name: str,
+    cspace_seeds: np.ndarray | None = None,
     ccd_max_iterations: int | None = None,
     bfgs_max_iterations: int | None = None,
     orientation_weight: float | None = None,
 ) -> IKSolver:
-    """创建 IK 后端。
+    """创建 cuMotion IK 解算器。
 
     参数:
-        backend: ``auto``、``cumotion`` 或 ``lula``。
-        robot_description_path: 后端机器人描述路径；cuMotion 通常为 XRDF，Lula 为 YAML。
+        backend_or_robot_description_path: 旧调用中为 ``cumotion``；新调用中可直接传 XRDF 路径。
+        robot_description_path: cuMotion XRDF 路径。
         urdf_path: 机器人 URDF 路径，可能是临时附加 TCP 后的 URDF。
-        frame_name: 求解目标 frame 名。
-        default_cspace_seeds: 可选默认 IK seeds，shape ``(N, dof)`` 或 ``(dof,)``。
+        tcp_frame_name: 求解目标 TCP frame 名。
+        cspace_seeds: 可选 IK C-space seeds，shape ``(N, dof)`` 或 ``(dof,)``。
         ccd_max_iterations: 可选 CCD 最大迭代次数。
         bfgs_max_iterations: 可选 BFGS 最大迭代次数。
         orientation_weight: 可选姿态误差权重。
     返回:
-        实现 ``IKSolver`` 协议的后端实例。``auto`` 会优先 cuMotion，缺失时退回 Lula。
+        实现 ``IKSolver`` 协议的 cuMotion 实例。
     """
 
-    normalized = backend.strip().lower()
-    if normalized == "auto":
-        normalized = "cumotion" if is_cumotion_available() else "lula"
+    first = backend_or_robot_description_path
+    if robot_description_path is None:
+        raise TypeError("robot_description_path and urdf_path are required")
+    if str(first).strip().lower() == "cumotion":
+        xrdf_path = robot_description_path
+        if urdf_path is None:
+            raise TypeError("urdf_path is required")
+    else:
+        if urdf_path is not None:
+            raise ValueError("Unsupported IK backend; only cumotion is supported")
+        xrdf_path = first
+        urdf_path = robot_description_path
 
     kwargs = {
-        "frame_name": frame_name,
-        "default_cspace_seeds": default_cspace_seeds,
+        "tcp_frame_name": tcp_frame_name,
+        "cspace_seeds": cspace_seeds,
         "ccd_max_iterations": ccd_max_iterations,
         "bfgs_max_iterations": bfgs_max_iterations,
         "orientation_weight": orientation_weight,
     }
-    if normalized == "cumotion":
-        from manipulation_project.ik.cumotion_solver import CuMotionIKSolver
+    from manipulation_project.ik.cumotion_solver import CuMotionIKSolver
 
-        return CuMotionIKSolver(robot_description_path, urdf_path, **kwargs)
-    if normalized == "lula":
-        from manipulation_project.ik.lula_solver import LulaIKSolver
-
-        return LulaIKSolver(robot_description_path, urdf_path, **kwargs)
-    raise ValueError(f"Unsupported IK backend {backend!r}; expected auto, cumotion, or lula")
+    return CuMotionIKSolver(xrdf_path, urdf_path, **kwargs)

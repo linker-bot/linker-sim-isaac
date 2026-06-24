@@ -24,8 +24,17 @@ def test_joint_target_trajectory_reaches_target() -> None:
         sample_dt=0.25,
     )
     assert len(trajectory) == 5
+    assert trajectory.times.shape == (5,)
+    assert trajectory.positions.shape == (5, 2)
+    assert trajectory.velocities.shape == (5, 2)
+    assert trajectory.accelerations.shape == (5, 2)
+    assert trajectory.jerks.shape == (5, 2)
     np.testing.assert_allclose(trajectory.points[0].joint_positions, [0.0, 1.0])
     np.testing.assert_allclose(trajectory.points[-1].joint_positions, [1.0, 3.0])
+    np.testing.assert_allclose(trajectory.eval(1.0), [1.0, 3.0])
+    sample = trajectory.eval_all(0.5)
+    assert sample.position.shape == (2,)
+    assert sample.velocity.shape == (2,)
 
 
 def test_rpy_to_quaternion_is_unit_length() -> None:

@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5_l6.yaml"))
+    parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml"))
     parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers"))
     parser.add_argument("--trajectory-config", type=Path, default=Path("configs/trajectories/joint_target.yaml"))
     parser.add_argument("--env-config", type=Path, default=Path("configs/envs/empty_scene.yaml"))

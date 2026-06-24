@@ -1,10 +1,10 @@
 # AR5 机械臂 + LinkerHand L6 左手组合配置。
 robot:
-  name: ar5_l6
+  name: ar5v2_l6v1_l
   # 组合资产由 AR5 MJCF 和 L6 MJCF merge 得到。
   asset_type: mjcf
   asset_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
-  prim_path: /World/AR5_L6
+  prim_path: /World/AR5V2_L6V1_L
 
 # 机械臂 7 个主动关节。IK 结果会按这个顺序写回 articulation target。
 arm_joints:
@@ -43,14 +43,7 @@ controlled_joints:
 
 ik:
   # 默认使用 cuMotion 求解 AR5 臂的 TCP IK。
-  backend: cumotion
   robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
-  flange_frame: AR5V2_L_arm_flan_link
-
-# 兼容旧 Lula backend 的机器人描述。
-lula:
-  robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L_lula_robot_description.yaml
   base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   flange_frame: AR5V2_L_arm_flan_link
 

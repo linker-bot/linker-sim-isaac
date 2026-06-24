@@ -11,9 +11,6 @@ from manipulation_project.utils.paths import ASSETS_ROOT
 
 DEFAULT_AR5_MJCF = ASSETS_ROOT / "single_system" / "arm" / "AR5V2_L" / "AR5V2_L.xml"
 DEFAULT_AR5_URDF = ASSETS_ROOT / "single_system" / "arm" / "AR5V2_L" / "AR5V2_L.urdf"
-DEFAULT_AR5_LULA_DESCRIPTION = (
-    ASSETS_ROOT / "single_system" / "arm" / "AR5V2_L" / "AR5V2_L_lula_robot_description.yaml"
-)
 DEFAULT_AR5_CUMOTION_XRDF = ASSETS_ROOT / "single_system" / "arm" / "AR5V2_L" / "AR5V2_L.xrdf"
 DEFAULT_AR5_L6_MJCF = ASSETS_ROOT / "combined_system" / "AR5V2_L6V1_L" / "AR5V2_L6V1_L.xml"
 DEFAULT_L6_MJCF = ASSETS_ROOT / "single_system" / "hand" / "L6V1_L" / "L6V1_L.xml"

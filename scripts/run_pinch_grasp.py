@@ -28,10 +28,9 @@ from manipulation_project.assets.usd_overrides import apply_robot_usd_overrides,
 from manipulation_project.controllers.config import implicit_drive_settings, load_controller_profiles, physx_override_configs
 from manipulation_project.controllers.implicit_drive_controller import ImplicitDriveController
 from manipulation_project.envs.scene_builder import build_world, configure_visuals
-from manipulation_project.ik.solver_factory import is_cumotion_available
 from manipulation_project.logging.joint_logger import JointTrackingLogger
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, add_capsule_rope_reference
-from manipulation_project.robots.mimic import ActualFollowerTargetMapper, mjcf_equality_follower_joint_names
+from manipulation_project.robots.mimic import MimicFollowerTargetMapper, mjcf_equality_follower_joint_names
 from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, PinchGraspTask
 from manipulation_project.utils.config import load_yaml
 from manipulation_project.utils.paths import repo_path
@@ -41,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5_l6.yaml"))
+    parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml"))
     parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers"))
     parser.add_argument("--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml"))
     parser.add_argument("--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml"))
@@ -52,7 +51,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-grasp", action="store_true", help="只导入机器人和绳体，并短暂保持初始姿态")
     parser.add_argument("--short-smoke", action="store_true", help="覆盖阶段时长，用于快速 headless smoke")
     parser.add_argument("--endpoint", choices=("left", "right"), default=None)
-    parser.add_argument("--ik-backend", choices=("cumotion", "auto", "lula"), default=None)
     parser.add_argument("--physics-frequency", type=float, default=None)
     parser.add_argument("--render-frequency", type=float, default=None)
     parser.add_argument("--gravity-z", type=float, default=None)
@@ -81,37 +79,18 @@ def solver_settings(env_config: dict) -> SolverIterationConfig | None:
     )
 
 
-def robot_ik_settings(robot_config: dict, backend_override: str | None = None) -> dict:
-    """合并新版 IK 配置和旧 Lula 兼容配置。"""
+def robot_ik_settings(robot_config: dict) -> dict:
+    """读取 cuMotion IK 配置。"""
 
     robot_ik = dict(robot_config.get("ik") or {})
-    legacy_lula = dict(robot_config.get("lula") or {})
-    if not robot_ik and legacy_lula:
-        robot_ik = {
-            "backend": "lula",
-            "robot_description": legacy_lula.get("robot_description"),
-            "base_urdf": legacy_lula.get("base_urdf"),
-            "flange_frame": legacy_lula.get("flange_frame"),
-        }
-    elif legacy_lula:
-        robot_ik.setdefault("robot_description", legacy_lula.get("robot_description"))
-        robot_ik.setdefault("base_urdf", legacy_lula.get("base_urdf"))
-        robot_ik.setdefault("flange_frame", legacy_lula.get("flange_frame"))
-
-    if backend_override is not None:
-        robot_ik["backend"] = backend_override
-
-    effective_backend = str(robot_ik.get("backend", "cumotion")).lower()
-    if legacy_lula and (effective_backend == "lula" or (effective_backend == "auto" and not is_cumotion_available())):
-        robot_ik["robot_description"] = legacy_lula.get("robot_description")
-        robot_ik["base_urdf"] = legacy_lula.get("base_urdf")
-        robot_ik["flange_frame"] = legacy_lula.get("flange_frame")
     if not robot_ik:
         raise ValueError("Robot config must provide ik.robot_description, ik.base_urdf and ik.flange_frame")
     missing = [key for key in ("robot_description", "base_urdf") if not robot_ik.get(key)]
     if missing:
         raise ValueError(f"Robot IK config is missing required key(s): {missing}")
-    robot_ik.setdefault("backend", "cumotion")
+    if str(robot_ik.get("backend", "cumotion")).lower() not in {"", "cumotion"}:
+        raise ValueError("Only cuMotion IK is supported")
+    robot_ik.pop("backend", None)
     robot_ik.setdefault("flange_frame", "AR5V2_L_arm_flan_link")
     return robot_ik
 
@@ -175,7 +154,7 @@ def main() -> None:
 
     robot_asset = RobotAssetConfig.from_mapping(robot_config)
     controlled_joints = list(robot_config.get("controlled_joints", ["all"]))
-    robot_ik = robot_ik_settings(robot_config, args.ik_backend)
+    robot_ik = robot_ik_settings(robot_config)
 
     rope_config = CapsuleRopeConfig.from_mapping(rope_config_data)
     grasp_config = PinchGraspConfig.from_mapping(grasp_config_data)
@@ -249,7 +228,7 @@ def main() -> None:
             mjcf_path=mjcf_path,
         )
         controller.configure_runtime()
-        follower_mapper = ActualFollowerTargetMapper(list(robot.dof_names), mjcf_path)
+        follower_mapper = MimicFollowerTargetMapper(list(robot.dof_names), mjcf_path)
         mimic_names = mjcf_equality_follower_joint_names(mjcf_path)
 
         driven_joint_names = [list(robot.dof_names)[int(index)] for index in controller.driven_indices]
@@ -282,7 +261,6 @@ def main() -> None:
                     mjcf_path=asset_path,
                     ik_robot_description=repo_path(robot_ik["robot_description"]),
                     ik_base_urdf=repo_path(robot_ik["base_urdf"]),
-                    ik_backend=str(robot_ik["backend"]),
                     parent_frame=str(robot_ik["flange_frame"]),
                 )
                 result = task.run(

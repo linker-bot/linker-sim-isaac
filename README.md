@@ -7,7 +7,7 @@
 ## 当前能力
 
 - 资产导入：支持 AR5、L6、AR5+L6 组合 MJCF/URDF/XRDF 资产。
-- IK 后端：优先使用 cuMotion，保留 Isaac Sim Lula 兼容后端。
+- 运动解算：只使用 cuMotion，覆盖 IK、obstacle-aware IK、后续路径规划和轨迹适配。
 - 控制器：核心为 Isaac/PhysX implicit position drive，机械臂和灵巧手参数分文件配置。
 - Mimic 关节：软件层解析 MJCF `equality/joint` 的 `polycoef` 多项式并同步 follower drive 目标。
 - TCP：支持 AR5 法兰 TCP、自定义固定 TCP、thumb/index 闭合夹捏中心 TCP。
@@ -37,7 +37,9 @@
 │   ├── assets/               # 资产导入、USD/PhysX 覆盖、solver 设置
 │   ├── controllers/          # implicit drive 和控制器配置解析
 │   ├── envs/                 # World 和场景构建
-│   ├── ik/                   # cuMotion/Lula IK、临时 TCP URDF
+│   ├── backends/             # cuMotion 解算后端
+│   ├── ik/                   # 兼容入口和临时 TCP URDF
+│   ├── planning/             # 解算请求、结果和碰撞对象数据结构
 │   ├── logging/              # CSV 和关节跟踪日志
 │   ├── objects/              # 对象资产生成和引用
 │   ├── robots/               # 关节组、mimic/equality、状态容器
@@ -95,8 +97,8 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp 
 
 ## 关键配置
 
-- `configs/robots/ar5_l6.yaml`：AR5+L6 组合资产、关节组、IK 资源和 TCP frame。
-- `configs/robots/ar5_arm.yaml`：单独 AR5 机械臂资产和 IK 资源。
+- `configs/robots/ar5v2_l6v1_l.yaml`：AR5+L6 组合资产、关节组、IK 资源和 TCP frame。
+- `configs/robots/ar5v2_l.yaml`：单独 AR5 机械臂资产和 IK 资源。
 - `configs/controllers/arm_controller.yaml`：机械臂 drive、速度、effort、材料和刚体参数。
 - `configs/controllers/hand_controller.yaml`：灵巧手 drive、速度、effort、材料和刚体参数。
 - `configs/envs/rope_scene.yaml`：绳体抓取场景、步频、重力和 PhysX solver 设置。
@@ -120,7 +122,7 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp 
 - 左臂+左手组合：`assets/combined_system/AR5V2_L6V1_L/`
 - 绳体对象：`assets/dynamic_env_objects/capsuleropeV1_default/`
 
-右侧 AR5/L6 当前提供单体 URDF 和 mesh。若要运行右臂 IK 或右手 MJCF 组合资产，需要继续生成对应 XRDF/Lula/MJCF 描述。
+右侧 AR5/L6 当前提供单体 URDF 和 mesh。若要运行右臂 IK 或右手 MJCF 组合资产，需要继续生成对应 XRDF/MJCF 描述。
 
 ## 坐标、姿态和单位
 
@@ -147,13 +149,17 @@ TCP 实现在 `source/manipulation_project/tcp/`：
 - `custom_tcp.py`：在任意父 frame 下添加固定 `xyz/rpy` 偏移。
 - `pinch_tcp.py`：读取 MJCF body 链，在闭合手型下计算 thumb tip 和 index tip 中点。
 
-IK 统一入口是 `manipulation_project.ik.solver_factory.make_ik_solver()`：
-
-- `backend="auto"`：能 import `cumotion` 时优先使用 cuMotion，否则回退到 Lula。
-- `backend="cumotion"`：使用 `assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf` 和 URDF。
-- `backend="lula"`：使用 Isaac Sim 自带 Lula motion generation 扩展。
+运动解算后端位于 `manipulation_project.backends.cumotion`，旧的
+`manipulation_project.ik.solver_factory.make_ik_solver()` 仅作为 cuMotion 兼容入口保留。
+cuMotion 使用 `assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf` 和 URDF；不可用时直接报错，
+不再回退到其它后端。
 
 IK 后端通常要求目标 frame 已经在 URDF 中存在。`ik/tcp_urdf_builder.py` 会复制基础 URDF，并临时追加 fixed TCP link/joint。
+`planning.requests.IKRequest` 支持 `avoid_collisions` 开关，可在单点 IK 时消费项目
+`CollisionObject` 并通过 cuMotion world 约束目标构型。
+
+`trajectories.JointTrajectory` 内部按 cuMotion 轨迹语义保存 `times`、`positions`、
+`velocities`、`accelerations` 和 `jerks` 采样矩阵，同时保留迭代 `TrajectoryPoint` 的旧接口。
 
 ## Foxglove 可视化
 

@@ -1,7 +1,7 @@
 """关节空间轨迹生成。
 
 输入是一组起始/目标关节位置，输出是按固定采样间隔离散化的 ``JointTrajectory``。
-速度通过相邻采样点差分估计，适合给位置驱动或日志使用。
+轨迹内部按 cuMotion 风格保存时间、位置、速度、加速度和 jerk 矩阵。
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from manipulation_project.trajectories.base import JointTrajectory, TrajectoryPoint
+from manipulation_project.trajectories.base import JointTrajectory
 from manipulation_project.trajectories.interpolation import interpolation_fn
 
 
@@ -35,7 +35,7 @@ def build_joint_target_trajectory(
         interpolation: 插值函数名称。
         phase: 写入每个 ``TrajectoryPoint`` 的阶段名。
     返回:
-        ``JointTrajectory``，每个点包含位置、差分速度和时间戳。
+        ``JointTrajectory``，包含时间、位置、速度、加速度和 jerk 采样矩阵。
     """
 
     if duration_s < 0:
@@ -51,26 +51,44 @@ def build_joint_target_trajectory(
 
     fn = interpolation_fn(interpolation)
     if duration_s == 0:
-        return JointTrajectory(
-            [TrajectoryPoint(time_s=0.0, joint_positions=target.copy(), joint_velocities=np.zeros_like(target), phase=phase)],
-            tuple(joint_names),
+        return JointTrajectory.from_samples(
+            times=np.asarray([0.0], dtype=float),
+            positions=target.reshape(1, -1),
+            velocities=np.zeros((1, target.size), dtype=float),
+            accelerations=np.zeros((1, target.size), dtype=float),
+            jerks=np.zeros((1, target.size), dtype=float),
+            phases=(phase,),
+            joint_names=tuple(joint_names),
         )
 
     num_steps = max(1, int(np.ceil(duration_s / sample_dt)))
-    points: list[TrajectoryPoint] = []
-    previous_position = start
-    previous_time = 0.0
+    times = np.asarray([min(duration_s, step * sample_dt) for step in range(num_steps + 1)], dtype=float)
+    positions = np.zeros((times.size, start.size), dtype=float)
     for step in range(num_steps + 1):
-        time_s = min(duration_s, step * sample_dt)
+        time_s = times[step]
         alpha = time_s / duration_s
         scale = fn(alpha)
-        position = start + scale * (target - start)
-        if step == 0:
-            velocity = np.zeros_like(position)
-        else:
-            dt = max(1.0e-12, time_s - previous_time)
-            velocity = (position - previous_position) / dt
-        points.append(TrajectoryPoint(time_s=time_s, joint_positions=position, joint_velocities=velocity, phase=phase))
-        previous_position = position
-        previous_time = time_s
-    return JointTrajectory(points, tuple(joint_names))
+        positions[step] = start + scale * (target - start)
+
+    velocities = _differentiate(positions, times)
+    accelerations = _differentiate(velocities, times)
+    jerks = _differentiate(accelerations, times)
+    return JointTrajectory.from_samples(
+        times=times,
+        positions=positions,
+        velocities=velocities,
+        accelerations=accelerations,
+        jerks=jerks,
+        phases=tuple(phase for _ in range(times.size)),
+        joint_names=tuple(joint_names),
+    )
+
+
+def _differentiate(values: np.ndarray, times: np.ndarray) -> np.ndarray:
+    if values.shape[0] == 1:
+        return np.zeros_like(values)
+    result = np.zeros_like(values)
+    for index in range(1, values.shape[0]):
+        dt = max(1.0e-12, float(times[index] - times[index - 1]))
+        result[index] = (values[index] - values[index - 1]) / dt
+    return result

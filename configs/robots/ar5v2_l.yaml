@@ -1,13 +1,13 @@
 # 单独 AR5 机械臂配置。
 robot:
   # Isaac 场景中的机器人名称。
-  name: ar5_arm
+  name: ar5v2_l
   # 当前默认使用 MJCF 资产导入；也可扩展为 urdf。
   asset_type: mjcf
   # 机器人资产路径，相对仓库根目录。
   asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
   # 导入到 USD stage 的根 prim 路径。
-  prim_path: /World/AR5_Arm
+  prim_path: /World/AR5V2_L
 
 # 控制器实际下发目标的关节。单臂配置只包含 7 个 AR5 关节。
 controlled_joints:
@@ -20,17 +20,9 @@ controlled_joints:
   - AR5V2_L_arm_joint_7
 
 ik:
-  # 默认 IK 后端。cuMotion 使用 XRDF + URDF；可在 CLI 用 --ik-backend 覆盖。
-  backend: cumotion
   # cuMotion XRDF，描述 C-space、默认关节和工具 frame。
   robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
   # 基础 URDF。任务会临时复制并追加 TCP link。
   base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   # AR5 法兰 link；pinch TCP 会固定在这个 parent frame 下。
-  flange_frame: AR5V2_L_arm_flan_link
-
-# 旧 Isaac Sim Lula 后端兼容配置。
-lula:
-  robot_description: assets/single_system/arm/AR5V2_L/AR5V2_L_lula_robot_description.yaml
-  base_urdf: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   flange_frame: AR5V2_L_arm_flan_link

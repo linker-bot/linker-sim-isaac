@@ -15,12 +15,12 @@ import tempfile
 import numpy as np
 
 from manipulation_project.assets.asset_paths import DEFAULT_ARM_JOINT_NAMES
-from manipulation_project.ik.ik_request import IKRequest
-from manipulation_project.ik.solver_factory import make_ik_solver
+from manipulation_project.backends.cumotion.context import CuMotionConfig, CuMotionContext
+from manipulation_project.planning.requests import IKRequest
 from manipulation_project.ik.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.robots.mimic import ActualFollowerTargetMapper, expand_targets_with_mjcf_equalities
+from manipulation_project.robots.mimic import MimicFollowerTargetMapper, expand_targets_with_mjcf_equalities
 from manipulation_project.tcp.pinch_tcp import make_pinch_tcp
 from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
 
@@ -235,7 +235,7 @@ def step_joint_target(
     phase: str,
     target_velocity_all: np.ndarray | None = None,
     drive_logger=None,
-    follower_mapper: ActualFollowerTargetMapper | None = None,
+    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """下发一帧完整 DOF 目标，并推进一个 physics step。
 
@@ -307,7 +307,7 @@ def move_joint_target(
     render: bool,
     step: int,
     drive_logger=None,
-    follower_mapper: ActualFollowerTargetMapper | None = None,
+    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """用 smoothstep 在两个完整 DOF 目标之间平滑移动。
 
@@ -368,7 +368,7 @@ def hold_joint_target(
     render: bool,
     step: int,
     drive_logger=None,
-    follower_mapper: ActualFollowerTargetMapper | None = None,
+    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """保持一个完整 DOF 目标一段时间。
 
@@ -429,10 +429,7 @@ class PinchGraspTask:
         parent_frame: str,
         ik_robot_description: str | Path | None = None,
         ik_base_urdf: str | Path | None = None,
-        ik_backend: str = "auto",
         tcp_frame_name: str = "ar5_l6_pinch_tcp",
-        lula_robot_description: str | Path | None = None,
-        lula_base_urdf: str | Path | None = None,
     ) -> None:
         """保存任务配置和 IK/TCP 资源路径。
 
@@ -441,11 +438,9 @@ class PinchGraspTask:
             rope_config: rope 对象配置，用于定位端点。
             mjcf_path: AR5+L6 MJCF 文件路径，用于计算 pinch TCP 和 mimic 关系。
             parent_frame: pinch TCP 固连到的父 link 名称，通常是手掌基座。
-            ik_robot_description: cuMotion/Lula 等 IK 后端需要的机器人描述文件。
+            ik_robot_description: cuMotion XRDF 机器人描述文件。
             ik_base_urdf: 未附加 TCP 的基础 URDF。
-            ik_backend: IK 后端名称，``auto`` 会由工厂自行选择。
             tcp_frame_name: 写入临时 URDF 的 TCP frame 名称。
-            lula_robot_description/lula_base_urdf: 兼容旧配置名的别名。
         返回:
             无返回值；缺少 IK 描述文件时抛出 ``ValueError``。
         """
@@ -453,15 +448,10 @@ class PinchGraspTask:
         self.config = config
         self.rope_config = rope_config
         self.mjcf_path = Path(mjcf_path)
-        if ik_robot_description is None:
-            ik_robot_description = lula_robot_description
-        if ik_base_urdf is None:
-            ik_base_urdf = lula_base_urdf
         if ik_robot_description is None or ik_base_urdf is None:
             raise ValueError("PinchGraspTask requires ik_robot_description and ik_base_urdf")
         self.ik_robot_description = Path(ik_robot_description)
         self.ik_base_urdf = Path(ik_base_urdf)
-        self.ik_backend = ik_backend
         self.parent_frame = parent_frame
         self.tcp_frame_name = tcp_frame_name
 
@@ -516,15 +506,22 @@ class PinchGraspTask:
         with tempfile.TemporaryDirectory(prefix="ar5_l6_ik_tcp_") as temp_dir:
             tcp_urdf = Path(temp_dir) / f"{self.ik_base_urdf.stem}_{self.tcp_frame_name}.urdf"
             write_tcp_urdf(self.ik_base_urdf, tcp_urdf, tcp)
-            solver = make_ik_solver(
-                self.ik_backend,
-                self.ik_robot_description,
-                tcp_urdf,
-                frame_name=self.tcp_frame_name,
-                default_cspace_seeds=np.asarray(self.config.ik_seeds, dtype=float),
-                ccd_max_iterations=self.config.ik_max_iterations,
-                bfgs_max_iterations=self.config.ik_bfgs_max_iterations,
-                orientation_weight=self.config.ik_orientation_weight,
+            context = CuMotionContext(
+                CuMotionConfig(
+                    xrdf_path=self.ik_robot_description,
+                    urdf_path=tcp_urdf,
+                    flange_frame=self.parent_frame,
+                    default_tcp_frame=self.tcp_frame_name,
+                    cspace_seeds=np.asarray(self.config.ik_seeds, dtype=float),
+                    ccd_max_iterations=self.config.ik_max_iterations,
+                    bfgs_max_iterations=self.config.ik_bfgs_max_iterations,
+                    orientation_weight=self.config.ik_orientation_weight,
+                    position_tolerance=self.config.ik_position_tolerance,
+                    orientation_tolerance=self.config.ik_orientation_tolerance,
+                )
+            )
+            solver = context.make_inverse_kinematics(
+                tcp_frame_name=self.tcp_frame_name,
             )
             # IK 使用上一阶段解作为 warm start，保持关节轨迹连续，也减少求解器跳解概率。
             approach = solver.solve(
@@ -629,7 +626,7 @@ class PinchGraspTask:
         simulation_app,
         render: bool,
         drive_logger=None,
-        follower_mapper: ActualFollowerTargetMapper | None = None,
+        follower_mapper: MimicFollowerTargetMapper | None = None,
     ) -> dict[str, object]:
         """规划并执行完整夹捏抓取脚本。
 

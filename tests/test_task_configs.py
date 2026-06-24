@@ -12,10 +12,17 @@ from manipulation_project.utils.config import load_yaml
 
 
 def test_default_robot_config_paths_exist() -> None:
-    config = load_yaml("configs/robots/ar5_l6.yaml")
+    config = load_yaml("configs/robots/ar5v2_l6v1_l.yaml")
     robot = RobotAssetConfig.from_mapping(config)
     assert robot.asset_path.is_file()
     assert config["controlled_joints"]
+
+
+def test_robot_configs_are_cumotion_only() -> None:
+    for path in sorted(Path("configs/robots").glob("*.yaml")):
+        config = load_yaml(path)
+        assert "lula" not in config
+        assert config.get("ik", {}).get("backend") is None
 
 
 def test_right_side_urdf_assets_exist() -> None:

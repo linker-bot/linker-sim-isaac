@@ -14,10 +14,9 @@ import numpy as np
 from manipulation_project.robots.joint_groups import resolve_joint_indices
 from manipulation_project.robots.classification import component_for_name
 from manipulation_project.robots.mimic import (
-    follower_targets_from_masters,
+    MimicFollowerTargetMapper,
     mjcf_equality_follower_joint_names,
     parse_mjcf_joint_frictionloss,
-    resolve_mimic_follower_controls,
 )
 from manipulation_project.utils.math_utils import expand_scalar_or_vector
 
@@ -120,7 +119,7 @@ class ImplicitDriveController:
             dtype=int,
         )
         self.driven_indices = np.unique(np.concatenate([self.command_indices, self.follower_indices])).astype(int)
-        self.follower_controls = resolve_mimic_follower_controls(self.dof_names, mjcf_path, self.command_indices)
+        self.follower_mapper = MimicFollowerTargetMapper(self.dof_names, mjcf_path)
         self.settings = settings
         self.mjcf_path = mjcf_path
 
@@ -241,12 +240,12 @@ class ImplicitDriveController:
         full_positions[self.command_indices] = command_positions
         full_velocities[self.command_indices] = command_velocities
 
-        follower_positions, follower_velocities = follower_targets_from_masters(
-            command_positions, command_velocities, self.follower_controls
+        self.follower_mapper.apply_from_actual(
+            full_positions,
+            full_velocities,
+            np.asarray(self.robot.get_joint_positions(), dtype=float).reshape(-1),
+            np.asarray(self.robot.get_joint_velocities(), dtype=float).reshape(-1),
         )
-        for slot, control in enumerate(self.follower_controls):
-            full_positions[control.dependent_index] = follower_positions[slot]
-            full_velocities[control.dependent_index] = follower_velocities[slot]
         return full_positions, full_velocities
 
     def apply(self, articulation_action_type, joint_positions: np.ndarray, joint_velocities: np.ndarray | None = None) -> None:
