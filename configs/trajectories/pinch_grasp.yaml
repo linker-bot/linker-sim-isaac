@@ -4,8 +4,8 @@ grasp:
   endpoint: left
   # 在端块中心基础上添加的 TCP 目标偏移，单位 m。
   target_world_offset: [0.02, 0.0, 0.03]
-  # 目标 TCP 姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 degree；任务内部会转成 wxyz 四元数。
-  target_rpy_deg: [0.0, 115.0, -90.0]
+  # 目标 TCP 姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 rad；任务内部会转成 wxyz 四元数。
+  target_rpy: [0.0, 2.007128639793479, -1.5707963267948966]
   # false 时只约束 TCP 位置，忽略姿态。
   use_orientation: true
   # approach 点在 grasp 点上方的距离。

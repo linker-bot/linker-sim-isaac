@@ -15,6 +15,7 @@ from typing import Protocol
 
 import numpy as np
 
+from manipulation_project.controllers.types import JointControlSettings
 from manipulation_project.trajectories.types import JointTrajectory
 
 
@@ -120,6 +121,26 @@ class HoldTask:
             step=step,
             drive_logger=runtime.drive_logger,
         )
+
+
+@dataclass(frozen=True)
+class SwitchControlModeTask:
+    """在任务序列中切换 runtime 关节控制配置。
+
+    该任务只更新控制器的 ``settings`` 并重新写入 articulation runtime 参数，不推进
+    physics step。这样它可以作为阶段边界事件插在两个运动任务之间，下一帧目标会直接
+    使用新的 position/velocity/effort 控制方式下发。
+    """
+
+    settings: JointControlSettings
+    phase: str = "switch_control_mode"
+
+    def run(self, runtime: TaskRuntime, step: int) -> int:
+        """切换控制器模式并返回未改变的累计 step。"""
+
+        runtime.controller.settings = self.settings
+        runtime.controller.configure_runtime()
+        return step
 
 
 def step_joint_target(

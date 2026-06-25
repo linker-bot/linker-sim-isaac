@@ -32,13 +32,13 @@ rope:
   segment_linear_damping: 0.1
   segment_angular_damping: 0.12
   # 相邻段弯曲角限制和弹簧阻尼。
-  bend_limit_deg: 120.0
+  bend_limit: 2.0943951023931953
   bend_stiffness: 0.1
   bend_damping: 0.1
   # 是否完全锁住扭转自由度；false 时用 twist_* 做软限制。
   lock_twist: True
-  # 扭转角限制，单位 degree；null 表示按 segments 自动估算。
-  twist_limit_deg: null
+  # 扭转角限制，单位 rad；null 表示按 segments 自动估算。
+  twist_limit: null
   twist_stiffness: 0.1
   twist_damping: 0.05
   # 禁用相邻段碰撞，避免关节连接处自碰造成抖动。

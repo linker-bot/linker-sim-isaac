@@ -8,14 +8,15 @@
     * 引用已有 USD：把资产挂到当前 stage 的 ``prim_path`` 下，并收集 prim 句柄。
     * 不创建机器人、不控制关节、不在运行时改变绳体拓扑。
 
-坐标与单位遵循 Isaac：长度 m、质量 kg；配置字段以 ``*_deg`` 结尾时为度，写入 USD 关节
-limit/drive 前保持 PhysX 期望的角度属性。函数中的 pxr/omni 依赖保持局部导入，便于在不
-启动 Isaac 的环境里解析配置和运行纯 Python 测试。
+坐标与单位遵循 Isaac：长度 m、质量 kg；项目配置和 dataclass 中的角度统一使用 rad。
+USD/PhysX 的 D6 joint 角度 limit 属性需要 degree 时，只在写入 USD 的边界处显式转换。
+函数中的 pxr/omni 依赖保持局部导入，便于在不启动 Isaac 的环境里解析配置和运行纯 Python 测试。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 
 from manipulation_project.utils.paths import repo_path
@@ -70,11 +71,11 @@ class CapsuleRopeConfig:
     endpoint_angular_damping: float = 0.05
     segment_linear_damping: float = 0.1
     segment_angular_damping: float = 0.12
-    bend_limit_deg: float = 120.0
+    bend_limit: float = 2.0943951023931953
     bend_stiffness: float = 0.05
     bend_damping: float = 0.03
     lock_twist: bool = False
-    twist_limit_deg: float | None = None
+    twist_limit: float | None = None
     twist_stiffness: float = 0.1
     twist_damping: float = 0.05
     disable_adjacent_collisions: bool = True
@@ -94,7 +95,7 @@ class CapsuleRopeConfig:
             data: 完整对象配置，必须包含 ``object`` 和 ``rope`` 两个子 mapping。
         返回:
             ``CapsuleRopeConfig``；缺失或显式设为 ``null`` 的 ``radius`` 和
-            ``twist_limit_deg`` 会根据 ``length/segments`` 自动估算。
+            ``twist_limit`` 会根据 ``length/segments`` 自动估算。
         """
 
         # 配置拆成 object/rope 两层：object 描述资产路径和 stage 路径，rope 描述几何、质量、
@@ -110,9 +111,11 @@ class CapsuleRopeConfig:
         # radius/twist_limit 允许留空，由段间距估算一个保守默认值。这样调整 segments/length
         # 时绳体不会因为忘记同步半径或扭转范围而立刻不可用。
         default_radius = default_length / default_segments * 0.15
-        default_twist_limit = 560.0 / default_segments
+        default_twist_limit = math.radians(560.0 / default_segments)
         radius = rope.get("radius")
-        twist_limit_deg = rope.get("twist_limit_deg")
+        if "bend_limit_deg" in rope or "twist_limit_deg" in rope:
+            raise ValueError("rope *_deg angle fields are deprecated; use rad fields bend_limit/twist_limit")
+        twist_limit = rope.get("twist_limit")
         return cls(
             asset_path=str(object_cfg.get("asset_path", cls.asset_path)),
             prim_path=str(object_cfg.get("prim_path", cls.prim_path)),
@@ -141,13 +144,11 @@ class CapsuleRopeConfig:
             segment_angular_damping=float(
                 rope.get("segment_angular_damping", cls.segment_angular_damping)
             ),
-            bend_limit_deg=float(rope.get("bend_limit_deg", cls.bend_limit_deg)),
+            bend_limit=float(rope.get("bend_limit", cls.bend_limit)),
             bend_stiffness=float(rope.get("bend_stiffness", cls.bend_stiffness)),
             bend_damping=float(rope.get("bend_damping", cls.bend_damping)),
             lock_twist=bool(rope.get("lock_twist", cls.lock_twist)),
-            twist_limit_deg=default_twist_limit
-            if twist_limit_deg is None
-            else float(twist_limit_deg),
+            twist_limit=default_twist_limit if twist_limit is None else float(twist_limit),
             twist_stiffness=float(rope.get("twist_stiffness", cls.twist_stiffness)),
             twist_damping=float(rope.get("twist_damping", cls.twist_damping)),
             disable_adjacent_collisions=bool(
@@ -408,12 +409,14 @@ def create_d6_rope_joint(
         # 更自然的旋转自由度。
         lock_limit(prim, "rotX")
     else:
-        if config.twist_limit_deg is not None and config.twist_limit_deg >= 0:
-            bounded_limit(prim, "rotX", -config.twist_limit_deg, config.twist_limit_deg)
+        if config.twist_limit is not None and config.twist_limit >= 0:
+            twist_limit_deg = math.degrees(config.twist_limit)
+            bounded_limit(prim, "rotX", -twist_limit_deg, twist_limit_deg)
         add_angular_drive(prim, "rotX", config.twist_stiffness, config.twist_damping)
     for axis in ("rotY", "rotZ"):
-        if config.bend_limit_deg >= 0:
-            bounded_limit(prim, axis, -config.bend_limit_deg, config.bend_limit_deg)
+        if config.bend_limit >= 0:
+            bend_limit_deg = math.degrees(config.bend_limit)
+            bounded_limit(prim, axis, -bend_limit_deg, bend_limit_deg)
         add_angular_drive(prim, axis, config.bend_stiffness, config.bend_damping)
     return joint
 

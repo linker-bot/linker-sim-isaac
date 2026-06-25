@@ -288,7 +288,7 @@ trajectory:
 grasp:
   endpoint: left
   target_world_offset: [0.02, 0.0, 0.03]
-  target_rpy_deg: [0.0, 115.0, -90.0]
+  target_rpy: [0.0, 2.007128639793479, -1.5707963267948966]
   use_orientation: true
   approach_distance: 0.10
   lift_height: 0.4
@@ -342,7 +342,7 @@ dependent = a0 + a1 * master + a2 * master^2 + ...
 - 项目对外统一使用 wxyz 四元数，即 `[w, x, y, z]`。
 - SciPy 内部使用 xyzw，转换封装在 `utils/math_utils.py` 和 `utils/rotations.py`。
 - 配置中的 RPY 使用固定轴 XYZ 顺序，即外旋 XYZ；在 SciPy 中对应小写 `"xyz"`。
-- 距离单位为 m，角度配置通常为 degree，关节位置为 rad，关节速度为 rad/s。
+- 距离单位为 m，所有角度配置统一为 rad，关节速度为 rad/s。
 
 ## 资产和命名
 

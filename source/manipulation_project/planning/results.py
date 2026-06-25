@@ -63,3 +63,33 @@ class MotionResult:
     success: bool
     status: str
     diagnostics: PlanningDiagnostics = field(default_factory=PlanningDiagnostics)
+
+
+@dataclass(frozen=True)
+class TcpLineDiagnostics:
+    """TCP 直线 IK 诊断信息。
+
+    诊断只保存起点、终点、姿态端点、后端关节名和最大位置误差。逐点关节解保存在
+    ``TcpLinePlan.joint_positions`` 中，避免在诊断对象里重复保存大矩阵。
+    """
+
+    start_position: np.ndarray
+    target_position: np.ndarray
+    start_orientation: np.ndarray | None
+    target_orientation: np.ndarray | None
+    ik_joint_names: tuple[str, ...]
+    max_position_error: float
+
+
+@dataclass(frozen=True)
+class TcpLinePlan:
+    """TCP 直线 IK 结果。
+
+    ``times`` 是 waypoint 的采样时刻；``joint_positions`` 的每一行对应一个采样点。
+    列顺序由 ``diagnostics.ik_joint_names`` 说明，通常等于后端关节顺序。调用方如果需要
+    Isaac 完整 DOF 或 controller command space，需要按关节名在更高层映射。
+    """
+
+    times: np.ndarray
+    joint_positions: np.ndarray
+    diagnostics: TcpLineDiagnostics

@@ -11,7 +11,7 @@ from manipulation_project.trajectories.joint_trajectory_builder import (
     build_joint_target_trajectory,
     joint_trajectory_from_positions,
 )
-from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
+from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 def test_smoothstep_endpoints() -> None:
@@ -45,7 +45,7 @@ def test_joint_target_trajectory_reaches_target() -> None:
 
 
 def test_rpy_to_quaternion_is_unit_length() -> None:
-    quat = rpy_xyz_deg_to_quat_wxyz([0.0, 115.0, -90.0])
+    quat = rpy_xyz_to_quat_wxyz([0.0, 2.007128639793479, -np.pi / 2.0])
     assert quat.shape == (4,)
     assert np.isclose(np.linalg.norm(quat), 1.0)
 

@@ -45,7 +45,7 @@ from manipulation_project.tasks.primitives import (
     TaskRuntime,
 )
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
-from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
+from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class PinchGraspConfig:
     输入字段:
         endpoint: 选择 rope 的 ``left`` 或 ``right`` 端点作为抓取目标。
         target_world_offset: 在端点中心上叠加的世界坐标偏移，单位 m。
-        target_rpy_deg: 目标 TCP 姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 degree。
+        target_rpy: 目标 TCP 姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 rad。
         use_orientation: IK 是否约束 TCP 姿态；为假时只约束位置。
         approach_distance: 抓取前从目标正上方接近的高度差，单位 m。
         lift_height: 抓住后抬升高度，单位 m。
@@ -73,7 +73,11 @@ class PinchGraspConfig:
 
     endpoint: str = "left"
     target_world_offset: tuple[float, float, float] = (0.02, 0.0, 0.03)
-    target_rpy_deg: tuple[float, float, float] = (0.0, 115.0, -90.0)
+    target_rpy: tuple[float, float, float] = (
+        0.0,
+        2.007128639793479,
+        -1.5707963267948966,
+    )
     use_orientation: bool = True
     approach_distance: float = 0.10
     lift_height: float = 0.4
@@ -107,16 +111,15 @@ class PinchGraspConfig:
         if "grasp" not in data:
             raise ValueError("Pinch grasp config must contain top-level grasp section")
         grasp = data["grasp"]
+        if "target_rpy_deg" in grasp:
+            raise ValueError("target_rpy_deg is deprecated; use target_rpy in radians")
         return cls(
             endpoint=str(grasp.get("endpoint", cls.endpoint)),
             target_world_offset=tuple(
                 float(value)
                 for value in grasp.get("target_world_offset", cls.target_world_offset)
             ),
-            target_rpy_deg=tuple(
-                float(value)
-                for value in grasp.get("target_rpy_deg", cls.target_rpy_deg)
-            ),
+            target_rpy=tuple(float(value) for value in grasp.get("target_rpy", cls.target_rpy)),
             use_orientation=bool(grasp.get("use_orientation", cls.use_orientation)),
             approach_distance=float(
                 grasp.get("approach_distance", cls.approach_distance)
@@ -362,7 +365,7 @@ class PinchGraspTask:
                 lifted_world + wiggle_axis * self.config.wiggle_amplitude
             )
 
-        target_orientation = rpy_xyz_deg_to_quat_wxyz(self.config.target_rpy_deg)
+        target_orientation = rpy_xyz_to_quat_wxyz(self.config.target_rpy)
         ik_orientation = target_orientation if self.config.use_orientation else None
         # IK 后端只认识机器人描述里的 frame。这里临时写一个“附加 pinch TCP”的 URDF，
         # 避免改动仓库里的基础 URDF，同时让求解器直接以夹捏中心作为末端。

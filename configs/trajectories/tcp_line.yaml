@@ -10,7 +10,7 @@ trajectory:
   # 相对起点移动 5 cm；如果需要绝对终点，可以改用 target_position: [x, y, z]。
   target_offset: [0.0, 0.0, 0.05]
   # current 保持当前 TCP 姿态；none 表示只约束位置；
-  # target 表示从当前姿态 slerp 到 target_orientation/target_rpy_deg。
+  # target 表示从当前姿态 slerp 到 target_orientation/target_rpy。
   orientation_mode: current
   duration: 2.0
   sample_hz: 100.0

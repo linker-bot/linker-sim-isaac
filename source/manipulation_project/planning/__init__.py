@@ -9,11 +9,19 @@ cuMotion、加入采样规划器或 mock 求解器时，不需要改动任务层
 """
 
 from manipulation_project.planning.collision_objects import CollisionObject
-from manipulation_project.planning.requests import IKRequest, MotionRequest, PoseTarget
+from manipulation_project.planning.requests import (
+    IKRequest,
+    MotionRequest,
+    OrientationMode,
+    PoseTarget,
+    TcpLineRequest,
+)
 from manipulation_project.planning.results import (
     IKResult,
     MotionResult,
     PlanningDiagnostics,
+    TcpLineDiagnostics,
+    TcpLinePlan,
 )
 
 __all__ = [
@@ -22,6 +30,10 @@ __all__ = [
     "IKResult",
     "MotionRequest",
     "MotionResult",
+    "OrientationMode",
     "PlanningDiagnostics",
     "PoseTarget",
+    "TcpLineDiagnostics",
+    "TcpLinePlan",
+    "TcpLineRequest",
 ]

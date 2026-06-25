@@ -87,7 +87,7 @@ def test_default_rope_and_grasp_configs() -> None:
     assert rope.prim_path == "/World/CapsuleRope"
     assert rope.root_path == "/CapsuleRope"
     assert rope.radius is not None and rope.radius > 0.0
-    assert rope.twist_limit_deg is not None and rope.twist_limit_deg > 0.0
+    assert rope.twist_limit is not None and rope.twist_limit > 0.0
     grasp = PinchGraspConfig.from_mapping(
         load_yaml("configs/trajectories/pinch_grasp.yaml")
     )
