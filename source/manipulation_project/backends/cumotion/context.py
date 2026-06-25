@@ -202,3 +202,23 @@ class CuMotionContext:
         )
 
         return CuMotionForwardKinematics(self)
+
+    def make_motion_planner(
+        self,
+        *,
+        tcp_frame_name: str | None = None,
+        generate_interpolated_path: bool = True,
+        generate_trajectory: bool = True,
+    ):
+        """创建路径级运动规划组件。"""
+
+        from manipulation_project.backends.cumotion.motion_planner import (
+            CuMotionMotionPlanner,
+        )
+
+        return CuMotionMotionPlanner(
+            self,
+            tcp_frame_name=tcp_frame_name or self.config.default_tcp_frame,
+            generate_interpolated_path=generate_interpolated_path,
+            generate_trajectory=generate_trajectory,
+        )

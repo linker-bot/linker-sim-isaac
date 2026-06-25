@@ -34,9 +34,13 @@ class CuMotionCollisionWorld:
 
         self.context = context
         self.cumotion = context.cumotion
-        # 每个 collision-free IK 请求构造一个静态 world 快照；handles 保留下来便于未来做
-        # 增量更新或输出调试信息。
-        self.world = self.cumotion.World()
+        # cuMotion 的 pybind 类型 ``World`` 不是公开构造入口；官方 Python API 通过
+        # ``create_world()`` 工厂函数返回可用实例。这里显式走工厂，避免在真实 Isaac/cuMotion
+        # 环境中触发 ``World: No constructor defined``。
+        #
+        # 每个 collision-free IK / MotionPlanner 请求构造一个静态 world 快照；handles 保留下来
+        # 便于未来做增量更新或输出调试信息。
+        self.world = self.cumotion.create_world()
         self.handles = {}
         for obj in collision_objects:
             self.add(obj)

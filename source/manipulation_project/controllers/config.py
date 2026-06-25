@@ -121,7 +121,7 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
         )
     if "implicit_position_drive" in data:
         raise ValueError(
-            f"Controller profile {name!r} uses deprecated section 'implicit_position_drive'; "
+            f"Controller profile {name!r} uses removed section 'implicit_position_drive'; "
             "use 'position_control' with method: implicit"
         )
     return ControllerProfile(

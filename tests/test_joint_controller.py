@@ -81,12 +81,11 @@ class _FakeRobot:
         self.actions.append(action)
 
 
-class _GlobalModeController:
+class _MissingDofModeController:
     def __init__(self) -> None:
         self.gains: tuple[np.ndarray, np.ndarray] | None = None
         self.max_efforts: np.ndarray | None = None
         self.effort_mode_calls: list[tuple[str, np.ndarray]] = []
-        self.global_modes: list[str] = []
 
     def set_gains(self, *, kps, kds) -> None:
         self.gains = (np.asarray(kps, dtype=float), np.asarray(kds, dtype=float))
@@ -97,14 +96,11 @@ class _GlobalModeController:
     def set_effort_modes(self, mode: str, joint_indices=None) -> None:
         self.effort_mode_calls.append((str(mode), np.asarray(joint_indices, dtype=int)))
 
-    def switch_control_mode(self, mode: str) -> None:
-        self.global_modes.append(str(mode))
 
-
-class _GlobalModeRobot(_FakeRobot):
+class _MissingDofModeRobot(_FakeRobot):
     def __init__(self) -> None:
         super().__init__()
-        self.controller = _GlobalModeController()
+        self.controller = _MissingDofModeController()
 
 
 def _controller(
@@ -234,14 +230,14 @@ def test_effort_control_sends_direct_clipped_effort() -> None:
     np.testing.assert_allclose(effort_action.joint_efforts, [1.5, -1.0])
 
 
-def test_global_control_mode_fallback_rejects_mixed_runtime_modes() -> None:
+def test_controller_requires_per_dof_control_mode_switching() -> None:
     settings = ComponentControlSettings(
         mode="velocity",
         method="explicit",
         damping=(4.0,),
         max_force=100.0,
     )
-    robot = _GlobalModeRobot()
+    robot = _MissingDofModeRobot()
     controller = JointController(
         robot,
         joint_names=["arm_joint", "hand_joint", "follower_joint"],
@@ -253,5 +249,5 @@ def test_global_control_mode_fallback_rejects_mixed_runtime_modes() -> None:
     controller.command_indices = np.asarray([0, 1], dtype=int)
     controller.driven_indices = np.asarray([0, 1, 2], dtype=int)
 
-    with pytest.raises(RuntimeError, match="mixed runtime modes"):
+    with pytest.raises(RuntimeError, match="switch_dof_control_mode"):
         controller.configure_runtime()

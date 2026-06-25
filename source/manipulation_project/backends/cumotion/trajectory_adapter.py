@@ -40,14 +40,16 @@ def joint_trajectory_from_cumotion(
     accelerations = []
     jerks = []
     for time_s in sample_times:
-        # cuMotion 状态字段在不同版本中可能是属性也可能是零参方法，统一经 ``_attr`` 读取。
-        state = trajectory.eval_all(float(time_s))
-        positions.append(np.asarray(_attr(state, "position"), dtype=float).reshape(-1))
-        velocities.append(np.asarray(_attr(state, "velocity"), dtype=float).reshape(-1))
-        accelerations.append(
-            np.asarray(_attr(state, "acceleration"), dtype=float).reshape(-1)
+        # cuMotion 1.1 的真实 pybind 接口返回 ``(position, velocity, acceleration, jerk)``
+        # 四元组；部分测试替身或旧封装会返回带同名属性/方法的对象。统一在这里拆解，避免任务
+        # 层关心后端对象的具体 Python 形态。
+        position, velocity, acceleration, jerk = _trajectory_state_values(
+            trajectory.eval_all(float(time_s))
         )
-        jerks.append(np.asarray(_attr(state, "jerk"), dtype=float).reshape(-1))
+        positions.append(np.asarray(position, dtype=float).reshape(-1))
+        velocities.append(np.asarray(velocity, dtype=float).reshape(-1))
+        accelerations.append(np.asarray(acceleration, dtype=float).reshape(-1))
+        jerks.append(np.asarray(jerk, dtype=float).reshape(-1))
     return JointTrajectory.from_samples(
         times=sample_times,
         positions=np.vstack(positions),
@@ -91,3 +93,20 @@ def _attr(state, name: str):
 
     value = getattr(state, name)
     return value() if callable(value) else value
+
+
+def _trajectory_state_values(state):
+    """返回 ``position, velocity, acceleration, jerk`` 四个轨迹状态数组。"""
+
+    if isinstance(state, tuple):
+        if len(state) != 4:
+            raise ValueError(
+                "trajectory.eval_all tuple must contain position, velocity, acceleration, jerk"
+            )
+        return state
+    return (
+        _attr(state, "position"),
+        _attr(state, "velocity"),
+        _attr(state, "acceleration"),
+        _attr(state, "jerk"),
+    )

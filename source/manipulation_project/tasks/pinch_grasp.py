@@ -29,7 +29,11 @@ from manipulation_project.backends.cumotion.context import (
     CuMotionContext,
 )
 from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
-from manipulation_project.planning.requests import IKRequest
+from manipulation_project.backends.cumotion.trajectory_adapter import (
+    joint_trajectory_from_cumotion,
+)
+from manipulation_project.planning.requests import IKRequest, MotionRequest
+from manipulation_project.planning.results import MotionResult
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
@@ -45,7 +49,15 @@ from manipulation_project.tasks.primitives import (
     TaskRuntime,
 )
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
+from manipulation_project.trajectories.joint_trajectory_builder import (
+    joint_trajectory_from_positions,
+)
+from manipulation_project.trajectories.types import JointTrajectory
 from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
+
+
+_CUMOTION_TRAJECTORY_SAMPLE_DT = 0.01
+_CUMOTION_TRAJECTORY_MIN_SAMPLES = 50
 
 
 @dataclass(frozen=True)
@@ -112,7 +124,7 @@ class PinchGraspConfig:
             raise ValueError("Pinch grasp config must contain top-level grasp section")
         grasp = data["grasp"]
         if "target_rpy_deg" in grasp:
-            raise ValueError("target_rpy_deg is deprecated; use target_rpy in radians")
+            raise ValueError("target_rpy_deg is removed; use target_rpy in radians")
         return cls(
             endpoint=str(grasp.get("endpoint", cls.endpoint)),
             target_world_offset=tuple(
@@ -253,6 +265,303 @@ def set_joint_targets_by_indices(
 
     for index, value in zip(indices, values, strict=True):
         target[int(index)] = float(value)
+
+
+def build_planned_joint_motion_trajectory(
+    *,
+    motion_planner,
+    dof_names: list[str],
+    arm_indices: np.ndarray,
+    start_all: np.ndarray,
+    target_all: np.ndarray,
+    duration_s: float,
+    phase: str,
+) -> tuple[JointTrajectory, MotionResult]:
+    """用 cuMotion 规划一段完整 DOF 的关节角到关节角运动。
+
+    ``motion_planner`` 只处理 cuMotion C-space 关节；本函数负责把完整 articulation
+    DOF 中的机械臂关节切出来调用 ``MotionRequest(goal_q=...)``，再把返回的 C-space
+    path 嵌回完整 DOF 轨迹。非 C-space DOF 会按 start/target 线性插值，便于未来复用到
+    夹爪和机械臂同时变化的阶段。
+    """
+
+    if duration_s < 0:
+        raise ValueError("duration_s cannot be negative")
+    start = np.asarray(start_all, dtype=float).reshape(-1)
+    target = np.asarray(target_all, dtype=float).reshape(-1)
+    if start.shape != target.shape:
+        raise ValueError(f"start/target shape mismatch: {start.shape} vs {target.shape}")
+    if start.size != len(dof_names):
+        raise ValueError(f"dof_names expected {start.size} names, got {len(dof_names)}")
+    arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
+    start_q = start[arm_indices]
+    target_q = target[arm_indices]
+
+    # 配置时长为 0 时沿用其它任务原语的语义：只下发最终目标一帧，不要求 planner
+    # 生成一条有时间跨度的路径。
+    if duration_s == 0:
+        trajectory = joint_trajectory_from_positions(
+            times=np.asarray([0.0], dtype=float),
+            positions=target.reshape(1, -1),
+            joint_names=tuple(dof_names),
+            phases=(phase,),
+        )
+        return trajectory, MotionResult(
+            joint_path=target_q.reshape(1, -1),
+            trajectory=None,
+            success=True,
+            status="SKIPPED_ZERO_DURATION",
+        )
+
+    result = motion_planner.plan(
+        MotionRequest(current_q=start_q, goal_q=target_q, mode="collision_aware")
+    )
+    if not result.success or result.joint_path is None:
+        raise RuntimeError(
+            f"cuMotion joint motion planning failed for {phase}: status={result.status}"
+        )
+
+    if result.trajectory is not None:
+        return (
+            _full_trajectory_from_cumotion_trajectory(
+                result.trajectory,
+                motion_planner=motion_planner,
+                dof_names=dof_names,
+                arm_indices=arm_indices,
+                start_all=start,
+                target_all=target,
+                requested_duration_s=duration_s,
+                phase=phase,
+            ),
+            result,
+        )
+
+    cspace_path = _normalize_cspace_path(result.joint_path, start_q, target_q)
+    times = _times_for_cspace_path(cspace_path, duration_s)
+    full_positions = _full_positions_from_cspace_path(
+        cspace_path,
+        times=times,
+        duration_s=duration_s,
+        start_all=start,
+        target_all=target,
+        arm_indices=arm_indices,
+    )
+    trajectory = joint_trajectory_from_positions(
+        times=times,
+        positions=full_positions,
+        joint_names=tuple(dof_names),
+        phase=phase,
+    )
+    return trajectory, result
+
+
+def _full_trajectory_from_cumotion_trajectory(
+    cumotion_trajectory,
+    *,
+    motion_planner,
+    dof_names: list[str],
+    arm_indices: np.ndarray,
+    start_all: np.ndarray,
+    target_all: np.ndarray,
+    requested_duration_s: float,
+    phase: str,
+) -> JointTrajectory:
+    """把 cuMotion time-parameterized C-space trajectory 嵌回完整 DOF 轨迹。
+
+    cuMotion ``MotionPlanner`` 负责找路径，``CSpaceTrajectoryGenerator`` 负责按照机器人
+    约束生成带时间、速度、加速度和 jerk 的轨迹。本函数只做两个项目侧适配：
+    1. 如果配置阶段时长大于 cuMotion 生成时长，则等比例拉长时间轴并缩放导数，保持运动更慢
+       且不超过 cuMotion 速度/加速度规划；不会把轨迹压短到小于 cuMotion 生成时长。
+    2. cuMotion 只包含机械臂 C-space，本函数把这些列写回完整 articulation DOF；非 C-space
+       DOF 继续按起终点做线性补齐，用于手部或其它未纳入 cuMotion 模型的关节。
+    """
+
+    cspace_trajectory = _sample_and_retime_cumotion_trajectory(
+        cumotion_trajectory,
+        joint_names=tuple(motion_planner.joint_names()),
+        requested_duration_s=requested_duration_s,
+        phase=phase,
+    )
+    arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
+    if cspace_trajectory.positions.shape[1] != arm_indices.size:
+        raise ValueError(
+            "cuMotion trajectory dof mismatch: "
+            f"trajectory has {cspace_trajectory.positions.shape[1]} columns, "
+            f"arm_indices has {arm_indices.size}"
+        )
+
+    duration_s = float(cspace_trajectory.times[-1])
+    full_positions = _full_positions_from_cspace_path(
+        cspace_trajectory.positions,
+        times=cspace_trajectory.times,
+        duration_s=duration_s,
+        start_all=start_all,
+        target_all=target_all,
+        arm_indices=arm_indices,
+    )
+
+    # 先用完整位置矩阵做一次有限差分，给非 C-space DOF 生成一致的速度/加速度诊断；随后用
+    # cuMotion 的导数覆盖机械臂列，确保执行层能拿到后端真实的加减速规划结果。
+    baseline = joint_trajectory_from_positions(
+        times=cspace_trajectory.times,
+        positions=full_positions,
+        joint_names=tuple(dof_names),
+        phase=phase,
+    )
+    velocities = baseline.velocities.copy()
+    accelerations = baseline.accelerations.copy()
+    jerks = baseline.jerks.copy()
+    velocities[:, arm_indices] = cspace_trajectory.velocities
+    accelerations[:, arm_indices] = cspace_trajectory.accelerations
+    jerks[:, arm_indices] = cspace_trajectory.jerks
+    return JointTrajectory.from_samples(
+        times=cspace_trajectory.times,
+        positions=full_positions,
+        velocities=velocities,
+        accelerations=accelerations,
+        jerks=jerks,
+        phases=tuple(phase for _ in range(cspace_trajectory.times.size)),
+        joint_names=tuple(dof_names),
+    )
+
+
+def _sample_and_retime_cumotion_trajectory(
+    cumotion_trajectory,
+    *,
+    joint_names: tuple[str, ...],
+    requested_duration_s: float,
+    phase: str,
+) -> JointTrajectory:
+    """采样 cuMotion trajectory，并按配置时长做只拉长不压短的时间缩放。"""
+
+    sample_dt = _cumotion_trajectory_sample_dt(cumotion_trajectory)
+    trajectory = joint_trajectory_from_cumotion(
+        cumotion_trajectory,
+        joint_names=joint_names,
+        sample_dt=sample_dt,
+        phase=phase,
+    )
+    relative_times = trajectory.times - float(trajectory.times[0])
+    generated_duration = float(relative_times[-1])
+    if generated_duration <= 1.0e-12:
+        return JointTrajectory.from_samples(
+            times=np.asarray([0.0], dtype=float),
+            positions=trajectory.positions[-1:].copy(),
+            velocities=np.zeros_like(trajectory.positions[-1:]),
+            accelerations=np.zeros_like(trajectory.positions[-1:]),
+            jerks=np.zeros_like(trajectory.positions[-1:]),
+            phases=(phase,),
+            joint_names=joint_names,
+        )
+
+    # requested_duration_s 是 demo 配置里的阶段时长。若它更长，只会降低速度/加速度/jerk；
+    # 若它更短，则保留 cuMotion generator 给出的时长，避免把已规划好的加速度约束压坏。
+    target_duration = max(float(requested_duration_s), generated_duration)
+    scale = target_duration / generated_duration
+    return JointTrajectory.from_samples(
+        times=relative_times * scale,
+        positions=trajectory.positions.copy(),
+        velocities=trajectory.velocities / scale,
+        accelerations=trajectory.accelerations / (scale * scale),
+        jerks=trajectory.jerks / (scale * scale * scale),
+        phases=tuple(phase for _ in range(trajectory.times.size)),
+        joint_names=joint_names,
+    )
+
+
+def _cumotion_trajectory_sample_dt(cumotion_trajectory) -> float:
+    """根据 cuMotion 轨迹时域选择采样周期。"""
+
+    lower, upper = _trajectory_domain_bounds(cumotion_trajectory)
+    span = max(0.0, upper - lower)
+    if span <= 0.0:
+        return _CUMOTION_TRAJECTORY_SAMPLE_DT
+    return min(
+        _CUMOTION_TRAJECTORY_SAMPLE_DT,
+        max(span / float(_CUMOTION_TRAJECTORY_MIN_SAMPLES), 1.0e-4),
+    )
+
+
+def _trajectory_domain_bounds(trajectory) -> tuple[float, float]:
+    """读取 cuMotion trajectory domain 的上下界。"""
+
+    domain = trajectory.domain()
+    lower = float(
+        getattr(domain, "lower", domain[0] if isinstance(domain, tuple) else 0.0)
+    )
+    upper = float(
+        getattr(domain, "upper", domain[1] if isinstance(domain, tuple) else lower)
+    )
+    return lower, upper
+
+
+def _normalize_cspace_path(
+    joint_path: np.ndarray, start_q: np.ndarray, target_q: np.ndarray
+) -> np.ndarray:
+    """确保 planner path 至少包含精确起点和终点，并去掉连续重复点。"""
+
+    path = np.asarray(joint_path, dtype=float)
+    if path.ndim == 1:
+        path = path.reshape(1, -1)
+    if path.ndim != 2:
+        raise ValueError("joint_path must have shape (N, dof)")
+    dof = np.asarray(start_q, dtype=float).reshape(-1).size
+    if path.shape[1] != dof:
+        raise ValueError(f"joint_path expected {dof} columns, got {path.shape[1]}")
+
+    rows = []
+    start = np.asarray(start_q, dtype=float).reshape(1, -1)
+    target = np.asarray(target_q, dtype=float).reshape(1, -1)
+    if path.shape[0] == 0 or not np.allclose(path[0], start[0]):
+        rows.append(start[0])
+    rows.extend(path)
+    if not np.allclose(rows[-1], target[0]):
+        rows.append(target[0])
+
+    deduped = [np.asarray(rows[0], dtype=float).reshape(-1)]
+    for row in rows[1:]:
+        row = np.asarray(row, dtype=float).reshape(-1)
+        if not np.allclose(row, deduped[-1]):
+            deduped.append(row)
+    return np.vstack(deduped)
+
+
+def _times_for_cspace_path(cspace_path: np.ndarray, duration_s: float) -> np.ndarray:
+    """按 C-space 路径长度把 planner waypoint 分配到指定阶段时长内。"""
+
+    if cspace_path.shape[0] == 1:
+        return np.asarray([0.0], dtype=float)
+    segment_lengths = np.linalg.norm(np.diff(cspace_path, axis=0), axis=1)
+    cumulative = np.concatenate(([0.0], np.cumsum(segment_lengths)))
+    total = float(cumulative[-1])
+    if total <= 1.0e-12:
+        return np.linspace(0.0, float(duration_s), cspace_path.shape[0])
+    return float(duration_s) * cumulative / total
+
+
+def _full_positions_from_cspace_path(
+    cspace_path: np.ndarray,
+    *,
+    times: np.ndarray,
+    duration_s: float,
+    start_all: np.ndarray,
+    target_all: np.ndarray,
+    arm_indices: np.ndarray,
+) -> np.ndarray:
+    """把 C-space path 嵌回完整 DOF 位置矩阵。"""
+
+    start = np.asarray(start_all, dtype=float).reshape(-1)
+    target = np.asarray(target_all, dtype=float).reshape(-1)
+    times = np.asarray(times, dtype=float).reshape(-1)
+    if duration_s <= 0:
+        alpha = np.ones((times.size, 1), dtype=float)
+    else:
+        alpha = (times / float(duration_s)).reshape(-1, 1)
+    full_positions = start.reshape(1, -1) + alpha * (target - start).reshape(1, -1)
+    full_positions[:, np.asarray(arm_indices, dtype=int).reshape(-1)] = cspace_path
+    full_positions[0] = start
+    full_positions[-1] = target
+    return full_positions
 
 
 def grasp_target_position(
@@ -403,6 +712,10 @@ class PinchGraspTask:
             solver = context.make_inverse_kinematics(
                 tcp_frame_name=self.tcp_frame_name,
             )
+            motion_planner = context.make_motion_planner(
+                tcp_frame_name=self.tcp_frame_name,
+                generate_trajectory=True,
+            )
             # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
             # 保持关节轨迹连续，也减少求解器跳解概率。
             approach = solver.solve(
@@ -470,43 +783,121 @@ class PinchGraspTask:
                 wiggles.append((target, result))
                 warm = result.joint_positions
 
-        # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
-        # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
-        grasp_open_all = np.asarray(
-            grasp_line_trajectory.positions[-1], dtype=float
-        ).copy()
-        grasp_closed_all = target_vector_from_mapping(
-            dof_names, self.config.closed_targets, base=grasp_open_all
-        )
-        lifted_all = grasp_closed_all.copy()
-        set_joint_targets_by_indices(lifted_all, arm_indices, lift.joint_positions)
-
-        wiggle_all_targets = []
-        for _world, result in wiggles:
-            wiggle_all = grasp_closed_all.copy()
-            set_joint_targets_by_indices(
-                wiggle_all, arm_indices, result.joint_positions
+            # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
+            # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
+            grasp_open_all = np.asarray(
+                grasp_line_trajectory.positions[-1], dtype=float
+            ).copy()
+            grasp_closed_all = target_vector_from_mapping(
+                dof_names, self.config.closed_targets, base=grasp_open_all
             )
-            wiggle_all_targets.append(wiggle_all)
+            lifted_all = grasp_closed_all.copy()
+            set_joint_targets_by_indices(
+                lifted_all, arm_indices, lift.joint_positions
+            )
 
-        # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
-        post_joint_sweep_targets = []
-        for joint_1_target in self.config.post_joint_sweep_targets:
-            sweep_all = lifted_all.copy()
-            sweep_all[arm_indices[0]] = float(joint_1_target)
-            post_joint_sweep_targets.append(sweep_all)
+            wiggle_all_targets = []
+            for _world, result in wiggles:
+                wiggle_all = grasp_closed_all.copy()
+                set_joint_targets_by_indices(
+                    wiggle_all, arm_indices, result.joint_positions
+                )
+                wiggle_all_targets.append(wiggle_all)
+
+            # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
+            post_joint_sweep_targets = []
+            for joint_1_target in self.config.post_joint_sweep_targets:
+                sweep_all = lifted_all.copy()
+                sweep_all[arm_indices[0]] = float(joint_1_target)
+                post_joint_sweep_targets.append(sweep_all)
+
+            # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动。原来用完整 DOF smoothstep
+            # 直接插值，现在先让 cuMotion MotionPlanner 在 C-space 中找避障路径，再把路径嵌回
+            # 完整 DOF 轨迹播放。手指开合阶段仍保留 smoothstep，因为手部 DOF 不属于 cuMotion
+            # 机器人描述的 C-space。
+            move_to_approach_trajectory, move_to_approach_motion = (
+                build_planned_joint_motion_trajectory(
+                    motion_planner=motion_planner,
+                    dof_names=dof_names,
+                    arm_indices=arm_indices,
+                    start_all=pre_pinch_all,
+                    target_all=approach_all,
+                    duration_s=self.config.move_duration,
+                    phase="move_to_approach",
+                )
+            )
+            lift_trajectory, lift_motion = build_planned_joint_motion_trajectory(
+                motion_planner=motion_planner,
+                dof_names=dof_names,
+                arm_indices=arm_indices,
+                start_all=grasp_closed_all,
+                target_all=lifted_all,
+                duration_s=self.config.lift_duration,
+                phase="lift",
+            )
+            wiggle_trajectories = []
+            wiggle_motions = []
+            previous_target = lifted_all
+            for index, wiggle_all in enumerate(wiggle_all_targets, start=1):
+                trajectory, motion = build_planned_joint_motion_trajectory(
+                    motion_planner=motion_planner,
+                    dof_names=dof_names,
+                    arm_indices=arm_indices,
+                    start_all=previous_target,
+                    target_all=wiggle_all,
+                    duration_s=self.config.wiggle_duration,
+                    phase=f"wiggle_{index}",
+                )
+                wiggle_trajectories.append(trajectory)
+                wiggle_motions.append(motion)
+                previous_target = wiggle_all
+            wiggle_return_trajectory = None
+            wiggle_return_motion = None
+            if wiggle_all_targets:
+                wiggle_return_trajectory, wiggle_return_motion = (
+                    build_planned_joint_motion_trajectory(
+                        motion_planner=motion_planner,
+                        dof_names=dof_names,
+                        arm_indices=arm_indices,
+                        start_all=previous_target,
+                        target_all=lifted_all,
+                        duration_s=self.config.wiggle_duration,
+                        phase="wiggle_return_center",
+                    )
+                )
+            post_joint_sweep_trajectories = []
+            post_joint_sweep_motions = []
+            previous_target = lifted_all
+            for index, sweep_all in enumerate(post_joint_sweep_targets, start=1):
+                trajectory, motion = build_planned_joint_motion_trajectory(
+                    motion_planner=motion_planner,
+                    dof_names=dof_names,
+                    arm_indices=arm_indices,
+                    start_all=previous_target,
+                    target_all=sweep_all,
+                    duration_s=self.config.post_joint_sweep_duration,
+                    phase=f"post_joint_1_sweep_{index}",
+                )
+                post_joint_sweep_trajectories.append(trajectory)
+                post_joint_sweep_motions.append(motion)
+                previous_target = sweep_all
 
         return {
             "arm_indices": arm_indices,
             "initial_all": initial_all,
             "pre_pinch_all": pre_pinch_all,
             "approach_all": approach_all,
+            "move_to_approach_trajectory": move_to_approach_trajectory,
             "approach_line_trajectory": grasp_line_trajectory,
             "grasp_open_all": grasp_open_all,
             "grasp_closed_all": grasp_closed_all,
             "lifted_all": lifted_all,
+            "lift_trajectory": lift_trajectory,
             "wiggle_all_targets": wiggle_all_targets,
+            "wiggle_trajectories": wiggle_trajectories,
+            "wiggle_return_trajectory": wiggle_return_trajectory,
             "post_joint_sweep_targets": post_joint_sweep_targets,
+            "post_joint_sweep_trajectories": post_joint_sweep_trajectories,
             "ik": {
                 "pinch_world": pinch_world,
                 "approach_world": approach_world,
@@ -526,6 +917,13 @@ class PinchGraspTask:
                     for world_target, result in wiggles
                 ],
             },
+            "motion": {
+                "move_to_approach": move_to_approach_motion,
+                "lift": lift_motion,
+                "wiggles": wiggle_motions,
+                "wiggle_return_center": wiggle_return_motion,
+                "post_joint_sweeps": post_joint_sweep_motions,
+            },
         }
 
     def execution_tasks(self, plan: dict[str, object]) -> list[ExecutableTask]:
@@ -540,10 +938,8 @@ class PinchGraspTask:
                 duration=self.config.prep_duration,
                 phase="pre_pinch",
             ),
-            MoveJointTargetTask(
-                start_all=plan["pre_pinch_all"],
-                target_all=plan["approach_all"],
-                duration=self.config.move_duration,
+            MoveFullJointTrajectoryTask(
+                trajectory=plan["move_to_approach_trajectory"],
                 phase="move_to_approach",
             ),
             MoveFullJointTrajectoryTask(
@@ -556,30 +952,22 @@ class PinchGraspTask:
                 duration=self.config.close_duration,
                 phase="close_fingers",
             ),
-            MoveJointTargetTask(
-                start_all=plan["grasp_closed_all"],
-                target_all=plan["lifted_all"],
-                duration=self.config.lift_duration,
+            MoveFullJointTrajectoryTask(
+                trajectory=plan["lift_trajectory"],
                 phase="lift",
             ),
         ]
-        previous_target = plan["lifted_all"]
-        for index, wiggle_all in enumerate(plan["wiggle_all_targets"], start=1):
+        for index, trajectory in enumerate(plan["wiggle_trajectories"], start=1):
             tasks.append(
-                MoveJointTargetTask(
-                    start_all=previous_target,
-                    target_all=wiggle_all,
-                    duration=self.config.wiggle_duration,
+                MoveFullJointTrajectoryTask(
+                    trajectory=trajectory,
                     phase=f"wiggle_{index}",
                 )
             )
-            previous_target = wiggle_all
-        if plan["wiggle_all_targets"]:
+        if plan["wiggle_return_trajectory"] is not None:
             tasks.append(
-                MoveJointTargetTask(
-                    start_all=previous_target,
-                    target_all=plan["lifted_all"],
-                    duration=self.config.wiggle_duration,
+                MoveFullJointTrajectoryTask(
+                    trajectory=plan["wiggle_return_trajectory"],
                     phase="wiggle_return_center",
                 )
             )
@@ -590,17 +978,15 @@ class PinchGraspTask:
                 phase="final",
             )
         )
-        previous_target = plan["lifted_all"]
-        for index, sweep_all in enumerate(plan["post_joint_sweep_targets"], start=1):
+        for index, trajectory in enumerate(
+            plan["post_joint_sweep_trajectories"], start=1
+        ):
             tasks.append(
-                MoveJointTargetTask(
-                    start_all=previous_target,
-                    target_all=sweep_all,
-                    duration=self.config.post_joint_sweep_duration,
+                MoveFullJointTrajectoryTask(
+                    trajectory=trajectory,
                     phase=f"post_joint_1_sweep_{index}",
                 )
             )
-            previous_target = sweep_all
         return tasks
 
     def run(

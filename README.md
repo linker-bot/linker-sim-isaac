@@ -5,7 +5,7 @@
 ## 当前能力
 
 - 资产导入：支持 AR5、L6、AR5+L6 组合 MJCF/URDF/XRDF/USD 资产。
-- 运动解算：统一使用 cuMotion，当前提供 FK、几何 IK、obstacle-aware IK、碰撞世界适配和 cuMotion 轨迹适配。
+- 运动解算：统一使用 cuMotion，当前提供 FK、几何 IK、obstacle-aware IK、路径级 MotionPlanner、碰撞世界适配和 cuMotion 轨迹适配。
 - 控制器：支持位置、速度和 effort 控制；位置/速度可选 Isaac implicit drive 或 Python 显式 effort 计算。
 - Mimic 关节：解析 MJCF `equality/joint` 的 `polycoef` 多项式关系，并在软件层同步 follower drive 目标。
 - TCP：支持法兰 TCP、自定义固定 TCP、thumb/index 闭合夹捏中心 TCP。
@@ -119,6 +119,7 @@ config/script
 - `context.py`：`CuMotionConfig` 和 `CuMotionContext`，加载 XRDF + URDF，缓存 robot description 和 kinematics。
 - `forward_kinematics.py`：封装 FK、frame 查询和关节名查询。
 - `inverse_kinematics.py`：封装单点 IK；`IKRequest.avoid_collisions=True` 时使用 cuMotion collision-free IK。
+- `motion_planner.py`：封装路径级 `MotionRequest`；支持关节目标、TCP translation/pose 目标，并通过 cuMotion `MotionPlanner` 做连续路径级避障。
 - `collision_world.py`：把项目 `CollisionObject` 转成 cuMotion `World` obstacle。
 - `pose_adapter.py`：在项目 numpy pose/quaternion 和 cuMotion pose 类型之间转换。
 - `tcp_urdf_builder.py`：复制 URDF 并临时追加 fixed TCP link/joint。
@@ -149,7 +150,7 @@ CuMotionConfig(
 - `IKResult` / `MotionResult`：保存求解输出、成功状态、误差、状态和诊断。
 - `CollisionObject`：后端无关障碍物描述，支持 `box/cuboid`、`sphere`、`capsule` 的尺寸和 padding。
 
-obstacle-aware IK 约束的是“求出的目标构型”或离散 waypoint 构型。它不是连续路径级避障；当前项目尚未接入连续路径级避障 planner。
+obstacle-aware IK 约束的是“求出的目标构型”或离散 waypoint 构型；`CuMotionMotionPlanner` 则通过 cuMotion `MotionPlanner` 为 `MotionRequest` 提供连续路径级避障。`MotionRequest.mode` 默认使用碰撞感知规划，传入 `geometric`/`collision_unaware` 等模式时会忽略环境障碍物。
 
 ### TCP
 

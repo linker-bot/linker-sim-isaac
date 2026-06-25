@@ -114,7 +114,9 @@ class CapsuleRopeConfig:
         default_twist_limit = math.radians(560.0 / default_segments)
         radius = rope.get("radius")
         if "bend_limit_deg" in rope or "twist_limit_deg" in rope:
-            raise ValueError("rope *_deg angle fields are deprecated; use rad fields bend_limit/twist_limit")
+            raise ValueError(
+                "rope *_deg angle fields are removed; use rad fields bend_limit/twist_limit"
+            )
         twist_limit = rope.get("twist_limit")
         return cls(
             asset_path=str(object_cfg.get("asset_path", cls.asset_path)),

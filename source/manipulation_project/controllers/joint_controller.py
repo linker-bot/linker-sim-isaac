@@ -287,20 +287,12 @@ class JointController:
 
         if not runtime_modes:
             return
-        if hasattr(controller, "switch_dof_control_mode"):
-            for index, mode in runtime_modes:
-                controller.switch_dof_control_mode(dof_index=int(index), mode=mode)
-            return
-
-        modes = {mode for _, mode in runtime_modes}
-        if len(modes) > 1:
-            # 旧 Isaac wrapper 可能只有全 articulation 级别的 switch_control_mode。混合模式
-            # 不能用全局切换表达，直接报错比静默把所有 DOF 切成最后一个模式更安全。
+        if not hasattr(controller, "switch_dof_control_mode"):
             raise RuntimeError(
-                "The articulation controller does not support per-DOF control mode switching, "
-                f"but this configuration requires mixed runtime modes: {sorted(modes)}"
+                "The articulation controller must provide switch_dof_control_mode"
             )
-        controller.switch_control_mode(next(iter(modes)))
+        for index, mode in runtime_modes:
+            controller.switch_dof_control_mode(dof_index=int(index), mode=mode)
 
     def _configure_joint_friction(self) -> None:
         """按关节名写入 runtime friction，资产 frictionloss 优先。"""

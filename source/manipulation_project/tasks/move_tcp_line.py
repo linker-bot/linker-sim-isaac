@@ -70,9 +70,7 @@ class MoveTcpLineConfig:
     def from_mapping(cls, data: dict) -> "MoveTcpLineConfig":
         """从 YAML 映射构造 TCP 直线配置。
 
-        支持两种轨迹类型名：``tcp_line`` 是当前推荐名称，``cartesian_line`` 用于
-        兼容早期配置。``tcp.frame_name`` 和顶层 ``tcp_frame_name`` 都可指定 TCP
-        frame；后者优先级更高。
+        TCP frame 通过 ``trajectory.tcp_frame_name`` 指定。
         """
 
         if "trajectory" not in data:
@@ -80,25 +78,21 @@ class MoveTcpLineConfig:
                 "TCP line config must contain top-level trajectory section"
             )
         trajectory = data["trajectory"]
-        # 兼容旧配置名 ``cartesian_line``，但内部统一当作 TCP line 处理。TCP frame 可以
-        # 放在 trajectory.tcp 子节，也可以顶层直接指定，便于简单 YAML 少写一层结构。
+        # 轨迹类型只接受当前接口名 ``tcp_line``；不再保留多套等价写法。
         trajectory_type = str(trajectory.get("type", "tcp_line"))
-        if trajectory_type not in {"tcp_line", "cartesian_line"}:
+        if trajectory_type != "tcp_line":
             raise ValueError(
-                f"TCP line trajectory type must be tcp_line or cartesian_line, got {trajectory_type!r}"
+                f"TCP line trajectory type must be tcp_line, got {trajectory_type!r}"
             )
-        tcp = trajectory.get("tcp") or {}
+        if "tcp" in trajectory:
+            raise ValueError("trajectory.tcp is removed; use trajectory.tcp_frame_name")
         if "target_rpy_deg" in trajectory:
-            raise ValueError("target_rpy_deg is deprecated; use target_rpy in radians")
+            raise ValueError("target_rpy_deg is removed; use target_rpy in radians")
         orientation_mode = str(trajectory.get("orientation_mode", "current")).lower()
-        use_orientation = trajectory.get("use_orientation")
-        if use_orientation is not None and not bool(use_orientation):
-            orientation_mode = "none"
+        if "use_orientation" in trajectory:
+            raise ValueError("use_orientation is removed; use orientation_mode='none'")
         return cls(
-            tcp_frame_name=str(
-                trajectory.get("tcp_frame_name") or tcp.get("frame_name") or ""
-            )
-            or None,
+            tcp_frame_name=str(trajectory.get("tcp_frame_name") or "") or None,
             start_position=_optional_vector3(trajectory.get("start_position")),
             target_position=_optional_vector3(trajectory.get("target_position")),
             target_offset=_optional_vector3(trajectory.get("target_offset")),

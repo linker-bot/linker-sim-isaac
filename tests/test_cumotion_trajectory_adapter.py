@@ -16,11 +16,17 @@ class _State:
 
 
 class _Trajectory:
+    def __init__(self, *, tuple_state: bool = False) -> None:
+        self.tuple_state = tuple_state
+
     def domain(self):
         return (0.0, 1.0)
 
     def eval_all(self, time_s: float):
-        return _State(time_s)
+        state = _State(time_s)
+        if self.tuple_state:
+            return (state.position, state.velocity, state.acceleration, state.jerk)
+        return state
 
 
 def test_joint_trajectory_from_cumotion_samples_eval_all() -> None:
@@ -36,3 +42,15 @@ def test_joint_trajectory_from_cumotion_samples_eval_all() -> None:
     np.testing.assert_allclose(trajectory.positions[-1], [1.0, 2.0])
     np.testing.assert_allclose(trajectory.velocities[1], [1.0, 1.0])
     assert trajectory.phases[0] == "planned"
+
+
+def test_joint_trajectory_from_cumotion_accepts_real_tuple_eval_all() -> None:
+    trajectory = joint_trajectory_from_cumotion(
+        _Trajectory(tuple_state=True),
+        joint_names=("j1", "j2"),
+        times=[0.0, 1.0],
+    )
+
+    np.testing.assert_allclose(trajectory.positions, [[0.0, 1.0], [1.0, 2.0]])
+    np.testing.assert_allclose(trajectory.velocities, [[0.0, 0.0], [2.0, 2.0]])
+    np.testing.assert_allclose(trajectory.accelerations[-1], [0.5, 0.5])

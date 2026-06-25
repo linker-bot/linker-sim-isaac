@@ -2,9 +2,7 @@
 trajectory:
   type: tcp_line
   # 使用法兰作为默认 TCP；也可以改成 robot config 中存在的其它 frame。
-  tcp:
-    type: flange
-    frame_name: AR5V2_L_arm_flan_link
+  tcp_frame_name: AR5V2_L_arm_flan_link
   # current 表示以当前 TCP FK 位置为起点。
   start_position: current
   # 相对起点移动 5 cm；如果需要绝对终点，可以改用 target_position: [x, y, z]。

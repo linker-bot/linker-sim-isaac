@@ -19,6 +19,9 @@ from manipulation_project.backends.cumotion.forward_kinematics import (
 from manipulation_project.backends.cumotion.inverse_kinematics import (
     CuMotionInverseKinematics,
 )
+from manipulation_project.backends.cumotion.motion_planner import (
+    CuMotionMotionPlanner,
+)
 from manipulation_project.backends.cumotion.tcp_line import (
     plan_tcp_line_joint_path,
 )
@@ -31,6 +34,7 @@ __all__ = [
     "CuMotionContext",
     "CuMotionForwardKinematics",
     "CuMotionInverseKinematics",
+    "CuMotionMotionPlanner",
     "joint_trajectory_from_cumotion",
     "plan_tcp_line_joint_path",
 ]

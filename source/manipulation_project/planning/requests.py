@@ -52,8 +52,8 @@ class IKRequest:
     tcp_frame_name: str | None = None
     tcp_type: str = "flange"
     warm_start: np.ndarray | None = None
-    position_tolerance: float = 1.0e-3
-    orientation_tolerance: float = 1.0e-2
+    position_tolerance: float = 1.0e-4
+    orientation_tolerance: float = 1.0e-3
     avoid_collisions: bool = False
     collision_objects: tuple[CollisionObject, ...] = ()
 
@@ -63,7 +63,7 @@ class MotionRequest:
     """路径级运动规划请求。
 
     ``current_q`` 和 ``goal_q`` 使用后端关节顺序；``goal_pose`` 用于任务空间目标。
-    ``mode`` 是后端可解释的策略标签，默认表示优先考虑碰撞。
+    ``mode`` 是后端可解释的策略标签，默认表示优先考虑环境障碍和机器人碰撞。
     """
 
     current_q: np.ndarray
@@ -72,6 +72,32 @@ class MotionRequest:
     tcp_frame_name: str | None = None
     collision_objects: tuple[CollisionObject, ...] = ()
     mode: str = "collision_aware"
+
+    def validate(self) -> None:
+        """检查路径级请求是否描述了唯一目标。"""
+
+        # MotionRequest 不知道具体机器人模型，因此这里只做结构性检查：当前构型必须是非空
+        # 1D 向量，目标必须且只能指定一种。具体关节名、frame 是否存在、碰撞世界是否可用，
+        # 交给后端 context/planner 在执行时检查。
+        current = np.asarray(self.current_q, dtype=float).reshape(-1)
+        if current.size == 0:
+            raise ValueError("current_q cannot be empty")
+        if (self.goal_q is None) == (self.goal_pose is None):
+            raise ValueError("Exactly one of goal_q or goal_pose must be provided")
+        if self.goal_q is not None:
+            # goal_q 和 current_q 必须使用同一后端关节顺序。这里能检查长度一致；顺序是否正确
+            # 由调用方通过后端 ``joint_names()`` 做名称映射来保证。
+            goal = np.asarray(self.goal_q, dtype=float).reshape(-1)
+            if goal.size != current.size:
+                raise ValueError(
+                    f"goal_q expected {current.size} values, got {goal.size}"
+                )
+        if self.goal_pose is not None:
+            # PoseTarget 使用项目统一边界：position 为 3D 米制坐标，orientation 若提供则为
+            # wxyz 四元数。这里只 reshape 触发清晰错误，不做归一化或可达性判断。
+            np.asarray(self.goal_pose.position, dtype=float).reshape(3)
+            if self.goal_pose.orientation is not None:
+                np.asarray(self.goal_pose.orientation, dtype=float).reshape(4)
 
 
 @dataclass(frozen=True)
