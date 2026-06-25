@@ -1,8 +1,18 @@
 """控制器 YAML 配置解析。
 
-项目将机械臂和灵巧手的控制、材料、刚体参数拆成独立 YAML 文件。
-本模块从 controllers 目录或显式 profile 映射读取这些文件，并转换成 runtime
-controller 和 USD/PhysX 覆盖所需的数据。
+项目将机械臂和灵巧手的控制、材料、刚体参数拆成独立 YAML 文件。本模块从 controllers
+目录或显式 profile 映射读取这些文件，并转换成 runtime controller 和 USD/PhysX 覆盖所需
+的数据。
+
+职责边界:
+        * 把 YAML 中的 arm/hand profile 解析成纯 Python dataclass。
+        * 生成 ``ImplicitDriveSettings``（运行时 articulation controller 用）和
+            ``PhysxOverrideConfig``（导入后 USD/PhysX 覆盖用）。
+        * 不读取机器人 ``dof_names``，不检查每个关节名是否存在；这一步必须等资产导入后完成。
+
+配置约定：arm/hand profile 分别描述一个部件，``active_joints`` 面向上层命令空间，
+``follower_joints`` 面向 mimic 从动关节。解析阶段只做类型、缺失字段和 target 名称校验，
+具体 DOF 长度会在控制器拿到 Isaac articulation 后再校验。
 """
 
 from __future__ import annotations
@@ -48,6 +58,10 @@ class ControllerProfiles:
 
 
 def _section(data: Mapping[str, Any], key: str) -> dict[str, Any]:
+    """读取可选 YAML section，并确保其为 mapping。"""
+
+    # 缺失 section 视为空 mapping，后续与默认值合并；但如果用户显式写成列表/标量，
+    # 通常表示 YAML 结构错误，应立即报告。
     value = data.get(key, {})
     if not isinstance(value, Mapping):
         raise ValueError(f"Controller section {key!r} must be a mapping")
@@ -66,6 +80,7 @@ def load_controller_profiles(config_dir: str | Path) -> ControllerProfiles:
 
     if not isinstance(config_dir, (str, Path)):
         raise TypeError(f"Controller config must be a directory path, got {type(config_dir).__name__}")
+    # controllers 配置以目录为单位加载，保证 arm/hand profile 来自同一套实验参数。
     path = repo_path(config_dir)
     if not path.is_dir():
         raise ValueError(f"Controller config must be a directory containing arm_controller.yaml and hand_controller.yaml: {path}")
@@ -76,12 +91,17 @@ def load_controller_profiles(config_dir: str | Path) -> ControllerProfiles:
 
 
 def _load_profile_from_path(name: str, path: Path) -> ControllerProfile:
+    """从单个 YAML 文件读取并校验指定部件 profile。"""
+
     if not path.is_file():
         raise FileNotFoundError(f"Controller profile {name!r} was not found: {path}")
     return _profile_from_mapping(name, load_yaml(path))
 
 
 def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfile:
+    """把 YAML mapping 转成 ``ControllerProfile``。"""
+
+    # profile 内的 target 是防呆字段：例如手部配置误命名为 arm_controller.yaml 时能尽早发现。
     target = str(data.get("target", name))
     if target != name:
         raise ValueError(f"Controller profile {name!r} has mismatched target {target!r}")
@@ -95,10 +115,16 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
 
 
 def _joint_section(config: Mapping[str, Any], key: str, defaults: Mapping[str, Any]) -> dict[str, Any]:
+    """读取 active/follower 子配置并与默认值深合并。"""
+
     return deep_merge(defaults, _section(config, key))
 
 
 def _component_drive_settings(profile: ControllerProfile) -> ComponentDriveSettings:
+    """把单个部件 profile 转成 runtime drive 参数。"""
+
+    # active/follower 使用不同默认增益：follower 通常需要更硬的 drive 才能贴近 mimic 关系，
+    # 但最终数值仍由 YAML 覆盖。
     defaults = {
         "stiffness": 1000.0,
         "damping": 50.0,
@@ -136,6 +162,10 @@ def implicit_drive_settings(profiles: ControllerProfiles) -> ImplicitDriveSettin
 
 
 def _physx_override_config(profile: ControllerProfile) -> PhysxOverrideConfig:
+    """把单个部件 profile 转成导入后 USD/PhysX 覆盖参数。"""
+
+    # USD/PhysX 覆盖复用 runtime drive 配置中的关节摩擦和 drive seed，确保导入初值与
+    # 后续控制器增益不会完全脱节。
     material = _section(profile.physx, "material")
     rigid_body = _section(profile.physx, "rigid_body")
     drive = _component_drive_settings(profile)

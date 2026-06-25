@@ -1,7 +1,19 @@
 """TCP 笛卡尔直线运动任务辅助函数。
 
-该模块把“TCP 在 base 坐标下沿直线移动”的配置转换成控制器可执行的关节轨迹：
-先用 FK 读取当前 TCP 位姿，再在线段上逐点 IK 求解，并用上一点 IK 解热启动下一点。
+该模块把“TCP 在 base 坐标下沿直线移动”的配置转换成控制器可执行的关节轨迹：先用 FK
+读取当前 TCP 位姿，再在线段上逐点 IK 求解，并用上一点 IK 解热启动下一点。
+
+职责边界:
+    * 只负责生成关节空间命令轨迹，不直接推进 Isaac world。
+    * 不创建机器人或控制器；调用方负责提供完整 DOF 名称、命令索引和当前关节状态。
+    * 不做碰撞规划；若后端支持碰撞，可通过 ``IKRequest`` 扩展相关字段。
+
+坐标/顺序约定:
+    所有 position 都在 cuMotion robot base 坐标系下表达；当前示例资产固定在 world 原点，
+    因此默认场景中它和 world 坐标一致。输出轨迹仍然是关节空间命令，列顺序按控制器
+    ``command_indices`` 对应的 DOF 名称排列。如果 cuMotion 只覆盖机械臂 C-space，而组合
+    articulation 还包含灵巧手 DOF，本模块会显式检查 IK 关节是否都属于命令空间，避免把
+    未求解的 DOF 静默写错。
 """
 
 from __future__ import annotations
@@ -60,6 +72,8 @@ class MoveTcpLineConfig:
         if "trajectory" not in data:
             raise ValueError("TCP line config must contain top-level trajectory section")
         trajectory = data["trajectory"]
+        # 兼容旧配置名 ``cartesian_line``，但内部统一当作 TCP line 处理。TCP frame 可以
+        # 放在 trajectory.tcp 子节，也可以顶层直接指定，便于简单 YAML 少写一层结构。
         trajectory_type = str(trajectory.get("type", "tcp_line"))
         if trajectory_type not in {"tcp_line", "cartesian_line"}:
             raise ValueError(f"TCP line trajectory type must be tcp_line or cartesian_line, got {trajectory_type!r}")
@@ -249,6 +263,8 @@ def _target_position(start_position: np.ndarray, config: MoveTcpLineConfig) -> n
     位移。两者在 ``validate`` 中保证只会出现一个。
     """
 
+    # 绝对终点和相对偏移在 validate 阶段已保证互斥；这里保留显式分支，使错误信息在未来
+    # 直接调用该 helper 时仍然清晰。
     if config.target_position is not None:
         return np.asarray(config.target_position, dtype=float).reshape(3)
     if config.target_offset is not None:
@@ -263,6 +279,8 @@ def _orientation_endpoints(current_orientation: np.ndarray, config: MoveTcpLineC
     返回不同起终点则由 ``slerp_quat_wxyz`` 生成逐点姿态。
     """
 
+    # 姿态模式决定 IKRequest 是否传 orientation：None 表示后端只约束位置，可以在目标姿态
+    # 难以满足时提高成功率；current/target 则用于保持或插值末端姿态。
     if config.orientation_mode == "none":
         return None, None
     start = normalize_quat_wxyz(current_orientation, label="current_orientation")
@@ -278,6 +296,7 @@ def _orientation_endpoints(current_orientation: np.ndarray, config: MoveTcpLineC
 def _indices_for_names(dof_names: list[str], joint_names: list[str], *, label: str) -> np.ndarray:
     """把一组关节名解析成完整 DOF 索引，并在缺失时给出完整上下文。"""
 
+    # 名称映射比直接假设索引更安全：cuMotion C-space 通常只是完整 articulation DOF 的子集。
     index_by_name = {name: index for index, name in enumerate(dof_names)}
     missing = [name for name in joint_names if name not in index_by_name]
     if missing:

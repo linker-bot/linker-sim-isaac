@@ -1,8 +1,17 @@
 """关节分组和稀疏目标展开工具。
 
-配置文件里经常只想指定一组关节或少量关节目标，而 Isaac Lab 的 articulation
-接口通常需要完整 DOF 索引或完整目标向量。本模块负责在“名字空间”和“数组空间”
-之间做转换，并在名字缺失时尽早报错。
+配置文件里经常只想指定一组关节或少量关节目标，而 Isaac Lab 的 articulation 接口通常需要
+完整 DOF 索引或完整目标向量。本模块负责在“名字空间”和“数组空间”之间做转换，并在名字
+缺失时尽早报错。
+
+职责边界:
+    * 根据 Isaac ``dof_names`` 把有序关节名解析成整数索引。
+    * 把稀疏 ``关节名 -> 位置`` 映射展开成完整 DOF 数组。
+    * 不猜测关节别名，也不根据字符串相似度自动修正拼写。
+
+顺序约定:
+    所有顺序都由传入的名称列表和 Isaac ``dof_names`` 显式决定。配置中的目标顺序不会被
+    自动重排；当名称缺失时立即抛错，可以避免后续控制器把目标写到错误 DOF。
 """
 
 from __future__ import annotations
@@ -52,6 +61,7 @@ class JointGroup:
             int ndarray，包含每个关节在 ``dof_names`` 中的索引。
         """
 
+        # ``all`` 是少数允许的语义别名，用于测试或全 DOF 控制；除此之外必须精确匹配名称。
         if allow_all and len(self.joint_names) == 1 and self.joint_names[0].lower() == "all":
             return np.arange(len(dof_names), dtype=int)
         missing = [name for name in self.joint_names if name not in dof_names]
@@ -94,6 +104,8 @@ def target_vector_from_mapping(
         shape ``(len(dof_names),)`` 的完整目标向量；没有 ``base`` 时未指定关节为 0。
     """
 
+    # base 表示“未指定关节沿用当前/上一阶段目标”。没有 base 时只能填 0，适合构造简单
+    # 全新目标；抓取任务通常会传 base 以避免未涉及关节突然归零。
     if base is None:
         vector = np.zeros(len(dof_names), dtype=float)
     else:
@@ -105,6 +117,7 @@ def target_vector_from_mapping(
     missing = [name for name in targets if name not in index_by_name]
     if missing:
         raise ValueError(f"Target joints were not found: {missing}. Available DOFs: {list(dof_names)}")
+    # Python dict 保留插入顺序，但这里按名称定位写入完整数组，因此稀疏映射顺序不影响结果。
     for name, value in targets.items():
         vector[index_by_name[name]] = float(value)
     return vector

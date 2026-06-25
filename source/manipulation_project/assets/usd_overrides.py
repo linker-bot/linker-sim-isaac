@@ -1,7 +1,17 @@
 """导入机器人后的 USD / PhysX 参数覆盖。
 
-MJCF/URDF importer 写出的默认 drive、摩擦和阻尼未必适合抓取实验。
-本模块在导入后统一修正碰撞材料、刚体阻尼、关节摩擦和 drive 初值。
+MJCF/URDF importer 写出的默认 drive、摩擦和阻尼未必适合抓取实验。本模块在导入后统一
+修正碰撞材料、刚体阻尼、关节摩擦和 drive 初值。
+
+职责边界:
+    * 直接写当前 stage 上的 USD/PhysX schema 属性，影响 reset 后的物理初始状态。
+    * 不下发 articulation action，也不改变控制器的每步目标。
+    * 不重新生成资产文件；覆盖只作用于当前 stage 中已经导入/引用的 prim。
+
+调用顺序约定:
+    调用方应在资产导入完成后、创建或 reset articulation runtime 前应用这些覆盖；runtime
+    controller 仍会在后续写入每步目标和最终 drive gain。这样 USD 层提供稳定默认值，运行时
+    层再按任务需要细化控制参数。
 """
 
 from __future__ import annotations
@@ -18,6 +28,9 @@ from manipulation_project.robots.mimic import mjcf_equality_follower_joint_names
 @dataclass(frozen=True)
 class PhysxOverrideConfig:
     """机器人 USD/PhysX 覆盖参数。
+
+    该配置聚合材料、刚体阻尼、solver iteration 和 joint drive 初始值。它面向 USD 属性
+    覆盖，不等同于运行时控制器增益；后者由 ``controllers`` 子包在 articulation view 上设置。
 
     输入字段:
         contact_static_friction/contact_dynamic_friction/contact_restitution: 接触材质参数。
@@ -60,6 +73,7 @@ def make_physics_material(stage, path: str, static_friction: float, dynamic_fric
 
     from pxr import PhysxSchema, Sdf, UsdPhysics, UsdShade
 
+    # 接触材质作为独立 prim 复用到多个 collision 上，避免每个碰撞几何重复创建 schema。
     material = UsdShade.Material.Define(stage, Sdf.Path(path))
     prim = material.GetPrim()
     material_api = UsdPhysics.MaterialAPI.Apply(prim)
@@ -97,6 +111,8 @@ def apply_robot_usd_overrides(
 
     stage = omni.usd.get_context().get_stage()
     configs = _normalize_physx_configs(config)
+    # arm/hand/default 可以使用不同摩擦材质；即使当前只传单个配置，也规范化成字典，
+    # 让下面遍历 prim 时只需按 component 名选择。
     materials = {
         name: make_physics_material(
             stage,
@@ -118,6 +134,8 @@ def apply_robot_usd_overrides(
         group = component_for_name(prim.GetName())
         item = configs.get(group, configs["default"])
         if prim.HasAPI(UsdPhysics.CollisionAPI):
+            # 物理材质绑定到 collision purpose，避免影响纯视觉材质，同时使用 stronger 级别
+            # 覆盖 importer 或资产内部已有的弱绑定。
             UsdShade.MaterialBindingAPI.Apply(prim).Bind(
                 materials.get(group, materials["default"]),
                 bindingStrength=UsdShade.Tokens.strongerThanDescendants,
@@ -126,6 +144,8 @@ def apply_robot_usd_overrides(
             counts["collision_prims"] += 1
 
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            # importer 生成的刚体阻尼常偏向通用场景；抓取/绳体接触需要可控阻尼，
+            # 因此按部件统一写入，减少局部高频振荡。
             rigid_api = (
                 PhysxSchema.PhysxRigidBodyAPI(prim)
                 if prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI)
@@ -144,6 +164,8 @@ def apply_robot_usd_overrides(
             else PhysxSchema.PhysxJointAPI.Apply(prim)
         )
         is_follower = prim.GetName() in follower_joint_names
+        # mimic follower 的摩擦和 drive 初值允许单独配置，因为它们不是独立命令关节，
+        # 过低会跟随不稳，过高又可能和主关节约束竞争。
         joint_friction = item.joint_friction
         if is_follower and item.follower_joint_friction is not None:
             joint_friction = item.follower_joint_friction
@@ -154,6 +176,8 @@ def apply_robot_usd_overrides(
         damping = item.follower_drive_damping_seed if is_follower else item.drive_damping_seed
         max_force = item.follower_max_force if is_follower and item.follower_max_force is not None else item.max_force
         drive_name = "angular" if prim.GetTypeName() == "PhysicsRevoluteJoint" else "linear"
+        # 先在 USD 层写入 drive seed，让 articulation 创建时具备合理默认值；运行时
+        # ImplicitDriveController 仍会再根据配置写入最终 gain/max effort。
         drive_api = UsdPhysics.DriveAPI.Apply(prim, drive_name)
         drive_api.CreateTypeAttr().Set("force")
         drive_api.CreateStiffnessAttr().Set(float(stiffness if is_driven else 0.0))
@@ -168,6 +192,7 @@ def apply_robot_usd_overrides(
 def _normalize_physx_configs(config: PhysxOverrideConfig | dict[str, PhysxOverrideConfig]) -> dict[str, PhysxOverrideConfig]:
     """把单配置或分组配置规范成含 default 的字典。"""
 
+    # 单配置适合简单机器人；分组配置适合 AR5+L6 这种机械臂和灵巧手物理尺度差异较大的资产。
     if isinstance(config, PhysxOverrideConfig):
         return {"default": config}
     if not config:
@@ -198,6 +223,8 @@ def disable_robot_gravity(root_path: str) -> list[str]:
     from isaacsim.core.utils.prims import get_prim_at_path
     from pxr import PhysxSchema, Usd, UsdPhysics
 
+    # 关闭机器人重力常用于固定基座或外部控制的 articulation，避免 drive 还没稳定前
+    # 由重力引入额外下坠误差。
     root = get_prim_at_path(root_path)
     disabled_paths: list[str] = []
     for prim in Usd.PrimRange(root):

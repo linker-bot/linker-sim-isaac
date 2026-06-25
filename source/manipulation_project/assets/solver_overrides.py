@@ -2,6 +2,9 @@
 
 复杂接触、细小灵巧手和绳体交互都容易受 solver 迭代次数影响。
 这里把迭代次数按 arm/hand 分组配置，便于在不同实验中快速调整稳定性。
+
+这些覆盖发生在 USD/PhysX 属性层面，只影响求解稳定性和接触收敛，不改变关节目标、
+控制器命令空间或任务 API。arm/hand 分类依赖资产命名约定，未知 prim 会跳过或使用默认值。
 """
 
 from __future__ import annotations
@@ -14,6 +17,9 @@ from manipulation_project.robots.classification import is_arm_name, is_hand_name
 @dataclass(frozen=True)
 class SolverIterationConfig:
     """PhysX solver 类型和每组刚体的迭代次数。
+
+    position/velocity iteration 分别对应 PhysX 位置约束和速度约束求解次数。数值越大通常
+    越稳定但越慢，适合在绳体接触、指尖夹持等局部不稳定时按部件提高。
 
     输入字段:
         solver_type: ``PGS`` 或 ``TGS``。
@@ -89,6 +95,8 @@ def apply_solver_iteration_overrides(stage, articulation_root_path: str, config:
     from isaacsim.core.utils.prims import get_prim_at_path
     from pxr import PhysxSchema, Usd, UsdPhysics
 
+    # solver 类型写在 physics scene 上，是全局物理求解策略；迭代次数写在刚体/关节树上，
+    # 可以只提高关键部件的稳定性，避免整场景成本过高。
     solver_type = str(config.solver_type).upper()
     if solver_type not in {"PGS", "TGS"}:
         raise ValueError(f"Unsupported solver_type: {solver_type}")
@@ -106,6 +114,8 @@ def apply_solver_iteration_overrides(stage, articulation_root_path: str, config:
 
     articulation_root = get_prim_at_path(articulation_root_path)
     if config.apply_scope == "articulation":
+        # articulation 级覆盖适合不想依赖命名分类的资产；它会给整棵 articulation 使用同一组
+        # 迭代次数。arm/hand 模式则继续在刚体级别细分。
         articulation_api = (
             PhysxSchema.PhysxArticulationAPI(articulation_root)
             if articulation_root.HasAPI(PhysxSchema.PhysxArticulationAPI)
@@ -118,6 +128,7 @@ def apply_solver_iteration_overrides(stage, articulation_root_path: str, config:
     for prim in Usd.PrimRange(articulation_root):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
+        # 通过命名约定判断 arm/hand，未知刚体不写入，避免把环境或装饰 prim 意外纳入高迭代设置。
         solver_iterations = solver_iterations_for_prim_name(prim.GetName(), config)
         if solver_iterations is None:
             counts["skipped_rigid_bodies"] += 1

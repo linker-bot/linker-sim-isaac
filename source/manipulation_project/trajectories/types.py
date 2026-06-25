@@ -2,6 +2,9 @@
 
 项目内部的关节轨迹对齐 cuMotion ``Trajectory`` 的表达：一条轨迹由时间域和
 关节空间 position / velocity / acceleration / jerk 采样矩阵组成。
+
+矩阵行是时间采样点，列是 ``joint_names`` 定义的关节顺序；本类不关心这些列是否对应完整
+articulation DOF 或控制器命令子空间。时间单位为秒，关节单位为弧度。
 """
 
 from __future__ import annotations
@@ -13,7 +16,10 @@ import numpy as np
 
 @dataclass(frozen=True)
 class TrajectoryEval:
-    """某个时间点的轨迹求值结果。"""
+    """某个时间点的轨迹求值结果。
+
+    四个数组 shape 相同，均按 ``JointTrajectory.joint_names`` 顺序排列。
+    """
 
     position: np.ndarray
     velocity: np.ndarray
@@ -30,6 +36,8 @@ class JointTrajectory:
         joint_names: 关节名元组，定义每个点中关节数组的顺序。
     输出:
         可按矩阵读取和按时间求值的轨迹对象。
+    错误边界:
+        构造时只校验矩阵维度、采样数和关节名数量；关节名是否存在于机器人由调用方负责。
     """
 
     def __init__(
@@ -53,6 +61,8 @@ class JointTrajectory:
             无返回值；非法空轨迹会抛出 ``ValueError``。
         """
 
+        # 先冻结关节名顺序，再校验所有矩阵列数。后续插值和执行层都只按列索引工作，
+        # 因此构造阶段必须尽早发现名称数量与数据列数不一致的问题。
         self.joint_names = tuple(joint_names)
         self.times = np.asarray(times, dtype=float).reshape(-1)
         self.positions = np.asarray(positions, dtype=float)
@@ -64,6 +74,8 @@ class JointTrajectory:
             raise ValueError(f"joint_names expected {self.positions.shape[1]} names, got {len(self.joint_names)}")
         if self.times.size == 0:
             raise ValueError("Trajectory must contain at least one sample")
+        # 速度/加速度/jerk 对执行器并非总是必需；缺省填零可保持对象接口完整，
+        # 让日志和控制器无需为“没有速度曲线”的简单轨迹写特殊分支。
         self.velocities = _matrix_or_zeros(velocities, self.positions.shape, "velocities")
         self.accelerations = _matrix_or_zeros(accelerations, self.positions.shape, "accelerations")
         self.jerks = _matrix_or_zeros(jerks, self.positions.shape, "jerks")
@@ -108,6 +120,8 @@ class JointTrajectory:
     def eval_all(self, time_s: float) -> TrajectoryEval:
         """返回指定时间的位置、速度、加速度和 jerk。"""
 
+        # 对时间做钳制而不是抛错，便于执行循环在浮点舍入导致略微越界时仍返回端点。
+        # 这与多数轨迹播放器“超出域保持首/末样本”的行为一致。
         t = float(np.clip(time_s, self.times[0], self.times[-1]))
         return TrajectoryEval(
             position=_interp_rows(self.times, self.positions, t),
@@ -129,6 +143,8 @@ class JointTrajectory:
 
 
 def _matrix_or_zeros(values: np.ndarray | None, shape: tuple[int, int], label: str) -> np.ndarray:
+    """把可选采样矩阵规范化为指定 shape，缺省时填零。"""
+
     if values is None:
         return np.zeros(shape, dtype=float)
     matrix = np.asarray(values, dtype=float)
@@ -138,6 +154,10 @@ def _matrix_or_zeros(values: np.ndarray | None, shape: tuple[int, int], label: s
 
 
 def _interp_rows(times: np.ndarray, values: np.ndarray, time_s: float) -> np.ndarray:
+    """对每一列独立做一维线性插值。"""
+
+    # 单点轨迹没有可插值区间，直接返回该点副本，避免 ``np.interp`` 在退化时间域上
+    # 给出依赖实现细节的结果。
     if times.size == 1:
         return values[0].copy()
     return np.asarray([np.interp(time_s, times, values[:, col]) for col in range(values.shape[1])], dtype=float)

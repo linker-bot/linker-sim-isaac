@@ -1,6 +1,12 @@
 """时间采样与轨迹差分辅助函数。
 
 本模块提供仿真循环更新间隔计算、轨迹采样时间生成、线性位置插值和采样矩阵差分等工具。
+所有时间单位为 s，频率单位为 Hz。
+
+职责边界:
+    * 把用户给定的频率/时长转换为离散采样点或 physics step 间隔。
+    * 对采样矩阵做简单后向差分，供日志和命令轨迹近似速度/加速度。
+    * 不做滤波、限幅或动力学优化；需要严格轨迹约束时应由规划后端生成。
 """
 
 from __future__ import annotations
@@ -22,6 +28,8 @@ def interval_steps(update_frequency_hz: float, physics_dt: float) -> int:
         raise ValueError("update_frequency_hz must be positive")
     if physics_dt <= 0:
         raise ValueError("physics_dt must be positive")
+    # round 让目标频率尽量贴近 physics step 的整数倍；至少返回 1，避免频率高于物理频率时
+    # 得到 0 步间隔。
     return max(1, int(round(1.0 / (update_frequency_hz * physics_dt))))
 
 
@@ -41,6 +49,7 @@ def sample_times(duration_s: float, sample_hz: float) -> np.ndarray:
     sample_dt = 1.0 / sample_hz
     if duration == 0:
         return np.asarray([0.0], dtype=float)
+    # ceil 保证覆盖终点；每个采样时刻用 min 钳制到 duration，避免最后一点超过配置时长。
     num_steps = max(1, int(np.ceil(duration / sample_dt)))
     return np.asarray([min(duration, step * sample_dt) for step in range(num_steps + 1)], dtype=float)
 
@@ -57,6 +66,7 @@ def sample_linear_positions(start_position, target_position, times: np.ndarray) 
     sample_times_array = np.asarray(times, dtype=float).reshape(-1)
     if sample_times_array.size == 0:
         raise ValueError("times must contain at least one sample")
+    # 用最后一个采样时间作为总时长，可支持非均匀 times；alpha 逐行广播到 xyz 三列。
     duration = float(sample_times_array[-1])
     if duration <= 0:
         return target.reshape(1, 3)
@@ -82,6 +92,7 @@ def differentiate_samples(values: np.ndarray, times: np.ndarray) -> np.ndarray:
 
     result = np.zeros_like(samples)
     for index in range(1, samples.shape[0]):
+        # dt 用极小正数下限保护重复时间戳，避免除零；这会产生很大的导数，提示输入采样异常。
         dt = max(1.0e-12, float(sample_times_array[index] - sample_times_array[index - 1]))
         result[index] = (samples[index] - samples[index - 1]) / dt
     return result

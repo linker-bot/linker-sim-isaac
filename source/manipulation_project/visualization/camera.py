@@ -1,6 +1,11 @@
 """摄像机视角辅助函数。
 
 任务脚本可以调用这里的函数快速设置一个适合观察机械臂、灵巧手和 rope 端点的默认视角。
+本模块只处理 GUI 观察角度，不影响物理世界、机器人状态或日志输出。
+
+Isaac viewport API 在函数内部延迟导入，保证导入 visualization 包本身不会要求 GUI 已启动。
+headless 运行通常不需要调用该函数；如果调用方在无 viewport 环境执行，应由脚本入口决定
+是否捕获 Isaac 侧异常。
 """
 
 from __future__ import annotations

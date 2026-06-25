@@ -8,6 +8,8 @@ Omni/USD 初始化代码，也让基础世界和具体场景对象保持解耦�
 注意:
     这里的函数会直接操作当前 Isaac Sim / Omni USD context，因此调用前通常需要
     已经通过 ``SimulationApp`` 或项目的 launch helper 启动 Isaac 运行时。
+    本模块仅设置基础 world、灯光和地面，不加载机器人资产，便于不同任务复用同一
+    场景初始化流程。
 """
 
 from __future__ import annotations

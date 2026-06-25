@@ -1,9 +1,19 @@
 """夹捏抓取任务流程。
 
-该任务面向机械臂 + 灵巧手 + rope endpoint box 的 scripted demo：
-先根据闭合手型从 MJCF 运动链计算 thumb/index 夹捏中心 TCP，再把这个 TCP 写入
-临时 URDF 供 IK 后端求解，最后把 approach、grasp、lift、wiggle 等阶段合成为
-完整 articulation DOF 目标并在 Isaac 中执行。
+该任务面向机械臂 + 灵巧手 + rope endpoint box 的 scripted demo：先根据闭合手型从 MJCF
+运动链计算 thumb/index 夹捏中心 TCP，再把这个 TCP 写入临时 URDF 供 IK 后端求解，最后把
+approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目标并在 Isaac 中执行。
+
+职责边界:
+    * 作为高层 demo 编排，可以串联对象配置、TCP 生成、IK、轨迹原语和日志。
+    * 不直接创建 ``World`` 或导入机器人资产；这些由脚本入口和 env/assets 层完成。
+    * 不在这里实现低层控制器；每个阶段最终委托 ``tasks.primitives`` 下发目标。
+
+数组/坐标约定:
+    内部数组大多是完整 articulation DOF 顺序；只有调用 cuMotion 时才切到 C-space 关节顺序，
+    返回后再按关节名映射回完整目标。笛卡尔目标按当前示例的 world/base 对齐坐标表达，单位
+    为 m；手型关节目标单位为 rad。这样可以同时控制机械臂、主动手指关节和 MJCF mimic
+    follower，同时避免把 IK 结果误写到灵巧手 DOF。
 """
 
 from __future__ import annotations
@@ -169,6 +179,8 @@ class PinchGraspConfig:
             "final_hold_duration": self.final_hold_duration,
             "post_joint_sweep_duration": self.post_joint_sweep_duration,
         }
+        # 时长和距离允许为 0，用于跳过某些阶段或立即下发目标；负数没有物理意义，
+        # 会导致 step 计数和 smoothstep 插值难以解释。
         for name, value in nonnegative.items():
             if value < 0:
                 raise ValueError(f"{name} cannot be negative")
@@ -212,6 +224,8 @@ def grasp_target_position(config: PinchGraspConfig, rope_config: CapsuleRopeConf
         shape 为 ``(3,)`` 的世界坐标位置数组，单位 m。
     """
 
+    # endpoint_center 给出端块几何中心，target_world_offset 用于把 TCP 对准更适合夹捏的点，
+    # lift_height 只在 z 方向叠加，保持抓取水平位置不变。
     return (
         np.asarray(endpoint_center(rope_config, config.endpoint), dtype=float)
         + np.asarray(config.target_world_offset, dtype=float)
@@ -312,6 +326,8 @@ class PinchGraspTask:
             ik_joint_names = context.joint_names()
             dof_names = list(robot.dof_names)
             dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
+            # cuMotion 模型和 Isaac articulation 可能来自不同资产文件。这里按名称检查能尽早
+            # 发现 URDF/MJCF 关节名不一致，而不是在写目标数组时静默错位。
             missing_ik_joints = [name for name in ik_joint_names if name not in dof_index_by_name]
             if missing_ik_joints:
                 raise ValueError(f"cuMotion joints not found in articulation: {missing_ik_joints}")
@@ -344,6 +360,8 @@ class PinchGraspTask:
                 sample_hz=self.config.approach_line_sample_hz,
                 phase="approach_box",
             )
+            # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
+            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的任务意图。
             grasp_line_trajectory, grasp_line_diagnostics = build_tcp_line_command_trajectory(
                 dof_names=dof_names,
                 command_indices=np.arange(len(dof_names), dtype=int),
@@ -361,6 +379,7 @@ class PinchGraspTask:
                     orientation_tolerance=context.config.orientation_tolerance,
                 )
             )
+            # wiggle 阶段每个目标都用上一目标热启动，减少在冗余机械臂上突然换解的概率。
             wiggles = []
             warm = lift.joint_positions
             for target in wiggle_worlds:
@@ -389,6 +408,7 @@ class PinchGraspTask:
             set_joint_targets_by_indices(wiggle_all, arm_indices, result.joint_positions)
             wiggle_all_targets.append(wiggle_all)
 
+        # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
         post_joint_sweep_targets = []
         for joint_1_target in self.config.post_joint_sweep_targets:
             sweep_all = lifted_all.copy()
@@ -427,6 +447,8 @@ class PinchGraspTask:
     def execution_tasks(self, plan: dict[str, object]) -> list[ExecutableTask]:
         """把抓取 plan 拆成可顺序执行的任务原语列表。"""
 
+        # plan 阶段只生成目标数组；这里把它们转换成可执行原语，确保 run 的主循环只需要
+        # 顺序调用 ``task.run``，便于之后插入/删除阶段。
         tasks: list[ExecutableTask] = [
             MoveJointTargetTask(
                 start_all=plan["initial_all"],
@@ -524,6 +546,7 @@ class PinchGraspTask:
             ``plan`` 字典，额外写入 ``steps`` 表示实际执行的 physics step 数。
         """
 
+        # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
         plan = self.plan(robot)
         runtime = TaskRuntime(
             robot=robot,
@@ -540,5 +563,5 @@ class PinchGraspTask:
             step = task.run(runtime, step)
         plan["steps"] = step
         return plan
-
+    # 文件结束：本类只定义抓取任务配置、规划和执行编排，不在导入时产生仿真副作用。
     pass

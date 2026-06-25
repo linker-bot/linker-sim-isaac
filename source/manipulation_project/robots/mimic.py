@@ -1,8 +1,17 @@
 """MJCF equality/mimic 关系解析与运行时目标映射。
 
-灵巧手的某些从动关节通过 MJCF ``<equality><joint ...>`` 描述 mimic
-关系。Isaac 导入后不一定会自动帮控制器维护这些从动目标，因此这里把 MJCF
-里的多项式关系解析出来，在运行时显式生成 follower 关节的目标位置和速度。
+灵巧手的某些从动关节通过 MJCF ``<equality><joint ...>`` 描述 mimic 关系。Isaac 导入后不
+一定会自动帮控制器维护这些从动目标，因此这里把 MJCF 里的多项式关系解析出来，在运行时
+显式生成 follower 关节的目标位置和速度。
+
+职责边界:
+    * 解析 MJCF equality 和 joint frictionloss，不修改 USD stage。
+    * 根据完整 DOF 名称建立 master/follower 索引映射。
+    * 在控制目标数组上原地写 follower 位置/速度，供控制器或任务原语下发。
+
+约定 ``joint1`` 是 dependent/follower，``joint2`` 是 master/active。所有关节角单位为 rad，
+速度单位为 rad/s；数组索引始终以 Isaac articulation ``dof_names`` 顺序为准。多项式按照
+MuJoCo ``polycoef`` 约定从常数项开始排列。
 """
 
 from __future__ import annotations
@@ -24,6 +33,8 @@ def evaluate_polycoef(polycoef: tuple[float, ...], master_position: float) -> fl
         ``a0 + a1*q + a2*q^2 + ...`` 的计算结果。
     """
 
+    # MuJoCo polycoef 以常数项开头；用 enumerate 的 power 直接对应 q 的幂次，避免手写
+    # 固定四/五项导致不同资产 polycoef 长度不兼容。
     q = float(master_position)
     return float(sum(coef * (q**power) for power, coef in enumerate(polycoef)))
 
@@ -38,6 +49,7 @@ def evaluate_polycoef_derivative(polycoef: tuple[float, ...], master_position: f
         ``a1 + 2*a2*q + 3*a3*q^2 + ...`` 的计算结果。
     """
 
+    # 速度映射需要多项式对 master 位置的一阶导数，再乘 master_velocity，这是链式法则。
     q = float(master_position)
     return float(sum(power * coef * (q ** (power - 1)) for power, coef in enumerate(polycoef[1:], start=1)))
 
@@ -140,6 +152,8 @@ def parse_mjcf_joint_equalities(path: str | Path | None) -> list[MjcfJointEquali
     if not mjcf_path.is_file():
         return []
 
+    # XML 解析保持惰性：只有需要 mimic/friction 信息时才读取文件；不存在的路径按“无关系”
+    # 处理，便于 URDF-only 测试复用同一控制器代码。
     root = ET.parse(mjcf_path).getroot()
     equalities: list[MjcfJointEquality] = []
     for element in root.findall("./equality/joint"):
@@ -148,6 +162,7 @@ def parse_mjcf_joint_equalities(path: str | Path | None) -> list[MjcfJointEquali
         if not dependent_joint or not master_joint:
             continue
         polycoef_text = element.get("polycoef", "0 1 0 0 0")
+        # polycoef 解析失败通常意味着资产文件写错，应立即抛出带 equality 名称的错误。
         try:
             polycoef = tuple(float(value) for value in polycoef_text.split())
         except ValueError as exc:
@@ -219,6 +234,7 @@ def expand_targets_with_mjcf_equalities(targets: dict[str, float], path: str | P
         新字典；保留原目标，并为已知 master 生成 follower 目标。
     """
 
+    # 返回新字典，避免把调用方的稀疏配置原地改成“含 follower”的临时表示。
     expanded = dict(targets)
     for equality in parse_mjcf_joint_equalities(path):
         if equality.master_joint not in expanded:
@@ -240,6 +256,8 @@ def resolve_mimic_follower_controls(
         ``MimicFollowerControl`` 列表；只包含 master/follower 都存在的关系。
     """
 
+    # 只保留 master/follower 都存在于当前 articulation 的关系；同一个 MJCF 可能包含其它
+    # 子系统或未导入关节，不能让它们阻塞当前机器人运行。
     dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
     controls: list[MimicFollowerControl] = []
     for equality in parse_mjcf_joint_equalities(mjcf_path):
@@ -318,6 +336,8 @@ class MimicFollowerTargetMapper:
             无返回值。
         """
 
+        # 使用实际 master 状态而非目标状态，可以在主关节未完全跟踪到目标时，让 follower
+        # 仍贴近当前物理姿态，减少 mimic 关节和接触约束之间的瞬态冲突。
         for control in self.controls:
             target_positions[control.dependent_index] = control.evaluate_position(actual_positions[control.master_index])
             target_velocities[control.dependent_index] = control.evaluate_velocity(

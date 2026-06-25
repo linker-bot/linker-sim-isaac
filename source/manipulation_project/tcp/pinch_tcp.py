@@ -1,8 +1,16 @@
 """从灵巧手 MJCF 运动树计算夹捏中心 TCP。
 
 夹捏 TCP 的位置不是一个固定常量，而是由 thumb/index 指尖在“闭合手型”下的位置决定。
-本模块读取 MJCF body/joint 层级，沿手掌基座到指尖的 body chain 做正运动学，
-取拇指和食指 tip 的中点作为 TCP。
+本模块读取 MJCF body/joint 层级，沿手掌基座到指尖的 body chain 做正运动学，取拇指和食指
+tip 的中点作为 TCP。
+
+职责边界:
+    * 只从 MJCF 和手型目标推导一个 ``TcpFrame``，不运行 IK，也不修改原始 URDF。
+    * 不假设具体手型数值；调用方传入预夹捏/闭合目标，函数按当前资产命名推导 body。
+    * mimic follower 会先展开，确保闭合手型几何与 Isaac 中实际驱动的从动关节一致。
+
+MJCF 的 ``pos`` 单位为 m，``quat`` 使用 wxyz 顺序；关节轴按 body 局部坐标解释。计算结果
+最终以手掌基座 link 为父 frame 写入 ``TcpFrame``，供临时 URDF 和 cuMotion IK 使用。
 """
 
 from __future__ import annotations
@@ -30,6 +38,8 @@ def infer_hand_body_names(hand_targets: Mapping[str, float]) -> tuple[str, str, 
     ``<single-system-name>_hand_index_tip``。
     """
 
+    # 资产命名中 system 前缀区分左右手/组合系统。只要找到一个手部关节名，就能推导出
+    # hand_base、thumb_tip 和 index_tip 三个 body 名，避免在每个配置里重复写。
     for joint_name in hand_targets:
         name = str(joint_name)
         if "_hand_" not in name:
@@ -87,6 +97,7 @@ def mjcf_parent_map(root: ET.Element) -> dict[int, ET.Element]:
         ``id(child) -> parent`` 字典，用于从 tip body 向上回溯到 base body。
     """
 
+    # ElementTree 元素没有直接的 parent 指针；建立 id 映射后才能从 tip 反向回溯到 base。
     parent_by_child_id: dict[int, ET.Element] = {}
     for parent in root.iter():
         for child in list(parent):
@@ -147,6 +158,8 @@ def body_chain_local_transform(body_chain: list[ET.Element], joint_positions: di
         shape ``(4, 4)`` 的齐次变换矩阵，表示 tip 相对 base 的位姿。
     """
 
+    # 链条第一个元素就是 base body，它定义的是目标局部坐标系原点，因此从第二个 body
+    # 开始累乘相对父 body 的固定变换和关节变换。
     transform = np.eye(4, dtype=float)
     for body in body_chain[1:]:
         # MJCF body 的 pos/quat 是该 body 相对父 body 的固定偏移；
@@ -161,6 +174,8 @@ def body_chain_local_transform(body_chain: list[ET.Element], joint_positions: di
             joint_pos = parse_vec3(joint.get("pos"))
             joint_axis = parse_vec3(joint.get("axis"), default=(1.0, 0.0, 0.0))
             joint_value = float(joint_positions.get(joint_name, 0.0))
+            # MJCF joint 的 pos 是关节轴在当前 body 局部坐标中的位置；这里用 translate+axis-angle
+            # 近似该 revolute 关节对后续子 body 的影响，足以计算指尖中心偏移。
             transform = transform @ make_transform(joint_pos, axis_angle_to_matrix(joint_axis, joint_value))
     return transform
 
@@ -187,6 +202,8 @@ def fingertip_pinch_local_offset(
     """
 
     path = Path(mjcf_path)
+    # 先展开 mimic follower，再做 FK；否则从动指节会按 0 rad 计算，得到的 pinch TCP 会偏向
+    # 未闭合手型，而不是实际夹捏时的两指尖中点。
     expanded_targets = expand_targets_with_mjcf_equalities(hand_targets, path)
     inferred_base, inferred_thumb, inferred_index = infer_hand_body_names(hand_targets)
     hand_base_body = hand_base_body or inferred_base
@@ -197,6 +214,7 @@ def fingertip_pinch_local_offset(
     index_chain = body_chain_between(root, hand_base_body, index_tip_body)
     thumb_tip = body_chain_local_transform(thumb_chain, expanded_targets)[:3, 3]
     index_tip = body_chain_local_transform(index_chain, expanded_targets)[:3, 3]
+    # TCP 取两指尖几何中点，而不是任一指尖位置，这样 IK 目标落在夹持中心，更符合端块夹捏。
     pinch_center = 0.5 * (thumb_tip + index_tip)
     return pinch_center, thumb_tip, index_tip
 

@@ -1,8 +1,18 @@
 """Isaac Sim 机器人资产导入工具。
 
-本模块负责把 MJCF/URDF 资产导入当前 USD stage，并找到可交给
-SingleArticulation 使用的 articulation root。Isaac/Omni 相关导入
-刻意放在函数内部，这样普通 Python 测试可以导入本包而不启动 Isaac。
+本模块负责把 MJCF/URDF 资产导入当前 USD stage，并找到可交给 ``SingleArticulation``
+使用的 articulation root。Isaac/Omni 相关导入刻意放在函数内部，这样普通 Python 测试可以
+导入本包而不启动 Isaac。
+
+职责边界:
+    * 解析机器人资产配置并调用 Isaac importer。
+    * 在导入后的 USD 子树中寻找 articulation root。
+    * 不创建 ``World``，不配置控制器，不应用任务级初始姿态。
+
+输入输出约定:
+    路径字段可写仓库相对路径或绝对路径，最终通过 ``repo_path``/``resolve`` 规整；prim path
+    必须是 USD 绝对路径（例如 ``/World/Robot``）。导入流程会修改当前 USD stage，因此调用方
+    需要保证 ``SimulationApp`` 已启动且 stage 处于期望状态。
 """
 
 from __future__ import annotations
@@ -16,6 +26,9 @@ from manipulation_project.utils.paths import repo_path
 @dataclass(frozen=True)
 class RobotAssetConfig:
     """机器人资产导入配置。
+
+    ``asset_path`` 指向 MJCF/URDF 文件，``prim_path`` 是导入到当前 USD stage 的目标路径。
+    ``asset_type`` 只控制选择 MJCF importer 还是 URDF importer，不改变上层机器人控制 API。
 
     输入字段:
         asset_type: 资产类型，当前支持 ``mjcf`` 和 ``urdf``。
@@ -43,6 +56,8 @@ class RobotAssetConfig:
             ``RobotAssetConfig``；路径字段会通过 ``repo_path`` 解析。
         """
 
+        # YAML 顶层保留 ``robot`` 子节，可以和 env/task/controller 配置并列；这里不接受
+        # 裸映射，避免误把其它配置字典当成机器人资产配置。
         if "robot" not in data:
             raise ValueError("Robot config must contain top-level robot section")
         robot = data["robot"]
@@ -68,6 +83,8 @@ def find_articulation_root(prim_path: str, *, require_rigid_body: bool = False) 
     from isaacsim.core.utils.prims import get_prim_at_path, is_prim_path_valid
     from pxr import Usd, UsdPhysics
 
+    # importer 返回的路径有时是用户请求的根路径，有时是内部生成的子 prim；先确认路径
+    # 存在，再遍历其子树寻找真正带 ArticulationRootAPI 的 prim。
     if not is_prim_path_valid(prim_path):
         raise RuntimeError(f"Stage prim was not created: {prim_path}")
 
@@ -77,6 +94,8 @@ def find_articulation_root(prim_path: str, *, require_rigid_body: bool = False) 
         raise RuntimeError(f"No articulation root found under stage prim: {prim_path}")
 
     if require_rigid_body:
+        # MJCF importer 常会在 articulation root 附近创建额外 Xform。执行控制时需要绑定到
+        # 同时具备刚体语义的 root，才能被 Isaac articulation view 正确识别。
         rigid_roots = [prim for prim in articulation_roots if prim.HasAPI(UsdPhysics.RigidBodyAPI)]
         if not rigid_roots:
             raise RuntimeError(f"No rigid articulation root found under stage prim: {prim_path}")
@@ -96,6 +115,8 @@ def configure_mjcf_import(mjcf_path: Path, prim_path: str) -> str:
 
     import omni.kit.commands
 
+    # MJCF importer 的配置对象由 Omni command 创建，不能直接实例化。配置在导入前一次性
+    # 写入，导入后再由 usd_overrides/runtime controller 继续细化物理参数。
     status, import_config = omni.kit.commands.execute("MJCFCreateImportConfig")
     if not status:
         raise RuntimeError("Failed to create MJCF import config")
@@ -139,6 +160,8 @@ def configure_urdf_import(
     if not status:
         raise RuntimeError("Failed to create URDF import config")
 
+    # URDF 导入默认做凸分解和固定关节合并，得到更适合实时仿真的碰撞与关节树。
+    # drive_type='none' 用于只需要几何/运动学、不希望 importer 预设控制参数的场景。
     import_config.merge_fixed_joints = True
     import_config.convex_decomp = True
     import_config.import_inertia_tensor = True
@@ -185,6 +208,8 @@ def import_robot_asset(config: RobotAssetConfig) -> tuple[str, Path, str]:
         ``imported_root_path`` 是本次导入创建/覆盖的 USD 子树根路径。
     """
 
+    # 在真正导入前检查文件存在，错误会指向用户配置的资产路径，而不是 Isaac importer
+    # 内部更难读的失败信息。
     asset_path = config.asset_path.resolve()
     if not asset_path.is_file():
         raise FileNotFoundError(f"Robot asset not found: {asset_path}")

@@ -3,6 +3,9 @@
 该模块把“目标关节状态”和“实际关节状态”展开成稳定的 CSV 列名，
 便于用 ``scripts/plot_joint_tracking_logs.py`` 或其它工具绘制误差曲线。
 位置单位为 rad，速度单位为 rad/s。
+
+logger 不参与控制决策，写文件失败以异常形式暴露给调用方；禁用日志时可以传 ``None``
+路径，字段构造和数组校验仍保持一致，便于测试。
 """
 
 from __future__ import annotations

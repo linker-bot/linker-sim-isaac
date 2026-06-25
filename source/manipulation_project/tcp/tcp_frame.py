@@ -1,7 +1,15 @@
 """通用 TCP frame 数据类型。
 
-TCP 在这里被表示为一个刚性固定到父 link 的局部坐标系。``xyz`` 和 ``rpy`` 都是
-父 link 坐标系下的相对位姿。
+TCP 在这里被表示为一个刚性固定到父 link 的局部坐标系。``xyz`` 和 ``rpy`` 都是父 link
+坐标系下的相对位姿。
+
+职责边界:
+    * 只保存 TCP 描述，不访问 Isaac stage，也不生成 URDF XML。
+    * 不做姿态插值或 IK；调用方只把它作为后端需要的 frame 定义。
+    * 保持纯 dataclass，便于配置解析、MJCF 推断和 URDF 生成之间传递。
+
+实际后端若要求 TCP 是运动树 link，需要由 ``backends.cumotion.tcp_urdf_builder`` 把它写入
+临时 URDF。``rpy`` 采用固定轴 XYZ 顺序，单位 rad。
 """
 
 from __future__ import annotations
@@ -48,6 +56,7 @@ class TcpFrame:
             ``TcpFrame``，其中 ``xyz``/``rpy`` 已转换为 float ndarray。
         """
 
+        # 在构造入口统一 reshape，后续写 URDF 或日志时可以假设字段形状稳定。
         return cls(
             frame_name=frame_name,
             parent_frame=parent_frame,

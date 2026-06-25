@@ -2,6 +2,8 @@
 
 这些函数都接收归一化时间 ``alpha``，并返回归一化进度 ``scale``。调用方再用
 ``start + scale * (target - start)`` 生成具体位置。
+输入会被截断到 ``[0, 1]``，因此轻微的浮点越界不会导致轨迹超过端点；未知插值名会抛出
+``ValueError``，由配置解析或任务构建层向用户报告。
 """
 
 from __future__ import annotations
@@ -57,6 +59,7 @@ def interpolation_fn(name: str):
         可调用对象，签名为 ``fn(alpha: float) -> float``。
     """
 
+    # 配置里允许常见别名，内部统一成函数对象；未知名称尽早失败，避免默默退回线性插值。
     normalized = name.strip().lower()
     if normalized in {"linear", "lin"}:
         return linear

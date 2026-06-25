@@ -1,9 +1,16 @@
 """命令行和配置输入常用的旋转转换。
 
-项目配置里常用固定轴 XYZ RPY（roll、pitch、yaw）描述目标姿态，也就是外旋
-XYZ 顺序；外部配置输入单位通常为 degree。SciPy 中小写 ``"xyz"`` 对应该约定，
-等价于旧实现的 ``Rz @ Ry @ Rx``。
-四元数对外统一使用 wxyz 顺序。
+项目配置里常用固定轴 XYZ RPY（roll、pitch、yaw）描述目标姿态，也就是外旋 XYZ 顺序；
+外部配置输入单位通常为 degree。SciPy 中小写 ``"xyz"`` 对应该约定，等价于旧实现的
+``Rz @ Ry @ Rx``。四元数对外统一使用 wxyz 顺序。
+
+职责边界:
+    * 在配置友好的 RPY、项目边界的 wxyz 四元数、SciPy 的 xyzw 四元数之间转换。
+    * 提供 TCP waypoint 姿态插值用的 slerp helper。
+    * 不处理坐标系命名或机器人 frame 变换；调用方必须明确姿态属于哪个 frame。
+
+SciPy ``Rotation`` 的四元数接口使用 xyzw，本模块集中做顺序转换，避免任务、TCP 和
+Foxglove 日志中出现 wxyz/xyzw 混用。所有函数都返回新的 ndarray，不修改输入。
 """
 
 from __future__ import annotations
@@ -103,11 +110,14 @@ def slerp_quat_wxyz(start_orientation, target_orientation, times) -> list[np.nda
 
     start = normalize_quat_wxyz(start_orientation, label="start_orientation")
     target = normalize_quat_wxyz(target_orientation, label="target_orientation")
+    # 四元数 q 和 -q 表示同一姿态。若点积为负，翻转目标可让 Slerp 走较短弧线，避免
+    # 中间姿态绕远路旋转。
     if np.dot(start, target) < 0.0:
         target = -target
 
     duration = float(sample_times[-1])
     if duration <= 0:
+        # 退化时间域只需要返回终点姿态，和位置采样中的“0 时长直接到目标”保持一致。
         return [target.copy()]
 
     key_rots = Rotation.from_quat([quat_wxyz_to_xyzw(start), quat_wxyz_to_xyzw(target)])

@@ -1,6 +1,7 @@
 """机械臂法兰 TCP 定义。
 
 当任务只想把机械臂末端法兰当作 TCP 时，可直接使用本模块；没有额外平移或旋转。
+法兰 frame 名必须与后端 robot description 中的 link/frame 名一致，否则 FK/IK 查询会失败。
 """
 
 from __future__ import annotations

@@ -1,6 +1,15 @@
 """YAML 配置读取与仓库相对路径解析。
 
-配置文件中的路径默认按仓库根目录解析，避免从不同工作目录启动脚本时路径含义变化。
+配置文件中的路径默认按仓库根目录解析，避免从不同工作目录启动脚本时路径含义变化。本模块
+只处理纯 Python 数据结构，不导入 Isaac/Omni；因此可以在 CLI 参数解析和测试阶段安全使用。
+
+职责边界:
+    * 读取 YAML 并保证顶层是 mapping。
+    * 递归合并默认配置和用户覆盖配置。
+    * 提供常用的必填字段、嵌套 mapping 和路径读取 helper。
+
+错误统一抛 ``ValueError``/``FileNotFoundError``，让脚本入口决定如何展示。这里不把配置
+转换成具体 dataclass；各领域模块负责解释自己的字段含义和单位。
 """
 
 from __future__ import annotations
@@ -26,6 +35,7 @@ def load_yaml(path: str | Path) -> dict[str, Any]:
         顶层 mapping 转成的 dict；空文件返回空 dict。
     """
 
+    # 统一通过 repo_path 解析，保证 ``configs/...`` 在任意当前工作目录下都指向仓库内文件。
     resolved = repo_path(path)
     with resolved.open("r", encoding="utf-8") as file:
         data = yaml.safe_load(file) or {}
@@ -44,8 +54,11 @@ def deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str
         新 dict，不会原地修改输入。
     """
 
+    # 只创建新 dict，不修改输入对象；这让默认配置可以在多个测试/脚本中安全复用。
     merged = dict(base)
     for key, value in override.items():
+        # 只有两边都是 mapping 时才递归合并；列表和标量按 override 整体替换，避免对轨迹点、
+        # 关节目标等有顺序含义的数据做不符合预期的逐项合并。
         if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
             merged[key] = deep_merge(merged[key], value)
         else:

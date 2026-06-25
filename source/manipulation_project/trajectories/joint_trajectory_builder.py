@@ -1,7 +1,12 @@
 """关节空间轨迹构造。
 
-输入是一组起始/目标关节位置，输出是按固定采样间隔离散化的 ``JointTrajectory``。
-轨迹内部按 cuMotion 风格保存时间、位置、速度、加速度和 jerk 矩阵。
+输入是一组起始/目标关节位置，输出是按固定采样间隔离散化的 ``JointTrajectory``。轨迹内部
+按 cuMotion 风格保存时间、位置、速度、加速度和 jerk 矩阵。
+
+职责边界:
+    * 只负责关节空间数值采样，不进行速度/加速度约束优化。
+    * 不解析机器人模型、不检查关节限位；调用方必须保证输入数组已经按期望关节名顺序排列。
+    * 有限差分生成的速度/加速度只用于控制目标和日志诊断，不代表严格动力学最优曲线。
 """
 
 from __future__ import annotations
@@ -50,6 +55,8 @@ def build_joint_target_trajectory(
     if len(joint_names) != start.size:
         raise ValueError(f"joint_names expected {start.size} names, got {len(joint_names)}")
 
+    # 插值函数只定义 0..1 的无量纲进度，具体持续时间由 duration_s 决定；这样同一种
+    # smoothstep 可用于不同任务阶段。
     fn = interpolation_fn(interpolation)
     if duration_s == 0:
         return joint_trajectory_from_positions(
@@ -59,6 +66,8 @@ def build_joint_target_trajectory(
             joint_names=tuple(joint_names),
         )
 
+    # 使用 ceil 保证最后一个采样覆盖 duration_s；每个时间点再用 min 钳制到终点，避免
+    # duration 不是 sample_dt 整数倍时越界。
     num_steps = max(1, int(np.ceil(duration_s / sample_dt)))
     times = np.asarray([min(duration_s, step * sample_dt) for step in range(num_steps + 1)], dtype=float)
     positions = np.zeros((times.size, start.size), dtype=float)
@@ -99,6 +108,8 @@ def joint_trajectory_from_positions(
     if positions_array.shape[0] != times_array.size:
         raise ValueError("times length must match positions rows")
 
+    # phase 用于日志和可视化标记，不参与轨迹数学；仍要求与采样点数量一致，避免 CSV 行
+    # 无法对应任务阶段。
     if phases is None:
         phases_tuple = tuple(phase for _ in range(times_array.size))
     else:
@@ -107,6 +118,8 @@ def joint_trajectory_from_positions(
             raise ValueError("phases length must match trajectory samples")
 
     if differentiate:
+        # 速度、加速度、jerk 通过同一时间网格上的有限差分得到。对于手写关键帧轨迹，
+        # 这比全部填零更有利于 drive velocity target 和误差分析。
         velocities = differentiate_samples(positions_array, times_array)
         accelerations = differentiate_samples(velocities, times_array)
         jerks = differentiate_samples(accelerations, times_array)

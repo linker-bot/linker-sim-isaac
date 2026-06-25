@@ -2,6 +2,9 @@
 
 该模块负责把 YAML 中的稀疏关节目标转换成控制器可执行的采样轨迹。实际仿真下发
 由 ``manipulation_project.execution`` 层负责。
+
+稀疏目标按关节名写入完整 DOF 基准，再切片成控制器命令空间。未出现在配置中的关节
+保持当前值，mimic follower 不在这里展开，而是在控制器/执行层根据 MJCF equality 处理。
 """
 
 from __future__ import annotations

@@ -1,7 +1,16 @@
 """Capsule/box 刚体链绳体对象。
 
-本模块只负责“绳体对象”本身：从 YAML 参数生成 USD 资产，或在仿真 stage 中
-引用已经生成好的 USD。场景环境只负责 world、重力、solver 等全局设置。
+本模块只负责“绳体对象”本身：从 YAML 参数生成 USD 资产，或在仿真 stage 中引用已经生成
+好的 USD。场景环境只负责 world、重力、solver 等全局设置；任务层只负责抓取和移动逻辑。
+
+职责边界:
+    * 生成绳体 USD：端块、绳段、D6 joint、材质、碰撞过滤和 solver 迭代次数。
+    * 引用已有 USD：把资产挂到当前 stage 的 ``prim_path`` 下，并收集 prim 句柄。
+    * 不创建机器人、不控制关节、不在运行时改变绳体拓扑。
+
+坐标与单位遵循 Isaac：长度 m、质量 kg；配置字段以 ``*_deg`` 结尾时为度，写入 USD 关节
+limit/drive 前保持 PhysX 期望的角度属性。函数中的 pxr/omni 依赖保持局部导入，便于在不
+启动 Isaac 的环境里解析配置和运行纯 Python 测试。
 """
 
 from __future__ import annotations
@@ -21,6 +30,10 @@ def _float_tuple(values, default: tuple[float, ...]) -> tuple[float, ...]:
 @dataclass(frozen=True)
 class CapsuleRopeConfig:
     """抓取 demo 使用的 capsule/box 绳体对象参数。
+
+    绳体沿局部 X 方向离散为 ``segments`` 个 capsule/box 刚体，两端各有一个 endpoint box
+    供夹捏抓取。``center`` 是整条绳体在 stage 中的中心位置；实际生成时会按段长计算每个
+    prim 的局部平移并用 D6 joint 串联。
 
     输入字段:
         asset_path: 生成后保存的 USD 资产路径。
@@ -82,12 +95,16 @@ class CapsuleRopeConfig:
             ``twist_limit_deg`` 会根据 ``length/segments`` 自动估算。
         """
 
+        # 配置拆成 object/rope 两层：object 描述资产路径和 stage 路径，rope 描述几何、质量、
+        # 关节和材质参数。这样同一绳体形态可以被不同场景引用到不同 prim_path。
         if "object" not in data or "rope" not in data:
             raise ValueError("Capsule rope config must contain top-level object and rope sections")
         object_cfg = dict(data["object"])
         rope = dict(data["rope"])
         default_length = float(rope.get("length", cls.length))
         default_segments = int(rope.get("segments", cls.segments))
+        # radius/twist_limit 允许留空，由段间距估算一个保守默认值。这样调整 segments/length
+        # 时绳体不会因为忘记同步半径或扭转范围而立刻不可用。
         default_radius = default_length / default_segments * 0.15
         default_twist_limit = 560.0 / default_segments
         radius = rope.get("radius")
@@ -147,6 +164,8 @@ class CapsuleRopeConfig:
             raise ValueError("endpoint_box_size values must be positive")
         if self.shape not in {"capsule", "box"}:
             raise ValueError(f"Unsupported rope shape: {self.shape}")
+        # 半径过大会让相邻 capsule/box 大量重叠，D6 joint 和碰撞过滤都更难稳定；这里用
+        # 段距的 45% 作为保守上限，给关节和碰撞留出数值余量。
         segment_pitch = self.length / self.segments
         if self.radius >= 0.45 * segment_pitch:
             raise ValueError("rope radius is too large for the segment spacing")
@@ -161,6 +180,7 @@ def make_physics_material(stage, path: str, static_friction: float, dynamic_fric
 
     from pxr import PhysxSchema, Sdf, UsdPhysics, UsdShade
 
+    # friction combine mode 设为 average，让绳端和环境/手指接触时的有效摩擦更可预期。
     material = UsdShade.Material.Define(stage, Sdf.Path(path))
     prim = material.GetPrim()
     material_api = UsdPhysics.MaterialAPI.Apply(prim)
@@ -250,6 +270,8 @@ def create_rope_segment(stage, path: str, position, pitch: float, mass: float, c
     from pxr import Gf, UsdGeom
 
     radius = float(config.radius)
+    # box 形状便于调试和稳定接触；capsule 形状更接近柔性绳段。两者都沿局部 X 方向排列，
+    # 因此后续 D6 joint 的 local_pos 使用 ±0.5*pitch。
     if config.shape == "box":
         segment = UsdGeom.Cube.Define(stage, path)
         segment.CreateSizeAttr(1.0)
@@ -306,6 +328,8 @@ def create_d6_rope_joint(stage, path: str, body0, body1, local_pos0, local_pos1,
 
     from pxr import Gf, UsdPhysics
 
+    # 这里使用通用 Joint + LimitAPI 组合出 D6 行为：平移全部锁定，绕 X 轴表示扭转，
+    # 绕 Y/Z 轴表示弯曲。这样 capsule/box 链能近似连续绳体，同时仍是刚体系统。
     joint = UsdPhysics.Joint.Define(stage, path)
     joint.CreateBody0Rel().SetTargets([body0.GetPath()])
     joint.CreateBody1Rel().SetTargets([body1.GetPath()])
@@ -317,6 +341,8 @@ def create_d6_rope_joint(stage, path: str, body0, body1, local_pos0, local_pos1,
     for axis in ("transX", "transY", "transZ"):
         lock_limit(prim, axis)
     if config.lock_twist:
+        # 扭转锁定可提升稳定性，但会让绳体更像扁平链；允许打开 twist limit/drive 以获得
+        # 更自然的旋转自由度。
         lock_limit(prim, "rotX")
     else:
         if config.twist_limit_deg is not None and config.twist_limit_deg >= 0:
@@ -334,6 +360,7 @@ def filter_collision_pair(body_a, body_b) -> None:
 
     from pxr import UsdPhysics
 
+    # 相邻段已经通过 joint 约束连接，如果还相互碰撞，容易在接触求解中产生抖动和能量注入。
     filter_api = UsdPhysics.FilteredPairsAPI.Apply(body_a)
     filter_api.CreateFilteredPairsRel().AddTarget(body_b.GetPath())
 
@@ -359,6 +386,8 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
     from pxr import Sdf, UsdGeom, UsdPhysics
 
     config.validate()
+    # 资产内部 root 使用 ``config.root_path``，运行时引用到 stage 的位置由 ``prim_path`` 决定。
+    # 这样一个 USD 文件可以被多场景复用。
     root_path = Sdf.Path(config.root_path)
     root = UsdGeom.Xform.Define(stage, root_path)
     bodies_scope = UsdGeom.Scope.Define(stage, root_path.AppendChild("Bodies"))
@@ -375,6 +404,8 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
         config.env_restitution,
     )
 
+    # 绳体中心和总长决定两端 attach 点；端块中心再向外偏移半个 box 长度，使端块内侧面
+    # 与第一/最后一个绳段的连接点对齐。
     cx, cy, cz = config.center
     segment_pitch = config.length / config.segments
     left_attach_x = cx - 0.5 * config.length
@@ -400,6 +431,7 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
         endpoint_physics,
     )
 
+    # 中间绳段质量均分，总质量保持配置可读；端块质量单独设置，便于夹持端具有更稳定惯性。
     segment_mass = config.total_mass / config.segments
     segments = []
     for index in range(config.segments):
@@ -452,6 +484,7 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
     )
 
     if config.disable_adjacent_collisions:
+        # 仅过滤相邻刚体碰撞，非相邻段仍可互相接触，从而保留绳体自碰撞的大致效果。
         filter_collision_pair(left_box, segments[0])
         for body_a, body_b in zip(segments, segments[1:]):
             filter_collision_pair(body_a, body_b)
@@ -493,6 +526,7 @@ def write_capsule_rope_asset(config: CapsuleRopeConfig, output_path: str | Path 
 
     from pxr import Usd, UsdGeom
 
+    # 生成资产时先删除旧文件，避免 USD layer 复用旧内容；随后创建全新 stage 并设置单位。
     output = repo_path(output_path or config.asset_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
@@ -527,6 +561,8 @@ def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, ob
             f"Capsule rope asset does not exist: {asset_path}. "
             "Run scripts/build_capsule_rope_asset.py to generate it."
         )
+    # 引用而不是复制 USD 内容，能让生成脚本和仿真场景共享同一个资产文件；修改资产后只需
+    # 重新生成文件即可影响所有引用场景。
     prim_path = Sdf.Path(config.prim_path)
     rope_xform = UsdGeom.Xform.Define(stage, prim_path)
     rope_xform.GetPrim().GetReferences().AddReference(str(asset_path))

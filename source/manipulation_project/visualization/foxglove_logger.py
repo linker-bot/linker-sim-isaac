@@ -1,8 +1,16 @@
 """Foxglove 可视化日志封装。
 
-该模块提供非 ROS 的 Foxglove SDK 接入：可以写离线 MCAP，也可以开启本地
-WebSocket server 给 Foxglove 实时连接。SDK 采用懒加载，未安装 ``foxglove-sdk``
-时不会影响项目其它模块导入。
+该模块提供非 ROS 的 Foxglove SDK 接入：可以写离线 MCAP，也可以开启本地 WebSocket server
+给 Foxglove 实时连接。SDK 采用懒加载，未安装 ``foxglove-sdk`` 时不会影响项目其它模块导入。
+
+职责边界:
+    * 把项目中的关节状态、点云式 marker 和线段 marker 转换成 Foxglove 消息。
+    * 不参与控制闭环，不改变机器人或 world 状态。
+    * 不负责采样频率控制；调用方决定何时写一帧可视化数据。
+
+时间/单位约定:
+    可视化数据采用仿真时间戳（秒转纳秒）写入；位置单位为 m，关节角单位为 rad。任何发送
+    失败都应由调用方在调试层处理，而不改变机器人运动逻辑。
 """
 
 from __future__ import annotations
@@ -23,6 +31,7 @@ def _ns_time(time_s: float | None = None) -> int:
         int 纳秒时间戳。
     """
 
+    # Foxglove SDK 的 log_time 使用 ns；传 None 时返回 0，调用处会让 sink 使用当前时间。
     if time_s is None:
         return 0
     return int(round(float(time_s) * 1_000_000_000))
@@ -95,6 +104,7 @@ def _load_foxglove():
         ``(foxglove, foxglove.messages)``。
     """
 
+    # 可视化是可选能力，导入失败只在用户真正创建 logger 时暴露，避免影响仿真核心测试。
     try:
         import foxglove
         from foxglove import messages
@@ -144,6 +154,7 @@ class FoxgloveLogger:
         self.foxglove, self.messages = _load_foxglove()
         self.sink = sink
         self.topics = topics or FoxgloveTopicConfig()
+        # channel 在构造时绑定 topic 和 schema，后续每帧只需要构造消息并 log。
         self.joint_channel = self.foxglove.Channel(
             self.topics.joint_states,
             schema=self.messages.JointStates.get_schema(),
@@ -253,6 +264,7 @@ class FoxgloveLogger:
             无返回值。
         """
 
+        # 先做长度校验再构造消息，避免 Foxglove 中出现关节名和值错位的难查问题。
         positions_array = np.asarray(positions, dtype=float).reshape(-1)
         if positions_array.size != len(joint_names):
             raise ValueError(f"positions expected {len(joint_names)} values, got {positions_array.size}")
@@ -299,6 +311,7 @@ class FoxgloveLogger:
             无返回值。
         """
 
+        # reshape(-1, 3) 允许调用方传单个点或点列表；每个点转换成独立 sphere primitive。
         points = np.asarray(positions, dtype=float).reshape(-1, 3)
         spheres = [
             self.messages.SpherePrimitive(
@@ -333,6 +346,7 @@ class FoxgloveLogger:
             无返回值。
         """
 
+        # LineStrip 按输入顺序连接点，适合画 TCP 轨迹、绳体中心线或调试路径。
         point_array = np.asarray(points, dtype=float).reshape(-1, 3)
         line = self.messages.LinePrimitive(
             type=self.messages.LinePrimitiveLineType.LineStrip,
@@ -354,6 +368,7 @@ class FoxgloveLogger:
             无返回值。
         """
 
+        # 每次写一个 SceneEntity，entity_id 稳定时 Foxglove 会更新同一可视对象，而不是无限累积。
         entity = self.messages.SceneEntity(
             timestamp=_timestamp(time_s, self.messages),
             frame_id=frame_id,
