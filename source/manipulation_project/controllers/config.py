@@ -6,13 +6,16 @@
 
 职责边界:
         * 把 YAML 中的 arm/hand profile 解析成纯 Python dataclass。
-        * 生成 ``ImplicitDriveSettings``（运行时 articulation controller 用）和
+        * 生成 ``JointControlSettings``（运行时 articulation controller 用）和
             ``PhysxOverrideConfig``（导入后 USD/PhysX 覆盖用）。
         * 不读取机器人 ``dof_names``，不检查每个关节名是否存在；这一步必须等资产导入后完成。
 
-配置约定：arm/hand profile 分别描述一个部件，``active_joints`` 面向上层命令空间，
-``follower_joints`` 面向 mimic 从动关节。解析阶段只做类型、缺失字段和 target 名称校验，
-具体 DOF 长度会在控制器拿到 Isaac articulation 后再校验。
+配置约定：arm/hand profile 分别描述一个部件，``position_control``/``velocity_control``/
+``effort_control`` 表示不同主动控制模式的配置。每个控制模式内的 ``active_joints`` 面向
+上层命令空间，字段含义随主动模式变化；``follower_joints`` 始终面向 mimic 从动关节，
+字段含义固定为 Isaac position drive 的 stiffness/damping/max_force/friction。解析阶段
+只做类型、缺失字段和 target 名称校验，具体 DOF 长度会在控制器拿到 Isaac articulation 后
+再校验。
 """
 
 from __future__ import annotations
@@ -20,10 +23,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from manipulation_project.assets.usd_overrides import PhysxOverrideConfig
-from manipulation_project.controllers.implicit_drive_controller import ComponentDriveSettings, ImplicitDriveSettings
+from manipulation_project.controllers.types import (
+    ComponentControlSettings,
+    ControlMethod,
+    ControlMode,
+    JointControlSettings,
+)
 from manipulation_project.utils.config import deep_merge, load_yaml
 from manipulation_project.utils.paths import repo_path
 
@@ -34,16 +42,16 @@ class ControllerProfile:
 
     输入字段:
         name: ``arm`` 或 ``hand`` 等部件名。
-        implicit_position_drive: position drive 参数。
-        velocity_control: 速度控制预留参数。
-        effort_control: effort 控制预留参数。
+        position_control: 位置控制参数，支持 ``method: implicit`` 或 ``method: explicit``。
+        velocity_control: 速度控制参数，支持 ``method: implicit`` 或 ``method: explicit``。
+        effort_control: effort 控制参数，当前支持 ``method: direct``。
         physx: 材料、刚体和导入后 drive 初值覆盖参数。
     输出:
-        可转换为 ``ComponentDriveSettings`` 和 ``PhysxOverrideConfig``。
+        可转换为 ``ComponentControlSettings`` 和 ``PhysxOverrideConfig``。
     """
 
     name: str
-    implicit_position_drive: dict[str, Any]
+    position_control: dict[str, Any]
     velocity_control: dict[str, Any]
     effort_control: dict[str, Any]
     physx: dict[str, Any]
@@ -105,9 +113,14 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
     target = str(data.get("target", name))
     if target != name:
         raise ValueError(f"Controller profile {name!r} has mismatched target {target!r}")
+    if "implicit_position_drive" in data:
+        raise ValueError(
+            f"Controller profile {name!r} uses deprecated section 'implicit_position_drive'; "
+            "use 'position_control' with method: implicit"
+        )
     return ControllerProfile(
         name=name,
-        implicit_position_drive=_section(data, "implicit_position_drive"),
+        position_control=_section(data, "position_control"),
         velocity_control=_section(data, "velocity_control"),
         effort_control=_section(data, "effort_control"),
         physx=_section(data, "physx"),
@@ -120,29 +133,74 @@ def _joint_section(config: Mapping[str, Any], key: str, defaults: Mapping[str, A
     return deep_merge(defaults, _section(config, key))
 
 
-def _component_drive_settings(profile: ControllerProfile) -> ComponentDriveSettings:
-    """把单个部件 profile 转成 runtime drive 参数。"""
+def _control_section(profile: ControllerProfile, mode: ControlMode) -> dict[str, Any]:
+    """按控制模式选择 profile section。"""
 
-    # active/follower 使用不同默认增益：follower 通常需要更硬的 drive 才能贴近 mimic 关系，
-    # 但最终数值仍由 YAML 覆盖。
+    if mode == "position":
+        return profile.position_control
+    if mode == "velocity":
+        return profile.velocity_control
+    if mode == "effort":
+        return profile.effort_control
+    raise ValueError(f"Unsupported control mode: {mode!r}")
+
+
+def _normalize_method(config: Mapping[str, Any], mode: ControlMode) -> ControlMethod:
+    """读取并规范化控制方法名称。"""
+
+    raw_method = config.get("method", config.get("type"))
+    if raw_method is None and mode == "position":
+        raw_method = "implicit"
+    if raw_method is None and mode == "velocity":
+        raw_method = "implicit"
+    if raw_method is None and mode == "effort":
+        raw_method = "direct"
+    method = str(raw_method)
+    if method == "implicit_drive":
+        method = "implicit"
+    allowed = {
+        "position": {"implicit", "explicit"},
+        "velocity": {"implicit", "explicit"},
+        "effort": {"direct"},
+    }[mode]
+    if method not in allowed:
+        raise ValueError(f"{mode}_control method must be one of {sorted(allowed)}, got {method!r}")
+    return cast(ControlMethod, method)
+
+
+def _component_control_settings(profile: ControllerProfile, mode: ControlMode) -> ComponentControlSettings:
+    """把单个部件 profile 转成指定模式的 runtime 控制参数。"""
+
+    # active_joints 描述当前 --control-mode 下主动关节的控制参数；当 mode=effort 时，
+    # stiffness/damping 只作为默认字段保留，真实输出由 command effort 和 effort_limit 决定。
+    control = _control_section(profile, mode)
+    method = _normalize_method(control, mode)
     defaults = {
         "stiffness": 1000.0,
         "damping": 50.0,
         "max_force": 100.0,
+        "effort_limit": None,
         "joint_friction": 0.5,
     }
+    # follower_joints 不随主动模式切换控制语义。无论 active_joints 使用位置、速度还是
+    # effort，mimic follower 都使用 Isaac position drive 跟随 master 实际角度，因此这里
+    # 总是读取 stiffness/damping/max_force/joint_friction。
     follower_defaults = {
         "stiffness": 50000.0,
         "damping": 50.0,
         "max_force": 100.0,
         "joint_friction": defaults["joint_friction"],
     }
-    active = _joint_section(profile.implicit_position_drive, "active_joints", defaults)
-    follower = _joint_section(profile.implicit_position_drive, "follower_joints", follower_defaults)
-    return ComponentDriveSettings(
+    active = _joint_section(control, "active_joints", defaults)
+    follower = _joint_section(control, "follower_joints", follower_defaults)
+    effort_limit = active.get("effort_limit")
+    return ComponentControlSettings(
+        mode=mode,
+        method=method,
         stiffness=(float(active["stiffness"]),),
         damping=(float(active["damping"]),),
         max_force=float(active["max_force"]),
+        effort_limit=None if effort_limit is None else float(effort_limit),
         joint_friction=float(active["joint_friction"]),
         follower_stiffness=(float(follower["stiffness"]),),
         follower_damping=(float(follower["damping"]),),
@@ -151,24 +209,24 @@ def _component_drive_settings(profile: ControllerProfile) -> ComponentDriveSetti
     )
 
 
-def implicit_drive_settings(profiles: ControllerProfiles) -> ImplicitDriveSettings:
-    """把 arm/hand profile 转成 runtime implicit drive 设置。"""
+def joint_control_settings(profiles: ControllerProfiles, *, mode: ControlMode = "position") -> JointControlSettings:
+    """把 arm/hand profile 转成指定模式的 runtime 关节控制设置。"""
 
-    return ImplicitDriveSettings(
-        default=_component_drive_settings(profiles.arm),
-        arm=_component_drive_settings(profiles.arm),
-        hand=_component_drive_settings(profiles.hand),
+    return JointControlSettings(
+        default=_component_control_settings(profiles.arm, mode),
+        arm=_component_control_settings(profiles.arm, mode),
+        hand=_component_control_settings(profiles.hand, mode),
     )
 
 
 def _physx_override_config(profile: ControllerProfile) -> PhysxOverrideConfig:
     """把单个部件 profile 转成导入后 USD/PhysX 覆盖参数。"""
 
-    # USD/PhysX 覆盖复用 runtime drive 配置中的关节摩擦和 drive seed，确保导入初值与
-    # 后续控制器增益不会完全脱节。
+    # USD/PhysX 覆盖只需要导入后的默认 drive seed。这里固定从 position_control 读取，
+    # 因为 Isaac importer 写入的是 joint drive 初值，而不是运行期的速度/effort action。
     material = _section(profile.physx, "material")
     rigid_body = _section(profile.physx, "rigid_body")
-    drive = _component_drive_settings(profile)
+    drive = _component_control_settings(profile, "position")
     return PhysxOverrideConfig(
         contact_static_friction=float(material.get("contact_static_friction", 0.8)),
         contact_dynamic_friction=float(material.get("contact_dynamic_friction", 0.6)),

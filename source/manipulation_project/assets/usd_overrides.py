@@ -177,7 +177,7 @@ def apply_robot_usd_overrides(
         max_force = item.follower_max_force if is_follower and item.follower_max_force is not None else item.max_force
         drive_name = "angular" if prim.GetTypeName() == "PhysicsRevoluteJoint" else "linear"
         # 先在 USD 层写入 drive seed，让 articulation 创建时具备合理默认值；运行时
-        # ImplicitDriveController 仍会再根据配置写入最终 gain/max effort。
+        # JointController 仍会再根据配置写入最终 gain/max effort。
         drive_api = UsdPhysics.DriveAPI.Apply(prim, drive_name)
         drive_api.CreateTypeAttr().Set("force")
         drive_api.CreateStiffnessAttr().Set(float(stiffness if is_driven else 0.0))

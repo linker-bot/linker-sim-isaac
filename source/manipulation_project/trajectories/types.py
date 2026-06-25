@@ -1,7 +1,8 @@
 """轨迹数据类型。
 
 项目内部的关节轨迹对齐 cuMotion ``Trajectory`` 的表达：一条轨迹由时间域和
-关节空间 position / velocity / acceleration / jerk 采样矩阵组成。
+关节空间 position / velocity / acceleration / jerk 采样矩阵组成；effort 控制场景可额外携带
+joint effort 采样矩阵。
 
 矩阵行是时间采样点，列是 ``joint_names`` 定义的关节顺序；本类不关心这些列是否对应完整
 articulation DOF 或控制器命令子空间。时间单位为秒，关节单位为弧度。
@@ -25,6 +26,7 @@ class TrajectoryEval:
     velocity: np.ndarray
     acceleration: np.ndarray
     jerk: np.ndarray
+    effort: np.ndarray
 
 
 class JointTrajectory:
@@ -49,6 +51,7 @@ class JointTrajectory:
         velocities: np.ndarray | None = None,
         accelerations: np.ndarray | None = None,
         jerks: np.ndarray | None = None,
+        efforts: np.ndarray | None = None,
         phases: tuple[str, ...] | None = None,
     ):
         """创建关节轨迹并校验形状。
@@ -79,6 +82,7 @@ class JointTrajectory:
         self.velocities = _matrix_or_zeros(velocities, self.positions.shape, "velocities")
         self.accelerations = _matrix_or_zeros(accelerations, self.positions.shape, "accelerations")
         self.jerks = _matrix_or_zeros(jerks, self.positions.shape, "jerks")
+        self.efforts = _matrix_or_zeros(efforts, self.positions.shape, "efforts")
         self.phases = phases if phases is not None else tuple("trajectory" for _ in range(self.times.size))
         if len(self.phases) != self.times.size:
             raise ValueError("phases length must match trajectory samples")
@@ -93,6 +97,7 @@ class JointTrajectory:
         velocities: np.ndarray | None = None,
         accelerations: np.ndarray | None = None,
         jerks: np.ndarray | None = None,
+        efforts: np.ndarray | None = None,
         phases: tuple[str, ...] | None = None,
     ) -> "JointTrajectory":
         """从 cuMotion 风格采样矩阵创建轨迹。"""
@@ -104,6 +109,7 @@ class JointTrajectory:
             velocities=velocities,
             accelerations=accelerations,
             jerks=jerks,
+            efforts=efforts,
             phases=phases,
         )
 
@@ -128,6 +134,7 @@ class JointTrajectory:
             velocity=_interp_rows(self.times, self.velocities, t),
             acceleration=_interp_rows(self.times, self.accelerations, t),
             jerk=_interp_rows(self.times, self.jerks, t),
+            effort=_interp_rows(self.times, self.efforts, t),
         )
 
     def __len__(self) -> int:

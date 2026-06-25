@@ -29,7 +29,7 @@ from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_ur
 from manipulation_project.planning.requests import IKRequest
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.robots.mimic import MimicFollowerTargetMapper, expand_targets_with_mjcf_equalities
+from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
 from manipulation_project.tasks.move_tcp_line import MoveTcpLineConfig, build_tcp_line_command_trajectory
 from manipulation_project.tasks.primitives import (
     ExecutableTask,
@@ -525,11 +525,10 @@ class PinchGraspTask:
         robot,
         world,
         articulation_action_type,
-        driven_indices: np.ndarray,
+        controller,
         simulation_app,
         render: bool,
         drive_logger=None,
-        follower_mapper: MimicFollowerTargetMapper | None = None,
     ) -> dict[str, object]:
         """规划并执行完整夹捏抓取脚本。
 
@@ -537,11 +536,10 @@ class PinchGraspTask:
             robot: Isaac articulation。
             world: Isaac world。
             articulation_action_type: Isaac action 类型构造器。
-            driven_indices: 控制器/驱动实际控制的 DOF 索引。
+            controller: runtime 关节控制器，负责主动关节 action 和 mimic follower 下发。
             simulation_app: Isaac app，用于检测仿真窗口是否仍运行。
             render: 是否渲染每个仿真步。
             drive_logger: 可选关节跟踪日志器。
-            follower_mapper: 可选 mimic follower 映射器。
         返回:
             ``plan`` 字典，额外写入 ``steps`` 表示实际执行的 physics step 数。
         """
@@ -552,11 +550,10 @@ class PinchGraspTask:
             robot=robot,
             world=world,
             articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
+            controller=controller,
             simulation_app=simulation_app,
             render=render,
             drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
         )
         step = 0
         for task in self.execution_tasks(plan):

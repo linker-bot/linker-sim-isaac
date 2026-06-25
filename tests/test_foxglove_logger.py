@@ -4,19 +4,19 @@ import sys
 
 import numpy as np
 
-from manipulation_project.visualization import foxglove_logger
+from manipulation_project.telemetry import foxglove
 
 
 def test_foxglove_time_helpers() -> None:
-    assert foxglove_logger._ns_time(None) == 0
-    assert foxglove_logger._ns_time(1.25) == 1_250_000_000
+    assert foxglove._ns_time(None) == 0
+    assert foxglove._ns_time(1.25) == 1_250_000_000
 
 
 def test_foxglove_optional_dependency_error() -> None:
     original_module = sys.modules.get("foxglove")
     sys.modules["foxglove"] = None
     try:
-        foxglove_logger._load_foxglove()
+        foxglove._load_foxglove()
     except ImportError as exc:
         assert "foxglove-sdk" in str(exc)
     else:
@@ -36,5 +36,5 @@ def test_foxglove_vector_shape_validation() -> None:
                 self.y = y
                 self.z = z
 
-    vec = foxglove_logger._vector3(np.asarray([1.0, 2.0, 3.0]), Messages)
+    vec = foxglove._vector3(np.asarray([1.0, 2.0, 3.0]), Messages)
     assert (vec.x, vec.y, vec.z) == (1.0, 2.0, 3.0)

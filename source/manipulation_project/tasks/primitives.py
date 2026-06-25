@@ -15,7 +15,6 @@ from typing import Protocol
 
 import numpy as np
 
-from manipulation_project.robots.mimic import MimicFollowerTargetMapper
 from manipulation_project.trajectories.types import JointTrajectory
 
 
@@ -30,11 +29,10 @@ class TaskRuntime:
     robot: object
     world: object
     articulation_action_type: object
-    driven_indices: np.ndarray
+    controller: object
     simulation_app: object | None
     render: bool
     drive_logger: object | None = None
-    follower_mapper: MimicFollowerTargetMapper | None = None
 
 
 class ExecutableTask(Protocol):
@@ -62,7 +60,7 @@ class MoveJointTargetTask:
             robot=runtime.robot,
             world=runtime.world,
             articulation_action_type=runtime.articulation_action_type,
-            driven_indices=runtime.driven_indices,
+            controller=runtime.controller,
             start_all=self.start_all,
             target_all=self.target_all,
             duration=self.duration,
@@ -71,7 +69,6 @@ class MoveJointTargetTask:
             render=runtime.render,
             step=step,
             drive_logger=runtime.drive_logger,
-            follower_mapper=runtime.follower_mapper,
         )
 
 
@@ -89,14 +86,13 @@ class MoveFullJointTrajectoryTask:
             robot=runtime.robot,
             world=runtime.world,
             articulation_action_type=runtime.articulation_action_type,
-            driven_indices=runtime.driven_indices,
+            controller=runtime.controller,
             trajectory=self.trajectory,
             phase=self.phase,
             simulation_app=runtime.simulation_app,
             render=runtime.render,
             step=step,
             drive_logger=runtime.drive_logger,
-            follower_mapper=runtime.follower_mapper,
         )
 
 
@@ -115,7 +111,7 @@ class HoldTask:
             robot=runtime.robot,
             world=runtime.world,
             articulation_action_type=runtime.articulation_action_type,
-            driven_indices=runtime.driven_indices,
+            controller=runtime.controller,
             target_all=self.target_all,
             duration=self.duration,
             phase=self.phase,
@@ -123,7 +119,6 @@ class HoldTask:
             render=runtime.render,
             step=step,
             drive_logger=runtime.drive_logger,
-            follower_mapper=runtime.follower_mapper,
         )
 
 
@@ -132,58 +127,37 @@ def step_joint_target(
     robot,
     world,
     articulation_action_type,
-    driven_indices: np.ndarray,
+    controller,
     target_all: np.ndarray,
     render: bool,
     step: int,
     phase: str,
     target_velocity_all: np.ndarray | None = None,
+    target_effort_all: np.ndarray | None = None,
     drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """下发一帧完整 DOF 目标，并推进一个 physics step。"""
 
-    # 每帧都复制目标数组，避免 follower mapper 在原地修正从动关节目标时污染调用方
-    # 持有的关键帧、轨迹采样或任务配置缓存。
-    command_target_all = np.asarray(target_all, dtype=float).copy()
-    if target_velocity_all is None:
-        command_velocity_all = np.zeros(robot.num_dof, dtype=float)
-    else:
-        command_velocity_all = np.asarray(target_velocity_all, dtype=float).copy()
-    if follower_mapper is not None:
-        # 上层传入的完整目标通常只可靠描述主动关节；mimic follower 需要用当前实际状态
-        # 和 MJCF 多项式重新计算，才能避免从动关节在每帧执行时落后于主关节。
-        follower_mapper.apply_from_actual(
-            command_target_all,
-            command_velocity_all,
-            np.asarray(robot.get_joint_positions(), dtype=float),
-            np.asarray(robot.get_joint_velocities(), dtype=float),
-        )
-    driven_position = command_target_all[driven_indices]
-    driven_velocity = command_velocity_all[driven_indices]
-    # 这里只下发 driven_indices 切片，而不是完整 DOF 数组。这样未参与任务的 DOF 不会被
-    # action 重置；同时 logger 也按同一索引记录期望/实际值，便于误差列一一对应。
-    robot.apply_action(
-        articulation_action_type(
-            joint_positions=driven_position,
-            joint_velocities=driven_velocity,
-            joint_indices=driven_indices,
-        )
+    # 完整目标进入 controller 后会被分解成主动关节 action 和 follower position drive action。
+    # 这样 position/velocity/effort 三种主动控制都能复用同一套 mimic follower 规则。
+    targets = controller.targets_from_full_state(
+        target_all,
+        joint_velocities=target_velocity_all,
+        joint_efforts=target_effort_all,
     )
+    controller.apply_targets(articulation_action_type, targets)
     world.step(render=render)
     if drive_logger is not None:
-        actual_position = np.asarray(robot.get_joint_positions(), dtype=float)[driven_indices]
-        actual_velocity = np.asarray(robot.get_joint_velocities(), dtype=float)[driven_indices]
-        drive_logger.write(
-            step=step,
-            time_s=(step + 1) * float(world.get_physics_dt()),
-            phase=phase,
-            drive_update=True,
-            desired_position=driven_position,
-            actual_position=actual_position,
-            desired_velocity=driven_velocity,
-            actual_velocity=actual_velocity,
-        )
+        driven_indices = controller.driven_indices
+        if drive_logger.should_write(step):
+            log_values = drive_logger.collect_step_values(robot, controller, targets, driven_indices)
+            drive_logger.write(
+                step=step,
+                time_s=(step + 1) * float(world.get_physics_dt()),
+                phase=phase,
+                drive_update=True,
+                **log_values,
+            )
     return step + 1
 
 
@@ -192,7 +166,7 @@ def move_joint_target(
     robot,
     world,
     articulation_action_type,
-    driven_indices: np.ndarray,
+    controller,
     start_all: np.ndarray,
     target_all: np.ndarray,
     duration: float,
@@ -201,7 +175,6 @@ def move_joint_target(
     render: bool,
     step: int,
     drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """用 smoothstep 在两个完整 DOF 目标之间平滑移动。"""
 
@@ -224,14 +197,13 @@ def move_joint_target(
             robot=robot,
             world=world,
             articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
+            controller=controller,
             target_all=command,
             target_velocity_all=velocity,
             render=render,
             step=step,
             phase=phase,
             drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
         )
     # 轨迹段结束后清零 articulation 速度，避免下一段任务继承上一段残余速度造成过冲。
     robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
@@ -243,14 +215,13 @@ def move_full_joint_trajectory(
     robot,
     world,
     articulation_action_type,
-    driven_indices: np.ndarray,
+    controller,
     trajectory: JointTrajectory,
     phase: str,
     simulation_app,
     render: bool,
     step: int,
     drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """按 physics dt 播放完整 DOF 关节轨迹。"""
 
@@ -276,14 +247,13 @@ def move_full_joint_trajectory(
             robot=robot,
             world=world,
             articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
+            controller=controller,
             target_all=sample.position,
             target_velocity_all=sample.velocity,
             render=render,
             step=step,
             phase=phase,
             drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
         )
     robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
     return step
@@ -294,7 +264,7 @@ def hold_joint_target(
     robot,
     world,
     articulation_action_type,
-    driven_indices: np.ndarray,
+    controller,
     target_all: np.ndarray,
     duration: float,
     phase: str,
@@ -302,7 +272,6 @@ def hold_joint_target(
     render: bool,
     step: int,
     drive_logger=None,
-    follower_mapper: MimicFollowerTargetMapper | None = None,
 ) -> int:
     """保持一个完整 DOF 目标一段时间。"""
 
@@ -318,14 +287,13 @@ def hold_joint_target(
             robot=robot,
             world=world,
             articulation_action_type=articulation_action_type,
-            driven_indices=driven_indices,
+            controller=controller,
             target_all=target_all,
             render=render,
             step=step,
             phase=phase,
             target_velocity_all=np.zeros(robot.num_dof, dtype=float),
             drive_logger=drive_logger,
-            follower_mapper=follower_mapper,
         )
         local_step += 1
     return step

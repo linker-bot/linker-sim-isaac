@@ -1,6 +1,23 @@
 # 日志默认配置。
 logging:
+  # 是否启用 CSV 写入；false 时仍会构造 logger，但不会打开文件。
+  enabled: true
   # 关节跟踪 CSV 输出路径；相对路径以仓库根目录为基准。
   joint_tracking_path: logs/joint_tracking/run_pinch_grasp.csv
   # flush 周期，秒。脚本会换算成物理步数，避免每行都刷盘。
   flush_interval_s: 0.05
+  # 采样降频。1 表示每个 physics step 都写一行；例如 10 表示每 10 步写一行。
+  interval_steps: 1
+  # 所有模式下都可以记录实际位置/速度。关闭这些列可以减少 get_joint_* 和 CSV 写入成本。
+  actual_position: true
+  actual_velocity: true
+  # 命令目标列。position 模式主要看 command_position，velocity 模式主要看 command_velocity。
+  command_position: true
+  command_velocity: true
+  # direct effort 或显式控制下的 effort command。implicit drive 通常会写 nan。
+  command_effort: true
+  # 控制器实际下发给 Isaac 的 effort action；显式 position/velocity 和 direct effort 下有值。
+  action_effort: false
+  # PhysX measured/applied effort 读取相对更贵，默认关闭，需要分析力矩时再打开。
+  measured_effort: false
+  applied_effort: false

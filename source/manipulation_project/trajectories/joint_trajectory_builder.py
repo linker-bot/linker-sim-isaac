@@ -93,6 +93,7 @@ def joint_trajectory_from_positions(
     phases: Sequence[str] | None = None,
     phase: str = "trajectory",
     differentiate: bool = True,
+    efforts: np.ndarray | None = None,
 ) -> JointTrajectory:
     """从位置采样矩阵构造完整 ``JointTrajectory``。
 
@@ -134,6 +135,7 @@ def joint_trajectory_from_positions(
         velocities=velocities,
         accelerations=accelerations,
         jerks=jerks,
+        efforts=efforts,
         phases=phases_tuple,
         joint_names=tuple(joint_names),
     )

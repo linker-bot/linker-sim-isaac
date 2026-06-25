@@ -23,7 +23,8 @@ from pathlib import Path
 
 import numpy as np
 
-from manipulation_project.controllers.implicit_drive_controller import ImplicitDriveController
+from manipulation_project.controllers.joint_controller import JointController
+from manipulation_project.logging.config import JointLoggingConfig
 from manipulation_project.logging.joint_logger import JointTrackingLogger
 
 
@@ -32,12 +33,13 @@ def execute_joint_trajectory(
     robot,
     world,
     articulation_action_type,
-    controller: ImplicitDriveController,
+    controller: JointController,
     trajectory,
     log_path: str | Path | None,
     render: bool,
     simulation_app=None,
     hold: bool = False,
+    logging_config: JointLoggingConfig | None = None,
 ) -> None:
     """在 Isaac 中执行采样后的关节命令轨迹。
 
@@ -45,12 +47,13 @@ def execute_joint_trajectory(
         robot: Isaac articulation 对象，需提供关节读写和 ``num_dof``。
         world: Isaac world，用于获取 physics dt 并推进仿真。
         articulation_action_type: Isaac 的 action 类型构造器。
-        controller: ``ImplicitDriveController``，负责把命令子空间扩展成完整 DOF 目标。
+        controller: ``JointController``，负责把命令子空间扩展成完整 DOF 控制目标。
         trajectory: ``JointTrajectory``，以矩阵形式保存命令关节轨迹。
         log_path: CSV 日志路径；为 ``None`` 时禁用写文件。
         render: 是否在 ``world.step`` 时渲染。
         simulation_app: 可选 Isaac app，用于 hold 阶段检测窗口是否仍在运行。
         hold: 为真时轨迹结束后持续保持最后一个目标。
+        logging_config: 可选日志列和采样开关。
     """
 
     # 日志刷盘不需要每步都做，否则长轨迹会产生明显 I/O 开销。这里按约 50 ms
@@ -60,46 +63,50 @@ def execute_joint_trajectory(
     # logger 只记录 controller 实际驱动的 DOF。未驱动 DOF 虽然也存在于完整
     # articulation target 中，但通常不是 tracking 关注对象，写入 CSV 会增加噪声。
     driven_joint_names = [controller.dof_names[int(index)] for index in controller.driven_indices]
-    logger = JointTrackingLogger(log_path, driven_joint_names, flush_interval_steps=flush_interval_steps)
+    logger = JointTrackingLogger(
+        log_path,
+        driven_joint_names,
+        flush_interval_steps=flush_interval_steps,
+        config=logging_config,
+    )
     try:
         # 使用当前仿真状态作为 base_positions，可以避免未控制 DOF 在第一步被意外
-        # 置零；后续每一步则用上一帧 full_target 作为基准，保持命令连续。
-        full_target = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)
+        # 置零；后续每一步则用上一帧目标位置作为基准，保持命令连续。
+        full_position = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)
         full_velocity = np.zeros(robot.num_dof, dtype=float)
         for step in range(len(trajectory)):
             # 将命令关节子空间扩展为 Isaac 需要的完整 DOF 数组。controller 内部会
             # 根据 driven_indices 写入命令目标，并保留/推导其它 DOF 的目标值。
-            full_target, full_velocity = controller.build_full_targets(
-                trajectory.positions[step],
-                trajectory.velocities[step],
-                base_positions=full_target,
+            targets = controller.build_control_targets(
+                command_positions=trajectory.positions[step],
+                command_velocities=trajectory.velocities[step],
+                command_efforts=trajectory.efforts[step],
+                base_positions=full_position,
             )
+            full_position = targets.positions
+            full_velocity = targets.velocities
 
-            # 下发目标后立即推进一个 physics step。Isaac 的 drive controller 会在
-            # 本 step 内尝试跟踪 position/velocity target。
-            controller.apply(articulation_action_type, full_target, full_velocity)
+            # 下发目标后立即推进一个 physics step。不同控制方法会在 controller 内部
+            # 转换成 position、velocity 或 effort action。
+            controller.apply_targets(articulation_action_type, targets)
             world.step(render=render)
 
-            # 读取 step 后的实际状态，用于和刚下发的 desired target 对比。
-            # 注意：这里记录的是驱动关节切片，而不是完整 DOF 数组。
-            actual_position = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)
-            actual_velocity = np.asarray(robot.get_joint_velocities(), dtype=float).reshape(-1)
-            logger.write(
-                step=step,
-                time_s=float(step) * float(world.get_physics_dt()),
-                phase=trajectory.phases[step],
-                drive_update=True,
-                desired_position=full_target[controller.driven_indices],
-                actual_position=actual_position[controller.driven_indices],
-                desired_velocity=full_velocity[controller.driven_indices],
-                actual_velocity=actual_velocity[controller.driven_indices],
-            )
+            if logger.should_write(step):
+                # 只在需要写日志时读取实际状态/effort，避免日志降采样时仍产生 Isaac 查询成本。
+                log_values = logger.collect_step_values(robot, controller, targets, controller.driven_indices)
+                logger.write(
+                    step=step,
+                    time_s=float(step) * float(world.get_physics_dt()),
+                    phase=trajectory.phases[step],
+                    drive_update=True,
+                    **log_values,
+                )
 
         if hold:
             # GUI 调试时，轨迹结束后继续保持最后一帧目标，用户可以观察稳定后的姿态。
             # 如果没有传入 simulation_app，则只执行一次，避免在测试或脚本中卡住。
             while simulation_app is None or simulation_app.is_running():
-                controller.apply(articulation_action_type, full_target, full_velocity)
+                controller.apply_targets(articulation_action_type, targets)
                 world.step(render=render)
                 if simulation_app is None:
                     break

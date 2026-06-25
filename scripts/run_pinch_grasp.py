@@ -7,8 +7,8 @@
 2. 启动 Isaac Sim/Isaac Lab，并按配置创建 World、地面、重力和渲染参数。
 3. 加载 capsule rope 对象，导入 AR5 + L6 组合机器人资产。
 4. 写入机器人 USD/PhysX runtime 覆盖，例如 drive、摩擦、solver iteration 和重力设置。
-5. 创建 ``ImplicitDriveController``，把主动关节目标扩展为完整 articulation 控制目标。
-6. 创建 mimic follower 映射器，使 L6 从动关节按实际主动关节状态跟随。
+5. 创建 ``JointController``，把主动关节目标转换成 position、velocity 或 effort action。
+6. 由控制器内部的 mimic follower 映射器，使 L6 从动关节按实际主动关节状态跟随。
 7. 构造 pinch TCP，并通过 cuMotion 求解 approach / grasp / lift / wiggle 等阶段目标。
 8. 按阶段推进仿真，同时记录关节目标和实际状态到 CSV。
 
@@ -37,12 +37,13 @@ from manipulation_project.assets.robot_loader import RobotAssetConfig, import_ro
 from manipulation_project.assets.solver_overrides import SolverIterationConfig, apply_solver_iteration_overrides
 from manipulation_project.assets.usd_overrides import apply_robot_usd_overrides, disable_robot_gravity
 from manipulation_project.backends.cumotion.context import CuMotionConfig
-from manipulation_project.controllers.config import implicit_drive_settings, load_controller_profiles, physx_override_configs
-from manipulation_project.controllers.implicit_drive_controller import ImplicitDriveController
+from manipulation_project.controllers.config import joint_control_settings, load_controller_profiles, physx_override_configs
+from manipulation_project.controllers.joint_controller import JointController
 from manipulation_project.envs.scene_builder import build_world, configure_visuals
+from manipulation_project.logging.config import joint_logging_config_from_mapping, override_logging_config
 from manipulation_project.logging.joint_logger import JointTrackingLogger
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, add_capsule_rope_reference
-from manipulation_project.robots.mimic import MimicFollowerTargetMapper, mjcf_equality_follower_joint_names
+from manipulation_project.robots.mimic import mjcf_equality_follower_joint_names
 from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, PinchGraspTask
 from manipulation_project.utils.config import load_yaml
 from manipulation_project.utils.paths import repo_path
@@ -53,7 +54,7 @@ def parse_args() -> argparse.Namespace:
 
     各配置文件默认指向仓库内的标准抓绳 demo：
     - robot config 选择 AR5V2_L + L6V1_L 组合机器人；
-    - controller config 目录提供按部件分组的 implicit drive 参数；
+    - controller config 目录提供按部件分组的位置、速度和 effort 控制参数；
     - env config 提供物理步频、重力和 solver iteration；
     - rope config 提供 capsule rope 资产路径和 prim 路径；
     - grasp config 提供抓取阶段时长、目标姿态、手指闭合角度和 wiggle 参数。
@@ -65,12 +66,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml"))
     parser.add_argument("--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml"))
     parser.add_argument("--grasp-config", type=Path, default=Path("configs/trajectories/pinch_grasp.yaml"))
-    parser.add_argument("--log", type=Path, default=Path("logs/joint_tracking/run_pinch_grasp.csv"))
+    parser.add_argument("--logging-config", type=Path, default=Path("configs/logging/default_logger.yaml"))
+    parser.add_argument("--log", type=Path, default=None, help="覆盖关节跟踪 CSV 输出路径")
+    parser.add_argument("--log-interval-steps", type=int, default=None, help="覆盖日志采样步长")
+    parser.add_argument("--log-measured-effort", action="store_true", help="记录 PhysX measured joint effort")
+    parser.add_argument("--log-applied-effort", action="store_true", help="记录 Isaac applied joint effort")
+    parser.add_argument("--log-action-effort", action="store_true", help="记录控制器实际下发的 effort action")
+    parser.add_argument("--no-log-effort-command", action="store_true", help="不记录语义 effort command 列")
     parser.add_argument("--gui", action="store_true")
     parser.add_argument("--hold", action="store_true", help="最终目标保持到窗口关闭")
     parser.add_argument("--no-grasp", action="store_true", help="只导入机器人和绳体，并短暂保持初始姿态")
     parser.add_argument("--short-smoke", action="store_true", help="覆盖阶段时长，用于快速 headless smoke")
     parser.add_argument("--endpoint", choices=("left", "right"), default=None)
+    parser.add_argument("--control-mode", choices=("position", "velocity", "effort"), default="position")
     parser.add_argument("--physics-frequency", type=float, default=None)
     parser.add_argument("--render-frequency", type=float, default=None)
     parser.add_argument("--gravity-z", type=float, default=None)
@@ -143,19 +151,20 @@ def hold_initial_pose(robot, world, articulation_action_type, controller, simula
     full_velocity = np.zeros(robot.num_dof, dtype=float)
     step = 0
     while step < 3 or (simulation_app is not None and simulation_app.is_running()):
-        controller.apply(articulation_action_type, full_target, full_velocity)
+        targets = controller.targets_from_full_state(full_target, full_velocity)
+        controller.apply_targets(articulation_action_type, targets)
         world.step(render=render)
         if logger is not None:
-            logger.write(
-                step=step,
-                time_s=(step + 1) * float(world.get_physics_dt()),
-                phase="initial_hold",
-                drive_update=True,
-                desired_position=full_target[controller.driven_indices],
-                actual_position=np.asarray(robot.get_joint_positions(), dtype=float)[controller.driven_indices],
-                desired_velocity=full_velocity[controller.driven_indices],
-                actual_velocity=np.asarray(robot.get_joint_velocities(), dtype=float)[controller.driven_indices],
-            )
+            driven_indices = controller.driven_indices
+            if logger.should_write(step):
+                log_values = logger.collect_step_values(robot, controller, targets, driven_indices)
+                logger.write(
+                    step=step,
+                    time_s=(step + 1) * float(world.get_physics_dt()),
+                    phase="initial_hold",
+                    drive_update=True,
+                    **log_values,
+                )
         step += 1
         if simulation_app is None and step >= 3:
             break
@@ -177,6 +186,16 @@ def main() -> None:
     env_config = load_yaml(args.env_config)
     rope_config_data = load_yaml(args.rope_config)
     grasp_config_data = load_yaml(args.grasp_config)
+    logging_config = joint_logging_config_from_mapping(load_yaml(args.logging_config))
+    logging_config = override_logging_config(
+        logging_config,
+        joint_tracking_path=args.log,
+        interval_steps=args.log_interval_steps,
+        log_measured_effort=True if args.log_measured_effort else None,
+        log_applied_effort=True if args.log_applied_effort else None,
+        log_action_effort=True if args.log_action_effort else None,
+        log_command_effort=False if args.no_log_effort_command else None,
+    )
 
     # RobotAssetConfig 只描述“如何把资产导入 stage”，例如 asset_type、asset_path、prim_path。
     # controlled_joints 则描述控制器主动下发目标的关节集合，mimic follower 会在运行时自动补齐。
@@ -236,7 +255,7 @@ def main() -> None:
         articulation_path, asset_path, imported_root_path = import_robot_asset(robot_asset)
         mjcf_path = asset_path if robot_asset.asset_type == "mjcf" else None
 
-        # 对刚导入的 USD prim 做运行时覆盖：drive 参数、关节摩擦、最大力、碰撞近似等。
+        # 对刚导入的 USD prim 做运行时覆盖：关节 drive 初值、摩擦、最大力、碰撞近似等。
         # 这些覆盖不会修改原始资产文件，只影响当前 stage。
         apply_robot_usd_overrides(
             imported_root_path,
@@ -254,8 +273,8 @@ def main() -> None:
             else {"configured": 0}
         )
 
-        # 默认关闭机器人刚体重力，让机器人主要由 position drive 控制。
-        # 如果需要测试真实重力下的下垂或力控行为，可以传 --enable-robot-gravity。
+        # 默认关闭机器人刚体重力，让关节主要按控制器命令运动。
+        # 如果需要测试真实重力下的下垂、显式控制或力控行为，可以传 --enable-robot-gravity。
         if not args.enable_robot_gravity:
             disabled = disable_robot_gravity(imported_root_path)
             print(f"RUN_PINCH_GRASP_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}", flush=True)
@@ -271,32 +290,38 @@ def main() -> None:
             robot.disable_gravity()
         robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
 
-        # implicit drive 控制器负责：
-        # - 配置 articulation controller 为 position 模式；
-        # - 写入主动关节和 follower 关节的 stiffness/damping/max effort；
-        # - 把命令关节目标扩展为完整 DOF 目标。
-        controller = ImplicitDriveController(
+        # JointController 负责：
+        # - 按 --control-mode 选择 position、velocity 或 effort 主动关节控制配置；
+        # - 为 implicit 控制写入 Isaac drive gain，为 explicit 控制计算 effort action；
+        # - 始终用 follower 独立 position drive 跟随 master 实际状态。
+        controller = JointController(
             robot,
             joint_names=controlled_joints,
-            settings=implicit_drive_settings(controller_profiles),
+            settings=joint_control_settings(controller_profiles, mode=args.control_mode),
             mjcf_path=mjcf_path,
         )
         controller.configure_runtime()
 
         # L6 手的 DIP 等 follower 关节由 MJCF equality 描述。运行时根据实际 master 关节状态
         # 更新 follower 目标，避免 follower 跟随“命令目标”而不是“实际主动关节”导致超前。
-        follower_mapper = MimicFollowerTargetMapper(list(robot.dof_names), mjcf_path)
         mimic_names = mjcf_equality_follower_joint_names(mjcf_path)
 
         # 日志只记录实际受驱动的 DOF，即主动关节 + mimic follower。flush_interval_steps 控制
         # CSV 刷盘频率，避免每个 physics step 都 flush 造成 I/O 开销过大。
         driven_joint_names = [list(robot.dof_names)[int(index)] for index in controller.driven_indices]
-        flush_interval_steps = max(1, int(round(0.05 / float(world.get_physics_dt()))))
-        logger = JointTrackingLogger(repo_path(args.log), driven_joint_names, flush_interval_steps=flush_interval_steps)
+        flush_interval_steps = logging_config.flush_interval_steps(float(world.get_physics_dt()))
+        log_path = None if not logging_config.enabled or logging_config.joint_tracking_path is None else repo_path(logging_config.joint_tracking_path)
+        logger = JointTrackingLogger(
+            log_path,
+            driven_joint_names,
+            flush_interval_steps=flush_interval_steps,
+            config=logging_config,
+        )
         print(
             "RUN_PINCH_GRASP_IMPORTED "
             f"asset={asset_path} prim_path={articulation_path} num_dof={robot.num_dof} "
-            f"mimic_joint_names={sorted(mimic_names)} follower_relations={follower_mapper.relations}",
+            f"control_mode={args.control_mode} mimic_joint_names={sorted(mimic_names)} "
+            f"follower_relations={controller.follower_mapper.relations}",
             flush=True,
         )
         print("RUN_PINCH_GRASP_DOF_NAMES " + ", ".join(list(robot.dof_names)), flush=True)
@@ -319,7 +344,7 @@ def main() -> None:
                 # - 根据闭合手型计算 pinch TCP 相对法兰的 offset；
                 # - 生成临时 URDF，把 pinch TCP 作为 fixed frame 挂到 robot cumotion.flange_frame；
                 # - 使用 cuMotion 求解 approach/grasp/lift/wiggle 关键帧；
-                # - 按阶段插值并通过 controller/follower_mapper 下发到 Isaac。
+                # - 按阶段插值并通过 controller 下发到 Isaac。
                 task = PinchGraspTask(
                     config=grasp_config,
                     rope_config=rope_config,
@@ -330,15 +355,14 @@ def main() -> None:
                     robot=robot,
                     world=world,
                     articulation_action_type=ArticulationAction,
-                    driven_indices=controller.driven_indices,
+                    controller=controller,
                     simulation_app=simulation_app,
                     render=args.gui,
                     drive_logger=logger,
-                    follower_mapper=follower_mapper,
                 )
                 print(
                     "RUN_PINCH_GRASP_OK "
-                    f"steps={result['steps']} ik={result['ik']} log={repo_path(args.log)}",
+                    f"steps={result['steps']} ik={result['ik']} log={log_path}",
                     flush=True,
                 )
         finally:

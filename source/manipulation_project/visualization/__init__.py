@@ -1,8 +1,8 @@
-"""可视化辅助工具。
+"""Isaac 本地可视化辅助工具。
 
-这里放置摄像机、调试绘制、marker 和 Foxglove 日志相关的薄封装，避免任务代码直接
-散落 Isaac viewport、debug draw 或外部可视化协议细节。
+这里放置摄像机、debug draw 和本地 marker 相关的薄封装，避免任务代码直接散落
+Isaac viewport 或调试绘制 API 细节。
 
-可视化模块只作为调试和记录用途，不应影响控制闭环的数值结果。Foxglove SDK 等可选
-依赖采用懒加载，未安装时其它子包仍可正常导入和运行测试。
+外部可视化/遥测协议（例如 Foxglove WebSocket、MCAP）放在 ``manipulation_project.telemetry``。
+本模块只作为调试显示用途，不应影响控制闭环的数值结果。
 """

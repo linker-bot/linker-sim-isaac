@@ -1,15 +1,16 @@
-"""Foxglove 可视化日志封装。
+"""Foxglove 遥测输出封装。
 
 该模块提供非 ROS 的 Foxglove SDK 接入：可以写离线 MCAP，也可以开启本地 WebSocket server
 给 Foxglove 实时连接。SDK 采用懒加载，未安装 ``foxglove-sdk`` 时不会影响项目其它模块导入。
 
 职责边界:
     * 把项目中的关节状态、点云式 marker 和线段 marker 转换成 Foxglove 消息。
+    * 负责外部遥测数据出口，不负责 CSV 数值日志；CSV 仍放在 ``manipulation_project.logging``。
     * 不参与控制闭环，不改变机器人或 world 状态。
-    * 不负责采样频率控制；调用方决定何时写一帧可视化数据。
+    * 不负责采样频率控制；调用方决定何时写一帧遥测数据。
 
 时间/单位约定:
-    可视化数据采用仿真时间戳（秒转纳秒）写入；位置单位为 m，关节角单位为 rad。任何发送
+    遥测数据采用仿真时间戳（秒转纳秒）写入；位置单位为 m，关节角单位为 rad。任何发送
     失败都应由调用方在调试层处理，而不改变机器人运动逻辑。
 """
 
@@ -104,13 +105,13 @@ def _load_foxglove():
         ``(foxglove, foxglove.messages)``。
     """
 
-    # 可视化是可选能力，导入失败只在用户真正创建 logger 时暴露，避免影响仿真核心测试。
+    # Foxglove 是可选遥测能力，导入失败只在用户真正创建 sink 时暴露，避免影响仿真核心测试。
     try:
         import foxglove
         from foxglove import messages
     except ImportError as exc:
         raise ImportError(
-            "Foxglove visualization requires the optional dependency 'foxglove-sdk'. "
+            "Foxglove telemetry requires the optional dependency 'foxglove-sdk'. "
             "Install it with: pip install foxglove-sdk"
         ) from exc
     return foxglove, messages
@@ -132,7 +133,7 @@ class FoxgloveTopicConfig:
 
 
 class FoxgloveLogger:
-    """Foxglove MCAP/WebSocket 日志器。
+    """Foxglove MCAP/WebSocket 遥测出口。
 
     输入:
         sink: Foxglove SDK sink 上下文，例如 ``open_mcap`` 或 ``start_server`` 的返回值。
@@ -142,7 +143,7 @@ class FoxgloveLogger:
     """
 
     def __init__(self, sink: Any, *, topics: FoxgloveTopicConfig | None = None) -> None:
-        """创建 Foxglove logger。
+        """创建 Foxglove 遥测出口。
 
         参数:
             sink: Foxglove sink/context。
