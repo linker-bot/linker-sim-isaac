@@ -23,12 +23,22 @@ from typing import Literal
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.context import CuMotionConfig, CuMotionContext
+from manipulation_project.backends.cumotion.context import (
+    CuMotionConfig,
+    CuMotionContext,
+)
 from manipulation_project.planning.requests import IKRequest
-from manipulation_project.trajectories.cartesian_waypoints import sample_cartesian_pose_line
-from manipulation_project.trajectories.joint_trajectory_builder import joint_trajectory_from_positions
+from manipulation_project.trajectories.cartesian_waypoints import (
+    sample_cartesian_pose_line,
+)
+from manipulation_project.trajectories.joint_trajectory_builder import (
+    joint_trajectory_from_positions,
+)
 from manipulation_project.trajectories.types import JointTrajectory
-from manipulation_project.utils.rotations import normalize_quat_wxyz, rpy_xyz_deg_to_quat_wxyz
+from manipulation_project.utils.rotations import (
+    normalize_quat_wxyz,
+    rpy_xyz_deg_to_quat_wxyz,
+)
 from manipulation_project.utils.timing import sample_times
 
 
@@ -70,20 +80,27 @@ class MoveTcpLineConfig:
         """
 
         if "trajectory" not in data:
-            raise ValueError("TCP line config must contain top-level trajectory section")
+            raise ValueError(
+                "TCP line config must contain top-level trajectory section"
+            )
         trajectory = data["trajectory"]
         # 兼容旧配置名 ``cartesian_line``，但内部统一当作 TCP line 处理。TCP frame 可以
         # 放在 trajectory.tcp 子节，也可以顶层直接指定，便于简单 YAML 少写一层结构。
         trajectory_type = str(trajectory.get("type", "tcp_line"))
         if trajectory_type not in {"tcp_line", "cartesian_line"}:
-            raise ValueError(f"TCP line trajectory type must be tcp_line or cartesian_line, got {trajectory_type!r}")
+            raise ValueError(
+                f"TCP line trajectory type must be tcp_line or cartesian_line, got {trajectory_type!r}"
+            )
         tcp = trajectory.get("tcp") or {}
         orientation_mode = str(trajectory.get("orientation_mode", "current")).lower()
         use_orientation = trajectory.get("use_orientation")
         if use_orientation is not None and not bool(use_orientation):
             orientation_mode = "none"
         return cls(
-            tcp_frame_name=str(trajectory.get("tcp_frame_name") or tcp.get("frame_name") or "") or None,
+            tcp_frame_name=str(
+                trajectory.get("tcp_frame_name") or tcp.get("frame_name") or ""
+            )
+            or None,
             start_position=_optional_vector3(trajectory.get("start_position")),
             target_position=_optional_vector3(trajectory.get("target_position")),
             target_offset=_optional_vector3(trajectory.get("target_offset")),
@@ -105,9 +122,17 @@ class MoveTcpLineConfig:
         if not self.tcp_frame_name:
             raise ValueError("tcp_frame_name is required")
         if (self.target_position is None) == (self.target_offset is None):
-            raise ValueError("Exactly one of target_position or target_offset must be provided")
-        if self.orientation_mode == "target" and self.target_orientation is None and self.target_rpy_deg is None:
-            raise ValueError("target orientation requires target_orientation or target_rpy_deg")
+            raise ValueError(
+                "Exactly one of target_position or target_offset must be provided"
+            )
+        if (
+            self.orientation_mode == "target"
+            and self.target_orientation is None
+            and self.target_rpy_deg is None
+        ):
+            raise ValueError(
+                "target orientation requires target_orientation or target_rpy_deg"
+            )
         if self.duration_s < 0:
             raise ValueError("duration cannot be negative")
         if self.sample_hz <= 0:
@@ -158,7 +183,9 @@ def build_tcp_line_command_trajectory(
     command_indices = np.asarray(command_indices, dtype=int).reshape(-1)
     current = np.asarray(current_positions, dtype=float).reshape(-1)
     if current.size != len(dof_names):
-        raise ValueError(f"current_positions expected {len(dof_names)} values, got {current.size}")
+        raise ValueError(
+            f"current_positions expected {len(dof_names)} values, got {current.size}"
+        )
 
     # 正常运行时从 CuMotionConfig 加载真实 cuMotion context；单元测试注入 fake
     # context，避免启动 Isaac/cuMotion，同时覆盖同一条任务数据流。
@@ -179,9 +206,16 @@ def build_tcp_line_command_trajectory(
     current_cspace = current[ik_indices]
     fk = context.make_forward_kinematics()
     start_pose = fk.compute_pose(current_cspace, config.tcp_frame_name)
-    start_position = np.asarray(config.start_position if config.start_position is not None else start_pose.position, dtype=float)
+    start_position = np.asarray(
+        config.start_position
+        if config.start_position is not None
+        else start_pose.position,
+        dtype=float,
+    )
     target_position = _target_position(start_position, config)
-    start_orientation, target_orientation = _orientation_endpoints(start_pose.orientation, config)
+    start_orientation, target_orientation = _orientation_endpoints(
+        start_pose.orientation, config
+    )
 
     # 先在 trajectories 层生成任务空间 waypoint：位置走直线，姿态按 wxyz 四元数
     # slerp。若 orientation_mode=none，waypoint orientation 会是 None，IKRequest
@@ -238,7 +272,9 @@ def build_tcp_line_command_trajectory(
     # execute_joint_trajectory 接收的是 controller command space 轨迹，不是
     # 完整 DOF 轨迹。这里按 command_indices 裁剪列，再交给 trajectories 层统一
     # 由 position 采样构造 JointTrajectory。
-    command_positions = np.asarray([target[command_indices] for target in full_targets], dtype=float)
+    command_positions = np.asarray(
+        [target[command_indices] for target in full_targets], dtype=float
+    )
     trajectory = joint_trajectory_from_positions(
         times=times,
         positions=command_positions,
@@ -248,15 +284,21 @@ def build_tcp_line_command_trajectory(
     diagnostics = TcpLineDiagnostics(
         start_position=start_position,
         target_position=target_position,
-        start_orientation=None if start_orientation is None else start_orientation.copy(),
-        target_orientation=None if target_orientation is None else target_orientation.copy(),
+        start_orientation=None
+        if start_orientation is None
+        else start_orientation.copy(),
+        target_orientation=None
+        if target_orientation is None
+        else target_orientation.copy(),
         ik_joint_names=tuple(ik_joint_names),
         max_position_error=max(position_errors),
     )
     return trajectory, diagnostics
 
 
-def _target_position(start_position: np.ndarray, config: MoveTcpLineConfig) -> np.ndarray:
+def _target_position(
+    start_position: np.ndarray, config: MoveTcpLineConfig
+) -> np.ndarray:
     """解析 TCP 终点位置。
 
     ``target_position`` 是 base 坐标系下的绝对终点；``target_offset`` 是相对起点的
@@ -268,11 +310,15 @@ def _target_position(start_position: np.ndarray, config: MoveTcpLineConfig) -> n
     if config.target_position is not None:
         return np.asarray(config.target_position, dtype=float).reshape(3)
     if config.target_offset is not None:
-        return np.asarray(start_position, dtype=float).reshape(3) + np.asarray(config.target_offset, dtype=float).reshape(3)
+        return np.asarray(start_position, dtype=float).reshape(3) + np.asarray(
+            config.target_offset, dtype=float
+        ).reshape(3)
     raise ValueError("Exactly one of target_position or target_offset must be provided")
 
 
-def _orientation_endpoints(current_orientation: np.ndarray, config: MoveTcpLineConfig) -> tuple[np.ndarray | None, np.ndarray | None]:
+def _orientation_endpoints(
+    current_orientation: np.ndarray, config: MoveTcpLineConfig
+) -> tuple[np.ndarray | None, np.ndarray | None]:
     """根据姿态模式解析 slerp 的起点和终点四元数。
 
     返回 ``(None, None)`` 表示不约束姿态；返回同一个起终点表示保持当前姿态；
@@ -287,33 +333,49 @@ def _orientation_endpoints(current_orientation: np.ndarray, config: MoveTcpLineC
     if config.orientation_mode == "current":
         return start, start.copy()
     if config.target_orientation is not None:
-        return start, normalize_quat_wxyz(config.target_orientation, label="target_orientation")
+        return start, normalize_quat_wxyz(
+            config.target_orientation, label="target_orientation"
+        )
     if config.target_rpy_deg is not None:
-        return start, normalize_quat_wxyz(rpy_xyz_deg_to_quat_wxyz(config.target_rpy_deg), label="target_rpy_deg")
+        return start, normalize_quat_wxyz(
+            rpy_xyz_deg_to_quat_wxyz(config.target_rpy_deg), label="target_rpy_deg"
+        )
     raise ValueError("target orientation requires target_orientation or target_rpy_deg")
 
 
-def _indices_for_names(dof_names: list[str], joint_names: list[str], *, label: str) -> np.ndarray:
+def _indices_for_names(
+    dof_names: list[str], joint_names: list[str], *, label: str
+) -> np.ndarray:
     """把一组关节名解析成完整 DOF 索引，并在缺失时给出完整上下文。"""
 
     # 名称映射比直接假设索引更安全：cuMotion C-space 通常只是完整 articulation DOF 的子集。
     index_by_name = {name: index for index, name in enumerate(dof_names)}
     missing = [name for name in joint_names if name not in index_by_name]
     if missing:
-        raise ValueError(f"{label} not found in articulation: {missing}. Available DOFs: {dof_names}")
+        raise ValueError(
+            f"{label} not found in articulation: {missing}. Available DOFs: {dof_names}"
+        )
     return np.asarray([index_by_name[name] for name in joint_names], dtype=int)
 
 
-def _require_commanded_ik_joints(dof_names: list[str], command_indices: np.ndarray, ik_indices: np.ndarray) -> None:
+def _require_commanded_ik_joints(
+    dof_names: list[str], command_indices: np.ndarray, ik_indices: np.ndarray
+) -> None:
     """确认控制器命令空间覆盖所有 IK 关节。
 
     如果某个 IK 关节没有被 controller 控制，轨迹即使求出来也无法下发到机器人。
     """
 
     command_index_set = {int(index) for index in command_indices}
-    missing = [dof_names[int(index)] for index in ik_indices if int(index) not in command_index_set]
+    missing = [
+        dof_names[int(index)]
+        for index in ik_indices
+        if int(index) not in command_index_set
+    ]
     if missing:
-        raise ValueError(f"Controller command joints must include all cuMotion IK joints; missing: {missing}")
+        raise ValueError(
+            f"Controller command joints must include all cuMotion IK joints; missing: {missing}"
+        )
 
 
 def _optional_vector3(value) -> tuple[float, float, float] | None:

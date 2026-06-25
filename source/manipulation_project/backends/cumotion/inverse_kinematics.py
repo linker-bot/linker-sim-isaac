@@ -55,7 +55,9 @@ class CuMotionInverseKinematics:
         self.orientation_weight = context.config.orientation_weight
         # IkConfig 可复用，但每次请求会覆盖 warm_start 和容差；构造阶段只写全局默认值。
         if context.config.cspace_seeds is not None:
-            self.config.cspace_seeds = _seed_list(np.asarray(context.config.cspace_seeds, dtype=float))
+            self.config.cspace_seeds = _seed_list(
+                np.asarray(context.config.cspace_seeds, dtype=float)
+            )
         self.config.ccd_max_iterations = int(context.config.ccd_max_iterations)
         self.config.bfgs_max_iterations = int(context.config.bfgs_max_iterations)
         self.config.ccd_orientation_weight = float(context.config.orientation_weight)
@@ -82,7 +84,9 @@ class CuMotionInverseKinematics:
     def _target_pose(self, request: IKRequest):
         """构造 cuMotion 目标位姿对象。"""
 
-        return target_pose(self.cumotion, request.target_position, request.target_orientation)
+        return target_pose(
+            self.cumotion, request.target_position, request.target_orientation
+        )
 
     def _apply_request_config(self, request: IKRequest) -> None:
         """把单次请求的 warm start 和容差写入可复用 IK config。"""
@@ -108,7 +112,9 @@ class CuMotionInverseKinematics:
         frame_name = request.tcp_frame_name or self.tcp_frame_name
         # solve_ik 返回 cuMotion C-space 顺序的关节向量；不要在后端内部重排，调用方会按
         # ``joint_names`` 映射回 articulation。
-        result = self.cumotion.solve_ik(self.kinematics, self._target_pose(request), frame_name, self.config)
+        result = self.cumotion.solve_ik(
+            self.kinematics, self._target_pose(request), frame_name, self.config
+        )
         q = np.asarray(result.cspace_position, dtype=float)
         orientation_error = max(
             float(result.x_axis_orientation_error),
@@ -142,18 +148,28 @@ class CuMotionInverseKinematics:
             np.asarray(request.target_position, dtype=float).reshape(3)
         )
         if request.target_orientation is None:
-            orientation = self.cumotion.CollisionFreeIkSolver.OrientationConstraint.none()
-        else:
-            orientation = self.cumotion.CollisionFreeIkSolver.OrientationConstraint.target(
-                self.cumotion.Rotation3.from_matrix(quat_wxyz_to_matrix(request.target_orientation)),
-                float(request.orientation_tolerance),
+            orientation = (
+                self.cumotion.CollisionFreeIkSolver.OrientationConstraint.none()
             )
-        target = self.cumotion.CollisionFreeIkSolver.TaskSpaceTarget(translation, orientation)
+        else:
+            orientation = (
+                self.cumotion.CollisionFreeIkSolver.OrientationConstraint.target(
+                    self.cumotion.Rotation3.from_matrix(
+                        quat_wxyz_to_matrix(request.target_orientation)
+                    ),
+                    float(request.orientation_tolerance),
+                )
+            )
+        target = self.cumotion.CollisionFreeIkSolver.TaskSpaceTarget(
+            translation, orientation
+        )
         seeds = []
         if request.warm_start is not None:
             seeds.append(np.asarray(request.warm_start, dtype=float).reshape(-1))
         elif self.context.config.cspace_seeds is not None:
-            seeds.extend(_seed_list(np.asarray(self.context.config.cspace_seeds, dtype=float)))
+            seeds.extend(
+                _seed_list(np.asarray(self.context.config.cspace_seeds, dtype=float))
+            )
         results = solver.solve(target, seeds)
         status = results.status()
         success_status = self.cumotion.CollisionFreeIkSolver.Results.Status.SUCCESS
@@ -166,7 +182,11 @@ class CuMotionInverseKinematics:
             self.config.cspace_seeds = [q]
             position_error = self._position_error(q, request, frame_name)
         else:
-            q = np.asarray(request.warm_start, dtype=float).reshape(-1) if request.warm_start is not None else np.array([])
+            q = (
+                np.asarray(request.warm_start, dtype=float).reshape(-1)
+                if request.warm_start is not None
+                else np.array([])
+            )
             position_error = float("inf")
         return IKResult(
             joint_positions=q,
@@ -177,10 +197,14 @@ class CuMotionInverseKinematics:
             num_solutions=len(positions),
         )
 
-    def _position_error(self, joint_positions, request: IKRequest, frame_name: str) -> float:
+    def _position_error(
+        self, joint_positions, request: IKRequest, frame_name: str
+    ) -> float:
         """用 FK 复算解的 TCP 位置误差，作为 collision-free IK 诊断值。"""
 
-        pose = self.kinematics.pose(np.asarray(joint_positions, dtype=float).reshape(-1), frame_name)
+        pose = self.kinematics.pose(
+            np.asarray(joint_positions, dtype=float).reshape(-1), frame_name
+        )
         achieved = np.asarray(pose.translation, dtype=float).reshape(3)
         target = np.asarray(request.target_position, dtype=float).reshape(3)
         return float(np.linalg.norm(achieved - target))

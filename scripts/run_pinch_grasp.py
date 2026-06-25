@@ -33,16 +33,35 @@ if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
 from manipulation_project.app.launch import launch_simulation_app
-from manipulation_project.assets.robot_loader import RobotAssetConfig, import_robot_asset
-from manipulation_project.assets.solver_overrides import SolverIterationConfig, apply_solver_iteration_overrides
-from manipulation_project.assets.usd_overrides import apply_robot_usd_overrides, disable_robot_gravity
+from manipulation_project.assets.robot_loader import (
+    RobotAssetConfig,
+    import_robot_asset,
+)
+from manipulation_project.assets.solver_overrides import (
+    SolverIterationConfig,
+    apply_solver_iteration_overrides,
+)
+from manipulation_project.assets.usd_overrides import (
+    apply_robot_usd_overrides,
+    disable_robot_gravity,
+)
 from manipulation_project.backends.cumotion.context import CuMotionConfig
-from manipulation_project.controllers.config import joint_control_settings, load_controller_profiles, physx_override_configs
+from manipulation_project.controllers.config import (
+    joint_control_settings,
+    load_controller_profiles,
+    physx_override_configs,
+)
 from manipulation_project.controllers.joint_controller import JointController
 from manipulation_project.envs.scene_builder import build_world, configure_visuals
-from manipulation_project.logging.config import joint_logging_config_from_mapping, override_logging_config
+from manipulation_project.logging.config import (
+    joint_logging_config_from_mapping,
+    override_logging_config,
+)
 from manipulation_project.logging.joint_logger import JointTrackingLogger
-from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, add_capsule_rope_reference
+from manipulation_project.objects.capsule_rope import (
+    CapsuleRopeConfig,
+    add_capsule_rope_reference,
+)
 from manipulation_project.robots.mimic import mjcf_equality_follower_joint_names
 from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, PinchGraspTask
 from manipulation_project.utils.config import load_yaml
@@ -61,24 +80,68 @@ def parse_args() -> argparse.Namespace:
     """
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml"))
-    parser.add_argument("--controller-config", type=Path, default=Path("configs/controllers"))
-    parser.add_argument("--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml"))
-    parser.add_argument("--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml"))
-    parser.add_argument("--grasp-config", type=Path, default=Path("configs/trajectories/pinch_grasp.yaml"))
-    parser.add_argument("--logging-config", type=Path, default=Path("configs/logging/default_logger.yaml"))
-    parser.add_argument("--log", type=Path, default=None, help="覆盖关节跟踪 CSV 输出路径")
-    parser.add_argument("--log-interval-steps", type=int, default=None, help="覆盖日志采样步长")
-    parser.add_argument("--log-measured-effort", action="store_true", help="记录 PhysX measured joint effort")
-    parser.add_argument("--log-applied-effort", action="store_true", help="记录 Isaac applied joint effort")
-    parser.add_argument("--log-action-effort", action="store_true", help="记录控制器实际下发的 effort action")
-    parser.add_argument("--no-log-effort-command", action="store_true", help="不记录语义 effort command 列")
+    parser.add_argument(
+        "--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml")
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, default=Path("configs/controllers")
+    )
+    parser.add_argument(
+        "--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml")
+    )
+    parser.add_argument(
+        "--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml")
+    )
+    parser.add_argument(
+        "--grasp-config",
+        type=Path,
+        default=Path("configs/trajectories/pinch_grasp.yaml"),
+    )
+    parser.add_argument(
+        "--logging-config",
+        type=Path,
+        default=Path("configs/logging/default_logger.yaml"),
+    )
+    parser.add_argument(
+        "--log", type=Path, default=None, help="覆盖关节跟踪 CSV 输出路径"
+    )
+    parser.add_argument(
+        "--log-interval-steps", type=int, default=None, help="覆盖日志采样步长"
+    )
+    parser.add_argument(
+        "--log-measured-effort",
+        action="store_true",
+        help="记录 PhysX measured joint effort",
+    )
+    parser.add_argument(
+        "--log-applied-effort",
+        action="store_true",
+        help="记录 Isaac applied joint effort",
+    )
+    parser.add_argument(
+        "--log-action-effort",
+        action="store_true",
+        help="记录控制器实际下发的 effort action",
+    )
+    parser.add_argument(
+        "--no-log-effort-command",
+        action="store_true",
+        help="不记录语义 effort command 列",
+    )
     parser.add_argument("--gui", action="store_true")
     parser.add_argument("--hold", action="store_true", help="最终目标保持到窗口关闭")
-    parser.add_argument("--no-grasp", action="store_true", help="只导入机器人和绳体，并短暂保持初始姿态")
-    parser.add_argument("--short-smoke", action="store_true", help="覆盖阶段时长，用于快速 headless smoke")
+    parser.add_argument(
+        "--no-grasp", action="store_true", help="只导入机器人和绳体，并短暂保持初始姿态"
+    )
+    parser.add_argument(
+        "--short-smoke",
+        action="store_true",
+        help="覆盖阶段时长，用于快速 headless smoke",
+    )
     parser.add_argument("--endpoint", choices=("left", "right"), default=None)
-    parser.add_argument("--control-mode", choices=("position", "velocity", "effort"), default="position")
+    parser.add_argument(
+        "--control-mode", choices=("position", "velocity", "effort"), default="position"
+    )
     parser.add_argument("--physics-frequency", type=float, default=None)
     parser.add_argument("--render-frequency", type=float, default=None)
     parser.add_argument("--gravity-z", type=float, default=None)
@@ -139,7 +202,15 @@ def short_smoke_config(config: PinchGraspConfig) -> PinchGraspConfig:
     )
 
 
-def hold_initial_pose(robot, world, articulation_action_type, controller, simulation_app, render: bool, logger) -> None:
+def hold_initial_pose(
+    robot,
+    world,
+    articulation_action_type,
+    controller,
+    simulation_app,
+    render: bool,
+    logger,
+) -> None:
     """保持当前姿态几步，用于 import smoke。
 
     ``--no-grasp`` 会走这个分支。它不执行抓取任务，只把当前机器人关节位置作为目标反复下发，
@@ -157,7 +228,9 @@ def hold_initial_pose(robot, world, articulation_action_type, controller, simula
         if logger is not None:
             driven_indices = controller.driven_indices
             if logger.should_write(step):
-                log_values = logger.collect_step_values(robot, controller, targets, driven_indices)
+                log_values = logger.collect_step_values(
+                    robot, controller, targets, driven_indices
+                )
                 logger.write(
                     step=step,
                     time_s=(step + 1) * float(world.get_physics_dt()),
@@ -217,9 +290,19 @@ def main() -> None:
     if "env" not in env_config:
         raise ValueError("Environment config must contain top-level env section")
     env = env_config["env"]
-    physics_frequency = float(args.physics_frequency if args.physics_frequency is not None else env.get("physics_frequency", 600.0))
-    render_frequency = float(args.render_frequency if args.render_frequency is not None else env.get("render_frequency", 100.0))
-    gravity_z = float(args.gravity_z if args.gravity_z is not None else env.get("gravity_z", -9.81))
+    physics_frequency = float(
+        args.physics_frequency
+        if args.physics_frequency is not None
+        else env.get("physics_frequency", 600.0)
+    )
+    render_frequency = float(
+        args.render_frequency
+        if args.render_frequency is not None
+        else env.get("render_frequency", 100.0)
+    )
+    gravity_z = float(
+        args.gravity_z if args.gravity_z is not None else env.get("gravity_z", -9.81)
+    )
     if physics_frequency <= 0 or render_frequency <= 0:
         raise ValueError("physics and render frequencies must be positive")
 
@@ -235,7 +318,9 @@ def main() -> None:
         # 创建 World。physics_dt 控制 PhysX step，rendering_dt 控制 GUI 刷新间隔。
         physics_dt = 1.0 / physics_frequency
         rendering_dt = 1.0 / render_frequency if args.gui else physics_dt
-        world = build_world(physics_dt=physics_dt, rendering_dt=rendering_dt, gravity_z=gravity_z)
+        world = build_world(
+            physics_dt=physics_dt, rendering_dt=rendering_dt, gravity_z=gravity_z
+        )
         if args.gui:
             configure_visuals()
 
@@ -252,7 +337,9 @@ def main() -> None:
         )
 
         # 导入机器人资产。MJCF/URDF 导入后会生成 stage prim；后续控制和 PhysX 覆盖都基于该 prim。
-        articulation_path, asset_path, imported_root_path = import_robot_asset(robot_asset)
+        articulation_path, asset_path, imported_root_path = import_robot_asset(
+            robot_asset
+        )
         mjcf_path = asset_path if robot_asset.asset_type == "mjcf" else None
 
         # 对刚导入的 USD prim 做运行时覆盖：关节 drive 初值、摩擦、最大力、碰撞近似等。
@@ -277,13 +364,18 @@ def main() -> None:
         # 如果需要测试真实重力下的下垂、显式控制或力控行为，可以传 --enable-robot-gravity。
         if not args.enable_robot_gravity:
             disabled = disable_robot_gravity(imported_root_path)
-            print(f"RUN_PINCH_GRASP_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}", flush=True)
+            print(
+                f"RUN_PINCH_GRASP_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}",
+                flush=True,
+            )
         else:
             print("RUN_PINCH_GRASP_GRAVITY robot_gravity=true", flush=True)
         print(f"RUN_PINCH_GRASP_SOLVER {solver_counts}", flush=True)
 
         # 将导入后的 articulation 包装为 Isaac Sim SingleArticulation，并 reset world 以初始化 handles。
-        robot = world.scene.add(SingleArticulation(prim_path=articulation_path, name=robot_asset.name))
+        robot = world.scene.add(
+            SingleArticulation(prim_path=articulation_path, name=robot_asset.name)
+        )
         world.reset()
         world.get_physics_context().set_gravity(gravity_z)
         if not args.enable_robot_gravity:
@@ -297,7 +389,9 @@ def main() -> None:
         controller = JointController(
             robot,
             joint_names=controlled_joints,
-            settings=joint_control_settings(controller_profiles, mode=args.control_mode),
+            settings=joint_control_settings(
+                controller_profiles, mode=args.control_mode
+            ),
             mjcf_path=mjcf_path,
         )
         controller.configure_runtime()
@@ -308,9 +402,17 @@ def main() -> None:
 
         # 日志只记录实际受驱动的 DOF，即主动关节 + mimic follower。flush_interval_steps 控制
         # CSV 刷盘频率，避免每个 physics step 都 flush 造成 I/O 开销过大。
-        driven_joint_names = [list(robot.dof_names)[int(index)] for index in controller.driven_indices]
-        flush_interval_steps = logging_config.flush_interval_steps(float(world.get_physics_dt()))
-        log_path = None if not logging_config.enabled or logging_config.joint_tracking_path is None else repo_path(logging_config.joint_tracking_path)
+        driven_joint_names = [
+            list(robot.dof_names)[int(index)] for index in controller.driven_indices
+        ]
+        flush_interval_steps = logging_config.flush_interval_steps(
+            float(world.get_physics_dt())
+        )
+        log_path = (
+            None
+            if not logging_config.enabled or logging_config.joint_tracking_path is None
+            else repo_path(logging_config.joint_tracking_path)
+        )
         logger = JointTrackingLogger(
             log_path,
             driven_joint_names,
@@ -324,7 +426,9 @@ def main() -> None:
             f"follower_relations={controller.follower_mapper.relations}",
             flush=True,
         )
-        print("RUN_PINCH_GRASP_DOF_NAMES " + ", ".join(list(robot.dof_names)), flush=True)
+        print(
+            "RUN_PINCH_GRASP_DOF_NAMES " + ", ".join(list(robot.dof_names)), flush=True
+        )
 
         try:
             if args.no_grasp:

@@ -21,10 +21,22 @@ class _Action:
         joint_efforts=None,
         joint_indices=None,
     ) -> None:
-        self.joint_positions = None if joint_positions is None else np.asarray(joint_positions, dtype=float)
-        self.joint_velocities = None if joint_velocities is None else np.asarray(joint_velocities, dtype=float)
-        self.joint_efforts = None if joint_efforts is None else np.asarray(joint_efforts, dtype=float)
-        self.joint_indices = None if joint_indices is None else np.asarray(joint_indices, dtype=int)
+        self.joint_positions = (
+            None
+            if joint_positions is None
+            else np.asarray(joint_positions, dtype=float)
+        )
+        self.joint_velocities = (
+            None
+            if joint_velocities is None
+            else np.asarray(joint_velocities, dtype=float)
+        )
+        self.joint_efforts = (
+            None if joint_efforts is None else np.asarray(joint_efforts, dtype=float)
+        )
+        self.joint_indices = (
+            None if joint_indices is None else np.asarray(joint_indices, dtype=int)
+        )
 
 
 class _FakeController:
@@ -95,7 +107,9 @@ class _GlobalModeRobot(_FakeRobot):
         self.controller = _GlobalModeController()
 
 
-def _controller(settings: ComponentControlSettings) -> tuple[JointController, _FakeRobot]:
+def _controller(
+    settings: ComponentControlSettings,
+) -> tuple[JointController, _FakeRobot]:
     robot = _FakeRobot()
     controller = JointController(
         robot,
@@ -119,7 +133,9 @@ def _controller(settings: ComponentControlSettings) -> tuple[JointController, _F
     return controller, robot
 
 
-def test_explicit_position_control_computes_pd_effort_and_keeps_follower_position_drive() -> None:
+def test_explicit_position_control_computes_pd_effort_and_keeps_follower_position_drive() -> (
+    None
+):
     controller, robot = _controller(
         ComponentControlSettings(
             mode="position",

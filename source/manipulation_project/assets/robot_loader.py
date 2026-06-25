@@ -89,16 +89,24 @@ def find_articulation_root(prim_path: str, *, require_rigid_body: bool = False) 
         raise RuntimeError(f"Stage prim was not created: {prim_path}")
 
     root = get_prim_at_path(prim_path)
-    articulation_roots = [prim for prim in Usd.PrimRange(root) if prim.HasAPI(UsdPhysics.ArticulationRootAPI)]
+    articulation_roots = [
+        prim
+        for prim in Usd.PrimRange(root)
+        if prim.HasAPI(UsdPhysics.ArticulationRootAPI)
+    ]
     if not articulation_roots:
         raise RuntimeError(f"No articulation root found under stage prim: {prim_path}")
 
     if require_rigid_body:
         # MJCF importer 常会在 articulation root 附近创建额外 Xform。执行控制时需要绑定到
         # 同时具备刚体语义的 root，才能被 Isaac articulation view 正确识别。
-        rigid_roots = [prim for prim in articulation_roots if prim.HasAPI(UsdPhysics.RigidBodyAPI)]
+        rigid_roots = [
+            prim for prim in articulation_roots if prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        ]
         if not rigid_roots:
-            raise RuntimeError(f"No rigid articulation root found under stage prim: {prim_path}")
+            raise RuntimeError(
+                f"No rigid articulation root found under stage prim: {prim_path}"
+            )
         return str(rigid_roots[0].GetPath())
     return str(articulation_roots[0].GetPath())
 
@@ -190,7 +198,9 @@ def configure_urdf_import(
     if dest_path is not None:
         command_args["dest_path"] = str(dest_path)
 
-    status, prim_path = omni.kit.commands.execute("URDFParseAndImportFile", **command_args)
+    status, prim_path = omni.kit.commands.execute(
+        "URDFParseAndImportFile", **command_args
+    )
     if not status or not prim_path:
         raise RuntimeError(f"Failed to import URDF: {urdf_path}")
     return str(prim_path)
@@ -216,11 +226,15 @@ def import_robot_asset(config: RobotAssetConfig) -> tuple[str, Path, str]:
 
     if config.asset_type == "mjcf":
         imported_path = configure_mjcf_import(asset_path, config.prim_path)
-        articulation_path = find_articulation_root(imported_path, require_rigid_body=True)
+        articulation_path = find_articulation_root(
+            imported_path, require_rigid_body=True
+        )
         return articulation_path, asset_path, imported_path
 
     if config.asset_type == "urdf":
-        articulation_path = configure_urdf_import(asset_path, drive_type=config.urdf_drive_type)
+        articulation_path = configure_urdf_import(
+            asset_path, drive_type=config.urdf_drive_type
+        )
         return articulation_path, asset_path, articulation_path
 
     raise ValueError(f"Unsupported robot asset type: {config.asset_type}")

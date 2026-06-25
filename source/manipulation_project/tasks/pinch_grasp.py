@@ -24,23 +24,25 @@ import tempfile
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.context import CuMotionConfig, CuMotionContext
+from manipulation_project.backends.cumotion.context import (
+    CuMotionConfig,
+    CuMotionContext,
+)
 from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.planning.requests import IKRequest
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
-from manipulation_project.tasks.move_tcp_line import MoveTcpLineConfig, build_tcp_line_command_trajectory
+from manipulation_project.tasks.move_tcp_line import (
+    MoveTcpLineConfig,
+    build_tcp_line_command_trajectory,
+)
 from manipulation_project.tasks.primitives import (
     ExecutableTask,
     HoldTask,
     MoveFullJointTrajectoryTask,
     MoveJointTargetTask,
     TaskRuntime,
-    hold_joint_target,
-    move_full_joint_trajectory,
-    move_joint_target,
-    step_joint_target,
 )
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
 from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
@@ -107,27 +109,54 @@ class PinchGraspConfig:
         grasp = data["grasp"]
         return cls(
             endpoint=str(grasp.get("endpoint", cls.endpoint)),
-            target_world_offset=tuple(float(value) for value in grasp.get("target_world_offset", cls.target_world_offset)),
-            target_rpy_deg=tuple(float(value) for value in grasp.get("target_rpy_deg", cls.target_rpy_deg)),
+            target_world_offset=tuple(
+                float(value)
+                for value in grasp.get("target_world_offset", cls.target_world_offset)
+            ),
+            target_rpy_deg=tuple(
+                float(value)
+                for value in grasp.get("target_rpy_deg", cls.target_rpy_deg)
+            ),
             use_orientation=bool(grasp.get("use_orientation", cls.use_orientation)),
-            approach_distance=float(grasp.get("approach_distance", cls.approach_distance)),
+            approach_distance=float(
+                grasp.get("approach_distance", cls.approach_distance)
+            ),
             lift_height=float(grasp.get("lift_height", cls.lift_height)),
-            approach_line_sample_hz=float(grasp.get("approach_line_sample_hz", cls.approach_line_sample_hz)),
+            approach_line_sample_hz=float(
+                grasp.get("approach_line_sample_hz", cls.approach_line_sample_hz)
+            ),
             prep_duration=float(grasp.get("prep_duration", cls.prep_duration)),
             move_duration=float(grasp.get("move_duration", cls.move_duration)),
-            approach_duration=float(grasp.get("approach_duration", cls.approach_duration)),
+            approach_duration=float(
+                grasp.get("approach_duration", cls.approach_duration)
+            ),
             close_duration=float(grasp.get("close_duration", cls.close_duration)),
             lift_duration=float(grasp.get("lift_duration", cls.lift_duration)),
             wiggle_cycles=int(grasp.get("wiggle_cycles", cls.wiggle_cycles)),
             wiggle_amplitude=float(grasp.get("wiggle_amplitude", cls.wiggle_amplitude)),
             wiggle_duration=float(grasp.get("wiggle_duration", cls.wiggle_duration)),
-            wiggle_axis=tuple(float(value) for value in grasp.get("wiggle_axis", cls.wiggle_axis)),
-            final_hold_duration=float(grasp.get("final_hold_duration", cls.final_hold_duration)),
-            post_joint_sweep_duration=float(grasp.get("post_joint_sweep_duration", cls.post_joint_sweep_duration)),
-            post_joint_sweep_targets=tuple(float(value) for value in grasp.get("post_joint_sweep_targets", cls.post_joint_sweep_targets)),
+            wiggle_axis=tuple(
+                float(value) for value in grasp.get("wiggle_axis", cls.wiggle_axis)
+            ),
+            final_hold_duration=float(
+                grasp.get("final_hold_duration", cls.final_hold_duration)
+            ),
+            post_joint_sweep_duration=float(
+                grasp.get("post_joint_sweep_duration", cls.post_joint_sweep_duration)
+            ),
+            post_joint_sweep_targets=tuple(
+                float(value)
+                for value in grasp.get(
+                    "post_joint_sweep_targets", cls.post_joint_sweep_targets
+                )
+            ),
             tcp_frame_name=str(grasp.get("tcp_frame_name", cls.tcp_frame_name)),
-            pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"]) if "pre_pinch_hand_targets" in grasp else None,
-            closed_pinch_hand_targets=dict(grasp["closed_pinch_hand_targets"]) if "closed_pinch_hand_targets" in grasp else None,
+            pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"])
+            if "pre_pinch_hand_targets" in grasp
+            else None,
+            closed_pinch_hand_targets=dict(grasp["closed_pinch_hand_targets"])
+            if "closed_pinch_hand_targets" in grasp
+            else None,
         )
 
     @property
@@ -139,7 +168,9 @@ class PinchGraspConfig:
         """
 
         if self.pre_pinch_hand_targets is None:
-            raise ValueError("pre_pinch_hand_targets must be provided for the selected hand")
+            raise ValueError(
+                "pre_pinch_hand_targets must be provided for the selected hand"
+            )
         return dict(self.pre_pinch_hand_targets)
 
     @property
@@ -151,7 +182,9 @@ class PinchGraspConfig:
         """
 
         if self.closed_pinch_hand_targets is None:
-            raise ValueError("closed_pinch_hand_targets must be provided for the selected hand")
+            raise ValueError(
+                "closed_pinch_hand_targets must be provided for the selected hand"
+            )
         return dict(self.closed_pinch_hand_targets)
 
     def validate(self) -> None:
@@ -191,14 +224,20 @@ class PinchGraspConfig:
         if not self.tcp_frame_name:
             raise ValueError("tcp_frame_name cannot be empty")
         if not self.pre_pinch_hand_targets:
-            raise ValueError("pre_pinch_hand_targets must be provided for the selected hand")
+            raise ValueError(
+                "pre_pinch_hand_targets must be provided for the selected hand"
+            )
         if not self.closed_pinch_hand_targets:
-            raise ValueError("closed_pinch_hand_targets must be provided for the selected hand")
+            raise ValueError(
+                "closed_pinch_hand_targets must be provided for the selected hand"
+            )
         if np.linalg.norm(np.asarray(self.wiggle_axis, dtype=float)) <= 0.0:
             raise ValueError("wiggle_axis must be non-zero")
 
 
-def set_joint_targets_by_indices(target: np.ndarray, indices: np.ndarray, values: np.ndarray) -> None:
+def set_joint_targets_by_indices(
+    target: np.ndarray, indices: np.ndarray, values: np.ndarray
+) -> None:
     """按索引原地写入一组关节目标。
 
     参数:
@@ -213,7 +252,12 @@ def set_joint_targets_by_indices(target: np.ndarray, indices: np.ndarray, values
         target[int(index)] = float(value)
 
 
-def grasp_target_position(config: PinchGraspConfig, rope_config: CapsuleRopeConfig, *, lift_height: float = 0.0) -> np.ndarray:
+def grasp_target_position(
+    config: PinchGraspConfig,
+    rope_config: CapsuleRopeConfig,
+    *,
+    lift_height: float = 0.0,
+) -> np.ndarray:
     """计算夹捏 TCP 的世界坐标目标位置。
 
     参数:
@@ -288,7 +332,9 @@ class PinchGraspTask:
         self.config.validate()
         # 先用闭合手型计算 thumb/index 的几何夹捏中心。这里需要展开 mimic follower，
         # 否则 MJCF 运动链里从动关节会停在 0，TCP 会偏离实际闭合指尖中心。
-        closed_geometry_targets = expand_targets_with_mjcf_equalities(self.config.closed_targets, self.mjcf_path)
+        closed_geometry_targets = expand_targets_with_mjcf_equalities(
+            self.config.closed_targets, self.mjcf_path
+        )
         tcp = make_pinch_tcp(
             self.mjcf_path,
             closed_geometry_targets,
@@ -299,14 +345,22 @@ class PinchGraspTask:
         # 三个核心笛卡尔目标：接近点、真正抓取点、抬升点。wiggle 目标在抬升点附近
         # 沿配置轴线来回偏移，用来验证抓取是否稳定。
         pinch_world = grasp_target_position(self.config, self.rope_config)
-        approach_world = pinch_world + np.asarray([0.0, 0.0, self.config.approach_distance], dtype=float)
-        lifted_world = grasp_target_position(self.config, self.rope_config, lift_height=self.config.lift_height)
+        approach_world = pinch_world + np.asarray(
+            [0.0, 0.0, self.config.approach_distance], dtype=float
+        )
+        lifted_world = grasp_target_position(
+            self.config, self.rope_config, lift_height=self.config.lift_height
+        )
         wiggle_axis = np.asarray(self.config.wiggle_axis, dtype=float)
         wiggle_axis = wiggle_axis / np.linalg.norm(wiggle_axis)
         wiggle_worlds: list[np.ndarray] = []
         for _cycle_index in range(self.config.wiggle_cycles):
-            wiggle_worlds.append(lifted_world - wiggle_axis * self.config.wiggle_amplitude)
-            wiggle_worlds.append(lifted_world + wiggle_axis * self.config.wiggle_amplitude)
+            wiggle_worlds.append(
+                lifted_world - wiggle_axis * self.config.wiggle_amplitude
+            )
+            wiggle_worlds.append(
+                lifted_world + wiggle_axis * self.config.wiggle_amplitude
+            )
 
         target_orientation = rpy_xyz_deg_to_quat_wxyz(self.config.target_rpy_deg)
         ik_orientation = target_orientation if self.config.use_orientation else None
@@ -314,7 +368,9 @@ class PinchGraspTask:
         # 避免改动仓库里的基础 URDF，同时让求解器直接以夹捏中心作为末端。
         with tempfile.TemporaryDirectory(prefix="pinch_ik_tcp_") as temp_dir:
             base_urdf_path = Path(self.cumotion_config.urdf_path)
-            tcp_urdf = Path(temp_dir) / f"{base_urdf_path.stem}_{self.tcp_frame_name}.urdf"
+            tcp_urdf = (
+                Path(temp_dir) / f"{base_urdf_path.stem}_{self.tcp_frame_name}.urdf"
+            )
             write_tcp_urdf(base_urdf_path, tcp_urdf, tcp)
             context = CuMotionContext(
                 replace(
@@ -328,11 +384,19 @@ class PinchGraspTask:
             dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
             # cuMotion 模型和 Isaac articulation 可能来自不同资产文件。这里按名称检查能尽早
             # 发现 URDF/MJCF 关节名不一致，而不是在写目标数组时静默错位。
-            missing_ik_joints = [name for name in ik_joint_names if name not in dof_index_by_name]
+            missing_ik_joints = [
+                name for name in ik_joint_names if name not in dof_index_by_name
+            ]
             if missing_ik_joints:
-                raise ValueError(f"cuMotion joints not found in articulation: {missing_ik_joints}")
-            arm_indices = np.asarray([dof_index_by_name[name] for name in ik_joint_names], dtype=int)
-            current_cspace = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)[arm_indices]
+                raise ValueError(
+                    f"cuMotion joints not found in articulation: {missing_ik_joints}"
+                )
+            arm_indices = np.asarray(
+                [dof_index_by_name[name] for name in ik_joint_names], dtype=int
+            )
+            current_cspace = np.asarray(
+                robot.get_joint_positions(), dtype=float
+            ).reshape(-1)[arm_indices]
             solver = context.make_inverse_kinematics(
                 tcp_frame_name=self.tcp_frame_name,
             )
@@ -348,9 +412,13 @@ class PinchGraspTask:
                 )
             )
             initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
-            pre_pinch_all = target_vector_from_mapping(dof_names, self.config.pre_targets, base=initial_all)
+            pre_pinch_all = target_vector_from_mapping(
+                dof_names, self.config.pre_targets, base=initial_all
+            )
             approach_all = pre_pinch_all.copy()
-            set_joint_targets_by_indices(approach_all, arm_indices, approach.joint_positions)
+            set_joint_targets_by_indices(
+                approach_all, arm_indices, approach.joint_positions
+            )
             approach_line_config = MoveTcpLineConfig(
                 tcp_frame_name=self.tcp_frame_name,
                 start_position=None,
@@ -362,14 +430,18 @@ class PinchGraspTask:
             )
             # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
             # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的任务意图。
-            grasp_line_trajectory, grasp_line_diagnostics = build_tcp_line_command_trajectory(
-                dof_names=dof_names,
-                command_indices=np.arange(len(dof_names), dtype=int),
-                current_positions=approach_all,
-                config=approach_line_config,
-                context=context,
+            grasp_line_trajectory, grasp_line_diagnostics = (
+                build_tcp_line_command_trajectory(
+                    dof_names=dof_names,
+                    command_indices=np.arange(len(dof_names), dtype=int),
+                    current_positions=approach_all,
+                    config=approach_line_config,
+                    context=context,
+                )
             )
-            grasp_joint_positions = np.asarray(grasp_line_trajectory.positions[-1], dtype=float)[arm_indices]
+            grasp_joint_positions = np.asarray(
+                grasp_line_trajectory.positions[-1], dtype=float
+            )[arm_indices]
             lift = solver.solve(
                 IKRequest(
                     target_position=lifted_world,
@@ -397,15 +469,21 @@ class PinchGraspTask:
 
         # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
         # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
-        grasp_open_all = np.asarray(grasp_line_trajectory.positions[-1], dtype=float).copy()
-        grasp_closed_all = target_vector_from_mapping(dof_names, self.config.closed_targets, base=grasp_open_all)
+        grasp_open_all = np.asarray(
+            grasp_line_trajectory.positions[-1], dtype=float
+        ).copy()
+        grasp_closed_all = target_vector_from_mapping(
+            dof_names, self.config.closed_targets, base=grasp_open_all
+        )
         lifted_all = grasp_closed_all.copy()
         set_joint_targets_by_indices(lifted_all, arm_indices, lift.joint_positions)
 
         wiggle_all_targets = []
         for _world, result in wiggles:
             wiggle_all = grasp_closed_all.copy()
-            set_joint_targets_by_indices(wiggle_all, arm_indices, result.joint_positions)
+            set_joint_targets_by_indices(
+                wiggle_all, arm_indices, result.joint_positions
+            )
             wiggle_all_targets.append(wiggle_all)
 
         # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
@@ -440,7 +518,10 @@ class PinchGraspTask:
                 "approach_line_max_error": grasp_line_diagnostics.max_position_error,
                 "lift_success": lift.success,
                 "lift_error": lift.position_error,
-                "wiggles": [(world_target, result.success, result.position_error) for world_target, result in wiggles],
+                "wiggles": [
+                    (world_target, result.success, result.position_error)
+                    for world_target, result in wiggles
+                ],
             },
         }
 
@@ -560,5 +641,6 @@ class PinchGraspTask:
             step = task.run(runtime, step)
         plan["steps"] = step
         return plan
+
     # 文件结束：本类只定义抓取任务配置、规划和执行编排，不在导入时产生仿真副作用。
     pass

@@ -3,12 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from manipulation_project.assets.asset_paths import DEFAULT_AR5_RIGHT_URDF, DEFAULT_L6_RIGHT_URDF
+from manipulation_project.assets.asset_paths import (
+    DEFAULT_AR5_RIGHT_URDF,
+    DEFAULT_L6_RIGHT_URDF,
+)
 from manipulation_project.assets.robot_loader import RobotAssetConfig
 from manipulation_project.assets.solver_overrides import SolverIterationConfig
 from manipulation_project.backends.cumotion.context import CuMotionConfig
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
-from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, grasp_target_position
+from manipulation_project.tasks.pinch_grasp import (
+    PinchGraspConfig,
+    grasp_target_position,
+)
 from manipulation_project.utils.config import load_yaml
 
 
@@ -73,14 +79,18 @@ def test_default_joint_trajectory_config() -> None:
 
 
 def test_default_rope_and_grasp_configs() -> None:
-    rope = CapsuleRopeConfig.from_mapping(load_yaml("configs/objects/capsule_rope.yaml"))
+    rope = CapsuleRopeConfig.from_mapping(
+        load_yaml("configs/objects/capsule_rope.yaml")
+    )
     rope.validate()
     assert rope.asset_file().is_file()
     assert rope.prim_path == "/World/CapsuleRope"
     assert rope.root_path == "/CapsuleRope"
     assert rope.radius is not None and rope.radius > 0.0
     assert rope.twist_limit_deg is not None and rope.twist_limit_deg > 0.0
-    grasp = PinchGraspConfig.from_mapping(load_yaml("configs/trajectories/pinch_grasp.yaml"))
+    grasp = PinchGraspConfig.from_mapping(
+        load_yaml("configs/trajectories/pinch_grasp.yaml")
+    )
     grasp.validate()
     left_center = endpoint_center(rope, "left")
     target = grasp_target_position(grasp, rope)
@@ -94,21 +104,27 @@ def test_task_configs_reject_obsolete_shapes() -> None:
     except ValueError:
         pass
     else:
-        raise AssertionError("RobotAssetConfig accepted config without top-level robot section")
+        raise AssertionError(
+            "RobotAssetConfig accepted config without top-level robot section"
+        )
 
     try:
         CapsuleRopeConfig.from_mapping({"segments": 18, "length": 0.75})
     except ValueError:
         pass
     else:
-        raise AssertionError("CapsuleRopeConfig accepted config without object/rope sections")
+        raise AssertionError(
+            "CapsuleRopeConfig accepted config without object/rope sections"
+        )
 
     try:
         PinchGraspConfig.from_mapping({"endpoint": "left"})
     except ValueError:
         pass
     else:
-        raise AssertionError("PinchGraspConfig accepted config without top-level grasp section")
+        raise AssertionError(
+            "PinchGraspConfig accepted config without top-level grasp section"
+        )
 
 
 def test_env_configs_provide_solver_settings() -> None:

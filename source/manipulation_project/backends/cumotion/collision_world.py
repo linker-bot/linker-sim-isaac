@@ -27,7 +27,9 @@ class CuMotionCollisionWorld:
     ``world_view`` 并刷新，满足 collision-free IK solver 对静态世界快照的要求。
     """
 
-    def __init__(self, context, collision_objects: Sequence[CollisionObject] = ()) -> None:
+    def __init__(
+        self, context, collision_objects: Sequence[CollisionObject] = ()
+    ) -> None:
         """根据项目碰撞对象初始化 cuMotion world view。"""
 
         self.context = context
@@ -48,7 +50,9 @@ class CuMotionCollisionWorld:
         if not obj.enabled:
             return
         obstacle = self._make_obstacle(obj)
-        handle = self.world.add_obstacle(obstacle, pose_from_matrix(self.cumotion, obj.pose_matrix()))
+        handle = self.world.add_obstacle(
+            obstacle, pose_from_matrix(self.cumotion, obj.pose_matrix())
+        )
         self.handles[obj.name] = handle
 
     def update(self) -> None:
@@ -67,16 +71,26 @@ class CuMotionCollisionWorld:
         obstacle = self.cumotion.create_obstacle(obstacle_type)
         size = np.asarray(obj.padded_size(), dtype=float)
         if shape == "cuboid":
-            obstacle.set_attribute(self.cumotion.Obstacle.Attribute.SIDE_LENGTHS, size.reshape(3))
+            obstacle.set_attribute(
+                self.cumotion.Obstacle.Attribute.SIDE_LENGTHS, size.reshape(3)
+            )
         elif shape == "sphere":
-            obstacle.set_attribute(self.cumotion.Obstacle.Attribute.RADIUS, float(size[0]))
+            obstacle.set_attribute(
+                self.cumotion.Obstacle.Attribute.RADIUS, float(size[0])
+            )
         elif shape == "capsule":
-            obstacle.set_attribute(self.cumotion.Obstacle.Attribute.RADIUS, float(size[0]))
-            obstacle.set_attribute(self.cumotion.Obstacle.Attribute.HEIGHT, float(size[1]))
+            obstacle.set_attribute(
+                self.cumotion.Obstacle.Attribute.RADIUS, float(size[0])
+            )
+            obstacle.set_attribute(
+                self.cumotion.Obstacle.Attribute.HEIGHT, float(size[1])
+            )
         return obstacle
 
 
-def make_collision_world(context, collision_objects: Sequence[CollisionObject] = ()) -> CuMotionCollisionWorld:
+def make_collision_world(
+    context, collision_objects: Sequence[CollisionObject] = ()
+) -> CuMotionCollisionWorld:
     """构建 cuMotion collision world。"""
 
     return CuMotionCollisionWorld(context, collision_objects)

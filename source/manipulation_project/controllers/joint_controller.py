@@ -23,7 +23,12 @@ from pathlib import Path
 
 import numpy as np
 
-from manipulation_project.controllers.types import ControlMethod, ControlMode, ControlTargets, JointControlSettings
+from manipulation_project.controllers.types import (
+    ControlMethod,
+    ControlMode,
+    ControlTargets,
+    JointControlSettings,
+)
 from manipulation_project.robots.classification import component_for_name
 from manipulation_project.robots.joint_groups import resolve_joint_indices
 from manipulation_project.robots.mimic import (
@@ -75,19 +80,29 @@ class JointController:
         # 命令输入，否则用户给 master 和 follower 同时下目标时会破坏 mimic 关系。
         self.follower_joint_names = mjcf_equality_follower_joint_names(mjcf_path)
         self.follower_indices = np.asarray(
-            [index for index, name in enumerate(self.dof_names) if name in self.follower_joint_names],
+            [
+                index
+                for index, name in enumerate(self.dof_names)
+                if name in self.follower_joint_names
+            ],
             dtype=int,
         )
         follower_index_set = {int(index) for index in self.follower_indices}
         # command_indices 只保留主动关节。即使用户的 controlled_joints 包含 follower，
         # 初始化时也会剔除，确保 follower 只由 master 实际状态推导。
         self.command_indices = np.asarray(
-            [int(index) for index in requested_indices if int(index) not in follower_index_set],
+            [
+                int(index)
+                for index in requested_indices
+                if int(index) not in follower_index_set
+            ],
             dtype=int,
         )
         # driven_indices 用于日志和诊断：它包含控制器实际会下发 action 的全部 DOF，
         # 即主动关节加 follower，但不包含 articulation 中其它自由度。
-        self.driven_indices = np.unique(np.concatenate([self.command_indices, self.follower_indices])).astype(int)
+        self.driven_indices = np.unique(
+            np.concatenate([self.command_indices, self.follower_indices])
+        ).astype(int)
         self.follower_mapper = MimicFollowerTargetMapper(self.dof_names, mjcf_path)
         self.settings = settings
         self.mjcf_path = mjcf_path
@@ -130,24 +145,36 @@ class JointController:
         self._switch_control_modes(controller)
         self._configure_joint_friction()
 
-    def _assign_active_runtime_parameters(self, stiffness: np.ndarray, damping: np.ndarray) -> None:
+    def _assign_active_runtime_parameters(
+        self, stiffness: np.ndarray, damping: np.ndarray
+    ) -> None:
         """按部件写入主动关节的控制增益和 effort 限幅。"""
 
         for group in ("arm", "hand", "default"):
             group_indices = np.asarray(
-                [index for index in self.command_indices if component_for_name(self.dof_names[int(index)]) == group],
+                [
+                    index
+                    for index in self.command_indices
+                    if component_for_name(self.dof_names[int(index)]) == group
+                ],
                 dtype=int,
             )
             if not group_indices.size:
                 continue
             settings = self.settings.component(self.dof_names[int(group_indices[0])])
-            kp_values = expand_scalar_or_vector(settings.stiffness, len(group_indices), f"{group} active stiffness")
-            kd_values = expand_scalar_or_vector(settings.damping, len(group_indices), f"{group} active damping")
+            kp_values = expand_scalar_or_vector(
+                settings.stiffness, len(group_indices), f"{group} active stiffness"
+            )
+            kd_values = expand_scalar_or_vector(
+                settings.damping, len(group_indices), f"{group} active damping"
+            )
             # 显式 position/velocity 控制在 Python 侧计算 effort；这些缓存就是每步计算残差时
             # 使用的 kp/kd 和限幅。implicit 模式缓存同样的值，但实际 effort 由 PhysX drive 算。
             self._active_stiffness[group_indices] = kp_values
             self._active_damping[group_indices] = kd_values
-            self._active_effort_limits[group_indices] = abs(float(settings.active_effort_limit()))
+            self._active_effort_limits[group_indices] = abs(
+                float(settings.active_effort_limit())
+            )
             for index in group_indices:
                 self._active_specs[int(index)] = (settings.mode, settings.method)
 
@@ -160,12 +187,18 @@ class JointController:
             elif settings.mode == "velocity" and settings.method == "implicit":
                 damping[group_indices] = kd_values
 
-    def _assign_follower_runtime_parameters(self, stiffness: np.ndarray, damping: np.ndarray) -> None:
+    def _assign_follower_runtime_parameters(
+        self, stiffness: np.ndarray, damping: np.ndarray
+    ) -> None:
         """按部件写入 follower 的 Isaac position drive 增益。"""
 
         for group in ("arm", "hand", "default"):
             group_indices = np.asarray(
-                [index for index in self.follower_indices if component_for_name(self.dof_names[int(index)]) == group],
+                [
+                    index
+                    for index in self.follower_indices
+                    if component_for_name(self.dof_names[int(index)]) == group
+                ],
                 dtype=int,
             )
             if not group_indices.size:
@@ -194,7 +227,11 @@ class JointController:
         if view is not None and hasattr(view, "get_max_efforts"):
             runtime_max_efforts = view.get_max_efforts()
             if runtime_max_efforts is not None:
-                max_efforts = np.asarray(runtime_max_efforts, dtype=float).reshape(-1)[: self.robot.num_dof].copy()
+                max_efforts = (
+                    np.asarray(runtime_max_efforts, dtype=float)
+                    .reshape(-1)[: self.robot.num_dof]
+                    .copy()
+                )
 
         # 主动关节使用 active effort limit：implicit drive 作为 max force，显式/direct 模式
         # 作为 action effort 的对称限幅。
@@ -208,7 +245,9 @@ class JointController:
             follower_max_force = settings.follower_max_force
             if follower_max_force is None:
                 follower_max_force = settings.max_force
-            max_efforts[int(index)] = abs(float(follower_max_force)) if follower_max_force > 0 else 0.0
+            max_efforts[int(index)] = (
+                abs(float(follower_max_force)) if follower_max_force > 0 else 0.0
+            )
         return max_efforts
 
     def _configure_effort_modes(self, controller) -> None:
@@ -220,7 +259,8 @@ class JointController:
             [
                 index
                 for index in self.command_indices
-                if self._active_specs.get(int(index)) in {
+                if self._active_specs.get(int(index))
+                in {
                     ("position", "explicit"),
                     ("velocity", "explicit"),
                     ("effort", "direct"),
@@ -271,7 +311,10 @@ class JointController:
         # MJCF frictionloss 是资产作者给出的关节级物理参数，优先级高于 YAML 默认摩擦。
         # YAML 仍作为缺省值，保证 URDF-only 或缺少 frictionloss 的资产也有稳定阻尼。
         friction_by_name = parse_mjcf_joint_frictionloss(self.mjcf_path)
-        friction = np.asarray([self._joint_friction(name, friction_by_name) for name in self.dof_names], dtype=float)
+        friction = np.asarray(
+            [self._joint_friction(name, friction_by_name) for name in self.dof_names],
+            dtype=float,
+        )
         view.set_friction_coefficients(friction.reshape(1, self.robot.num_dof))
 
     def _joint_friction(self, name: str, friction_by_name: dict[str, float]) -> float:
@@ -280,7 +323,10 @@ class JointController:
         if name in friction_by_name:
             return float(friction_by_name[name])
         settings = self.settings.component(name)
-        if name in self.follower_joint_names and settings.follower_joint_friction is not None:
+        if (
+            name in self.follower_joint_names
+            and settings.follower_joint_friction is not None
+        ):
             return float(settings.follower_joint_friction)
         return float(settings.joint_friction)
 
@@ -306,7 +352,11 @@ class JointController:
         if base_positions is None:
             # 没有外部基准时，用当前仿真状态初始化完整目标。这样未命令的 DOF 不会在
             # 第一帧因为默认 0 被突然拉回零位。
-            full_positions = np.asarray(self.robot.get_joint_positions(), dtype=float).reshape(-1).copy()
+            full_positions = (
+                np.asarray(self.robot.get_joint_positions(), dtype=float)
+                .reshape(-1)
+                .copy()
+            )
         else:
             # 连续轨迹通常把上一帧目标作为 base_positions 传入，保证未主动命令的 DOF
             # 沿用上一帧目标，而不是每步读取实际状态造成命令抖动。
@@ -317,11 +367,17 @@ class JointController:
         # command_* 数组只覆盖主动命令空间；长度必须等于 command_indices，顺序也由
         # command_indices 对应的 joint_names 决定。
         if command_positions is not None:
-            full_positions[self.command_indices] = self._command_vector(command_positions, "command_positions")
+            full_positions[self.command_indices] = self._command_vector(
+                command_positions, "command_positions"
+            )
         if command_velocities is not None:
-            full_velocities[self.command_indices] = self._command_vector(command_velocities, "command_velocities")
+            full_velocities[self.command_indices] = self._command_vector(
+                command_velocities, "command_velocities"
+            )
         if command_efforts is not None:
-            full_efforts[self.command_indices] = self._command_vector(command_efforts, "command_efforts")
+            full_efforts[self.command_indices] = self._command_vector(
+                command_efforts, "command_efforts"
+            )
 
         # follower 目标最后覆盖，确保即使调用方传入完整/稀疏目标时误写了 follower，
         # 运行时仍以 master 实际状态推导的 mimic 关系为准。
@@ -360,7 +416,9 @@ class JointController:
         self._apply_follower_targets(positions, velocities)
         return ControlTargets(positions, velocities, efforts)
 
-    def _apply_follower_targets(self, target_positions: np.ndarray, target_velocities: np.ndarray) -> None:
+    def _apply_follower_targets(
+        self, target_positions: np.ndarray, target_velocities: np.ndarray
+    ) -> None:
         """用 master 实际状态覆盖 follower 的 position drive 目标。"""
 
         # 注意这里特意读取 actual master，而不是使用 target master。主关节还没有跟上命令时，
@@ -382,8 +440,12 @@ class JointController:
             无返回值；副作用是调用 ``robot.apply_action``。
         """
 
-        actual_positions = np.asarray(self.robot.get_joint_positions(), dtype=float).reshape(-1)
-        actual_velocities = np.asarray(self.robot.get_joint_velocities(), dtype=float).reshape(-1)
+        actual_positions = np.asarray(
+            self.robot.get_joint_positions(), dtype=float
+        ).reshape(-1)
+        actual_velocities = np.asarray(
+            self.robot.get_joint_velocities(), dtype=float
+        ).reshape(-1)
         # 每次下发前重置 commanded effort 日志缓存。implicit drive 和 follower position drive
         # 没有 Python 侧 effort command，因此对应 DOF 会保持 nan。
         self.last_commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
@@ -395,15 +457,21 @@ class JointController:
             elif mode == "velocity" and method == "implicit":
                 self._apply_velocity_action(articulation_action_type, targets, indices)
             elif mode == "position" and method == "explicit":
-                efforts = self._explicit_position_efforts(targets, actual_positions, actual_velocities, indices)
+                efforts = self._explicit_position_efforts(
+                    targets, actual_positions, actual_velocities, indices
+                )
                 self.last_commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             elif mode == "velocity" and method == "explicit":
-                efforts = self._explicit_velocity_efforts(targets, actual_velocities, indices)
+                efforts = self._explicit_velocity_efforts(
+                    targets, actual_velocities, indices
+                )
                 self.last_commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             elif mode == "effort" and method == "direct":
-                efforts = self._clip_efforts(targets.efforts[indices], self._active_effort_limits[indices])
+                efforts = self._clip_efforts(
+                    targets.efforts[indices], self._active_effort_limits[indices]
+                )
                 self.last_commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             else:
@@ -412,7 +480,9 @@ class JointController:
         # follower 最后单独下发 position action。即使主动关节使用 effort action，follower
         # 也不会被 effort 字段覆盖，始终交给 Isaac position drive 跟随。
         if self.follower_indices.size:
-            self._apply_position_action(articulation_action_type, targets, self.follower_indices)
+            self._apply_position_action(
+                articulation_action_type, targets, self.follower_indices
+            )
 
     def _active_groups(self) -> list[tuple[ControlMode, ControlMethod, np.ndarray]]:
         """把主动关节按控制模式和方法分组。"""
@@ -426,9 +496,14 @@ class JointController:
                 settings = self.settings.component(self.dof_names[int(index)])
                 spec = (settings.mode, settings.method)
             groups.setdefault(spec, []).append(int(index))
-        return [(mode, method, np.asarray(indices, dtype=int)) for (mode, method), indices in groups.items()]
+        return [
+            (mode, method, np.asarray(indices, dtype=int))
+            for (mode, method), indices in groups.items()
+        ]
 
-    def _apply_position_action(self, articulation_action_type, targets: ControlTargets, indices: np.ndarray) -> None:
+    def _apply_position_action(
+        self, articulation_action_type, targets: ControlTargets, indices: np.ndarray
+    ) -> None:
         """向指定 DOF 下发 Isaac position target。"""
 
         if not indices.size:
@@ -441,7 +516,9 @@ class JointController:
             )
         )
 
-    def _apply_velocity_action(self, articulation_action_type, targets: ControlTargets, indices: np.ndarray) -> None:
+    def _apply_velocity_action(
+        self, articulation_action_type, targets: ControlTargets, indices: np.ndarray
+    ) -> None:
         """向指定 DOF 下发 Isaac velocity target。"""
 
         if not indices.size:
@@ -453,7 +530,9 @@ class JointController:
             )
         )
 
-    def _apply_effort_action(self, articulation_action_type, efforts: np.ndarray, indices: np.ndarray) -> None:
+    def _apply_effort_action(
+        self, articulation_action_type, efforts: np.ndarray, indices: np.ndarray
+    ) -> None:
         """向指定 DOF 下发 Isaac effort target。"""
 
         if not indices.size:
@@ -478,7 +557,10 @@ class JointController:
         # effort = kp * (q_target - q_actual) + kd * (v_target - v_actual)。
         position_error = targets.positions[indices] - actual_positions[indices]
         velocity_error = targets.velocities[indices] - actual_velocities[indices]
-        efforts = self._active_stiffness[indices] * position_error + self._active_damping[indices] * velocity_error
+        efforts = (
+            self._active_stiffness[indices] * position_error
+            + self._active_damping[indices] * velocity_error
+        )
         return self._clip_efforts(efforts, self._active_effort_limits[indices])
 
     def _explicit_velocity_efforts(
@@ -509,7 +591,9 @@ class JointController:
         # reshape(-1) 允许调用方传 list、列向量或一维数组；长度校验仍严格按 command_indices。
         vector = np.asarray(values, dtype=float).reshape(-1)
         if vector.size != self.command_indices.size:
-            raise ValueError(f"{label} expected {self.command_indices.size} values, got {vector.size}")
+            raise ValueError(
+                f"{label} expected {self.command_indices.size} values, got {vector.size}"
+            )
         return vector
 
     def _full_vector(self, values: np.ndarray, label: str) -> np.ndarray:
@@ -519,5 +603,7 @@ class JointController:
         # 写到错误关节，因此这里尽早报错。
         vector = np.asarray(values, dtype=float).reshape(-1)
         if vector.size != self.robot.num_dof:
-            raise ValueError(f"{label} expected {self.robot.num_dof} values, got {vector.size}")
+            raise ValueError(
+                f"{label} expected {self.robot.num_dof} values, got {vector.size}"
+            )
         return vector

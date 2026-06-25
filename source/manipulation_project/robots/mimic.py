@@ -39,7 +39,9 @@ def evaluate_polycoef(polycoef: tuple[float, ...], master_position: float) -> fl
     return float(sum(coef * (q**power) for power, coef in enumerate(polycoef)))
 
 
-def evaluate_polycoef_derivative(polycoef: tuple[float, ...], master_position: float) -> float:
+def evaluate_polycoef_derivative(
+    polycoef: tuple[float, ...], master_position: float
+) -> float:
     """按 MJCF ``polycoef`` 多项式计算对主动关节位置的导数。
 
     参数:
@@ -51,7 +53,12 @@ def evaluate_polycoef_derivative(polycoef: tuple[float, ...], master_position: f
 
     # 速度映射需要多项式对 master 位置的一阶导数，再乘 master_velocity，这是链式法则。
     q = float(master_position)
-    return float(sum(power * coef * (q ** (power - 1)) for power, coef in enumerate(polycoef[1:], start=1)))
+    return float(
+        sum(
+            power * coef * (q ** (power - 1))
+            for power, coef in enumerate(polycoef[1:], start=1)
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -83,7 +90,9 @@ class MjcfJointEquality:
 
         return evaluate_polycoef(self.polycoef, master_position)
 
-    def evaluate_velocity(self, master_position: float, master_velocity: float) -> float:
+    def evaluate_velocity(
+        self, master_position: float, master_velocity: float
+    ) -> float:
         """按多项式导数计算 follower 速度。
 
         参数:
@@ -93,7 +102,10 @@ class MjcfJointEquality:
             从动关节目标速度，单位 rad/s。
         """
 
-        return float(evaluate_polycoef_derivative(self.polycoef, master_position) * float(master_velocity))
+        return float(
+            evaluate_polycoef_derivative(self.polycoef, master_position)
+            * float(master_velocity)
+        )
 
 
 @dataclass(frozen=True)
@@ -125,7 +137,9 @@ class MimicFollowerControl:
 
         return evaluate_polycoef(self.polycoef, master_position)
 
-    def evaluate_velocity(self, master_position: float, master_velocity: float) -> float:
+    def evaluate_velocity(
+        self, master_position: float, master_velocity: float
+    ) -> float:
         """按多项式导数计算 follower 速度。
 
         参数:
@@ -135,7 +149,11 @@ class MimicFollowerControl:
             从动关节速度，单位 rad/s。
         """
 
-        return float(evaluate_polycoef_derivative(self.polycoef, master_position) * float(master_velocity))
+        return float(
+            evaluate_polycoef_derivative(self.polycoef, master_position)
+            * float(master_velocity)
+        )
+
 
 def parse_mjcf_joint_equalities(path: str | Path | None) -> list[MjcfJointEquality]:
     """读取 MJCF 文件中的 ``equality/joint`` mimic 关系。
@@ -166,7 +184,9 @@ def parse_mjcf_joint_equalities(path: str | Path | None) -> list[MjcfJointEquali
         try:
             polycoef = tuple(float(value) for value in polycoef_text.split())
         except ValueError as exc:
-            raise ValueError(f"Invalid polycoef for MJCF equality {element.get('name', '')!r}: {polycoef_text!r}") from exc
+            raise ValueError(
+                f"Invalid polycoef for MJCF equality {element.get('name', '')!r}: {polycoef_text!r}"
+            ) from exc
         if not polycoef:
             polycoef = (0.0, 1.0)
         equalities.append(
@@ -205,9 +225,13 @@ def parse_mjcf_joint_frictionloss(path: str | Path | None) -> dict[str, float]:
         try:
             frictionloss = float(frictionloss_text or 0.0)
         except ValueError as exc:
-            raise ValueError(f"Invalid MJCF frictionloss for joint {joint_name!r}: {frictionloss_text!r}") from exc
+            raise ValueError(
+                f"Invalid MJCF frictionloss for joint {joint_name!r}: {frictionloss_text!r}"
+            ) from exc
         if frictionloss < 0:
-            raise ValueError(f"MJCF frictionloss for joint {joint_name!r} cannot be negative: {frictionloss:g}")
+            raise ValueError(
+                f"MJCF frictionloss for joint {joint_name!r} cannot be negative: {frictionloss:g}"
+            )
         friction_by_name[joint_name] = frictionloss
     return friction_by_name
 
@@ -224,7 +248,9 @@ def mjcf_equality_follower_joint_names(path: str | Path | None) -> set[str]:
     return {equality.dependent_joint for equality in parse_mjcf_joint_equalities(path)}
 
 
-def expand_targets_with_mjcf_equalities(targets: dict[str, float], path: str | Path | None) -> dict[str, float]:
+def expand_targets_with_mjcf_equalities(
+    targets: dict[str, float], path: str | Path | None
+) -> dict[str, float]:
     """把稀疏主动关节目标扩展为包含从动关节目标的映射。
 
     参数:
@@ -239,7 +265,9 @@ def expand_targets_with_mjcf_equalities(targets: dict[str, float], path: str | P
     for equality in parse_mjcf_joint_equalities(path):
         if equality.master_joint not in expanded:
             continue
-        expanded[equality.dependent_joint] = equality.evaluate_position(float(expanded[equality.master_joint]))
+        expanded[equality.dependent_joint] = equality.evaluate_position(
+            float(expanded[equality.master_joint])
+        )
     return expanded
 
 
@@ -339,7 +367,9 @@ class MimicFollowerTargetMapper:
         # 使用实际 master 状态而非目标状态，可以在主关节未完全跟踪到目标时，让 follower
         # 仍贴近当前物理姿态，减少 mimic 关节和接触约束之间的瞬态冲突。
         for control in self.controls:
-            target_positions[control.dependent_index] = control.evaluate_position(actual_positions[control.master_index])
+            target_positions[control.dependent_index] = control.evaluate_position(
+                actual_positions[control.master_index]
+            )
             target_velocities[control.dependent_index] = control.evaluate_velocity(
                 actual_positions[control.master_index],
                 actual_velocities[control.master_index],

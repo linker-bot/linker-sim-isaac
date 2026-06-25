@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.forward_kinematics import CuMotionForwardKinematics
+from manipulation_project.backends.cumotion.forward_kinematics import (
+    CuMotionForwardKinematics,
+)
 
 
 class _Rotation:
@@ -63,4 +65,6 @@ def test_compute_pose_returns_position_and_orientation() -> None:
     np.testing.assert_allclose(pose.rotation_matrix, matrix)
     np.testing.assert_allclose(np.abs(pose.orientation), [0.0, 1.0, 0.0, 0.0])
     np.testing.assert_allclose(fk.compute_position([1.0, 2.0], "tool"), pose.position)
-    np.testing.assert_allclose(fk.compute_orientation([1.0, 2.0], "tool"), pose.orientation)
+    np.testing.assert_allclose(
+        fk.compute_orientation([1.0, 2.0], "tool"), pose.orientation
+    )

@@ -4,7 +4,10 @@ import csv
 
 import numpy as np
 
-from manipulation_project.logging.config import JointLoggingConfig, joint_logging_config_from_mapping
+from manipulation_project.logging.config import (
+    JointLoggingConfig,
+    joint_logging_config_from_mapping,
+)
 from manipulation_project.logging.effort_logger import (
     EffortLogger,
     commanded_efforts_from_controller,
@@ -34,12 +37,20 @@ class _RobotWithEfforts:
     def get_measured_joint_efforts(self, joint_indices=None):
         self.measured_reads += 1
         values = np.asarray([1.0, 2.0, 3.0], dtype=float)
-        return values if joint_indices is None else values[np.asarray(joint_indices, dtype=int)]
+        return (
+            values
+            if joint_indices is None
+            else values[np.asarray(joint_indices, dtype=int)]
+        )
 
     def get_applied_joint_efforts(self, joint_indices=None):
         self.applied_reads += 1
         values = np.asarray([4.0, 5.0, 6.0], dtype=float)
-        return values if joint_indices is None else values[np.asarray(joint_indices, dtype=int)]
+        return (
+            values
+            if joint_indices is None
+            else values[np.asarray(joint_indices, dtype=int)]
+        )
 
 
 class _RobotWithoutEfforts:
@@ -76,7 +87,9 @@ def test_read_joint_efforts_returns_nan_when_api_missing() -> None:
 
 
 def test_commanded_efforts_from_controller_slices_last_command() -> None:
-    values = commanded_efforts_from_controller(_Controller(), np.asarray([1, 2], dtype=int))
+    values = commanded_efforts_from_controller(
+        _Controller(), np.asarray([1, 2], dtype=int)
+    )
 
     np.testing.assert_allclose(values, [0.2, 0.3])
 
@@ -139,7 +152,9 @@ def test_joint_tracking_logger_includes_optional_effort_columns(tmp_path) -> Non
 
 def test_joint_tracking_logger_omits_disabled_effort_columns(tmp_path) -> None:
     path = tmp_path / "joint_tracking.csv"
-    logger = JointTrackingLogger(path, ["j0"], config=JointLoggingConfig(log_command_effort=False))
+    logger = JointTrackingLogger(
+        path, ["j0"], config=JointLoggingConfig(log_command_effort=False)
+    )
     logger.write(
         step=1,
         time_s=0.1,
@@ -176,7 +191,9 @@ def test_joint_tracking_logger_collects_efforts_only_when_enabled(tmp_path) -> N
     np.testing.assert_allclose(values["applied_effort"], [6.0, 4.0])
 
 
-def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(tmp_path) -> None:
+def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(
+    tmp_path,
+) -> None:
     robot = _RobotWithEfforts()
     logger = JointTrackingLogger(
         tmp_path / "joint_tracking.csv",
@@ -192,7 +209,9 @@ def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(tmp
         ),
     )
 
-    values = logger.collect_step_values(robot, _Controller(), _Targets(), np.asarray([2, 0], dtype=int))
+    values = logger.collect_step_values(
+        robot, _Controller(), _Targets(), np.asarray([2, 0], dtype=int)
+    )
 
     assert robot.position_reads == 0
     assert robot.velocity_reads == 1

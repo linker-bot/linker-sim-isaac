@@ -51,10 +51,14 @@ def sample_times(duration_s: float, sample_hz: float) -> np.ndarray:
         return np.asarray([0.0], dtype=float)
     # ceil 保证覆盖终点；每个采样时刻用 min 钳制到 duration，避免最后一点超过配置时长。
     num_steps = max(1, int(np.ceil(duration / sample_dt)))
-    return np.asarray([min(duration, step * sample_dt) for step in range(num_steps + 1)], dtype=float)
+    return np.asarray(
+        [min(duration, step * sample_dt) for step in range(num_steps + 1)], dtype=float
+    )
 
 
-def sample_linear_positions(start_position, target_position, times: np.ndarray) -> np.ndarray:
+def sample_linear_positions(
+    start_position, target_position, times: np.ndarray
+) -> np.ndarray:
     """根据采样时间在线段起点和终点之间插值位置。
 
     ``times`` 的最后一个值被视为轨迹总时长。返回矩阵 shape 为 ``(N, 3)``，
@@ -93,6 +97,8 @@ def differentiate_samples(values: np.ndarray, times: np.ndarray) -> np.ndarray:
     result = np.zeros_like(samples)
     for index in range(1, samples.shape[0]):
         # dt 用极小正数下限保护重复时间戳，避免除零；这会产生很大的导数，提示输入采样异常。
-        dt = max(1.0e-12, float(sample_times_array[index] - sample_times_array[index - 1]))
+        dt = max(
+            1.0e-12, float(sample_times_array[index] - sample_times_array[index - 1])
+        )
         result[index] = (samples[index] - samples[index - 1]) / dt
     return result

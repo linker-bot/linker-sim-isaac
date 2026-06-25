@@ -51,7 +51,9 @@ class JointGroup:
             raise ValueError(f"Joint group {name!r} must be a sequence")
         return cls(name=name, joint_names=tuple(str(value) for value in data))
 
-    def indices_in(self, dof_names: Sequence[str], *, allow_all: bool = True) -> np.ndarray:
+    def indices_in(
+        self, dof_names: Sequence[str], *, allow_all: bool = True
+    ) -> np.ndarray:
         """把本关节组解析成 articulation DOF 索引。
 
         参数:
@@ -62,15 +64,25 @@ class JointGroup:
         """
 
         # ``all`` 是少数允许的语义别名，用于测试或全 DOF 控制；除此之外必须精确匹配名称。
-        if allow_all and len(self.joint_names) == 1 and self.joint_names[0].lower() == "all":
+        if (
+            allow_all
+            and len(self.joint_names) == 1
+            and self.joint_names[0].lower() == "all"
+        ):
             return np.arange(len(dof_names), dtype=int)
         missing = [name for name in self.joint_names if name not in dof_names]
         if missing:
-            raise ValueError(f"Joint group {self.name!r} has missing joints: {missing}. Available: {list(dof_names)}")
-        return np.asarray([list(dof_names).index(name) for name in self.joint_names], dtype=int)
+            raise ValueError(
+                f"Joint group {self.name!r} has missing joints: {missing}. Available: {list(dof_names)}"
+            )
+        return np.asarray(
+            [list(dof_names).index(name) for name in self.joint_names], dtype=int
+        )
 
 
-def resolve_joint_indices(dof_names: Sequence[str], requested_names: Sequence[str] | None) -> np.ndarray:
+def resolve_joint_indices(
+    dof_names: Sequence[str], requested_names: Sequence[str] | None
+) -> np.ndarray:
     """把可选的关节名列表解析成 DOF 索引。
 
     参数:
@@ -80,12 +92,18 @@ def resolve_joint_indices(dof_names: Sequence[str], requested_names: Sequence[st
         int ndarray，包含被选中 DOF 的索引。
     """
 
-    if not requested_names or (len(requested_names) == 1 and requested_names[0].lower() == "all"):
+    if not requested_names or (
+        len(requested_names) == 1 and requested_names[0].lower() == "all"
+    ):
         return np.arange(len(dof_names), dtype=int)
     missing = [name for name in requested_names if name not in dof_names]
     if missing:
-        raise ValueError(f"Requested joints were not found: {missing}. Available DOFs: {list(dof_names)}")
-    return np.asarray([list(dof_names).index(name) for name in requested_names], dtype=int)
+        raise ValueError(
+            f"Requested joints were not found: {missing}. Available DOFs: {list(dof_names)}"
+        )
+    return np.asarray(
+        [list(dof_names).index(name) for name in requested_names], dtype=int
+    )
 
 
 def target_vector_from_mapping(
@@ -111,12 +129,16 @@ def target_vector_from_mapping(
     else:
         vector = np.asarray(base, dtype=float).reshape(-1).copy()
         if vector.size != len(dof_names):
-            raise ValueError(f"base target expected {len(dof_names)} values, got {vector.size}")
+            raise ValueError(
+                f"base target expected {len(dof_names)} values, got {vector.size}"
+            )
 
     index_by_name = {name: index for index, name in enumerate(dof_names)}
     missing = [name for name in targets if name not in index_by_name]
     if missing:
-        raise ValueError(f"Target joints were not found: {missing}. Available DOFs: {list(dof_names)}")
+        raise ValueError(
+            f"Target joints were not found: {missing}. Available DOFs: {list(dof_names)}"
+        )
     # Python dict 保留插入顺序，但这里按名称定位写入完整数组，因此稀疏映射顺序不影响结果。
     for name, value in targets.items():
         vector[index_by_name[name]] = float(value)

@@ -150,7 +150,9 @@ def step_joint_target(
     if drive_logger is not None:
         driven_indices = controller.driven_indices
         if drive_logger.should_write(step):
-            log_values = drive_logger.collect_step_values(robot, controller, targets, driven_indices)
+            log_values = drive_logger.collect_step_values(
+                robot, controller, targets, driven_indices
+            )
             drive_logger.write(
                 step=step,
                 time_s=(step + 1) * float(world.get_physics_dt()),
@@ -228,7 +230,9 @@ def move_full_joint_trajectory(
     # 此原语约定输入是完整 DOF 轨迹；如果传入命令子空间轨迹，应先经控制器扩展，
     # 否则 joint_indices 切片会和数组列数不匹配。
     if trajectory.positions.shape[1] != robot.num_dof:
-        raise ValueError(f"Full DOF trajectory expected {robot.num_dof} joints, got {trajectory.positions.shape[1]}")
+        raise ValueError(
+            f"Full DOF trajectory expected {robot.num_dof} joints, got {trajectory.positions.shape[1]}"
+        )
     physics_dt = float(world.get_physics_dt())
     if physics_dt <= 0:
         raise ValueError("world physics dt must be positive")

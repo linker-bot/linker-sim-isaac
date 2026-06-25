@@ -58,7 +58,11 @@ class CuMotionConfig:
         settings = data.get("cumotion", data)
         if not isinstance(settings, Mapping):
             raise ValueError("cuMotion config must be a mapping")
-        missing = [key for key in ("xrdf_path", "urdf_path", "flange_frame") if not settings.get(key)]
+        missing = [
+            key
+            for key in ("xrdf_path", "urdf_path", "flange_frame")
+            if not settings.get(key)
+        ]
         if missing:
             raise ValueError(f"cuMotion config is missing required key(s): {missing}")
 
@@ -69,13 +73,25 @@ class CuMotionConfig:
             xrdf_path=repo_path(settings["xrdf_path"]),
             urdf_path=repo_path(settings["urdf_path"]),
             flange_frame=str(settings["flange_frame"]),
-            default_tcp_frame=str(settings.get("default_tcp_frame") or settings["flange_frame"]),
+            default_tcp_frame=str(
+                settings.get("default_tcp_frame") or settings["flange_frame"]
+            ),
             cspace_seeds=_optional_seeds(settings.get("cspace_seeds")),
-            position_tolerance=float(settings.get("position_tolerance", cls.position_tolerance)),
-            orientation_tolerance=float(settings.get("orientation_tolerance", cls.orientation_tolerance)),
-            ccd_max_iterations=int(settings.get("ccd_max_iterations", cls.ccd_max_iterations)),
-            bfgs_max_iterations=int(settings.get("bfgs_max_iterations", cls.bfgs_max_iterations)),
-            orientation_weight=float(settings.get("orientation_weight", cls.orientation_weight)),
+            position_tolerance=float(
+                settings.get("position_tolerance", cls.position_tolerance)
+            ),
+            orientation_tolerance=float(
+                settings.get("orientation_tolerance", cls.orientation_tolerance)
+            ),
+            ccd_max_iterations=int(
+                settings.get("ccd_max_iterations", cls.ccd_max_iterations)
+            ),
+            bfgs_max_iterations=int(
+                settings.get("bfgs_max_iterations", cls.bfgs_max_iterations)
+            ),
+            orientation_weight=float(
+                settings.get("orientation_weight", cls.orientation_weight)
+            ),
         )
         config.validate()
         return config
@@ -144,13 +160,18 @@ class CuMotionContext:
         self.config = config
         # XRDF 提供 cuMotion 的语义配置，URDF 提供几何/运动链描述；二者必须同时加载，
         # 才能得到后续 FK/IK 共享的 kinematics 对象。
-        self.robot_description = cumotion.load_robot_from_file(str(config.xrdf_path), str(config.urdf_path))
+        self.robot_description = cumotion.load_robot_from_file(
+            str(config.xrdf_path), str(config.urdf_path)
+        )
         self.kinematics = self.robot_description.kinematics()
 
     def joint_names(self) -> list[str]:
         """返回 cuMotion C-space 主动关节名。"""
 
-        return [str(self.kinematics.cspace_coord_name(index)) for index in range(self.kinematics.num_cspace_coords())]
+        return [
+            str(self.kinematics.cspace_coord_name(index))
+            for index in range(self.kinematics.num_cspace_coords())
+        ]
 
     def frame_names(self) -> list[str]:
         """返回 cuMotion 可查询 frame 名。"""
@@ -165,13 +186,19 @@ class CuMotionContext:
     def make_inverse_kinematics(self, *, tcp_frame_name: str | None = None):
         """创建逆运动学组件。"""
 
-        from manipulation_project.backends.cumotion.inverse_kinematics import CuMotionInverseKinematics
+        from manipulation_project.backends.cumotion.inverse_kinematics import (
+            CuMotionInverseKinematics,
+        )
 
-        return CuMotionInverseKinematics(self, tcp_frame_name=tcp_frame_name or self.config.default_tcp_frame)
+        return CuMotionInverseKinematics(
+            self, tcp_frame_name=tcp_frame_name or self.config.default_tcp_frame
+        )
 
     def make_forward_kinematics(self):
         """创建正运动学组件。"""
 
-        from manipulation_project.backends.cumotion.forward_kinematics import CuMotionForwardKinematics
+        from manipulation_project.backends.cumotion.forward_kinematics import (
+            CuMotionForwardKinematics,
+        )
 
         return CuMotionForwardKinematics(self)

@@ -15,7 +15,9 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 
-def as_vector(values, *, length: int | None = None, label: str = "vector") -> np.ndarray:
+def as_vector(
+    values, *, length: int | None = None, label: str = "vector"
+) -> np.ndarray:
     """把输入转换为一维 float ndarray，并可选校验长度。
 
     参数:

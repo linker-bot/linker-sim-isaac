@@ -28,7 +28,9 @@ def rpy_xyz_to_matrix(rpy_rad) -> np.ndarray:
         shape ``(3, 3)`` 的旋转矩阵。
     """
 
-    return Rotation.from_euler("xyz", np.asarray(rpy_rad, dtype=float).reshape(3)).as_matrix()
+    return Rotation.from_euler(
+        "xyz", np.asarray(rpy_rad, dtype=float).reshape(3)
+    ).as_matrix()
 
 
 def rpy_xyz_deg_to_matrix(rpy_deg) -> np.ndarray:
@@ -40,7 +42,9 @@ def rpy_xyz_deg_to_matrix(rpy_deg) -> np.ndarray:
         shape ``(3, 3)`` 的旋转矩阵。
     """
 
-    return Rotation.from_euler("xyz", np.asarray(rpy_deg, dtype=float).reshape(3), degrees=True).as_matrix()
+    return Rotation.from_euler(
+        "xyz", np.asarray(rpy_deg, dtype=float).reshape(3), degrees=True
+    ).as_matrix()
 
 
 def matrix_to_quat_wxyz(matrix) -> np.ndarray:
@@ -52,7 +56,9 @@ def matrix_to_quat_wxyz(matrix) -> np.ndarray:
         shape ``(4,)`` 的四元数，顺序为 ``[w, x, y, z]``。
     """
 
-    x, y, z, w = Rotation.from_matrix(np.asarray(matrix, dtype=float).reshape(3, 3)).as_quat()
+    x, y, z, w = Rotation.from_matrix(
+        np.asarray(matrix, dtype=float).reshape(3, 3)
+    ).as_quat()
     return np.asarray([w, x, y, z], dtype=float)
 
 
@@ -84,7 +90,9 @@ def quat_wxyz_to_xyzw(quat) -> np.ndarray:
     """把 wxyz 四元数转换为 SciPy 使用的 xyzw 顺序。"""
 
     quat_wxyz = normalize_quat_wxyz(quat)
-    return np.asarray([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]], dtype=float)
+    return np.asarray(
+        [quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]], dtype=float
+    )
 
 
 def quat_xyzw_to_wxyz(quat) -> np.ndarray:
@@ -92,11 +100,15 @@ def quat_xyzw_to_wxyz(quat) -> np.ndarray:
 
     quat_xyzw = np.asarray(quat, dtype=float).reshape(-1)
     if quat_xyzw.size != 4:
-        raise ValueError(f"quat_xyzw expected 4 quaternion values, got {quat_xyzw.size}")
+        raise ValueError(
+            f"quat_xyzw expected 4 quaternion values, got {quat_xyzw.size}"
+        )
     return normalize_quat_wxyz([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
 
 
-def slerp_quat_wxyz(start_orientation, target_orientation, times) -> list[np.ndarray | None]:
+def slerp_quat_wxyz(
+    start_orientation, target_orientation, times
+) -> list[np.ndarray | None]:
     """按时间对 wxyz 起止四元数做球面线性插值。
 
     若任一端点为 ``None``，返回全 ``None``，供只约束位置的 IK waypoint 使用。

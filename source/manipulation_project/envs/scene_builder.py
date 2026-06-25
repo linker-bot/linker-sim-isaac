@@ -57,7 +57,9 @@ def configure_visuals() -> None:
     )
 
 
-def build_world(*, physics_dt: float | None, rendering_dt: float | None, gravity_z: float):
+def build_world(
+    *, physics_dt: float | None, rendering_dt: float | None, gravity_z: float
+):
     """创建带默认地面和重力的 Isaac ``World``。
 
     ``World`` 是 Isaac Sim 高层仿真入口，内部持有 stage、physics context、scene
@@ -77,7 +79,9 @@ def build_world(*, physics_dt: float | None, rendering_dt: float | None, gravity
 
     # stage_units_in_meters=1.0 表示 USD stage 的 1 个长度单位等于 1 m。
     # physics_dt/rendering_dt 可由 env yaml 通过频率换算得到；传 None 时沿用 Isaac 默认配置。
-    world = World(stage_units_in_meters=1.0, physics_dt=physics_dt, rendering_dt=rendering_dt)
+    world = World(
+        stage_units_in_meters=1.0, physics_dt=physics_dt, rendering_dt=rendering_dt
+    )
 
     # 当前项目约定 z 轴向上，因此重力通常是负值，例如 -9.81。
     world.get_physics_context().set_gravity(float(gravity_z))

@@ -33,3 +33,6 @@ where = ["source"]
 [tool.pytest.ini_options]
 pythonpath = ["source"]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]

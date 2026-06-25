@@ -87,11 +87,15 @@ def load_controller_profiles(config_dir: str | Path) -> ControllerProfiles:
     """
 
     if not isinstance(config_dir, (str, Path)):
-        raise TypeError(f"Controller config must be a directory path, got {type(config_dir).__name__}")
+        raise TypeError(
+            f"Controller config must be a directory path, got {type(config_dir).__name__}"
+        )
     # controllers 配置以目录为单位加载，保证 arm/hand profile 来自同一套实验参数。
     path = repo_path(config_dir)
     if not path.is_dir():
-        raise ValueError(f"Controller config must be a directory containing arm_controller.yaml and hand_controller.yaml: {path}")
+        raise ValueError(
+            f"Controller config must be a directory containing arm_controller.yaml and hand_controller.yaml: {path}"
+        )
     return ControllerProfiles(
         arm=_load_profile_from_path("arm", path / "arm_controller.yaml"),
         hand=_load_profile_from_path("hand", path / "hand_controller.yaml"),
@@ -112,7 +116,9 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
     # profile 内的 target 是防呆字段：例如手部配置误命名为 arm_controller.yaml 时能尽早发现。
     target = str(data.get("target", name))
     if target != name:
-        raise ValueError(f"Controller profile {name!r} has mismatched target {target!r}")
+        raise ValueError(
+            f"Controller profile {name!r} has mismatched target {target!r}"
+        )
     if "implicit_position_drive" in data:
         raise ValueError(
             f"Controller profile {name!r} uses deprecated section 'implicit_position_drive'; "
@@ -127,7 +133,9 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
     )
 
 
-def _joint_section(config: Mapping[str, Any], key: str, defaults: Mapping[str, Any]) -> dict[str, Any]:
+def _joint_section(
+    config: Mapping[str, Any], key: str, defaults: Mapping[str, Any]
+) -> dict[str, Any]:
     """读取 active/follower 子配置并与默认值深合并。"""
 
     return deep_merge(defaults, _section(config, key))
@@ -164,11 +172,15 @@ def _normalize_method(config: Mapping[str, Any], mode: ControlMode) -> ControlMe
         "effort": {"direct"},
     }[mode]
     if method not in allowed:
-        raise ValueError(f"{mode}_control method must be one of {sorted(allowed)}, got {method!r}")
+        raise ValueError(
+            f"{mode}_control method must be one of {sorted(allowed)}, got {method!r}"
+        )
     return cast(ControlMethod, method)
 
 
-def _component_control_settings(profile: ControllerProfile, mode: ControlMode) -> ComponentControlSettings:
+def _component_control_settings(
+    profile: ControllerProfile, mode: ControlMode
+) -> ComponentControlSettings:
     """把单个部件 profile 转成指定模式的 runtime 控制参数。"""
 
     # active_joints 描述当前 --control-mode 下主动关节的控制参数；当 mode=effort 时，
@@ -209,7 +221,9 @@ def _component_control_settings(profile: ControllerProfile, mode: ControlMode) -
     )
 
 
-def joint_control_settings(profiles: ControllerProfiles, *, mode: ControlMode = "position") -> JointControlSettings:
+def joint_control_settings(
+    profiles: ControllerProfiles, *, mode: ControlMode = "position"
+) -> JointControlSettings:
     """把 arm/hand profile 转成指定模式的 runtime 关节控制设置。"""
 
     return JointControlSettings(
@@ -244,7 +258,9 @@ def _physx_override_config(profile: ControllerProfile) -> PhysxOverrideConfig:
     )
 
 
-def physx_override_configs(profiles: ControllerProfiles) -> dict[str, PhysxOverrideConfig]:
+def physx_override_configs(
+    profiles: ControllerProfiles,
+) -> dict[str, PhysxOverrideConfig]:
     """把 arm/hand profile 转成 USD/PhysX 覆盖配置。"""
 
     arm = _physx_override_config(profiles.arm)

@@ -94,7 +94,9 @@ def _path(data: Mapping[str, Any], key: str, default: Path | None) -> Path | Non
     raise ValueError(f"logging.{key} must be a path string or null")
 
 
-def joint_logging_config_from_mapping(data: Mapping[str, Any] | None) -> JointLoggingConfig:
+def joint_logging_config_from_mapping(
+    data: Mapping[str, Any] | None,
+) -> JointLoggingConfig:
     """从 YAML mapping 构造 ``JointLoggingConfig``。"""
 
     logging = data.get("logging", {}) if data is not None else {}
@@ -103,21 +105,37 @@ def joint_logging_config_from_mapping(data: Mapping[str, Any] | None) -> JointLo
     default = JointLoggingConfig()
     return JointLoggingConfig(
         enabled=_bool(logging, "enabled", default.enabled),
-        joint_tracking_path=_path(logging, "joint_tracking_path", default.joint_tracking_path),
+        joint_tracking_path=_path(
+            logging, "joint_tracking_path", default.joint_tracking_path
+        ),
         flush_interval_s=_float(logging, "flush_interval_s", default.flush_interval_s),
         interval_steps=_int(logging, "interval_steps", default.interval_steps),
-        log_actual_position=_bool(logging, "actual_position", default.log_actual_position),
-        log_actual_velocity=_bool(logging, "actual_velocity", default.log_actual_velocity),
-        log_command_position=_bool(logging, "command_position", default.log_command_position),
-        log_command_velocity=_bool(logging, "command_velocity", default.log_command_velocity),
+        log_actual_position=_bool(
+            logging, "actual_position", default.log_actual_position
+        ),
+        log_actual_velocity=_bool(
+            logging, "actual_velocity", default.log_actual_velocity
+        ),
+        log_command_position=_bool(
+            logging, "command_position", default.log_command_position
+        ),
+        log_command_velocity=_bool(
+            logging, "command_velocity", default.log_command_velocity
+        ),
         log_command_effort=_bool(logging, "command_effort", default.log_command_effort),
         log_action_effort=_bool(logging, "action_effort", default.log_action_effort),
-        log_measured_effort=_bool(logging, "measured_effort", default.log_measured_effort),
+        log_measured_effort=_bool(
+            logging, "measured_effort", default.log_measured_effort
+        ),
         log_applied_effort=_bool(logging, "applied_effort", default.log_applied_effort),
     )
 
 
-def override_logging_config(config: JointLoggingConfig, **updates: Any) -> JointLoggingConfig:
+def override_logging_config(
+    config: JointLoggingConfig, **updates: Any
+) -> JointLoggingConfig:
     """用命令行参数覆盖日志配置。"""
 
-    return replace(config, **{key: value for key, value in updates.items() if value is not None})
+    return replace(
+        config, **{key: value for key, value in updates.items() if value is not None}
+    )

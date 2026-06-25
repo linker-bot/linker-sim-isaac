@@ -6,6 +6,8 @@ execution 层只负责把已经规划或采样好的目标下发到 Isaac world�
 执行层概念，不主动创建 world。
 """
 
-from manipulation_project.execution.joint_trajectory_executor import execute_joint_trajectory
+from manipulation_project.execution.joint_trajectory_executor import (
+    execute_joint_trajectory,
+)
 
 __all__ = ["execute_joint_trajectory"]

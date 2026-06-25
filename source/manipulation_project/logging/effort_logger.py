@@ -76,7 +76,9 @@ def _to_numpy_vector(values: Any, expected_size: int) -> np.ndarray | None:
     return array
 
 
-def _read_effort_method(source, method_name: str, joint_indices: np.ndarray | None, expected_size: int) -> np.ndarray | None:
+def _read_effort_method(
+    source, method_name: str, joint_indices: np.ndarray | None, expected_size: int
+) -> np.ndarray | None:
     """调用一个 Isaac effort 读取方法，并把返回值规范化。"""
 
     method = getattr(source, method_name, None)
@@ -95,7 +97,9 @@ def _read_effort_method(source, method_name: str, joint_indices: np.ndarray | No
     return _to_numpy_vector(values, expected_size)
 
 
-def _read_effort(robot, method_name: str, joint_indices: np.ndarray | None, expected_size: int) -> np.ndarray:
+def _read_effort(
+    robot, method_name: str, joint_indices: np.ndarray | None, expected_size: int
+) -> np.ndarray:
     """从 robot 或其 articulation view 读取一种 effort。"""
 
     values = _read_effort_method(robot, method_name, joint_indices, expected_size)
@@ -127,7 +131,11 @@ def read_joint_efforts(
         ``JointEffortSample``。未启用或读取失败的数组填 ``nan``。
     """
 
-    indices = None if joint_indices is None else np.asarray(joint_indices, dtype=int).reshape(-1)
+    indices = (
+        None
+        if joint_indices is None
+        else np.asarray(joint_indices, dtype=int).reshape(-1)
+    )
     expected_size = _expected_size(robot, indices)
     return JointEffortSample(
         measured=(
@@ -143,7 +151,9 @@ def read_joint_efforts(
     )
 
 
-def commanded_efforts_from_controller(controller, joint_indices: np.ndarray | list[int] | tuple[int, ...]) -> np.ndarray:
+def commanded_efforts_from_controller(
+    controller, joint_indices: np.ndarray | list[int] | tuple[int, ...]
+) -> np.ndarray:
     """从 ``JointController.last_commanded_efforts`` 中取出日志关节切片。
 
     参数:
@@ -177,7 +187,13 @@ class EffortLogger:
         CSV 列名使用 ``tau_cmd``、``tau_measured`` 和 ``tau_applied`` 区分三类 effort。
     """
 
-    def __init__(self, path: str | Path | None, joint_names: list[str], *, flush_interval_steps: int = 1) -> None:
+    def __init__(
+        self,
+        path: str | Path | None,
+        joint_names: list[str],
+        *,
+        flush_interval_steps: int = 1,
+    ) -> None:
         self.joint_names = list(joint_names)
         fieldnames = ["step", "time_s", "phase", "drive_update"]
         for name in self.joint_names:
@@ -188,7 +204,9 @@ class EffortLogger:
                     f"tau_applied_{name}",
                 ]
             )
-        self.writer = CsvWriter(path, fieldnames, flush_interval_rows=flush_interval_steps)
+        self.writer = CsvWriter(
+            path, fieldnames, flush_interval_rows=flush_interval_steps
+        )
 
     def _vector(self, values: np.ndarray | None, label: str) -> np.ndarray:
         """校验或补齐一类 effort 数组。"""
@@ -197,7 +215,9 @@ class EffortLogger:
             return _nan_vector(len(self.joint_names))
         vector = np.asarray(values, dtype=float).reshape(-1)
         if vector.size != len(self.joint_names):
-            raise ValueError(f"{label} expected {len(self.joint_names)} values, got {vector.size}")
+            raise ValueError(
+                f"{label} expected {len(self.joint_names)} values, got {vector.size}"
+            )
         return vector
 
     def write(

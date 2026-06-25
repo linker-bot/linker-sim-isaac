@@ -57,7 +57,9 @@ class CuMotionForwardKinematics:
     def compute_cumotion_pose(self, joint_positions, frame_name: str):
         """返回 cuMotion ``Pose3``。"""
 
-        return self.kinematics.pose(np.asarray(joint_positions, dtype=float).reshape(-1), str(frame_name))
+        return self.kinematics.pose(
+            np.asarray(joint_positions, dtype=float).reshape(-1), str(frame_name)
+        )
 
     def compute_pose(self, joint_positions, frame_name: str) -> ForwardKinematicsPose:
         """返回 frame 在 base 下的完整位姿。
@@ -72,7 +74,9 @@ class CuMotionForwardKinematics:
         rotation = cumotion_pose.rotation
         return ForwardKinematicsPose(
             position=np.asarray(cumotion_pose.translation, dtype=float).reshape(3),
-            orientation=np.asarray([rotation.w(), rotation.x(), rotation.y(), rotation.z()], dtype=float),
+            orientation=np.asarray(
+                [rotation.w(), rotation.x(), rotation.y(), rotation.z()], dtype=float
+            ),
             rotation_matrix=np.asarray(rotation.matrix(), dtype=float).reshape(3, 3),
         )
 

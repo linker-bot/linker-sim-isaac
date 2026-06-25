@@ -62,7 +62,9 @@ def is_arm_prim_name(name: str) -> bool:
     return is_arm_name(name)
 
 
-def solver_iterations_for_prim_name(name: str, config: SolverIterationConfig) -> tuple[int, int, str] | None:
+def solver_iterations_for_prim_name(
+    name: str, config: SolverIterationConfig
+) -> tuple[int, int, str] | None:
     """根据 prim 名和配置决定该刚体要写入的迭代次数。
 
     参数:
@@ -73,7 +75,11 @@ def solver_iterations_for_prim_name(name: str, config: SolverIterationConfig) ->
     """
 
     if config.apply_scope == "articulation":
-        return config.hand_position_iterations, config.hand_velocity_iterations, "articulation"
+        return (
+            config.hand_position_iterations,
+            config.hand_velocity_iterations,
+            "articulation",
+        )
     if config.apply_scope in {"arm", "arm_hand"} and is_arm_prim_name(name):
         return config.arm_position_iterations, config.arm_velocity_iterations, "arm"
     if config.apply_scope in {"hand", "arm_hand"} and is_hand_prim_name(name):
@@ -81,7 +87,9 @@ def solver_iterations_for_prim_name(name: str, config: SolverIterationConfig) ->
     return None
 
 
-def apply_solver_iteration_overrides(stage, articulation_root_path: str, config: SolverIterationConfig) -> dict[str, int]:
+def apply_solver_iteration_overrides(
+    stage, articulation_root_path: str, config: SolverIterationConfig
+) -> dict[str, int]:
     """写入 PhysX solver 类型和刚体迭代次数。
 
     参数:
@@ -103,7 +111,9 @@ def apply_solver_iteration_overrides(stage, articulation_root_path: str, config:
     if config.apply_scope not in {"arm", "hand", "arm_hand", "articulation"}:
         raise ValueError(f"Unsupported solver apply_scope: {config.apply_scope}")
 
-    physics_scene_prims = [prim for prim in stage.Traverse() if prim.IsA(UsdPhysics.Scene)]
+    physics_scene_prims = [
+        prim for prim in stage.Traverse() if prim.IsA(UsdPhysics.Scene)
+    ]
     for scene_prim in physics_scene_prims:
         scene_api = (
             PhysxSchema.PhysxSceneAPI(scene_prim)
@@ -121,10 +131,19 @@ def apply_solver_iteration_overrides(stage, articulation_root_path: str, config:
             if articulation_root.HasAPI(PhysxSchema.PhysxArticulationAPI)
             else PhysxSchema.PhysxArticulationAPI.Apply(articulation_root)
         )
-        articulation_api.CreateSolverPositionIterationCountAttr().Set(config.hand_position_iterations)
-        articulation_api.CreateSolverVelocityIterationCountAttr().Set(config.hand_velocity_iterations)
+        articulation_api.CreateSolverPositionIterationCountAttr().Set(
+            config.hand_position_iterations
+        )
+        articulation_api.CreateSolverVelocityIterationCountAttr().Set(
+            config.hand_velocity_iterations
+        )
 
-    counts = {"rigid_bodies": 0, "arm_rigid_bodies": 0, "hand_rigid_bodies": 0, "skipped_rigid_bodies": 0}
+    counts = {
+        "rigid_bodies": 0,
+        "arm_rigid_bodies": 0,
+        "hand_rigid_bodies": 0,
+        "skipped_rigid_bodies": 0,
+    }
     for prim in Usd.PrimRange(articulation_root):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue

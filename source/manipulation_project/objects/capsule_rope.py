@@ -53,7 +53,9 @@ class CapsuleRopeConfig:
         ``add_capsule_rope_reference`` 可把 USD 引用进仿真 stage。
     """
 
-    asset_path: str = "assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
+    asset_path: str = (
+        "assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
+    )
     prim_path: str = "/World/CapsuleRope"
     root_path: str = "/CapsuleRope"
     segments: int = 18
@@ -98,7 +100,9 @@ class CapsuleRopeConfig:
         # 配置拆成 object/rope 两层：object 描述资产路径和 stage 路径，rope 描述几何、质量、
         # 关节和材质参数。这样同一绳体形态可以被不同场景引用到不同 prim_path。
         if "object" not in data or "rope" not in data:
-            raise ValueError("Capsule rope config must contain top-level object and rope sections")
+            raise ValueError(
+                "Capsule rope config must contain top-level object and rope sections"
+            )
         object_cfg = dict(data["object"])
         rope = dict(data["rope"])
         default_length = float(rope.get("length", cls.length))
@@ -119,26 +123,50 @@ class CapsuleRopeConfig:
             shape=str(rope.get("shape", cls.shape)),
             total_mass=float(rope.get("total_mass", cls.total_mass)),
             center=_float_tuple(rope.get("center"), cls.center),
-            endpoint_box_mass=float(rope.get("endpoint_box_mass", cls.endpoint_box_mass)),
-            endpoint_box_size=_float_tuple(rope.get("endpoint_box_size"), cls.endpoint_box_size),
-            endpoint_linear_damping=float(rope.get("endpoint_linear_damping", cls.endpoint_linear_damping)),
-            endpoint_angular_damping=float(rope.get("endpoint_angular_damping", cls.endpoint_angular_damping)),
-            segment_linear_damping=float(rope.get("segment_linear_damping", cls.segment_linear_damping)),
-            segment_angular_damping=float(rope.get("segment_angular_damping", cls.segment_angular_damping)),
+            endpoint_box_mass=float(
+                rope.get("endpoint_box_mass", cls.endpoint_box_mass)
+            ),
+            endpoint_box_size=_float_tuple(
+                rope.get("endpoint_box_size"), cls.endpoint_box_size
+            ),
+            endpoint_linear_damping=float(
+                rope.get("endpoint_linear_damping", cls.endpoint_linear_damping)
+            ),
+            endpoint_angular_damping=float(
+                rope.get("endpoint_angular_damping", cls.endpoint_angular_damping)
+            ),
+            segment_linear_damping=float(
+                rope.get("segment_linear_damping", cls.segment_linear_damping)
+            ),
+            segment_angular_damping=float(
+                rope.get("segment_angular_damping", cls.segment_angular_damping)
+            ),
             bend_limit_deg=float(rope.get("bend_limit_deg", cls.bend_limit_deg)),
             bend_stiffness=float(rope.get("bend_stiffness", cls.bend_stiffness)),
             bend_damping=float(rope.get("bend_damping", cls.bend_damping)),
             lock_twist=bool(rope.get("lock_twist", cls.lock_twist)),
-            twist_limit_deg=default_twist_limit if twist_limit_deg is None else float(twist_limit_deg),
+            twist_limit_deg=default_twist_limit
+            if twist_limit_deg is None
+            else float(twist_limit_deg),
             twist_stiffness=float(rope.get("twist_stiffness", cls.twist_stiffness)),
             twist_damping=float(rope.get("twist_damping", cls.twist_damping)),
-            disable_adjacent_collisions=bool(rope.get("disable_adjacent_collisions", cls.disable_adjacent_collisions)),
-            solver_position_iterations=int(rope.get("solver_position_iterations", cls.solver_position_iterations)),
-            solver_velocity_iterations=int(rope.get("solver_velocity_iterations", cls.solver_velocity_iterations)),
+            disable_adjacent_collisions=bool(
+                rope.get("disable_adjacent_collisions", cls.disable_adjacent_collisions)
+            ),
+            solver_position_iterations=int(
+                rope.get("solver_position_iterations", cls.solver_position_iterations)
+            ),
+            solver_velocity_iterations=int(
+                rope.get("solver_velocity_iterations", cls.solver_velocity_iterations)
+            ),
             endpoint_color=_float_tuple(rope.get("endpoint_color"), cls.endpoint_color),
             rope_color=_float_tuple(rope.get("rope_color"), cls.rope_color),
-            env_static_friction=float(rope.get("env_static_friction", cls.env_static_friction)),
-            env_dynamic_friction=float(rope.get("env_dynamic_friction", cls.env_dynamic_friction)),
+            env_static_friction=float(
+                rope.get("env_static_friction", cls.env_static_friction)
+            ),
+            env_dynamic_friction=float(
+                rope.get("env_dynamic_friction", cls.env_dynamic_friction)
+            ),
             env_restitution=float(rope.get("env_restitution", cls.env_restitution)),
         )
 
@@ -175,7 +203,13 @@ class CapsuleRopeConfig:
             raise ValueError("solver_velocity_iterations cannot be negative")
 
 
-def make_physics_material(stage, path: str, static_friction: float, dynamic_friction: float, restitution: float):
+def make_physics_material(
+    stage,
+    path: str,
+    static_friction: float,
+    dynamic_friction: float,
+    restitution: float,
+):
     """创建 USD 物理材质。"""
 
     from pxr import PhysxSchema, Sdf, UsdPhysics, UsdShade
@@ -234,7 +268,9 @@ def set_xform_translate(prim, xyz) -> None:
     UsdGeom.Xformable(prim).AddTranslateOp().Set(Gf.Vec3d(*xyz))
 
 
-def apply_rigid_body(prim, mass: float, linear_damping: float, angular_damping: float) -> None:
+def apply_rigid_body(
+    prim, mass: float, linear_damping: float, angular_damping: float
+) -> None:
     """给 prim 添加碰撞、刚体、质量和阻尼 API。"""
 
     from pxr import PhysxSchema, UsdPhysics
@@ -248,7 +284,15 @@ def apply_rigid_body(prim, mass: float, linear_damping: float, angular_damping: 
     rigid_body_api.CreateAngularDampingAttr().Set(float(angular_damping))
 
 
-def create_endpoint_box(stage, path: str, position, size_xyz, config: CapsuleRopeConfig, visual_material, physics_material):
+def create_endpoint_box(
+    stage,
+    path: str,
+    position,
+    size_xyz,
+    config: CapsuleRopeConfig,
+    visual_material,
+    physics_material,
+):
     """创建一个绳端端块刚体。"""
 
     from pxr import Gf, UsdGeom
@@ -258,13 +302,26 @@ def create_endpoint_box(stage, path: str, position, size_xyz, config: CapsuleRop
     prim = box.GetPrim()
     set_xform_translate(prim, position)
     UsdGeom.Xformable(prim).AddScaleOp().Set(Gf.Vec3f(*size_xyz))
-    apply_rigid_body(prim, config.endpoint_box_mass, config.endpoint_linear_damping, config.endpoint_angular_damping)
+    apply_rigid_body(
+        prim,
+        config.endpoint_box_mass,
+        config.endpoint_linear_damping,
+        config.endpoint_angular_damping,
+    )
     bind_visual_material(prim, visual_material)
     bind_physics_material(prim, physics_material)
     return prim
 
 
-def create_rope_segment(stage, path: str, position, pitch: float, mass: float, config: CapsuleRopeConfig, visual_material):
+def create_rope_segment(
+    stage,
+    path: str,
+    position,
+    pitch: float,
+    mass: float,
+    config: CapsuleRopeConfig,
+    visual_material,
+):
     """创建一个中间绳段刚体。"""
 
     from pxr import Gf, UsdGeom
@@ -277,7 +334,9 @@ def create_rope_segment(stage, path: str, position, pitch: float, mass: float, c
         segment.CreateSizeAttr(1.0)
         prim = segment.GetPrim()
         set_xform_translate(prim, position)
-        UsdGeom.Xformable(prim).AddScaleOp().Set(Gf.Vec3f(pitch, 2.0 * radius, 2.0 * radius))
+        UsdGeom.Xformable(prim).AddScaleOp().Set(
+            Gf.Vec3f(pitch, 2.0 * radius, 2.0 * radius)
+        )
     else:
         segment = UsdGeom.Capsule.Define(stage, path)
         segment.CreateAxisAttr("X")
@@ -285,7 +344,9 @@ def create_rope_segment(stage, path: str, position, pitch: float, mass: float, c
         segment.CreateHeightAttr(max(1.0e-4, pitch - 2.0 * radius))
         prim = segment.GetPrim()
         set_xform_translate(prim, position)
-    apply_rigid_body(prim, mass, config.segment_linear_damping, config.segment_angular_damping)
+    apply_rigid_body(
+        prim, mass, config.segment_linear_damping, config.segment_angular_damping
+    )
     bind_visual_material(prim, visual_material)
     return prim
 
@@ -323,7 +384,9 @@ def add_angular_drive(joint_prim, axis: str, stiffness: float, damping: float) -
     drive_api.CreateDampingAttr(float(damping))
 
 
-def create_d6_rope_joint(stage, path: str, body0, body1, local_pos0, local_pos1, config: CapsuleRopeConfig):
+def create_d6_rope_joint(
+    stage, path: str, body0, body1, local_pos0, local_pos1, config: CapsuleRopeConfig
+):
     """在两个绳体刚体之间创建一个 D6 风格关节。"""
 
     from pxr import Gf, UsdPhysics
@@ -365,7 +428,9 @@ def filter_collision_pair(body_a, body_b) -> None:
     filter_api.CreateFilteredPairsRel().AddTarget(body_b.GetPath())
 
 
-def apply_rope_solver_iteration_overrides(rope_bodies: list, config: CapsuleRopeConfig) -> None:
+def apply_rope_solver_iteration_overrides(
+    rope_bodies: list, config: CapsuleRopeConfig
+) -> None:
     """给绳体刚体写入 PhysX solver 迭代次数。"""
 
     from pxr import PhysxSchema
@@ -376,8 +441,12 @@ def apply_rope_solver_iteration_overrides(rope_bodies: list, config: CapsuleRope
             if body.HasAPI(PhysxSchema.PhysxRigidBodyAPI)
             else PhysxSchema.PhysxRigidBodyAPI.Apply(body)
         )
-        rigid_api.CreateSolverPositionIterationCountAttr().Set(int(config.solver_position_iterations))
-        rigid_api.CreateSolverVelocityIterationCountAttr().Set(int(config.solver_velocity_iterations))
+        rigid_api.CreateSolverPositionIterationCountAttr().Set(
+            int(config.solver_position_iterations)
+        )
+        rigid_api.CreateSolverVelocityIterationCountAttr().Set(
+            int(config.solver_velocity_iterations)
+        )
 
 
 def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
@@ -394,8 +463,14 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
     joints_scope = UsdGeom.Scope.Define(stage, root_path.AppendChild("Joints"))
     UsdPhysics.ArticulationRootAPI.Apply(root.GetPrim())
 
-    box_visual = make_visual_material(stage, str(root_path.AppendPath("Looks/EndpointBoxMaterial")), config.endpoint_color)
-    rope_visual = make_visual_material(stage, str(root_path.AppendPath("Looks/RopeMaterial")), config.rope_color)
+    box_visual = make_visual_material(
+        stage,
+        str(root_path.AppendPath("Looks/EndpointBoxMaterial")),
+        config.endpoint_color,
+    )
+    rope_visual = make_visual_material(
+        stage, str(root_path.AppendPath("Looks/RopeMaterial")), config.rope_color
+    )
     endpoint_physics = make_physics_material(
         stage,
         str(root_path.AppendPath("PhysicsMaterials/EndpointBoxMaterial")),
@@ -463,7 +538,11 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
         joints.append(
             create_d6_rope_joint(
                 stage,
-                str(joints_scope.GetPath().AppendChild(f"segment_{index:02d}_to_segment_{index + 1:02d}")),
+                str(
+                    joints_scope.GetPath().AppendChild(
+                        f"segment_{index:02d}_to_segment_{index + 1:02d}"
+                    )
+                ),
                 segments[index],
                 segments[index + 1],
                 (0.5 * segment_pitch, 0.0, 0.0),
@@ -474,7 +553,11 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
     joints.append(
         create_d6_rope_joint(
             stage,
-            str(joints_scope.GetPath().AppendChild(f"segment_{config.segments - 1:02d}_to_right_box")),
+            str(
+                joints_scope.GetPath().AppendChild(
+                    f"segment_{config.segments - 1:02d}_to_right_box"
+                )
+            ),
             segments[-1],
             right_box,
             (0.5 * segment_pitch, 0.0, 0.0),
@@ -491,7 +574,12 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
         filter_collision_pair(segments[-1], right_box)
     rope_bodies = [left_box, *segments, right_box]
     apply_rope_solver_iteration_overrides(rope_bodies, config)
-    return {"root": root.GetPrim(), "segments": segments, "joints": joints, "bodies": rope_bodies}
+    return {
+        "root": root.GetPrim(),
+        "segments": segments,
+        "joints": joints,
+        "bodies": rope_bodies,
+    }
 
 
 def collect_rope_model_prims(stage, root_path: str) -> dict[str, object]:
@@ -514,7 +602,9 @@ def collect_rope_model_prims(stage, root_path: str) -> dict[str, object]:
     return {"root": root, "segments": segments, "joints": joints, "bodies": bodies}
 
 
-def write_capsule_rope_asset(config: CapsuleRopeConfig, output_path: str | Path | None = None) -> Path:
+def write_capsule_rope_asset(
+    config: CapsuleRopeConfig, output_path: str | Path | None = None
+) -> Path:
     """按配置生成并保存 capsule rope USD 资产。
 
     参数:
@@ -569,7 +659,9 @@ def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, ob
     return collect_rope_model_prims(stage, str(prim_path))
 
 
-def endpoint_center(config: CapsuleRopeConfig, endpoint: str) -> tuple[float, float, float]:
+def endpoint_center(
+    config: CapsuleRopeConfig, endpoint: str
+) -> tuple[float, float, float]:
     """返回指定端块的世界坐标中心。"""
 
     cx, cy, cz = config.center

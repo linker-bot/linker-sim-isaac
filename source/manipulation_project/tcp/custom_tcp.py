@@ -9,7 +9,9 @@ from __future__ import annotations
 from manipulation_project.tcp.tcp_frame import TcpFrame
 
 
-def make_custom_tcp(parent_frame: str, frame_name: str, xyz, rpy=(0.0, 0.0, 0.0)) -> TcpFrame:
+def make_custom_tcp(
+    parent_frame: str, frame_name: str, xyz, rpy=(0.0, 0.0, 0.0)
+) -> TcpFrame:
     """创建固定到父 frame 的自定义 TCP。
 
     参数:
@@ -21,4 +23,6 @@ def make_custom_tcp(parent_frame: str, frame_name: str, xyz, rpy=(0.0, 0.0, 0.0)
         ``TcpFrame`` 实例。
     """
 
-    return TcpFrame.from_xyz_rpy(frame_name=frame_name, parent_frame=parent_frame, xyz=xyz, rpy=rpy)
+    return TcpFrame.from_xyz_rpy(
+        frame_name=frame_name, parent_frame=parent_frame, xyz=xyz, rpy=rpy
+    )

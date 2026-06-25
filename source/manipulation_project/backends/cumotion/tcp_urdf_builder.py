@@ -15,7 +15,9 @@ import xml.etree.ElementTree as ET
 from manipulation_project.tcp.tcp_frame import TcpFrame
 
 
-def write_tcp_urdf(urdf_path: str | Path, output_urdf_path: str | Path, tcp: TcpFrame) -> Path:
+def write_tcp_urdf(
+    urdf_path: str | Path, output_urdf_path: str | Path, tcp: TcpFrame
+) -> Path:
     """写出追加了固定 TCP link 和 joint 的 URDF 副本。
 
     参数:
@@ -33,9 +35,13 @@ def write_tcp_urdf(urdf_path: str | Path, output_urdf_path: str | Path, tcp: Tcp
     link_names = {link.get("name") for link in root.findall("link")}
     joint_names = {joint.get("name") for joint in root.findall("joint")}
     if tcp.parent_frame not in link_names:
-        raise ValueError(f"Parent frame {tcp.parent_frame!r} not found in {source_path}")
+        raise ValueError(
+            f"Parent frame {tcp.parent_frame!r} not found in {source_path}"
+        )
     if tcp.frame_name in link_names:
-        raise ValueError(f"TCP frame {tcp.frame_name!r} already exists in {source_path}")
+        raise ValueError(
+            f"TCP frame {tcp.frame_name!r} already exists in {source_path}"
+        )
 
     joint_name = f"{tcp.frame_name}_joint"
     if joint_name in joint_names:

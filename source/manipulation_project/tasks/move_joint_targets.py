@@ -13,9 +13,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from manipulation_project.execution.joint_trajectory_executor import execute_joint_trajectory
+from manipulation_project.execution.joint_trajectory_executor import (
+    execute_joint_trajectory,
+)
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.trajectories.joint_trajectory_builder import build_joint_target_trajectory
+from manipulation_project.trajectories.joint_trajectory_builder import (
+    build_joint_target_trajectory,
+)
 
 
 # 兼容旧脚本/外部调用：执行器已经迁移到 execution 层。
@@ -62,7 +66,9 @@ def build_command_trajectory_from_sparse_targets(
         ``command_indices`` 对应的命令关节。
     """
 
-    full_target = target_vector_from_mapping(dof_names, config.targets, base=current_positions)
+    full_target = target_vector_from_mapping(
+        dof_names, config.targets, base=current_positions
+    )
     start = np.asarray(current_positions, dtype=float).reshape(-1)[command_indices]
     target = full_target[command_indices]
     command_names = [dof_names[int(index)] for index in command_indices]

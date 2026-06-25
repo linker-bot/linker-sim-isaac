@@ -186,7 +186,10 @@ class FoxgloveLogger:
         foxglove, _messages = _load_foxglove()
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        return cls(foxglove.open_mcap(output_path, allow_overwrite=allow_overwrite), topics=topics)
+        return cls(
+            foxglove.open_mcap(output_path, allow_overwrite=allow_overwrite),
+            topics=topics,
+        )
 
     @classmethod
     def open_live_server(
@@ -209,7 +212,9 @@ class FoxgloveLogger:
         """
 
         foxglove, _messages = _load_foxglove()
-        return cls(foxglove.start_server(name=name, host=host, port=int(port)), topics=topics)
+        return cls(
+            foxglove.start_server(name=name, host=host, port=int(port)), topics=topics
+        )
 
     def close(self) -> None:
         """关闭 Foxglove sink。
@@ -268,13 +273,25 @@ class FoxgloveLogger:
         # 先做长度校验再构造消息，避免 Foxglove 中出现关节名和值错位的难查问题。
         positions_array = np.asarray(positions, dtype=float).reshape(-1)
         if positions_array.size != len(joint_names):
-            raise ValueError(f"positions expected {len(joint_names)} values, got {positions_array.size}")
-        velocities_array = None if velocities is None else np.asarray(velocities, dtype=float).reshape(-1)
-        efforts_array = None if efforts is None else np.asarray(efforts, dtype=float).reshape(-1)
+            raise ValueError(
+                f"positions expected {len(joint_names)} values, got {positions_array.size}"
+            )
+        velocities_array = (
+            None
+            if velocities is None
+            else np.asarray(velocities, dtype=float).reshape(-1)
+        )
+        efforts_array = (
+            None if efforts is None else np.asarray(efforts, dtype=float).reshape(-1)
+        )
         if velocities_array is not None and velocities_array.size != len(joint_names):
-            raise ValueError(f"velocities expected {len(joint_names)} values, got {velocities_array.size}")
+            raise ValueError(
+                f"velocities expected {len(joint_names)} values, got {velocities_array.size}"
+            )
         if efforts_array is not None and efforts_array.size != len(joint_names):
-            raise ValueError(f"efforts expected {len(joint_names)} values, got {efforts_array.size}")
+            raise ValueError(
+                f"efforts expected {len(joint_names)} values, got {efforts_array.size}"
+            )
 
         joints = []
         for index, name in enumerate(joint_names):
@@ -282,12 +299,20 @@ class FoxgloveLogger:
                 self.messages.JointState(
                     name=str(name),
                     position=float(positions_array[index]),
-                    velocity=None if velocities_array is None else float(velocities_array[index]),
-                    effort=None if efforts_array is None else float(efforts_array[index]),
+                    velocity=None
+                    if velocities_array is None
+                    else float(velocities_array[index]),
+                    effort=None
+                    if efforts_array is None
+                    else float(efforts_array[index]),
                 )
             )
-        msg = self.messages.JointStates(timestamp=_timestamp(time_s, self.messages), joints=joints)
-        self.joint_channel.log(msg, log_time=None if time_s is None else _ns_time(time_s))
+        msg = self.messages.JointStates(
+            timestamp=_timestamp(time_s, self.messages), joints=joints
+        )
+        self.joint_channel.log(
+            msg, log_time=None if time_s is None else _ns_time(time_s)
+        )
 
     def log_scene_spheres(
         self,
@@ -317,12 +342,16 @@ class FoxgloveLogger:
         spheres = [
             self.messages.SpherePrimitive(
                 pose=_pose(point, self.messages),
-                size=self.messages.Vector3(x=float(radius * 2.0), y=float(radius * 2.0), z=float(radius * 2.0)),
+                size=self.messages.Vector3(
+                    x=float(radius * 2.0), y=float(radius * 2.0), z=float(radius * 2.0)
+                ),
                 color=_color(color, self.messages),
             )
             for point in points
         ]
-        self._log_scene_entity(entity_id=entity_id, frame_id=frame_id, spheres=spheres, time_s=time_s)
+        self._log_scene_entity(
+            entity_id=entity_id, frame_id=frame_id, spheres=spheres, time_s=time_s
+        )
 
     def log_scene_line_strip(
         self,
@@ -355,9 +384,13 @@ class FoxgloveLogger:
             thickness=float(thickness),
             color=_color(color, self.messages),
         )
-        self._log_scene_entity(entity_id=entity_id, frame_id=frame_id, lines=[line], time_s=time_s)
+        self._log_scene_entity(
+            entity_id=entity_id, frame_id=frame_id, lines=[line], time_s=time_s
+        )
 
-    def _log_scene_entity(self, *, entity_id: str, frame_id: str, time_s: float | None, **primitive_lists) -> None:
+    def _log_scene_entity(
+        self, *, entity_id: str, frame_id: str, time_s: float | None, **primitive_lists
+    ) -> None:
         """写入单个 Foxglove scene entity。
 
         参数:
@@ -377,4 +410,6 @@ class FoxgloveLogger:
             **primitive_lists,
         )
         msg = self.messages.SceneUpdate(entities=[entity])
-        self.scene_channel.log(msg, log_time=None if time_s is None else _ns_time(time_s))
+        self.scene_channel.log(
+            msg, log_time=None if time_s is None else _ns_time(time_s)
+        )

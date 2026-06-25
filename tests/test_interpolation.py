@@ -2,8 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.trajectories.interpolation import linear, smootherstep, smoothstep
-from manipulation_project.trajectories.joint_trajectory_builder import build_joint_target_trajectory, joint_trajectory_from_positions
+from manipulation_project.trajectories.interpolation import (
+    linear,
+    smootherstep,
+    smoothstep,
+)
+from manipulation_project.trajectories.joint_trajectory_builder import (
+    build_joint_target_trajectory,
+    joint_trajectory_from_positions,
+)
 from manipulation_project.utils.rotations import rpy_xyz_deg_to_quat_wxyz
 
 

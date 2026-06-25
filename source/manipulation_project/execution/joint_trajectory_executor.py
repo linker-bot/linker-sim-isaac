@@ -62,7 +62,9 @@ def execute_joint_trajectory(
 
     # logger 只记录 controller 实际驱动的 DOF。未驱动 DOF 虽然也存在于完整
     # articulation target 中，但通常不是 tracking 关注对象，写入 CSV 会增加噪声。
-    driven_joint_names = [controller.dof_names[int(index)] for index in controller.driven_indices]
+    driven_joint_names = [
+        controller.dof_names[int(index)] for index in controller.driven_indices
+    ]
     logger = JointTrackingLogger(
         log_path,
         driven_joint_names,
@@ -73,7 +75,6 @@ def execute_joint_trajectory(
         # 使用当前仿真状态作为 base_positions，可以避免未控制 DOF 在第一步被意外
         # 置零；后续每一步则用上一帧目标位置作为基准，保持命令连续。
         full_position = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)
-        full_velocity = np.zeros(robot.num_dof, dtype=float)
         for step in range(len(trajectory)):
             # 将命令关节子空间扩展为 Isaac 需要的完整 DOF 数组。controller 内部会
             # 根据 driven_indices 写入命令目标，并保留/推导其它 DOF 的目标值。
@@ -84,7 +85,6 @@ def execute_joint_trajectory(
                 base_positions=full_position,
             )
             full_position = targets.positions
-            full_velocity = targets.velocities
 
             # 下发目标后立即推进一个 physics step。不同控制方法会在 controller 内部
             # 转换成 position、velocity 或 effort action。
@@ -93,7 +93,9 @@ def execute_joint_trajectory(
 
             if logger.should_write(step):
                 # 只在需要写日志时读取实际状态/effort，避免日志降采样时仍产生 Isaac 查询成本。
-                log_values = logger.collect_step_values(robot, controller, targets, controller.driven_indices)
+                log_values = logger.collect_step_values(
+                    robot, controller, targets, controller.driven_indices
+                )
                 logger.write(
                     step=step,
                     time_s=float(step) * float(world.get_physics_dt()),

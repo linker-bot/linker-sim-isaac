@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.trajectory_adapter import joint_trajectory_from_cumotion
+from manipulation_project.backends.cumotion.trajectory_adapter import (
+    joint_trajectory_from_cumotion,
+)
 
 
 class _State:

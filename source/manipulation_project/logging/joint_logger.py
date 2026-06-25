@@ -17,7 +17,10 @@ import numpy as np
 
 from manipulation_project.logging.csv_writer import CsvWriter
 from manipulation_project.logging.config import JointLoggingConfig
-from manipulation_project.logging.effort_logger import commanded_efforts_from_controller, read_joint_efforts
+from manipulation_project.logging.effort_logger import (
+    commanded_efforts_from_controller,
+    read_joint_efforts,
+)
 
 
 class JointTrackingLogger:
@@ -75,14 +78,18 @@ class JointTrackingLogger:
                 fieldnames.append(f"tau_measured_{name}")
             if self.config.log_applied_effort:
                 fieldnames.append(f"tau_applied_{name}")
-        self.writer = CsvWriter(path, fieldnames, flush_interval_rows=flush_interval_steps)
+        self.writer = CsvWriter(
+            path, fieldnames, flush_interval_rows=flush_interval_steps
+        )
 
     def should_write(self, step: int) -> bool:
         """判断当前 step 是否需要写日志。"""
 
         return self.config.should_write_step(step)
 
-    def collect_efforts(self, robot, controller, joint_indices: np.ndarray) -> dict[str, np.ndarray | None]:
+    def collect_efforts(
+        self, robot, controller, joint_indices: np.ndarray
+    ) -> dict[str, np.ndarray | None]:
         """按日志开关读取 commanded/action/measured/applied effort。
 
         measured/applied effort 读取可能触发 Isaac/PhysX buffer clone，是日志里相对昂贵的部分。
@@ -114,7 +121,9 @@ class JointTrackingLogger:
                 result["applied_effort"] = sample.applied
         return result
 
-    def collect_step_values(self, robot, controller, targets, joint_indices: np.ndarray) -> dict[str, np.ndarray | None]:
+    def collect_step_values(
+        self, robot, controller, targets, joint_indices: np.ndarray
+    ) -> dict[str, np.ndarray | None]:
         """按日志开关收集一帧需要写入的关节值。
 
         actual position/velocity 和 measured/applied effort 都需要访问 Isaac runtime；只有对应列开启且
@@ -123,15 +132,23 @@ class JointTrackingLogger:
 
         indices = np.asarray(joint_indices, dtype=int).reshape(-1)
         values: dict[str, np.ndarray | None] = {
-            "desired_position": targets.positions[indices] if self.config.log_command_position else None,
+            "desired_position": targets.positions[indices]
+            if self.config.log_command_position
+            else None,
             "actual_position": None,
-            "desired_velocity": targets.velocities[indices] if self.config.log_command_velocity else None,
+            "desired_velocity": targets.velocities[indices]
+            if self.config.log_command_velocity
+            else None,
             "actual_velocity": None,
         }
         if self.config.log_actual_position:
-            values["actual_position"] = np.asarray(robot.get_joint_positions(), dtype=float).reshape(-1)[indices]
+            values["actual_position"] = np.asarray(
+                robot.get_joint_positions(), dtype=float
+            ).reshape(-1)[indices]
         if self.config.log_actual_velocity:
-            values["actual_velocity"] = np.asarray(robot.get_joint_velocities(), dtype=float).reshape(-1)[indices]
+            values["actual_velocity"] = np.asarray(
+                robot.get_joint_velocities(), dtype=float
+            ).reshape(-1)[indices]
         values.update(self.collect_efforts(robot, controller, indices))
         return values
 
@@ -220,7 +237,9 @@ class JointTrackingLogger:
             return np.full(len(self.joint_names), np.nan, dtype=float)
         vector = np.asarray(values, dtype=float).reshape(-1)
         if vector.size != len(self.joint_names):
-            raise ValueError(f"{label} expected {len(self.joint_names)} values, got {vector.size}")
+            raise ValueError(
+                f"{label} expected {len(self.joint_names)} values, got {vector.size}"
+            )
         return vector
 
     def close(self) -> None:

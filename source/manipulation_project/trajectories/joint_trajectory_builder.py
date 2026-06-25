@@ -51,9 +51,13 @@ def build_joint_target_trajectory(
     start = np.asarray(start_positions, dtype=float).reshape(-1)
     target = np.asarray(target_positions, dtype=float).reshape(-1)
     if start.shape != target.shape:
-        raise ValueError(f"start/target shape mismatch: {start.shape} vs {target.shape}")
+        raise ValueError(
+            f"start/target shape mismatch: {start.shape} vs {target.shape}"
+        )
     if len(joint_names) != start.size:
-        raise ValueError(f"joint_names expected {start.size} names, got {len(joint_names)}")
+        raise ValueError(
+            f"joint_names expected {start.size} names, got {len(joint_names)}"
+        )
 
     # 插值函数只定义 0..1 的无量纲进度，具体持续时间由 duration_s 决定；这样同一种
     # smoothstep 可用于不同任务阶段。
@@ -69,7 +73,10 @@ def build_joint_target_trajectory(
     # 使用 ceil 保证最后一个采样覆盖 duration_s；每个时间点再用 min 钳制到终点，避免
     # duration 不是 sample_dt 整数倍时越界。
     num_steps = max(1, int(np.ceil(duration_s / sample_dt)))
-    times = np.asarray([min(duration_s, step * sample_dt) for step in range(num_steps + 1)], dtype=float)
+    times = np.asarray(
+        [min(duration_s, step * sample_dt) for step in range(num_steps + 1)],
+        dtype=float,
+    )
     positions = np.zeros((times.size, start.size), dtype=float)
     for step in range(num_steps + 1):
         time_s = times[step]

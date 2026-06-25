@@ -22,7 +22,10 @@ from pathlib import Path
 import numpy as np
 
 from manipulation_project.robots.classification import component_for_name
-from manipulation_project.robots.mimic import mjcf_equality_follower_joint_names, parse_mjcf_joint_frictionloss
+from manipulation_project.robots.mimic import (
+    mjcf_equality_follower_joint_names,
+    parse_mjcf_joint_frictionloss,
+)
 
 
 @dataclass(frozen=True)
@@ -58,7 +61,13 @@ class PhysxOverrideConfig:
     follower_max_force: float | None = None
 
 
-def make_physics_material(stage, path: str, static_friction: float, dynamic_friction: float, restitution: float):
+def make_physics_material(
+    stage,
+    path: str,
+    static_friction: float,
+    dynamic_friction: float,
+    restitution: float,
+):
     """创建带 PhysX friction combine mode 的物理材质。
 
     参数:
@@ -123,9 +132,17 @@ def apply_robot_usd_overrides(
         )
         for name, item in configs.items()
     }
-    friction_by_name = parse_mjcf_joint_frictionloss(mjcf_path) if mjcf_path is not None else {}
-    follower_joint_names = mjcf_equality_follower_joint_names(mjcf_path) if mjcf_path is not None else set()
-    drive_all_joints = len(driven_joint_names) == 1 and str(driven_joint_names[0]).lower() == "all"
+    friction_by_name = (
+        parse_mjcf_joint_frictionloss(mjcf_path) if mjcf_path is not None else {}
+    )
+    follower_joint_names = (
+        mjcf_equality_follower_joint_names(mjcf_path)
+        if mjcf_path is not None
+        else set()
+    )
+    drive_all_joints = (
+        len(driven_joint_names) == 1 and str(driven_joint_names[0]).lower() == "all"
+    )
     driven_names = set(driven_joint_names)
 
     root = get_prim_at_path(root_path)
@@ -151,8 +168,12 @@ def apply_robot_usd_overrides(
                 if prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI)
                 else PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
             )
-            rigid_api.CreateLinearDampingAttr().Set(float(item.rigid_body_linear_damping))
-            rigid_api.CreateAngularDampingAttr().Set(float(item.rigid_body_angular_damping))
+            rigid_api.CreateLinearDampingAttr().Set(
+                float(item.rigid_body_linear_damping)
+            )
+            rigid_api.CreateAngularDampingAttr().Set(
+                float(item.rigid_body_angular_damping)
+            )
             counts["rigid_bodies"] += 1
 
         if prim.GetTypeName() not in {"PhysicsRevoluteJoint", "PhysicsPrismaticJoint"}:
@@ -169,27 +190,45 @@ def apply_robot_usd_overrides(
         joint_friction = item.joint_friction
         if is_follower and item.follower_joint_friction is not None:
             joint_friction = item.follower_joint_friction
-        joint_api.CreateJointFrictionAttr().Set(float(friction_by_name.get(prim.GetName(), joint_friction)))
+        joint_api.CreateJointFrictionAttr().Set(
+            float(friction_by_name.get(prim.GetName(), joint_friction))
+        )
 
         is_driven = drive_all_joints or prim.GetName() in driven_names or is_follower
-        stiffness = item.follower_drive_stiffness_seed if is_follower else item.drive_stiffness_seed
-        damping = item.follower_drive_damping_seed if is_follower else item.drive_damping_seed
-        max_force = item.follower_max_force if is_follower and item.follower_max_force is not None else item.max_force
-        drive_name = "angular" if prim.GetTypeName() == "PhysicsRevoluteJoint" else "linear"
+        stiffness = (
+            item.follower_drive_stiffness_seed
+            if is_follower
+            else item.drive_stiffness_seed
+        )
+        damping = (
+            item.follower_drive_damping_seed if is_follower else item.drive_damping_seed
+        )
+        max_force = (
+            item.follower_max_force
+            if is_follower and item.follower_max_force is not None
+            else item.max_force
+        )
+        drive_name = (
+            "angular" if prim.GetTypeName() == "PhysicsRevoluteJoint" else "linear"
+        )
         # 先在 USD 层写入 drive seed，让 articulation 创建时具备合理默认值；运行时
         # JointController 仍会再根据配置写入最终 gain/max effort。
         drive_api = UsdPhysics.DriveAPI.Apply(prim, drive_name)
         drive_api.CreateTypeAttr().Set("force")
         drive_api.CreateStiffnessAttr().Set(float(stiffness if is_driven else 0.0))
         drive_api.CreateDampingAttr().Set(float(damping if is_driven else 0.0))
-        drive_api.CreateMaxForceAttr().Set(float(max_force if is_driven and max_force > 0 else 0.0))
+        drive_api.CreateMaxForceAttr().Set(
+            float(max_force if is_driven and max_force > 0 else 0.0)
+        )
         counts["joints"] += 1
         if is_driven:
             counts["driven_joints"] += 1
     return counts
 
 
-def _normalize_physx_configs(config: PhysxOverrideConfig | dict[str, PhysxOverrideConfig]) -> dict[str, PhysxOverrideConfig]:
+def _normalize_physx_configs(
+    config: PhysxOverrideConfig | dict[str, PhysxOverrideConfig],
+) -> dict[str, PhysxOverrideConfig]:
     """把单配置或分组配置规范成含 default 的字典。"""
 
     # 单配置适合简单机器人；分组配置适合 AR5+L6 这种机械臂和灵巧手物理尺度差异较大的资产。

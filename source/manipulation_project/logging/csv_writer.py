@@ -30,7 +30,13 @@ class CsvWriter:
         实例持有可选文件句柄和 ``csv.DictWriter``；写入行为通过 ``write`` 触发。
     """
 
-    def __init__(self, path: str | Path | None, fieldnames: list[str], *, flush_interval_rows: int = 1) -> None:
+    def __init__(
+        self,
+        path: str | Path | None,
+        fieldnames: list[str],
+        *,
+        flush_interval_rows: int = 1,
+    ) -> None:
         """初始化 CSV writer 并写入表头。
 
         参数:

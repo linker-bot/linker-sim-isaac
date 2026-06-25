@@ -44,7 +44,9 @@ def joint_trajectory_from_cumotion(
         state = trajectory.eval_all(float(time_s))
         positions.append(np.asarray(_attr(state, "position"), dtype=float).reshape(-1))
         velocities.append(np.asarray(_attr(state, "velocity"), dtype=float).reshape(-1))
-        accelerations.append(np.asarray(_attr(state, "acceleration"), dtype=float).reshape(-1))
+        accelerations.append(
+            np.asarray(_attr(state, "acceleration"), dtype=float).reshape(-1)
+        )
         jerks.append(np.asarray(_attr(state, "jerk"), dtype=float).reshape(-1))
     return JointTrajectory.from_samples(
         times=sample_times,
@@ -57,7 +59,9 @@ def joint_trajectory_from_cumotion(
     )
 
 
-def _sample_times(trajectory, *, sample_dt: float | None, times: Sequence[float] | None) -> np.ndarray:
+def _sample_times(
+    trajectory, *, sample_dt: float | None, times: Sequence[float] | None
+) -> np.ndarray:
     """根据显式时间序列或采样周期生成轨迹采样时刻。"""
 
     if times is not None:
@@ -69,10 +73,17 @@ def _sample_times(trajectory, *, sample_dt: float | None, times: Sequence[float]
         raise ValueError("sample_dt must be positive when times is not provided")
     # domain 兼容对象属性 lower/upper 和 tuple 两种表示；生成的最后一个采样点强制不超过 upper。
     domain = trajectory.domain()
-    lower = float(getattr(domain, "lower", domain[0] if isinstance(domain, tuple) else 0.0))
-    upper = float(getattr(domain, "upper", domain[1] if isinstance(domain, tuple) else lower))
+    lower = float(
+        getattr(domain, "lower", domain[0] if isinstance(domain, tuple) else 0.0)
+    )
+    upper = float(
+        getattr(domain, "upper", domain[1] if isinstance(domain, tuple) else lower)
+    )
     steps = max(1, int(np.ceil((upper - lower) / float(sample_dt))))
-    return np.asarray([min(upper, lower + index * float(sample_dt)) for index in range(steps + 1)], dtype=float)
+    return np.asarray(
+        [min(upper, lower + index * float(sample_dt)) for index in range(steps + 1)],
+        dtype=float,
+    )
 
 
 def _attr(state, name: str):

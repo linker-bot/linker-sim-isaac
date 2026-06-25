@@ -74,16 +74,26 @@ class JointTrajectory:
         if self.times.size != self.positions.shape[0]:
             raise ValueError("times length must match positions rows")
         if len(self.joint_names) != self.positions.shape[1]:
-            raise ValueError(f"joint_names expected {self.positions.shape[1]} names, got {len(self.joint_names)}")
+            raise ValueError(
+                f"joint_names expected {self.positions.shape[1]} names, got {len(self.joint_names)}"
+            )
         if self.times.size == 0:
             raise ValueError("Trajectory must contain at least one sample")
         # 速度/加速度/jerk 对执行器并非总是必需；缺省填零可保持对象接口完整，
         # 让日志和控制器无需为“没有速度曲线”的简单轨迹写特殊分支。
-        self.velocities = _matrix_or_zeros(velocities, self.positions.shape, "velocities")
-        self.accelerations = _matrix_or_zeros(accelerations, self.positions.shape, "accelerations")
+        self.velocities = _matrix_or_zeros(
+            velocities, self.positions.shape, "velocities"
+        )
+        self.accelerations = _matrix_or_zeros(
+            accelerations, self.positions.shape, "accelerations"
+        )
         self.jerks = _matrix_or_zeros(jerks, self.positions.shape, "jerks")
         self.efforts = _matrix_or_zeros(efforts, self.positions.shape, "efforts")
-        self.phases = phases if phases is not None else tuple("trajectory" for _ in range(self.times.size))
+        self.phases = (
+            phases
+            if phases is not None
+            else tuple("trajectory" for _ in range(self.times.size))
+        )
         if len(self.phases) != self.times.size:
             raise ValueError("phases length must match trajectory samples")
 
@@ -149,14 +159,18 @@ class JointTrajectory:
         return int(self.times.size)
 
 
-def _matrix_or_zeros(values: np.ndarray | None, shape: tuple[int, int], label: str) -> np.ndarray:
+def _matrix_or_zeros(
+    values: np.ndarray | None, shape: tuple[int, int], label: str
+) -> np.ndarray:
     """把可选采样矩阵规范化为指定 shape，缺省时填零。"""
 
     if values is None:
         return np.zeros(shape, dtype=float)
     matrix = np.asarray(values, dtype=float)
     if matrix.shape != shape:
-        raise ValueError(f"{label} shape mismatch: expected {shape}, got {matrix.shape}")
+        raise ValueError(
+            f"{label} shape mismatch: expected {shape}, got {matrix.shape}"
+        )
     return matrix
 
 
@@ -167,4 +181,7 @@ def _interp_rows(times: np.ndarray, values: np.ndarray, time_s: float) -> np.nda
     # 给出依赖实现细节的结果。
     if times.size == 1:
         return values[0].copy()
-    return np.asarray([np.interp(time_s, times, values[:, col]) for col in range(values.shape[1])], dtype=float)
+    return np.asarray(
+        [np.interp(time_s, times, values[:, col]) for col in range(values.shape[1])],
+        dtype=float,
+    )

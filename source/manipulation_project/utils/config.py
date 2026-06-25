@@ -82,7 +82,11 @@ def require_mapping(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     return value
 
 
-def get_required(config: Mapping[str, Any], key: str, expected_type: type[T] | tuple[type, ...] | None = None) -> T:
+def get_required(
+    config: Mapping[str, Any],
+    key: str,
+    expected_type: type[T] | tuple[type, ...] | None = None,
+) -> T:
     """读取必需配置项，并可选校验类型。
 
     参数:
@@ -97,7 +101,9 @@ def get_required(config: Mapping[str, Any], key: str, expected_type: type[T] | t
         raise ValueError(f"Missing required config key: {key}")
     value = config[key]
     if expected_type is not None and not isinstance(value, expected_type):
-        raise ValueError(f"Config key {key!r} must be {expected_type}, got {type(value).__name__}")
+        raise ValueError(
+            f"Config key {key!r} must be {expected_type}, got {type(value).__name__}"
+        )
     return value  # type: ignore[return-value]
 
 

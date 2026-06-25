@@ -20,19 +20,25 @@ def test_controller_profiles_split_arm_and_hand() -> None:
     assert position.component("AR5V2_L_arm_joint_1").mode == "position"
     assert position.component("AR5V2_L_arm_joint_1").method == "implicit"
     assert position.component("AR5V2_L_arm_joint_1").stiffness == (1000.0,)
-    assert position.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (50000.0,)
+    assert position.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (
+        50000.0,
+    )
 
     velocity = joint_control_settings(profiles, mode="velocity")
     assert velocity.component("AR5V2_L_arm_joint_1").mode == "velocity"
     assert velocity.component("AR5V2_L_arm_joint_1").method == "explicit"
-    assert velocity.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (50000.0,)
+    assert velocity.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (
+        50000.0,
+    )
     assert velocity.component("L6V1_L_hand_index_mcp_pitch").follower_damping == (40.0,)
 
     effort = joint_control_settings(profiles, mode="effort")
     assert effort.component("L6V1_L_hand_index_mcp_pitch").mode == "effort"
     assert effort.component("L6V1_L_hand_index_mcp_pitch").method == "direct"
     assert effort.component("L6V1_L_hand_index_mcp_pitch").effort_limit == 100.0
-    assert effort.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (50000.0,)
+    assert effort.component("L6V1_L_hand_index_mcp_pitch").follower_stiffness == (
+        50000.0,
+    )
     assert effort.component("L6V1_L_hand_index_mcp_pitch").follower_damping == (40.0,)
 
     physx = physx_override_configs(profiles)
@@ -42,7 +48,12 @@ def test_controller_profiles_split_arm_and_hand() -> None:
 
 def test_controller_profiles_require_directory_entrypoint() -> None:
     try:
-        load_controller_profiles({"arm": "configs/controllers/arm_controller.yaml", "hand": "configs/controllers/hand_controller.yaml"})
+        load_controller_profiles(
+            {
+                "arm": "configs/controllers/arm_controller.yaml",
+                "hand": "configs/controllers/hand_controller.yaml",
+            }
+        )
     except TypeError:
         pass
     else:

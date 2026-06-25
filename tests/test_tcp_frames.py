@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.assets.asset_paths import DEFAULT_AR5_L6_MJCF, DEFAULT_AR5_URDF
+from manipulation_project.assets.asset_paths import (
+    DEFAULT_AR5_L6_MJCF,
+    DEFAULT_AR5_URDF,
+)
 from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
-from manipulation_project.tcp.pinch_tcp import infer_hand_body_names, fingertip_pinch_local_offset, make_pinch_tcp
+from manipulation_project.tcp.pinch_tcp import (
+    infer_hand_body_names,
+    fingertip_pinch_local_offset,
+    make_pinch_tcp,
+)
 from manipulation_project.tcp.tcp_frame import TcpFrame
 
 
@@ -30,7 +37,11 @@ def test_hand_body_names_are_inferred_from_joint_prefix() -> None:
 def test_make_pinch_tcp() -> None:
     tcp = make_pinch_tcp(
         DEFAULT_AR5_L6_MJCF,
-        {"L6V1_L_hand_thumb_cmc_roll": 0.95, "L6V1_L_hand_thumb_cmc_pitch": 0.7, "L6V1_L_hand_index_mcp_pitch": 0.85},
+        {
+            "L6V1_L_hand_thumb_cmc_roll": 0.95,
+            "L6V1_L_hand_thumb_cmc_pitch": 0.7,
+            "L6V1_L_hand_index_mcp_pitch": 0.85,
+        },
         parent_frame="AR5V2_L_arm_flan_link",
     )
     assert tcp.frame_name == "pinch_tcp"

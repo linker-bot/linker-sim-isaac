@@ -56,7 +56,11 @@ def sample_cartesian_pose_line(
         CartesianPoseWaypoint(
             time_s=float(time_s),
             position=np.asarray(position, dtype=float).reshape(3),
-            orientation=None if orientation is None else np.asarray(orientation, dtype=float).reshape(4),
+            orientation=None
+            if orientation is None
+            else np.asarray(orientation, dtype=float).reshape(4),
         )
-        for time_s, position, orientation in zip(sample_times, positions, orientations, strict=True)
+        for time_s, position, orientation in zip(
+            sample_times, positions, orientations, strict=True
+        )
     )

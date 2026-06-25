@@ -23,7 +23,11 @@ import numpy as np
 
 from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
 from manipulation_project.tcp.tcp_frame import TcpFrame
-from manipulation_project.utils.math_utils import axis_angle_to_matrix, make_transform, quat_wxyz_to_matrix
+from manipulation_project.utils.math_utils import (
+    axis_angle_to_matrix,
+    make_transform,
+    quat_wxyz_to_matrix,
+)
 
 
 DEFAULT_PINCH_TCP_FRAME = "pinch_tcp"
@@ -50,7 +54,9 @@ def infer_hand_body_names(hand_targets: Mapping[str, float]) -> tuple[str, str, 
             f"{system_name}_hand_thumb_tip",
             f"{system_name}_hand_index_tip",
         )
-    raise ValueError("Cannot infer hand body names because no target joint name contains '_hand_'")
+    raise ValueError(
+        "Cannot infer hand body names because no target joint name contains '_hand_'"
+    )
 
 
 def parse_vec3(text: str | None, default=(0.0, 0.0, 0.0)) -> np.ndarray:
@@ -121,7 +127,9 @@ def find_mjcf_body(root: ET.Element, body_name: str) -> ET.Element:
     raise ValueError(f"MJCF body not found: {body_name}")
 
 
-def body_chain_between(root: ET.Element, base_body_name: str, tip_body_name: str) -> list[ET.Element]:
+def body_chain_between(
+    root: ET.Element, base_body_name: str, tip_body_name: str
+) -> list[ET.Element]:
     """返回从基座 body 到指尖 body 的 body 链。
 
     参数:
@@ -148,7 +156,9 @@ def body_chain_between(root: ET.Element, base_body_name: str, tip_body_name: str
     raise ValueError(f"{tip_body_name} is not under {base_body_name} in MJCF")
 
 
-def body_chain_local_transform(body_chain: list[ET.Element], joint_positions: dict[str, float]) -> np.ndarray:
+def body_chain_local_transform(
+    body_chain: list[ET.Element], joint_positions: dict[str, float]
+) -> np.ndarray:
     """沿一条 MJCF body 链计算局部齐次变换。
 
     参数:
@@ -176,7 +186,9 @@ def body_chain_local_transform(body_chain: list[ET.Element], joint_positions: di
             joint_value = float(joint_positions.get(joint_name, 0.0))
             # MJCF joint 的 pos 是关节轴在当前 body 局部坐标中的位置；这里用 translate+axis-angle
             # 近似该 revolute 关节对后续子 body 的影响，足以计算指尖中心偏移。
-            transform = transform @ make_transform(joint_pos, axis_angle_to_matrix(joint_axis, joint_value))
+            transform = transform @ make_transform(
+                joint_pos, axis_angle_to_matrix(joint_axis, joint_value)
+            )
     return transform
 
 
@@ -248,4 +260,6 @@ def make_pinch_tcp(
         thumb_tip_body=thumb_tip_body,
         index_tip_body=index_tip_body,
     )
-    return TcpFrame.from_xyz_rpy(frame_name=frame_name, parent_frame=parent_frame, xyz=pinch_center)
+    return TcpFrame.from_xyz_rpy(
+        frame_name=frame_name, parent_frame=parent_frame, xyz=pinch_center
+    )
