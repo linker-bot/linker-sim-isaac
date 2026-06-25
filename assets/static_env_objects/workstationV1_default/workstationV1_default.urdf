@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="workstationV1_default">
+  <!--
+    Canonical table frame.
+    Tune visual/collision origin here once, then keep scene placement simple.
+  -->
+  <link name="workstationV1_default_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="../../mesh/static_env_objects/workstationV1_default/workstationV1_default_link.stl"/>
+      </geometry>
+      <material name="workstationV1_default_gray">
+        <color rgba="0.6 0.6 0.6 1.0"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="../../mesh/static_env_objects/workstationV1_default/workstationV1_default_link.stl"/>
+      </geometry>
+    </collision>
+
+    <!-- Simple placeholder inertial properties. -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="50.0"/>
+      <inertia ixx="1.0" ixy="0.0" ixz="0.0" iyy="1.0" iyz="0.0" izz="1.0"/>
+    </inertial>
+  </link>
+
+</robot>

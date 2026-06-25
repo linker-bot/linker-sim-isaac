@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco
-  model="AR5V2_L6V1_L"
+  model="AR5V2_L6V1_R"
 >
-  <!-- 由清洗后的 URDF 生成：AR5V2_L.urdf。 -->
-  <!-- mesh 文件位于assets/mesh/arm/AR5V2_L 和 assets/mesh/hand/L6V1_L/。 -->
+  <!-- 由清洗后的 URDF 生成：AR5V2_R.urdf。 -->
+  <!-- mesh 文件位于assets/mesh/arm/AR5V2_R 和 assets/mesh/hand/L6V1_R/。 -->
   <!-- 惯性说明：URDF 完整惯性矩阵已分解为 quat + diaginertia，便于物理引擎和可视化工具读取。 -->
   <!-- 编译器与仿真选项。 -->
   <compiler
@@ -31,156 +31,156 @@
   <asset
   >
     <mesh
-      name="AR5V2_L_arm_base"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_base.stl"
+      name="AR5V2_R_arm_base"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_base.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link1"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link1.stl"
+      name="AR5V2_R_arm_link1"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link1.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link2"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link2.stl"
+      name="AR5V2_R_arm_link2"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link2.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link3"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link3.stl"
+      name="AR5V2_R_arm_link3"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link3.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link4"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link4.stl"
+      name="AR5V2_R_arm_link4"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link4.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link5"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link5.stl"
+      name="AR5V2_R_arm_link5"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link5.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link6"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link6.stl"
+      name="AR5V2_R_arm_link6"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link6.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="AR5V2_L_arm_link7"
-      file="../../mesh/arm/AR5V2_L/AR5V2_L_arm_link7.stl"
+      name="AR5V2_R_arm_link7"
+      file="../../mesh/arm/AR5V2_R/AR5V2_R_arm_link7.stl"
       scale="0.001 0.001 0.001"
     />
     <mesh
-      name="L6V1_L_hand_base_link"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_base_link.stl"
+      name="L6V1_R_hand_base_link"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_base_link.stl"
     />
     <mesh
-      name="L6V1_L_hand_thumb_metacarpals_base1"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_metacarpals_base1.stl"
+      name="L6V1_R_hand_thumb_metacarpals_base1"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_thumb_metacarpals_base1.stl"
     />
     <mesh
-      name="L6V1_L_hand_thumb_metacarpals"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_metacarpals.stl"
+      name="L6V1_R_hand_thumb_metacarpals"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_thumb_metacarpals.stl"
     />
     <mesh
-      name="L6V1_L_hand_thumb_distal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_thumb_distal.stl"
+      name="L6V1_R_hand_thumb_distal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_thumb_distal.stl"
     />
     <mesh
-      name="L6V1_L_hand_index_proximal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_index_proximal.stl"
+      name="L6V1_R_hand_index_proximal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_index_proximal.stl"
     />
     <mesh
-      name="L6V1_L_hand_index_distal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_index_distal.stl"
+      name="L6V1_R_hand_index_distal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_index_distal.stl"
     />
     <mesh
-      name="L6V1_L_hand_middle_proximal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_middle_proximal.stl"
+      name="L6V1_R_hand_middle_proximal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_middle_proximal.stl"
     />
     <mesh
-      name="L6V1_L_hand_middle_distal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_middle_distal.stl"
+      name="L6V1_R_hand_middle_distal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_middle_distal.stl"
     />
     <mesh
-      name="L6V1_L_hand_ring_proximal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_ring_proximal.stl"
+      name="L6V1_R_hand_ring_proximal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_ring_proximal.stl"
     />
     <mesh
-      name="L6V1_L_hand_ring_distal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_ring_distal.stl"
+      name="L6V1_R_hand_ring_distal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_ring_distal.stl"
     />
     <mesh
-      name="L6V1_L_hand_pinky_proximal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_pinky_proximal.stl"
+      name="L6V1_R_hand_pinky_proximal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_pinky_proximal.stl"
     />
     <mesh
-      name="L6V1_L_hand_pinky_distal"
-      file="../../mesh/hand/L6V1_L/L6V1_L_hand_pinky_distal.stl"
+      name="L6V1_R_hand_pinky_distal"
+      file="../../mesh/hand/L6V1_R/L6V1_R_hand_pinky_distal.stl"
     />
   </asset>
   <!-- 运动学树：body 嵌套关系遵循 URDF 的父子关节关系。 -->
   <worldbody
   >
-    <!-- 根 link：AR5V2_L_arm_base -->
+    <!-- 根 link：AR5V2_R_arm_base -->
     <body
-      name="AR5V2_L_arm_base"
+      name="AR5V2_R_arm_base"
     >
       <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
       <geom
-        name="AR5V2_L_arm_base_visual_0"
+        name="AR5V2_R_arm_base_visual_0"
         type="mesh"
-        mesh="AR5V2_L_arm_base"
+        mesh="AR5V2_R_arm_base"
         contype="0"
         conaffinity="0"
       />
       <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
       <geom
-        name="AR5V2_L_arm_base_collision_0"
+        name="AR5V2_R_arm_base_collision_0"
         type="mesh"
-        mesh="AR5V2_L_arm_base"
+        mesh="AR5V2_R_arm_base"
         rgba="0.8 0.8 0.8 0.25"
       />
-      <!-- 关节 AR5V2_L_arm_joint_1：AR5V2_L_arm_base -> AR5V2_L_arm_link1，类型 revolute。 -->
+      <!-- 关节 AR5V2_R_arm_joint_1：AR5V2_R_arm_base -> AR5V2_R_arm_link1，类型 revolute。 -->
       <body
-        name="AR5V2_L_arm_link1"
+        name="AR5V2_R_arm_link1"
       >
         <joint
-          name="AR5V2_L_arm_joint_1"
+          name="AR5V2_R_arm_joint_1"
           type="hinge"
           axis="0 0 1"
           limited="true"
-          range="-3.10669999999 3.10669999999"
+          range="-3.1067 3.1067"
         />
         <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
         <inertial
           mass="2.166"
-          diaginertia="0.00260865127768 0.00317729694845 0.00332249177387"
-          pos="-0.000184 0.001568 0.172804"
-          quat="0.507212632241 -0.492463268519 -0.505771616986 0.494378747829"
+          diaginertia="0.00258767060155 0.0031485676522 0.00329374174625"
+          pos="0.000186 -0.001543 0.172784"
+          quat="0.505896424611 0.494231755026 -0.507354310633 -0.492336656539"
         />
         <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
         <geom
-          name="AR5V2_L_arm_link1_visual_0"
+          name="AR5V2_R_arm_link1_visual_0"
           type="mesh"
-          mesh="AR5V2_L_arm_link1"
+          mesh="AR5V2_R_arm_link1"
           contype="0"
           conaffinity="0"
         />
         <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
         <geom
-          name="AR5V2_L_arm_link1_collision_0"
+          name="AR5V2_R_arm_link1_collision_0"
           type="mesh"
-          mesh="AR5V2_L_arm_link1"
+          mesh="AR5V2_R_arm_link1"
           rgba="0.8 0.8 0.8 0.25"
         />
-        <!-- 关节 AR5V2_L_arm_joint_2：AR5V2_L_arm_link1 -> AR5V2_L_arm_link2，类型 revolute。 -->
+        <!-- 关节 AR5V2_R_arm_joint_2：AR5V2_R_arm_link1 -> AR5V2_R_arm_link2，类型 revolute。 -->
         <body
-          name="AR5V2_L_arm_link2"
+          name="AR5V2_R_arm_link2"
           pos="0 0 0.1745"
         >
           <joint
-            name="AR5V2_L_arm_joint_2"
+            name="AR5V2_R_arm_joint_2"
             type="hinge"
             axis="0 1 0"
             limited="true"
@@ -189,66 +189,66 @@
           <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
           <inertial
             mass="1.903"
-            diaginertia="0.00299043451855 0.00681281702423 0.00779803845722"
-            pos="-1.7e-05 0.001795 0.106689"
-            quat="0.705808667119 -0.0450958401491 -0.705398384971 0.0470490074443"
+            diaginertia="0.00299054413814 0.00681305740467 0.00779827845719"
+            pos="1.7e-05 -0.001795 0.106691"
+            quat="0.705398432164 0.0470483517316 -0.705808705496 -0.0450951853961"
           />
           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
           <geom
-            name="AR5V2_L_arm_link2_visual_0"
+            name="AR5V2_R_arm_link2_visual_0"
             type="mesh"
-            mesh="AR5V2_L_arm_link2"
+            mesh="AR5V2_R_arm_link2"
             contype="0"
             conaffinity="0"
           />
           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
           <geom
-            name="AR5V2_L_arm_link2_collision_0"
+            name="AR5V2_R_arm_link2_collision_0"
             type="mesh"
-            mesh="AR5V2_L_arm_link2"
+            mesh="AR5V2_R_arm_link2"
             rgba="0.8 0.8 0.8 0.25"
           />
-          <!-- 关节 AR5V2_L_arm_joint_3：AR5V2_L_arm_link2 -> AR5V2_L_arm_link3，类型 revolute。 -->
+          <!-- 关节 AR5V2_R_arm_joint_3：AR5V2_R_arm_link2 -> AR5V2_R_arm_link3，类型 revolute。 -->
           <body
-            name="AR5V2_L_arm_link3"
+            name="AR5V2_R_arm_link3"
             pos="0 0 0.332"
           >
             <joint
-              name="AR5V2_L_arm_joint_3"
+              name="AR5V2_R_arm_joint_3"
               type="hinge"
               axis="0 0 1"
               limited="true"
-              range="-3.10669999999 3.10669999999"
+              range="-3.1067 3.1067"
             />
             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
             <inertial
               mass="1.845"
-              diaginertia="0.00273280691597 0.00591604014503 0.00644578293901"
-              pos="0.008227 -0.001273 -0.020611"
-              quat="0.00159087307759 -0.673026354472 -0.00732429270255 -0.73958052303"
+              diaginertia="0.00266618914189 0.00581605426676 0.00638091659135"
+              pos="0.009022 0.0009 -0.019936"
+              quat="0.0171400452138 -0.677713486318 -0.00796209926541 -0.735083161478"
             />
             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
             <geom
-              name="AR5V2_L_arm_link3_visual_0"
+              name="AR5V2_R_arm_link3_visual_0"
               type="mesh"
-              mesh="AR5V2_L_arm_link3"
+              mesh="AR5V2_R_arm_link3"
               contype="0"
               conaffinity="0"
             />
             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
             <geom
-              name="AR5V2_L_arm_link3_collision_0"
+              name="AR5V2_R_arm_link3_collision_0"
               type="mesh"
-              mesh="AR5V2_L_arm_link3"
+              mesh="AR5V2_R_arm_link3"
               rgba="0.8 0.8 0.8 0.25"
             />
-            <!-- 关节 AR5V2_L_arm_joint_4：AR5V2_L_arm_link3 -> AR5V2_L_arm_link4，类型 revolute。 -->
+            <!-- 关节 AR5V2_R_arm_joint_4：AR5V2_R_arm_link3 -> AR5V2_R_arm_link4，类型 revolute。 -->
             <body
-              name="AR5V2_L_arm_link4"
+              name="AR5V2_R_arm_link4"
               pos="0.0105 0 0"
             >
               <joint
-                name="AR5V2_L_arm_joint_4"
+                name="AR5V2_R_arm_joint_4"
                 type="hinge"
                 axis="0 1 0"
                 limited="true"
@@ -257,65 +257,65 @@
               <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
               <inertial
                 mass="1.037"
-                diaginertia="0.00135637896524 0.00248452938615 0.00295956164861"
-                pos="-0.009242 -0.002172 0.084042"
-                quat="0.101662648333 -0.673522741394 -0.0354006587534 0.731285591352"
+                diaginertia="0.00135669897392 0.00248453705539 0.00295875397068"
+                pos="-0.009272 0.002169 0.084042"
+                quat="0.730533539972 -0.0353365948382 -0.67433062092 0.10173635403"
               />
               <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
               <geom
-                name="AR5V2_L_arm_link4_visual_0"
+                name="AR5V2_R_arm_link4_visual_0"
                 type="mesh"
-                mesh="AR5V2_L_arm_link4"
+                mesh="AR5V2_R_arm_link4"
                 contype="0"
                 conaffinity="0"
               />
               <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
               <geom
-                name="AR5V2_L_arm_link4_collision_0"
+                name="AR5V2_R_arm_link4_collision_0"
                 type="mesh"
-                mesh="AR5V2_L_arm_link4"
+                mesh="AR5V2_R_arm_link4"
                 rgba="0.8 0.8 0.8 0.25"
               />
-              <!-- 关节 AR5V2_L_arm_joint_5：AR5V2_L_arm_link4 -> AR5V2_L_arm_link5，类型 revolute。 -->
+              <!-- 关节 AR5V2_R_arm_joint_5：AR5V2_R_arm_link4 -> AR5V2_R_arm_link5，类型 revolute。 -->
               <body
-                name="AR5V2_L_arm_link5"
+                name="AR5V2_R_arm_link5"
                 pos="-0.0105 0 0.278"
               >
                 <joint
-                  name="AR5V2_L_arm_joint_5"
+                  name="AR5V2_R_arm_joint_5"
                   type="hinge"
                   axis="0 0 1"
                   limited="true"
-                  range="-3.10669999999 3.10669999999"
+                  range="-3.1067 3.1067"
                 />
                 <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                 <inertial
                   mass="1.279"
-                  diaginertia="0.00157480850191 0.00200790111148 0.00242017038662"
-                  pos="-0.000756 0.000723 -0.086764"
-                  quat="0.723267183836 0.0147797211465 -0.684664050118 -0.0888891394068"
+                  diaginertia="0.00157123268922 0.00200544464877 0.00241664266201"
+                  pos="-0.000776 -0.000804 -0.086734"
+                  quat="0.722297139976 -0.0106279586101 -0.685579297425 0.0903045681076"
                 />
                 <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                 <geom
-                  name="AR5V2_L_arm_link5_visual_0"
+                  name="AR5V2_R_arm_link5_visual_0"
                   type="mesh"
-                  mesh="AR5V2_L_arm_link5"
+                  mesh="AR5V2_R_arm_link5"
                   contype="0"
                   conaffinity="0"
                 />
                 <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                 <geom
-                  name="AR5V2_L_arm_link5_collision_0"
+                  name="AR5V2_R_arm_link5_collision_0"
                   type="mesh"
-                  mesh="AR5V2_L_arm_link5"
+                  mesh="AR5V2_R_arm_link5"
                   rgba="0.8 0.8 0.8 0.25"
                 />
-                <!-- 关节 AR5V2_L_arm_joint_6：AR5V2_L_arm_link5 -> AR5V2_L_arm_link6，类型 revolute。 -->
+                <!-- 关节 AR5V2_R_arm_joint_6：AR5V2_R_arm_link5 -> AR5V2_R_arm_link6，类型 revolute。 -->
                 <body
-                  name="AR5V2_L_arm_link6"
+                  name="AR5V2_R_arm_link6"
                 >
                   <joint
-                    name="AR5V2_L_arm_joint_6"
+                    name="AR5V2_R_arm_joint_6"
                     type="hinge"
                     axis="0 1 0"
                     limited="true"
@@ -324,31 +324,31 @@
                   <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                   <inertial
                     mass="0.906"
-                    diaginertia="0.000614276769943 0.000747795466232 0.000758997763825"
-                    pos="-0.005104 0.000251 5.6e-05"
-                    quat="0.0212948322494 -0.99976143073 -0.00320528696201 0.00365210606041"
+                    diaginertia="0.000614857295432 0.000749415917981 0.000760586786587"
+                    pos="-0.005059 -0.00025 -5.5e-05"
+                    quat="0.999760851817 0.0213454523609 -0.00338955316814 -0.00333493134445"
                   />
                   <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                   <geom
-                    name="AR5V2_L_arm_link6_visual_0"
+                    name="AR5V2_R_arm_link6_visual_0"
                     type="mesh"
-                    mesh="AR5V2_L_arm_link6"
+                    mesh="AR5V2_R_arm_link6"
                     contype="0"
                     conaffinity="0"
                   />
                   <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                   <geom
-                    name="AR5V2_L_arm_link6_collision_0"
+                    name="AR5V2_R_arm_link6_collision_0"
                     type="mesh"
-                    mesh="AR5V2_L_arm_link6"
+                    mesh="AR5V2_R_arm_link6"
                     rgba="0.8 0.8 0.8 0.25"
                   />
-                  <!-- 关节 AR5V2_L_arm_joint_7：AR5V2_L_arm_link6 -> AR5V2_L_arm_link7，类型 revolute。 -->
+                  <!-- 关节 AR5V2_R_arm_joint_7：AR5V2_R_arm_link6 -> AR5V2_R_arm_link7，类型 revolute。 -->
                   <body
-                    name="AR5V2_L_arm_link7"
+                    name="AR5V2_R_arm_link7"
                   >
                     <joint
-                      name="AR5V2_L_arm_joint_7"
+                      name="AR5V2_R_arm_joint_7"
                       type="hinge"
                       axis="1 0 0"
                       limited="true"
@@ -357,53 +357,52 @@
                     <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                     <inertial
                       mass="0.33"
-                      diaginertia="0.000409986380333 0.000490030591627 0.000686553028041"
-                      pos="-0.001562 -0.000366 0.05392"
-                      quat="0.632557697773 0.634890326041 0.309668603875 -0.317632474194"
+                      diaginertia="0.000407904896974 0.000491834937953 0.000687070165073"
+                      pos="-0.00122 0.000673 0.053984"
+                      quat="0.315829368572 -0.305298758629 -0.631631644806 -0.638816048019"
                     />
                     <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                     <geom
-                      name="AR5V2_L_arm_link7_visual_0"
+                      name="AR5V2_R_arm_link7_visual_0"
                       type="mesh"
-                      mesh="AR5V2_L_arm_link7"
+                      mesh="AR5V2_R_arm_link7"
                       contype="0"
                       conaffinity="0"
                     />
                     <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                     <geom
-                      name="AR5V2_L_arm_link7_collision_0"
+                      name="AR5V2_R_arm_link7_collision_0"
                       type="mesh"
-                      mesh="AR5V2_L_arm_link7"
+                      mesh="AR5V2_R_arm_link7"
                       rgba="0.8 0.8 0.8 0.25"
                     />
-                    <!-- 关节 AR5V2_L_arm_flan_joint：AR5V2_L_arm_link7 -> AR5V2_L_arm_flan_link，类型 fixed。 -->
+                    <!-- 关节 AR5V2_R_arm_flan_joint：AR5V2_R_arm_link7 -> AR5V2_R_arm_flan_link，类型 fixed。 -->
                     <body
-                      name="AR5V2_L_arm_flan_link"
+                      name="AR5V2_R_arm_flan_link"
                       pos="0 0 0.09"
                     >
-                      <!-- 占位惯性：避免 PhysX 对零质量 fixed link 使用 fallback 小球惯量。 -->
                       <inertial
                         mass="1e-016"
                         diaginertia="1e-18 1e-18 1e-18"
                       />
                       <!-- L6 hand mounted to the AR5 flange. -->
                       <body
-                        name="L6V1_L_hand_base_link"
+                        name="L6V1_R_hand_base_link"
                         pos="0 0 0"
-                        quat="0.707106781187 0 0 0.707106781187"
+                        quat="0.707106781187 0 0 -0.707106781187"
                       >
                         <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                         <inertial
                           mass="0.4185"
                           diaginertia="0.000228936011594 0.000356517960576 0.000501146027831"
-                          pos="0.00199 -0.00091 0.058381"
-                          quat="0.716675486793 0.0605190421688 -0.694775998755 -6.09800402655e-05"
+                          pos="0.00199 0.00091 0.058381"
+                          quat="0.716675486793 -0.0605190421688 -0.694775998755 6.09800402655e-05"
                         />
                         <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                         <geom
-                          name="L6V1_L_hand_base_link_visual_0"
+                          name="L6V1_R_hand_base_link_visual_0"
                           type="mesh"
-                          mesh="L6V1_L_hand_base_link"
+                          mesh="L6V1_R_hand_base_link"
                           contype="0"
                           conaffinity="0"
                           condim="3"
@@ -411,25 +410,25 @@
                         />
                         <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                         <geom
-                          name="L6V1_L_hand_base_link_collision_0"
+                          name="L6V1_R_hand_base_link_collision_0"
                           type="mesh"
-                          mesh="L6V1_L_hand_base_link"
+                          mesh="L6V1_R_hand_base_link"
                           rgba="0.8 0.8 0.8 0.25"
                           condim="3"
                           friction="1.0 0.005 0.0001"
                         />
-                        <!-- 关节 L6V1_L_hand_thumb_cmc_roll：L6V1_L_hand_base_link -> L6V1_L_hand_thumb_metacarpals_base1，类型 revolute。 -->
+                        <!-- 关节 L6V1_R_hand_thumb_cmc_roll：L6V1_R_hand_base_link -> L6V1_R_hand_thumb_metacarpals_base1，类型 revolute。 -->
                         <body
-                          name="L6V1_L_hand_thumb_metacarpals_base1"
-                          pos="0.0078133 -0.029898 0.026692"
+                          name="L6V1_R_hand_thumb_metacarpals_base1"
+                          pos="0.0078133 0.030812 0.025678"
                           quat="0.999847691535 -0.0174526138857 0 0"
                         >
                           <joint
-                            name="L6V1_L_hand_thumb_cmc_roll"
+                            name="L6V1_R_hand_thumb_cmc_roll"
                             type="hinge"
-                            axis="0 0 1"
+                            axis="0 0.034899 -0.99939"
                             limited="true"
-                            range="-0.087266 1.556637"
+                            range="-0.087266 1.256637"
                             damping="0.02"
                             frictionloss="0.05416667"
                           />
@@ -437,14 +436,14 @@
                           <inertial
                             mass="0.01"
                             diaginertia="1.87992525039e-07 4.28030369083e-07 5.06087105878e-07"
-                            pos="0.0018663 -0.0066406 0.001533"
-                            quat="0.893802859783 -0.0948162308651 -0.0754170860189 -0.431785355639"
+                            pos="0.0018663 0.0066406 0.001533"
+                            quat="0.431785355639 0.0754170860189 0.0948162308651 -0.893802859783"
                           />
                           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                           <geom
-                            name="L6V1_L_hand_thumb_metacarpals_base1_visual_0"
+                            name="L6V1_R_hand_thumb_metacarpals_base1_visual_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_thumb_metacarpals_base1"
+                            mesh="L6V1_R_hand_thumb_metacarpals_base1"
                             contype="0"
                             conaffinity="0"
                             condim="3"
@@ -452,23 +451,23 @@
                           />
                           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                           <geom
-                            name="L6V1_L_hand_thumb_metacarpals_base1_collision_0"
+                            name="L6V1_R_hand_thumb_metacarpals_base1_collision_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_thumb_metacarpals_base1"
+                            mesh="L6V1_R_hand_thumb_metacarpals_base1"
                             rgba="0.8 0.8 0.8 0.25"
                             condim="3"
                             friction="1.0 0.005 0.0001"
                           />
-                          <!-- 关节 L6V1_L_hand_thumb_cmc_pitch：L6V1_L_hand_thumb_metacarpals_base1 -> L6V1_L_hand_thumb_metacarpals，类型 revolute。 -->
+                          <!-- 关节 L6V1_R_hand_thumb_cmc_pitch：L6V1_R_hand_thumb_metacarpals_base1 -> L6V1_R_hand_thumb_metacarpals，类型 revolute。 -->
                           <body
-                            name="L6V1_L_hand_thumb_metacarpals"
-                            pos="0.0057298 -0.01332 0.0027456"
-                            quat="0.833276684891 0.515656434586 0.104912634375 0.169533911169"
+                            name="L6V1_R_hand_thumb_metacarpals"
+                            pos="0.0054997 0.013314 0.0032166"
+                            quat="0.842140876551 -0.501049405308 0.107858079586 -0.167674900181"
                           >
                             <joint
-                              name="L6V1_L_hand_thumb_cmc_pitch"
+                              name="L6V1_R_hand_thumb_cmc_pitch"
                               type="hinge"
-                              axis="-1 0 0"
+                              axis="1 0 0"
                               limited="true"
                               range="0 0.837758"
                               damping="0.02"
@@ -478,14 +477,14 @@
                             <inertial
                               mass="0.065"
                               diaginertia="3.63103216455e-06 3.62821829378e-05 3.64101518078e-05"
-                              pos="4.57272561701e-06 0.00442250630583 0.0463354138089"
-                              quat="0.0414382386626 -0.704848611245 -0.100088181932 -0.701037562075"
+                              pos="4.57272561701e-06 -0.00442250630583 0.0463354138089"
+                              quat="0.704848611245 -0.0414382386626 -0.701037562075 -0.100088181932"
                             />
                             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                             <geom
-                              name="L6V1_L_hand_thumb_metacarpals_visual_0"
+                              name="L6V1_R_hand_thumb_metacarpals_visual_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_thumb_metacarpals"
+                              mesh="L6V1_R_hand_thumb_metacarpals"
                               contype="0"
                               conaffinity="0"
                               condim="3"
@@ -493,38 +492,37 @@
                             />
                             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                             <geom
-                              name="L6V1_L_hand_thumb_metacarpals_collision_0"
+                              name="L6V1_R_hand_thumb_metacarpals_collision_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_thumb_metacarpals"
+                              mesh="L6V1_R_hand_thumb_metacarpals"
                               rgba="0.8 0.8 0.8 0.25"
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_thumb_dip：L6V1_L_hand_thumb_metacarpals -> L6V1_L_hand_thumb_distal，类型 revolute。 -->
+                            <!-- 关节 L6V1_R_hand_thumb_dip：L6V1_R_hand_thumb_metacarpals -> L6V1_R_hand_thumb_distal，类型 revolute。 -->
                             <body
-                              name="L6V1_L_hand_thumb_distal"
-                              pos="0 0.0061 0.0827"
+                              name="L6V1_R_hand_thumb_distal"
+                              pos="0 -0.0061 0.0827"
                             >
                               <joint
-                                name="L6V1_L_hand_thumb_dip"
+                                name="L6V1_R_hand_thumb_dip"
                                 type="hinge"
-                                axis="-1 0 0"
+                                axis="1 0 0"
                                 limited="true"
                                 range="0 0.963287"
-                                damping="0.05"
                               />
                               <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                               <inertial
                                 mass="0.018"
                                 diaginertia="8.89726883912e-07 1.78347820876e-06 1.84194998677e-06"
-                                pos="-0.000167504033734 -0.00295134246551 0.0120017495624"
-                                quat="0.565880478789 0.42092500129 -0.471964441391 0.529009445168"
+                                pos="-0.000167504033734 0.00295134246551 0.0120017495624"
+                                quat="0.42092500129 0.565880478789 -0.529009445168 0.471964441391"
                               />
                               <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                               <geom
-                                name="L6V1_L_hand_thumb_distal_visual_0"
+                                name="L6V1_R_hand_thumb_distal_visual_0"
                                 type="mesh"
-                                mesh="L6V1_L_hand_thumb_distal"
+                                mesh="L6V1_R_hand_thumb_distal"
                                 contype="0"
                                 conaffinity="0"
                                 condim="3"
@@ -532,29 +530,30 @@
                               />
                               <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                               <geom
-                                name="L6V1_L_hand_thumb_distal_collision_0"
+                                name="L6V1_R_hand_thumb_distal_collision_0"
                                 type="mesh"
-                                mesh="L6V1_L_hand_thumb_distal"
+                                mesh="L6V1_R_hand_thumb_distal"
                                 rgba="0.8 0.8 0.8 0.25"
                                 condim="3"
                                 friction="1.0 0.005 0.0001"
                               />
-                              <!-- 关节 L6V1_L_hand_thumb_tip_fixed：L6V1_L_hand_thumb_distal -> L6V1_L_hand_thumb_tip，类型 fixed。 -->
+                              <!-- 关节 L6V1_R_hand_thumb_tip_fixed：L6V1_R_hand_thumb_distal -> L6V1_R_hand_thumb_tip，类型 fixed。 -->
                               <body
-                                name="L6V1_L_hand_thumb_tip"
-                                pos="0 0.0035 0.026"
-                                quat="0.707105482511 0 0 0.707108079859"
+                                name="L6V1_R_hand_thumb_tip"
+                                pos="0 -0.0035 0.026"
+                                quat="0.707105482511 0 0 -0.707108079859"
                               />
                             </body>
                           </body>
                         </body>
-                        <!-- 关节 L6V1_L_hand_index_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_index_proximal，类型 revolute。 -->
+                        <!-- 关节 L6V1_R_hand_index_mcp_pitch：L6V1_R_hand_base_link -> L6V1_R_hand_index_proximal，类型 revolute。 -->
                         <body
-                          name="L6V1_L_hand_index_proximal"
-                          pos="-0.00066821 -0.028967 0.11722"
+                          name="L6V1_R_hand_index_proximal"
+                          pos="-0.00066821 0.033467 0.11622"
+                          quat="0.999048231671 -0.0436191562856 0 0"
                         >
                           <joint
-                            name="L6V1_L_hand_index_mcp_pitch"
+                            name="L6V1_R_hand_index_mcp_pitch"
                             type="hinge"
                             axis="0 1 0"
                             limited="true"
@@ -566,14 +565,14 @@
                           <inertial
                             mass="0.008553"
                             diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
-                            pos="0.001776 -0.00011 0.012556"
-                            quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+                            pos="0.001776 0.00011 0.012556"
+                            quat="0.79902900377 -0.0111844046469 0.601150116492 0.00678952641663"
                           />
                           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                           <geom
-                            name="L6V1_L_hand_index_proximal_visual_0"
+                            name="L6V1_R_hand_index_proximal_visual_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_index_proximal"
+                            mesh="L6V1_R_hand_index_proximal"
                             contype="0"
                             conaffinity="0"
                             condim="3"
@@ -581,38 +580,37 @@
                           />
                           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                           <geom
-                            name="L6V1_L_hand_index_proximal_collision_0"
+                            name="L6V1_R_hand_index_proximal_collision_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_index_proximal"
+                            mesh="L6V1_R_hand_index_proximal"
                             rgba="0.8 0.8 0.8 0.25"
                             condim="3"
                             friction="1.0 0.005 0.0001"
                           />
-                          <!-- 关节 L6V1_L_hand_index_dip：L6V1_L_hand_index_proximal -> L6V1_L_hand_index_distal，类型 revolute。 -->
+                          <!-- 关节 L6V1_R_hand_index_dip：L6V1_R_hand_index_proximal -> L6V1_R_hand_index_distal，类型 revolute。 -->
                           <body
-                            name="L6V1_L_hand_index_distal"
-                            pos="0.00093749 0 0.028002"
+                            name="L6V1_R_hand_index_distal"
+                            pos="0.0009359 0 0.028002"
                           >
                             <joint
-                              name="L6V1_L_hand_index_dip"
+                              name="L6V1_R_hand_index_dip"
                               type="hinge"
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
-                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
                               mass="0.018408"
                               diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
-                              pos="0.0134 0.002262 0.016992"
-                              quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+                              pos="0.0134 -0.002262 0.016992"
+                              quat="0.577848080735 -0.692140565357 -0.279344934421 -0.330150633789"
                             />
                             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                             <geom
-                              name="L6V1_L_hand_index_distal_visual_0"
+                              name="L6V1_R_hand_index_distal_visual_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_index_distal"
+                              mesh="L6V1_R_hand_index_distal"
                               contype="0"
                               conaffinity="0"
                               condim="3"
@@ -620,27 +618,28 @@
                             />
                             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                             <geom
-                              name="L6V1_L_hand_index_distal_collision_0"
+                              name="L6V1_R_hand_index_distal_collision_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_index_distal"
+                              mesh="L6V1_R_hand_index_distal"
                               rgba="0.8 0.8 0.8 0.25"
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_index_tip_fixed：L6V1_L_hand_index_distal -> L6V1_L_hand_index_tip，类型 fixed。 -->
+                            <!-- 关节 L6V1_R_hand_index_tip_fixed：L6V1_R_hand_index_distal -> L6V1_R_hand_index_tip，类型 fixed。 -->
                             <body
-                              name="L6V1_L_hand_index_tip"
+                              name="L6V1_R_hand_index_tip"
                               pos="0.0341 0 0.034"
                             />
                           </body>
                         </body>
-                        <!-- 关节 L6V1_L_hand_middle_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_middle_proximal，类型 revolute。 -->
+                        <!-- 关节 L6V1_R_hand_middle_mcp_pitch：L6V1_R_hand_base_link -> L6V1_R_hand_middle_proximal，类型 revolute。 -->
                         <body
-                          name="L6V1_L_hand_middle_proximal"
-                          pos="-0.00066821 -0.0089013 0.12322"
+                          name="L6V1_R_hand_middle_proximal"
+                          pos="-0.00066821 0.0134013 0.12272"
+                          quat="0.999847691535 -0.0174526138857 0 0"
                         >
                           <joint
-                            name="L6V1_L_hand_middle_mcp_pitch"
+                            name="L6V1_R_hand_middle_mcp_pitch"
                             type="hinge"
                             axis="0 1 0"
                             limited="true"
@@ -652,14 +651,14 @@
                           <inertial
                             mass="0.008553"
                             diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
-                            pos="0.001776 -0.00011 0.012556"
-                            quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+                            pos="0.001776 0.00011 0.012556"
+                            quat="0.79902900377 -0.0111844046469 0.601150116492 0.00678952641663"
                           />
                           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                           <geom
-                            name="L6V1_L_hand_middle_proximal_visual_0"
+                            name="L6V1_R_hand_middle_proximal_visual_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_middle_proximal"
+                            mesh="L6V1_R_hand_middle_proximal"
                             contype="0"
                             conaffinity="0"
                             condim="3"
@@ -667,38 +666,37 @@
                           />
                           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                           <geom
-                            name="L6V1_L_hand_middle_proximal_collision_0"
+                            name="L6V1_R_hand_middle_proximal_collision_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_middle_proximal"
+                            mesh="L6V1_R_hand_middle_proximal"
                             rgba="0.8 0.8 0.8 0.25"
                             condim="3"
                             friction="1.0 0.005 0.0001"
                           />
-                          <!-- 关节 L6V1_L_hand_middle_dip：L6V1_L_hand_middle_proximal -> L6V1_L_hand_middle_distal，类型 revolute。 -->
+                          <!-- 关节 L6V1_R_hand_middle_dip：L6V1_R_hand_middle_proximal -> L6V1_R_hand_middle_distal，类型 revolute。 -->
                           <body
-                            name="L6V1_L_hand_middle_distal"
-                            pos="0.00093749 0 0.028002"
+                            name="L6V1_R_hand_middle_distal"
+                            pos="0.0009359 0 0.028002"
                           >
                             <joint
-                              name="L6V1_L_hand_middle_dip"
+                              name="L6V1_R_hand_middle_dip"
                               type="hinge"
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
-                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
                               mass="0.018408"
                               diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
-                              pos="0.0134 0.002262 0.016992"
-                              quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+                              pos="0.0134 -0.002262 0.016992"
+                              quat="0.577848080735 -0.692140565357 -0.279344934421 -0.330150633789"
                             />
                             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                             <geom
-                              name="L6V1_L_hand_middle_distal_visual_0"
+                              name="L6V1_R_hand_middle_distal_visual_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_middle_distal"
+                              mesh="L6V1_R_hand_middle_distal"
                               contype="0"
                               conaffinity="0"
                               condim="3"
@@ -706,27 +704,28 @@
                             />
                             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                             <geom
-                              name="L6V1_L_hand_middle_distal_collision_0"
+                              name="L6V1_R_hand_middle_distal_collision_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_middle_distal"
+                              mesh="L6V1_R_hand_middle_distal"
                               rgba="0.8 0.8 0.8 0.25"
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_middle_tip_fixed：L6V1_L_hand_middle_distal -> L6V1_L_hand_middle_tip，类型 fixed。 -->
+                            <!-- 关节 L6V1_R_hand_middle_tip_fixed：L6V1_R_hand_middle_distal -> L6V1_R_hand_middle_tip，类型 fixed。 -->
                             <body
-                              name="L6V1_L_hand_middle_tip"
+                              name="L6V1_R_hand_middle_tip"
                               pos="0.0341 0 0.034"
                             />
                           </body>
                         </body>
-                        <!-- 关节 L6V1_L_hand_ring_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_ring_proximal，类型 revolute。 -->
+                        <!-- 关节 L6V1_R_hand_ring_mcp_pitch：L6V1_R_hand_base_link -> L6V1_R_hand_ring_proximal，类型 revolute。 -->
                         <body
-                          name="L6V1_L_hand_ring_proximal"
-                          pos="-0.00067368 0.010717 0.11822"
+                          name="L6V1_R_hand_ring_proximal"
+                          pos="-0.00067368 -0.006217 0.11872"
+                          quat="0.999961924341 0.00872638924397 0 0"
                         >
                           <joint
-                            name="L6V1_L_hand_ring_mcp_pitch"
+                            name="L6V1_R_hand_ring_mcp_pitch"
                             type="hinge"
                             axis="0 1 0"
                             limited="true"
@@ -738,14 +737,14 @@
                           <inertial
                             mass="0.008553"
                             diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
-                            pos="0.001776 -0.00011 0.012556"
-                            quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+                            pos="0.001776 0.00011 0.012556"
+                            quat="0.79902900377 -0.0111844046469 0.601150116492 0.00678952641663"
                           />
                           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                           <geom
-                            name="L6V1_L_hand_ring_proximal_visual_0"
+                            name="L6V1_R_hand_ring_proximal_visual_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_ring_proximal"
+                            mesh="L6V1_R_hand_ring_proximal"
                             contype="0"
                             conaffinity="0"
                             condim="3"
@@ -753,38 +752,37 @@
                           />
                           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                           <geom
-                            name="L6V1_L_hand_ring_proximal_collision_0"
+                            name="L6V1_R_hand_ring_proximal_collision_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_ring_proximal"
+                            mesh="L6V1_R_hand_ring_proximal"
                             rgba="0.8 0.8 0.8 0.25"
                             condim="3"
                             friction="1.0 0.005 0.0001"
                           />
-                          <!-- 关节 L6V1_L_hand_ring_dip：L6V1_L_hand_ring_proximal -> L6V1_L_hand_ring_distal，类型 revolute。 -->
+                          <!-- 关节 L6V1_R_hand_ring_dip：L6V1_R_hand_ring_proximal -> L6V1_R_hand_ring_distal，类型 revolute。 -->
                           <body
-                            name="L6V1_L_hand_ring_distal"
-                            pos="0.00093749 0 0.028002"
+                            name="L6V1_R_hand_ring_distal"
+                            pos="0.0009359 0 0.028002"
                           >
                             <joint
-                              name="L6V1_L_hand_ring_dip"
+                              name="L6V1_R_hand_ring_dip"
                               type="hinge"
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
-                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
                               mass="0.018408"
                               diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
-                              pos="0.0134 0.002262 0.016992"
-                              quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+                              pos="0.0134 -0.002262 0.016992"
+                              quat="0.577848080735 -0.692140565357 -0.279344934421 -0.330150633789"
                             />
                             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                             <geom
-                              name="L6V1_L_hand_ring_distal_visual_0"
+                              name="L6V1_R_hand_ring_distal_visual_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_ring_distal"
+                              mesh="L6V1_R_hand_ring_distal"
                               contype="0"
                               conaffinity="0"
                               condim="3"
@@ -792,27 +790,28 @@
                             />
                             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                             <geom
-                              name="L6V1_L_hand_ring_distal_collision_0"
+                              name="L6V1_R_hand_ring_distal_collision_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_ring_distal"
+                              mesh="L6V1_R_hand_ring_distal"
                               rgba="0.8 0.8 0.8 0.25"
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_ring_tip_fixed：L6V1_L_hand_ring_distal -> L6V1_L_hand_ring_tip，类型 fixed。 -->
+                            <!-- 关节 L6V1_R_hand_ring_tip_fixed：L6V1_R_hand_ring_distal -> L6V1_R_hand_ring_tip，类型 fixed。 -->
                             <body
-                              name="L6V1_L_hand_ring_tip"
+                              name="L6V1_R_hand_ring_tip"
                               pos="0.0341 0 0.034"
                             />
                           </body>
                         </body>
-                        <!-- 关节 L6V1_L_hand_pinky_mcp_pitch：L6V1_L_hand_base_link -> L6V1_L_hand_pinky_proximal，类型 revolute。 -->
+                        <!-- 关节 L6V1_R_hand_pinky_mcp_pitch：L6V1_R_hand_base_link -> L6V1_R_hand_pinky_proximal，类型 revolute。 -->
                         <body
-                          name="L6V1_L_hand_pinky_proximal"
-                          pos="-0.00067852 0.029814 0.11424"
+                          name="L6V1_R_hand_pinky_proximal"
+                          pos="-0.00067852 -0.025314 0.11474"
+                          quat="0.999657323373 0.026177009507 0 0"
                         >
                           <joint
-                            name="L6V1_L_hand_pinky_mcp_pitch"
+                            name="L6V1_R_hand_pinky_mcp_pitch"
                             type="hinge"
                             axis="0 1 0"
                             limited="true"
@@ -824,14 +823,14 @@
                           <inertial
                             mass="0.008553"
                             diaginertia="3.17019722719e-07 8.00477131701e-07 8.3754614558e-07"
-                            pos="0.001776 -0.00011 0.012556"
-                            quat="0.79902900377 0.0111844046469 0.601150116492 -0.00678952641663"
+                            pos="0.001776 0.00011 0.012556"
+                            quat="0.79902900377 -0.0111844046469 0.601150116492 0.00678952641663"
                           />
                           <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                           <geom
-                            name="L6V1_L_hand_pinky_proximal_visual_0"
+                            name="L6V1_R_hand_pinky_proximal_visual_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_pinky_proximal"
+                            mesh="L6V1_R_hand_pinky_proximal"
                             contype="0"
                             conaffinity="0"
                             condim="3"
@@ -839,38 +838,37 @@
                           />
                           <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                           <geom
-                            name="L6V1_L_hand_pinky_proximal_collision_0"
+                            name="L6V1_R_hand_pinky_proximal_collision_0"
                             type="mesh"
-                            mesh="L6V1_L_hand_pinky_proximal"
+                            mesh="L6V1_R_hand_pinky_proximal"
                             rgba="0.8 0.8 0.8 0.25"
                             condim="3"
                             friction="1.0 0.005 0.0001"
                           />
-                          <!-- 关节 L6V1_L_hand_pinky_dip：L6V1_L_hand_pinky_proximal -> L6V1_L_hand_pinky_distal，类型 revolute。 -->
+                          <!-- 关节 L6V1_R_hand_pinky_dip：L6V1_R_hand_pinky_proximal -> L6V1_R_hand_pinky_distal，类型 revolute。 -->
                           <body
-                            name="L6V1_L_hand_pinky_distal"
-                            pos="0.00093749 0 0.028002"
+                            name="L6V1_R_hand_pinky_distal"
+                            pos="0.0009359 0 0.028002"
                           >
                             <joint
-                              name="L6V1_L_hand_pinky_dip"
+                              name="L6V1_R_hand_pinky_dip"
                               type="hinge"
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
-                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
                               mass="0.018408"
                               diaginertia="5.91045433074e-07 3.71074684726e-06 3.72425571966e-06"
-                              pos="0.0134 0.002262 0.016992"
-                              quat="0.692140565357 -0.577848080735 -0.330150633789 -0.279344934421"
+                              pos="0.0134 -0.002262 0.016992"
+                              quat="0.577848080735 -0.692140565357 -0.279344934421 -0.330150633789"
                             />
                             <!-- 视觉几何：通过 contype=0 和 conaffinity=0 关闭碰撞。 -->
                             <geom
-                              name="L6V1_L_hand_pinky_distal_visual_0"
+                              name="L6V1_R_hand_pinky_distal_visual_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_pinky_distal"
+                              mesh="L6V1_R_hand_pinky_distal"
                               contype="0"
                               conaffinity="0"
                               condim="3"
@@ -878,16 +876,16 @@
                             />
                             <!-- 碰撞几何：使用同源 mesh，并在查看器中设为半透明。 -->
                             <geom
-                              name="L6V1_L_hand_pinky_distal_collision_0"
+                              name="L6V1_R_hand_pinky_distal_collision_0"
                               type="mesh"
-                              mesh="L6V1_L_hand_pinky_distal"
+                              mesh="L6V1_R_hand_pinky_distal"
                               rgba="0.8 0.8 0.8 0.25"
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_pinky_tip_fixed：L6V1_L_hand_pinky_distal -> L6V1_L_hand_pinky_tip，类型 fixed。 -->
+                            <!-- 关节 L6V1_R_hand_pinky_tip_fixed：L6V1_R_hand_pinky_distal -> L6V1_R_hand_pinky_tip，类型 fixed。 -->
                             <body
-                              name="L6V1_L_hand_pinky_tip"
+                              name="L6V1_R_hand_pinky_tip"
                               pos="0.0341 0 0.034"
                             />
                           </body>
@@ -907,127 +905,127 @@
   <actuator
   >
     <motor
-      name="AR5V2_L_arm_joint_1_motor"
-      joint="AR5V2_L_arm_joint_1"
+      name="AR5V2_R_arm_joint_1_motor"
+      joint="AR5V2_R_arm_joint_1"
       ctrllimited="true"
       ctrlrange="-108 108"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_2_motor"
-      joint="AR5V2_L_arm_joint_2"
+      name="AR5V2_R_arm_joint_2_motor"
+      joint="AR5V2_R_arm_joint_2"
       ctrllimited="true"
       ctrlrange="-108 108"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_3_motor"
-      joint="AR5V2_L_arm_joint_3"
+      name="AR5V2_R_arm_joint_3_motor"
+      joint="AR5V2_R_arm_joint_3"
       ctrllimited="true"
       ctrlrange="-66 66"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_4_motor"
-      joint="AR5V2_L_arm_joint_4"
+      name="AR5V2_R_arm_joint_4_motor"
+      joint="AR5V2_R_arm_joint_4"
       ctrllimited="true"
       ctrlrange="-66 66"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_5_motor"
-      joint="AR5V2_L_arm_joint_5"
+      name="AR5V2_R_arm_joint_5_motor"
+      joint="AR5V2_R_arm_joint_5"
       ctrllimited="true"
       ctrlrange="-19 19"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_6_motor"
-      joint="AR5V2_L_arm_joint_6"
+      name="AR5V2_R_arm_joint_6_motor"
+      joint="AR5V2_R_arm_joint_6"
       ctrllimited="true"
       ctrlrange="-19 19"
       gear="1"
     />
     <motor
-      name="AR5V2_L_arm_joint_7_motor"
-      joint="AR5V2_L_arm_joint_7"
+      name="AR5V2_R_arm_joint_7_motor"
+      joint="AR5V2_R_arm_joint_7"
       ctrllimited="true"
       ctrlrange="-19 19"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_thumb_cmc_roll_motor"
-      joint="L6V1_L_hand_thumb_cmc_roll"
+      name="L6V1_R_hand_thumb_cmc_roll_motor"
+      joint="L6V1_R_hand_thumb_cmc_roll"
       ctrllimited="true"
       ctrlrange="-0.588 0.588"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_thumb_cmc_pitch_motor"
-      joint="L6V1_L_hand_thumb_cmc_pitch"
+      name="L6V1_R_hand_thumb_cmc_pitch_motor"
+      joint="L6V1_R_hand_thumb_cmc_pitch"
       ctrllimited="true"
       ctrlrange="-1.008 1.008"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_thumb_dip_motor"
-      joint="L6V1_L_hand_thumb_dip"
+      name="L6V1_R_hand_thumb_dip_motor"
+      joint="L6V1_R_hand_thumb_dip"
       ctrllimited="true"
       ctrlrange="-0 0"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_index_mcp_pitch_motor"
-      joint="L6V1_L_hand_index_mcp_pitch"
+      name="L6V1_R_hand_index_mcp_pitch_motor"
+      joint="L6V1_R_hand_index_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_index_dip_motor"
-      joint="L6V1_L_hand_index_dip"
+      name="L6V1_R_hand_index_dip_motor"
+      joint="L6V1_R_hand_index_dip"
       ctrllimited="true"
       ctrlrange="-0 0"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_middle_mcp_pitch_motor"
-      joint="L6V1_L_hand_middle_mcp_pitch"
+      name="L6V1_R_hand_middle_mcp_pitch_motor"
+      joint="L6V1_R_hand_middle_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_middle_dip_motor"
-      joint="L6V1_L_hand_middle_dip"
+      name="L6V1_R_hand_middle_dip_motor"
+      joint="L6V1_R_hand_middle_dip"
       ctrllimited="true"
       ctrlrange="-0 0"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_ring_mcp_pitch_motor"
-      joint="L6V1_L_hand_ring_mcp_pitch"
+      name="L6V1_R_hand_ring_mcp_pitch_motor"
+      joint="L6V1_R_hand_ring_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_ring_dip_motor"
-      joint="L6V1_L_hand_ring_dip"
+      name="L6V1_R_hand_ring_dip_motor"
+      joint="L6V1_R_hand_ring_dip"
       ctrllimited="true"
       ctrlrange="-0 0"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_pinky_mcp_pitch_motor"
-      joint="L6V1_L_hand_pinky_mcp_pitch"
+      name="L6V1_R_hand_pinky_mcp_pitch_motor"
+      joint="L6V1_R_hand_pinky_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
       gear="1"
     />
     <motor
-      name="L6V1_L_hand_pinky_dip_motor"
-      joint="L6V1_L_hand_pinky_dip"
+      name="L6V1_R_hand_pinky_dip_motor"
+      joint="L6V1_R_hand_pinky_dip"
       ctrllimited="true"
       ctrlrange="-0 0"
       gear="1"
@@ -1036,41 +1034,41 @@
   <equality
   >
     <joint
-      name="L6V1_L_hand_couple_index"
-      joint1="L6V1_L_hand_index_dip"
-      joint2="L6V1_L_hand_index_mcp_pitch"
+      name="L6V1_R_hand_couple_index"
+      joint1="L6V1_R_hand_index_dip"
+      joint2="L6V1_R_hand_index_mcp_pitch"
       polycoef="0 1.125676 0 0 0 0"
       limited="true"
       damping="0.05"
     />
     <joint
-      name="L6V1_L_hand_couple_middle"
-      joint1="L6V1_L_hand_middle_dip"
-      joint2="L6V1_L_hand_middle_mcp_pitch"
+      name="L6V1_R_hand_couple_middle"
+      joint1="L6V1_R_hand_middle_dip"
+      joint2="L6V1_R_hand_middle_mcp_pitch"
       polycoef="0 1.125676 0 0 0 0"
       limited="true"
       damping="0.05"
     />
     <joint
-      name="L6V1_L_hand_couple_ring"
-      joint1="L6V1_L_hand_ring_dip"
-      joint2="L6V1_L_hand_ring_mcp_pitch"
+      name="L6V1_R_hand_couple_ring"
+      joint1="L6V1_R_hand_ring_dip"
+      joint2="L6V1_R_hand_ring_mcp_pitch"
       polycoef="0 1.125676 0 0 0 0"
       limited="true"
       damping="0.05"
     />
     <joint
-      name="L6V1_L_hand_couple_pinky"
-      joint1="L6V1_L_hand_pinky_dip"
-      joint2="L6V1_L_hand_pinky_mcp_pitch"
+      name="L6V1_R_hand_couple_pinky"
+      joint1="L6V1_R_hand_pinky_dip"
+      joint2="L6V1_R_hand_pinky_mcp_pitch"
       polycoef="0 1.125676 0 0 0 0"
       limited="true"
       damping="0.05"
     />
     <joint
-      name="L6V1_L_hand_couple_thumb"
-      joint1="L6V1_L_hand_thumb_dip"
-      joint2="L6V1_L_hand_thumb_cmc_pitch"
+      name="L6V1_R_hand_couple_thumb"
+      joint1="L6V1_R_hand_thumb_dip"
+      joint2="L6V1_R_hand_thumb_cmc_pitch"
       polycoef="0 1.226495 0 0 0 0"
       limited="true"
       damping="0.05"
