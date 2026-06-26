@@ -44,7 +44,8 @@ class IKRequest:
     """单个 TCP 逆运动学目标。
 
     ``warm_start`` 用于连续轨迹求解的上一帧关节解；``avoid_collisions`` 为真时后端应使用
-    collision-aware 路径或 IK 模式。失败时由后端返回 ``IKResult``，不在数据类内抛错。
+    collision-aware 路径或 IK 模式。``collision_objects`` 是一次请求的环境快照，不表示
+    后端会长期维护动态障碍物。失败时由后端返回 ``IKResult``，不在数据类内抛错。
     """
 
     target_position: np.ndarray
@@ -57,13 +58,34 @@ class IKRequest:
     avoid_collisions: bool = False
     collision_objects: tuple[CollisionObject, ...] = ()
 
+    def validate(self) -> None:
+        """检查 IK 请求的结构性约束。
+
+        这里不判断目标是否可达，也不检查 frame 是否存在；这些依赖具体机器人模型。
+        warm start 只检查非空，长度是否匹配 C-space 由具体后端在加载模型后检查。
+        """
+
+        np.asarray(self.target_position, dtype=float).reshape(3)
+        if self.target_orientation is not None:
+            np.asarray(self.target_orientation, dtype=float).reshape(4)
+        if self.warm_start is not None:
+            warm_start = np.asarray(self.warm_start, dtype=float).reshape(-1)
+            if warm_start.size == 0:
+                raise ValueError("warm_start cannot be empty")
+        if self.position_tolerance < 0 or self.orientation_tolerance < 0:
+            raise ValueError("IK tolerances cannot be negative")
+        if self.tcp_frame_name is not None and not str(self.tcp_frame_name):
+            raise ValueError("tcp_frame_name cannot be empty")
+
 
 @dataclass(frozen=True)
 class MotionRequest:
     """路径级运动规划请求。
 
     ``current_q`` 和 ``goal_q`` 使用后端关节顺序；``goal_pose`` 用于任务空间目标。
-    ``mode`` 是后端可解释的策略标签，默认表示优先考虑环境障碍和机器人碰撞。
+    ``mode`` 是后端可解释的策略标签，默认表示优先考虑环境障碍和机器人碰撞。``duration_s``
+    只描述期望阶段时长，主要供 time-stamped trajectory generator 使用；普通 graph path
+    search 不会因为它而改变目标。
     """
 
     current_q: np.ndarray
@@ -72,9 +94,14 @@ class MotionRequest:
     tcp_frame_name: str | None = None
     collision_objects: tuple[CollisionObject, ...] = ()
     mode: str = "collision_aware"
+    duration_s: float | None = None
 
     def validate(self) -> None:
-        """检查路径级请求是否描述了唯一目标。"""
+        """检查路径级请求是否描述了唯一目标。
+
+        结构校验只保证数组形状、目标互斥关系和非负时长；frame 存在性、关节维度与碰撞
+        支持能力仍由后端 context/planner 判断。
+        """
 
         # MotionRequest 不知道具体机器人模型，因此这里只做结构性检查：当前构型必须是非空
         # 1D 向量，目标必须且只能指定一种。具体关节名、frame 是否存在、碰撞世界是否可用，
@@ -92,6 +119,8 @@ class MotionRequest:
                 raise ValueError(
                     f"goal_q expected {current.size} values, got {goal.size}"
                 )
+        if self.duration_s is not None and self.duration_s < 0:
+            raise ValueError("duration_s cannot be negative")
         if self.goal_pose is not None:
             # PoseTarget 使用项目统一边界：position 为 3D 米制坐标，orientation 若提供则为
             # wxyz 四元数。这里只 reshape 触发清晰错误，不做归一化或可达性判断。

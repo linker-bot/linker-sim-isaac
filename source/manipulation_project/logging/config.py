@@ -44,12 +44,21 @@ class JointLoggingConfig:
     log_applied_effort: bool = False
 
     def should_write_step(self, step: int) -> bool:
-        """判断当前 step 是否需要写日志。"""
+        """判断当前 physics step 是否需要写日志。
+
+        ``interval_steps`` 会被钳制到至少 1；当日志整体关闭时始终返回 ``False``。
+        """
 
         return self.enabled and int(step) % max(1, int(self.interval_steps)) == 0
 
     def flush_interval_steps(self, physics_dt: float) -> int:
-        """把 flush 时间间隔换算成行数/步数。"""
+        """把 flush 时间间隔换算成日志行/physics step 数。
+
+        参数:
+            physics_dt: 仿真物理步长，单位 s。
+        返回:
+            至少为 1 的整数；无效步长会退回每行 flush，优先保证日志落盘。
+        """
 
         if physics_dt <= 0:
             return 1
@@ -57,7 +66,7 @@ class JointLoggingConfig:
 
 
 def _bool(data: Mapping[str, Any], key: str, default: bool) -> bool:
-    """读取 bool 配置。"""
+    """读取布尔配置，并拒绝字符串等隐式真值。"""
 
     value = data.get(key, default)
     if isinstance(value, bool):
@@ -66,7 +75,7 @@ def _bool(data: Mapping[str, Any], key: str, default: bool) -> bool:
 
 
 def _float(data: Mapping[str, Any], key: str, default: float) -> float:
-    """读取 float 配置。"""
+    """读取数值配置并转换为 ``float``。"""
 
     value = data.get(key, default)
     if isinstance(value, (int, float)):
@@ -75,7 +84,7 @@ def _float(data: Mapping[str, Any], key: str, default: float) -> float:
 
 
 def _int(data: Mapping[str, Any], key: str, default: int) -> int:
-    """读取正整数配置。"""
+    """读取正整数配置，用于采样间隔等不能为 0 的字段。"""
 
     value = data.get(key, default)
     if isinstance(value, int) and value > 0:
@@ -84,7 +93,10 @@ def _int(data: Mapping[str, Any], key: str, default: int) -> int:
 
 
 def _path(data: Mapping[str, Any], key: str, default: Path | None) -> Path | None:
-    """读取可选路径配置。"""
+    """读取可选路径配置。
+
+    ``None`` 表示禁用对应文件输出；字符串会延迟到 writer 层再解析父目录和创建文件。
+    """
 
     value = data.get(key, default)
     if value is None:
@@ -97,7 +109,13 @@ def _path(data: Mapping[str, Any], key: str, default: Path | None) -> Path | Non
 def joint_logging_config_from_mapping(
     data: Mapping[str, Any] | None,
 ) -> JointLoggingConfig:
-    """从 YAML mapping 构造 ``JointLoggingConfig``。"""
+    """从 YAML mapping 构造 ``JointLoggingConfig``。
+
+    参数:
+        data: 完整任务配置；函数只读取其中的 ``logging`` 子 mapping。
+    返回:
+        ``JointLoggingConfig``，所有缺失字段使用 dataclass 默认值。
+    """
 
     logging = data.get("logging", {}) if data is not None else {}
     if not isinstance(logging, Mapping):
@@ -134,7 +152,11 @@ def joint_logging_config_from_mapping(
 def override_logging_config(
     config: JointLoggingConfig, **updates: Any
 ) -> JointLoggingConfig:
-    """用命令行参数覆盖日志配置。"""
+    """用命令行参数覆盖日志配置。
+
+    只应用值不为 ``None`` 的更新，便于 CLI 把“参数未传”和“显式关闭/设 0”区分开。
+    返回新的不可变配置对象，不修改传入实例。
+    """
 
     return replace(
         config, **{key: value for key, value in updates.items() if value is not None}

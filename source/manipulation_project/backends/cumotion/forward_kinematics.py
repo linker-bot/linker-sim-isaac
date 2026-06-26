@@ -39,23 +39,39 @@ class CuMotionForwardKinematics:
     """
 
     def __init__(self, context) -> None:
-        """保存共享上下文和 kinematics 引用。"""
+        """保存共享上下文和 kinematics 引用。
+
+        参数:
+            context: 已加载 cuMotion robot description 的 ``CuMotionContext``。
+        """
 
         self.context = context
         self.kinematics = context.kinematics
 
     def joint_names(self) -> list[str]:
-        """返回 C-space 关节名。"""
+        """返回 FK 输入向量使用的 C-space 关节名顺序。
+
+        调用 ``compute_*`` 时传入的关节数组必须按该顺序排列，通常是从完整 Isaac DOF 中按
+        名称抽取出的子向量。
+        """
 
         return self.context.joint_names()
 
     def frame_names(self) -> list[str]:
-        """返回 frame 名。"""
+        """返回当前机器人描述中可查询 FK 的 frame 名。
+
+        只有这些 frame 可以作为 ``compute_pose`` 的 ``frame_name``；自定义 TCP 需要先写入
+        URDF/robot description 后才会出现在这里。
+        """
 
         return self.context.frame_names()
 
     def compute_cumotion_pose(self, joint_positions, frame_name: str):
-        """返回 cuMotion ``Pose3``。"""
+        """返回后端原生 cuMotion ``Pose3``。
+
+        ``joint_positions`` 会被拉平成一维数组，但长度是否匹配 C-space 由 cuMotion
+        kinematics 报错。需要项目统一 pose 结构时使用 ``compute_pose``。
+        """
 
         return self.kinematics.pose(
             np.asarray(joint_positions, dtype=float).reshape(-1), str(frame_name)
@@ -81,13 +97,20 @@ class CuMotionForwardKinematics:
         )
 
     def compute_position(self, joint_positions, frame_name: str) -> np.ndarray:
-        """返回 frame 在 base 下的位置。"""
+        """返回 frame 在 base 下的位置副本，shape 为 ``(3,)``。
+
+        这是 ``compute_pose(...).position`` 的便捷入口，返回 copy，调用方修改它不会影响
+        缓存或后端对象。
+        """
 
         pose = self.compute_pose(joint_positions, frame_name)
         return pose.position.copy()
 
     def compute_orientation(self, joint_positions, frame_name: str) -> np.ndarray:
-        """返回 frame 在 base 下的姿态，wxyz 四元数。"""
+        """返回 frame 在 base 下的姿态副本，格式为 wxyz 四元数。
+
+        这是 ``compute_pose(...).orientation`` 的便捷入口，适合直接作为 IK 请求的姿态目标。
+        """
 
         pose = self.compute_pose(joint_positions, frame_name)
         return pose.orientation.copy()

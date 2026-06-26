@@ -1,9 +1,8 @@
-"""调试绘制工具占位模块。
+"""Isaac debug draw 可视化入口预留模块。
 
-后续可以在这里封装 Isaac debug draw API，用于显示 TCP 目标、IK 误差向量、
-轨迹采样点等临时可视化元素。
-当前保持为空模块是有意的：保留稳定导入路径，同时避免尚未使用的 Isaac debug draw
-依赖在无 GUI/headless 测试中产生副作用。
+项目中可能会从脚本或 notebook 统一导入 ``manipulation_project.visualization.debug_draw``。
+当前模块有意不导入 Isaac debug draw API，原因是该 API 依赖 GUI/runtime context；保持空实现
+可以保留稳定导入路径，同时避免 headless 单元测试在 import 阶段触发 Isaac 依赖。
 """
 
 from __future__ import annotations

@@ -43,6 +43,10 @@ class _FakeWorld:
     def __init__(self) -> None:
         self.obstacles = []
         self.world_view = _FakeWorldView()
+        self.enabled = []
+        self.disabled = []
+        self.removed = []
+        self.poses = []
 
     def add_obstacle(self, obstacle, pose):
         handle = SimpleNamespace(obstacle=obstacle, pose=pose)
@@ -51,6 +55,20 @@ class _FakeWorld:
 
     def add_world_view(self):
         return self.world_view
+
+    def set_pose(self, handle, pose) -> None:
+        handle.pose = pose
+        self.poses.append((handle, pose))
+
+    def enable_obstacle(self, handle) -> None:
+        self.enabled.append(handle)
+
+    def disable_obstacle(self, handle) -> None:
+        self.disabled.append(handle)
+
+    def remove_obstacle(self, handle) -> None:
+        self.removed.append(handle)
+        self.obstacles.remove(handle)
 
 
 class _FakeCumotion:
@@ -85,7 +103,7 @@ def test_collision_world_uses_cumotion_factory_and_adds_enabled_obstacles() -> N
     context = SimpleNamespace(cumotion=cumotion)
     enabled = CollisionObject(
         name="table",
-        shape="box",
+        shape="cuboid",
         pose=np.eye(4),
         size=(0.4, 0.5, 0.1),
         padding=0.02,
@@ -108,3 +126,58 @@ def test_collision_world_uses_cumotion_factory_and_adds_enabled_obstacles() -> N
     obstacle = cumotion.created_obstacles[0]
     assert obstacle.obstacle_type == "cuboid"
     np.testing.assert_allclose(obstacle.attributes["side_lengths"], [0.44, 0.54, 0.14])
+
+
+def test_collision_world_sync_updates_disables_and_removes_obstacles() -> None:
+    cumotion = _FakeCumotion()
+    context = SimpleNamespace(cumotion=cumotion)
+    collision_world = CuMotionCollisionWorld(
+        context,
+        (
+            CollisionObject("table", "cuboid", np.eye(4), (1.0, 1.0, 0.1)),
+            CollisionObject("ball", "sphere", np.eye(4), (0.2,)),
+        ),
+    )
+    table_handle = collision_world.handles["table"]
+    ball_handle = collision_world.handles["ball"]
+    moved_pose = np.eye(4)
+    moved_pose[:3, 3] = [1.0, 2.0, 3.0]
+
+    collision_world.sync(
+        (
+            CollisionObject("table", "cuboid", moved_pose, (1.0, 1.0, 0.1)),
+            CollisionObject("new", "capsule", np.eye(4), (0.1, 0.4)),
+        )
+    )
+
+    assert ball_handle in cumotion.world.removed
+    assert table_handle in cumotion.world.enabled
+    assert "ball" not in collision_world.handles
+    assert "new" in collision_world.handles
+    assert cumotion.world.world_view.update_count == 2
+    np.testing.assert_allclose(table_handle.pose.translation, [1.0, 2.0, 3.0])
+
+    collision_world.sync(
+        (CollisionObject("table", "cuboid", moved_pose, (1.0, 1.0, 0.1), enabled=False),)
+    )
+
+    assert table_handle in cumotion.world.disabled
+
+
+def test_collision_world_sync_recreates_changed_geometry() -> None:
+    cumotion = _FakeCumotion()
+    context = SimpleNamespace(cumotion=cumotion)
+    collision_world = CuMotionCollisionWorld(
+        context,
+        (CollisionObject("table", "cuboid", np.eye(4), (1.0, 1.0, 0.1)),),
+    )
+    original_handle = collision_world.handles["table"]
+
+    collision_world.sync(
+        (CollisionObject("table", "cuboid", np.eye(4), (1.2, 1.0, 0.1)),)
+    )
+
+    assert original_handle in cumotion.world.removed
+    assert collision_world.handles["table"] is not original_handle
+    obstacle = collision_world.obstacles["table"]
+    np.testing.assert_allclose(obstacle.attributes["side_lengths"], [1.2, 1.0, 0.1])

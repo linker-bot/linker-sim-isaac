@@ -1,8 +1,8 @@
-"""Isaac marker 可视化工具占位模块。
+"""Isaac marker 可视化入口预留模块。
 
-后续可以把重复使用的坐标轴、球形目标点、路径 marker 放到这里统一创建和更新。
-当前不导入任何 Isaac 类型，目的是为未来 marker 封装预留 public module，
-同时保持现有测试环境轻量。
+未来重复使用的坐标轴、球形目标点和路径 marker 可以放到这里统一创建和更新。当前模块
+有意保持无运行时代码：它提供稳定 public module 名称，但不在普通 Python 测试中导入 Isaac
+marker 类型或创建 USD/GUI 资源。
 """
 
 from __future__ import annotations

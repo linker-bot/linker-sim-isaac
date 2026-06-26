@@ -7,13 +7,15 @@ cuMotion C-space 关节顺序。若可用，本封装还会用 cuMotion C-space 
 
 职责边界:
     * 只处理后端 C-space，不映射 Isaac articulation 完整 DOF 或 controller command space。
-    * 碰撞世界按请求临时构建，适合静态环境快照。
-    * ``mode`` 只解释是否使用环境障碍；更细的 planner 参数仍由 cuMotion 默认配置管理。
+    * 碰撞世界按请求构建为 cuMotion ``WorldView``；动态物体需要由调用方在请求层更新。
+    * ``mode`` 只解释是否使用环境障碍；planner/trajectory 细节通过 context 或构造参数配置。
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -39,7 +41,11 @@ _COLLISION_DISABLED_MODES = {
 
 
 class CuMotionMotionPlanner:
-    """使用 cuMotion ``MotionPlanner`` 规划路径级运动。"""
+    """使用 cuMotion ``MotionPlanner`` 规划路径级运动。
+
+    该类封装 graph-based path search 和可选 C-space trajectory generation。输入输出都保持
+    cuMotion C-space 关节顺序；完整 articulation DOF 裁剪和回填属于任务层职责。
+    """
 
     def __init__(
         self,
@@ -48,6 +54,11 @@ class CuMotionMotionPlanner:
         tcp_frame_name: str | None = None,
         generate_interpolated_path: bool = True,
         generate_trajectory: bool = True,
+        trajectory_mode: str = "time_optimal",
+        trajectory_interpolation_mode: str = "linear",
+        motion_planner_params: Mapping[str, Any] | None = None,
+        trajectory_limits: Mapping[str, Any] | None = None,
+        trajectory_solver_params: Mapping[str, Any] | None = None,
     ) -> None:
         """创建 motion planner 封装。
 
@@ -58,25 +69,57 @@ class CuMotionMotionPlanner:
         消费这个较密的 path；如果关闭或后端未返回，则回退到 planner 的稀疏搜索节点。
         ``generate_trajectory`` 控制是否把 path 再交给 cuMotion trajectory generator 做时间
         参数化。调用方只需要离散路径时可以关闭它，省掉一次后处理。
+        ``trajectory_mode`` 选择时间参数化入口：``time_optimal`` 使用 cuMotion 根据约束生成
+        时间最优轨迹；``time_stamped`` 使用请求给定阶段时长为每个 waypoint 分配时间戳，再按
+        ``trajectory_interpolation_mode`` 调用 cuMotion 的插值模式。
+
+        参数覆盖采用“context 默认值 + 本次构造参数”的合并规则，构造参数同名键优先。
+        ``motion_planner_params`` 写入 ``MotionPlannerConfig.set_param``；
+        ``trajectory_limits`` 写入 trajectory generator 的 limit setter；
+        ``trajectory_solver_params`` 写入 ``CSpaceTrajectoryGenerator.set_solver_param``。
         """
 
         self.context = context
         self.cumotion = context.cumotion
         self.tcp_frame_name = str(
             tcp_frame_name
-            or context.config.default_tcp_frame
+            or context.config.custom_tcp_frame
             or context.config.flange_frame
         )
         self.generate_interpolated_path = bool(generate_interpolated_path)
         self.generate_trajectory = bool(generate_trajectory)
+        self.trajectory_mode = _normalize_trajectory_mode(trajectory_mode)
+        self.trajectory_interpolation_mode = _normalize_interpolation_mode(
+            trajectory_interpolation_mode
+        )
+        self.motion_planner_params = _merged_mapping(
+            getattr(context.config, "motion_planner_params", {}),
+            motion_planner_params,
+        )
+        self.trajectory_limits = _merged_mapping(
+            getattr(context.config, "trajectory_limits", {}),
+            trajectory_limits,
+        )
+        self.trajectory_solver_params = _merged_mapping(
+            getattr(context.config, "trajectory_solver_params", {}),
+            trajectory_solver_params,
+        )
 
     def joint_names(self) -> list[str]:
-        """返回 planner C-space 关节名。"""
+        """返回 planner 使用的 C-space 关节名。
+
+        顺序与 ``MotionRequest.current_q``、``goal_q`` 和返回的 ``MotionResult.joint_path``
+        完全一致。
+        """
 
         return self.context.joint_names()
 
     def plan(self, request: MotionRequest) -> MotionResult:
-        """根据 ``MotionRequest`` 调用 cuMotion MotionPlanner。"""
+        """根据 ``MotionRequest`` 调用 cuMotion MotionPlanner。
+
+        请求必须提供当前 C-space 位置，并在 ``goal_q`` 和 ``goal_pose`` 中二选一。成功时返回
+        离散 C-space path；若 ``generate_trajectory`` 为真，还会返回 cuMotion trajectory。
+        """
 
         # MotionRequest 是后端无关的数据结构；进入 cuMotion 边界后先做无需加载机器人模型
         # 的结构校验，再用当前 context 的 C-space 维度校验关节向量长度。这里不猜测完整
@@ -91,11 +134,7 @@ class CuMotionMotionPlanner:
         # 世界，从而得到“不考虑环境障碍”的规划结果。
         collision_objects = _collision_objects_for_mode(request)
         collision_world = make_collision_world(self.context, collision_objects)
-        config = self.cumotion.create_default_motion_planner_config(
-            self.context.robot_description,
-            frame_name,
-            collision_world.world_view,
-        )
+        config = self._motion_planner_config(frame_name, collision_world.world_view)
         planner = self.cumotion.create_motion_planner(config)
 
         # MotionRequest 允许两类互斥目标：
@@ -133,6 +172,7 @@ class CuMotionMotionPlanner:
             target_type=target_type,
             frame_name=frame_name,
             num_collision_objects=len(collision_objects),
+            duration_s=request.duration_s,
         )
 
     def _validate_cspace_length(self, values: np.ndarray, label: str) -> None:
@@ -151,6 +191,7 @@ class CuMotionMotionPlanner:
         target_type: str,
         frame_name: str,
         num_collision_objects: int,
+        duration_s: float | None,
     ) -> MotionResult:
         """把 cuMotion planner results 归一化成项目 MotionResult。"""
 
@@ -167,7 +208,7 @@ class CuMotionMotionPlanner:
             and joint_path is not None
         )
         trajectory = (
-            self._generate_trajectory(joint_path)
+            self._generate_trajectory(joint_path, duration_s=duration_s)
             if success and self.generate_trajectory
             else None
         )
@@ -193,7 +234,9 @@ class CuMotionMotionPlanner:
             diagnostics=diagnostics,
         )
 
-    def _generate_trajectory(self, joint_path: np.ndarray | None):
+    def _generate_trajectory(
+        self, joint_path: np.ndarray | None, *, duration_s: float | None = None
+    ):
         """用 cuMotion C-space trajectory generator 给路径做时间参数化。"""
 
         # 单点 path 没有时间参数化的意义，直接返回 None。两点及以上时，trajectory generator
@@ -203,8 +246,93 @@ class CuMotionMotionPlanner:
         generator = self.cumotion.create_cspace_trajectory_generator(
             self.context.kinematics
         )
-        return generator.generate_trajectory(
-            [np.asarray(row, dtype=float).reshape(-1) for row in joint_path]
+        self._configure_trajectory_generator(generator)
+        waypoints = [np.asarray(row, dtype=float).reshape(-1) for row in joint_path]
+        if self.trajectory_mode == "time_optimal":
+            return generator.generate_trajectory(waypoints)
+        if duration_s is None:
+            raise ValueError(
+                "duration_s is required when trajectory_mode='time_stamped'"
+            )
+        if duration_s <= 0.0:
+            raise ValueError(
+                "duration_s must be positive when trajectory_mode='time_stamped'"
+            )
+        times = _times_for_joint_path(joint_path, float(duration_s))
+        return generator.generate_time_stamped_trajectory(
+            waypoints,
+            times,
+            self._trajectory_interpolation_mode(),
+        )
+
+    def _trajectory_interpolation_mode(self):
+        """返回 cuMotion ``CSpaceTrajectoryGenerator.InterpolationMode`` 枚举值。"""
+
+        interpolation_mode = self.cumotion.CSpaceTrajectoryGenerator.InterpolationMode
+        if self.trajectory_interpolation_mode == "linear":
+            return interpolation_mode.LINEAR
+        if self.trajectory_interpolation_mode == "cubic_spline":
+            return interpolation_mode.CUBIC_SPLINE
+        raise ValueError(
+            f"Unsupported trajectory_interpolation_mode={self.trajectory_interpolation_mode!r}"
+        )
+
+    def _motion_planner_config(self, frame_name: str, world_view):
+        """创建并配置 cuMotion ``MotionPlannerConfig``。
+
+        优先使用 ``context.config.motion_planner_config_path`` 指向的配置文件；未配置时使用
+        cuMotion 默认配置。随后统一应用 ``motion_planner_params``，让 YAML/default file 与
+        任务级覆盖可以组合使用。
+        """
+
+        config_path = getattr(self.context.config, "motion_planner_config_path", None)
+        if config_path:
+            config = self.cumotion.create_motion_planner_config_from_file(
+                Path(config_path),
+                self.context.robot_description,
+                frame_name,
+                world_view,
+            )
+        else:
+            config = self.cumotion.create_default_motion_planner_config(
+                self.context.robot_description,
+                frame_name,
+                world_view,
+            )
+        _apply_config_params(
+            config,
+            self.motion_planner_params,
+            self.cumotion.MotionPlannerConfig.ParamValue,
+        )
+        return config
+
+    def _configure_trajectory_generator(self, generator) -> None:
+        """应用 trajectory limits 和 solver params。
+
+        支持的 limit 键为 ``position_min``、``position_max``、``velocity``、
+        ``acceleration`` 和 ``jerk``，若设置位置上下界必须同时给出。
+        """
+
+        limits = _normalized_trajectory_limits(self.trajectory_limits)
+        if "position_min" in limits or "position_max" in limits:
+            if "position_min" not in limits or "position_max" not in limits:
+                raise ValueError(
+                    "trajectory_limits position_min and position_max must be set together"
+                )
+            generator.set_position_limits(
+                limits["position_min"], limits["position_max"]
+            )
+        if "velocity" in limits:
+            generator.set_velocity_limits(limits["velocity"])
+        if "acceleration" in limits:
+            generator.set_acceleration_limits(limits["acceleration"])
+        if "jerk" in limits:
+            generator.set_jerk_limits(limits["jerk"])
+        _apply_config_params(
+            generator,
+            self.trajectory_solver_params,
+            self.cumotion.CSpaceTrajectoryGenerator.SolverParamValue,
+            setter_name="set_solver_param",
         )
 
 
@@ -217,6 +345,100 @@ def _collision_objects_for_mode(request: MotionRequest):
     if mode in _COLLISION_DISABLED_MODES:
         return ()
     return tuple(request.collision_objects)
+
+
+def _merged_mapping(*mappings) -> dict[str, Any]:
+    """合并可选映射，后面的映射覆盖前面的键。
+
+    该函数用于实现 context 配置与任务级覆盖的优先级；值本身不做类型转换，保留给 cuMotion
+    对应的 ``ParamValue`` 构造器处理。
+    """
+
+    merged: dict[str, Any] = {}
+    for mapping in mappings:
+        if mapping is None:
+            continue
+        if not isinstance(mapping, Mapping):
+            raise ValueError("cuMotion parameter overrides must be mappings")
+        merged.update({str(key): value for key, value in mapping.items()})
+    return merged
+
+
+def _apply_config_params(
+    target, params: Mapping[str, Any], param_value_type, *, setter_name: str = "set_param"
+) -> None:
+    """把项目参数映射写入 cuMotion config/generator。
+
+    cuMotion 的 ``set_param``/``set_solver_param`` 返回 ``False`` 时通常表示参数名或类型不被
+    后端接受；这里立即抛出 ``ValueError``，避免后续规划悄悄退回默认参数。
+    """
+
+    setter = getattr(target, setter_name)
+    for name, value in params.items():
+        ok = setter(str(name), param_value_type(value))
+        if ok is False:
+            raise ValueError(f"cuMotion config rejected parameter {name!r}")
+
+
+def _normalized_trajectory_limits(limits: Mapping[str, Any]) -> dict[str, np.ndarray]:
+    """规范化 trajectory limit 键名。
+
+    项目配置允许少量同义键，例如 ``max_velocity`` 和 ``velocity_limit``。返回值只包含
+    cuMotion wrapper 内部认可的规范键，未知键会报错以防拼写错误被忽略。
+    """
+
+    aliases = {
+        "min_position": "position_min",
+        "position_lower": "position_min",
+        "lower_position": "position_min",
+        "max_position": "position_max",
+        "position_upper": "position_max",
+        "upper_position": "position_max",
+        "max_velocity": "velocity",
+        "velocity_limit": "velocity",
+        "max_acceleration": "acceleration",
+        "acceleration_limit": "acceleration",
+        "max_jerk": "jerk",
+        "jerk_limit": "jerk",
+    }
+    normalized = {}
+    for key, value in limits.items():
+        normalized_key = aliases.get(str(key), str(key))
+        normalized[normalized_key] = np.asarray(value, dtype=float).reshape(-1)
+    unknown = set(normalized) - {
+        "position_min",
+        "position_max",
+        "velocity",
+        "acceleration",
+        "jerk",
+    }
+    if unknown:
+        raise ValueError(f"Unsupported trajectory_limits key(s): {sorted(unknown)}")
+    return normalized
+
+
+def _normalize_trajectory_mode(value: str) -> str:
+    """规范化 cuMotion trajectory generator 模式。"""
+
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized in {"time_optimal", "optimal", "default"}:
+        return "time_optimal"
+    if normalized in {"time_stamped", "timestamped", "time_stamp"}:
+        return "time_stamped"
+    raise ValueError("trajectory_mode must be one of: time_optimal, time_stamped")
+
+
+def _normalize_interpolation_mode(value: str) -> str:
+    """规范化 cuMotion time-stamped trajectory 插值模式。"""
+
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized == "linear":
+        return "linear"
+    if normalized in {"cubic", "cubic_spline", "spline"}:
+        return "cubic_spline"
+    raise ValueError(
+        "trajectory_interpolation_mode must be one of: linear, cubic_spline"
+    )
 
 
 def _result_path_samples(results, *, prefer_interpolated: bool) -> list[np.ndarray]:
@@ -247,15 +469,38 @@ def _stack_path(path_samples: Sequence[np.ndarray]) -> np.ndarray | None:
 
 
 def _path_length(joint_path: np.ndarray) -> float:
-    """计算 C-space 路径长度。"""
+    """计算 C-space 路径长度。
+
+    这是诊断用几何长度，不等于执行时长，也不考虑关节限速或加速度约束。
+    """
 
     if joint_path.shape[0] < 2:
         return 0.0
     return float(np.linalg.norm(np.diff(joint_path, axis=0), axis=1).sum())
 
 
+def _times_for_joint_path(joint_path: np.ndarray, duration_s: float) -> list[float]:
+    """按 C-space 路径长度给 waypoint 分配 ``[0, duration_s]`` 时间戳。"""
+
+    if duration_s < 0:
+        raise ValueError("duration_s cannot be negative")
+    path = np.asarray(joint_path, dtype=float)
+    if path.ndim != 2 or path.shape[0] < 2:
+        return [0.0]
+    segment_lengths = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    cumulative = np.concatenate(([0.0], np.cumsum(segment_lengths)))
+    total = float(cumulative[-1])
+    if total <= 1.0e-12:
+        return list(np.linspace(0.0, float(duration_s), path.shape[0]))
+    return [float(value) for value in float(duration_s) * cumulative / total]
+
+
 def _attr(obj, name: str, *, default=None):
-    """兼容字段是属性或零参方法两种形式。"""
+    """兼容字段是属性或零参方法两种形式。
+
+    真实 pybind 对象和测试 fake 在暴露结果字段时可能不一致；该 helper 让主逻辑不用关心
+    ``results.path`` 与 ``results.path()`` 的区别。
+    """
 
     value = getattr(obj, name, default)
     return value() if callable(value) else value

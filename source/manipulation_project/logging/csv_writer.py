@@ -85,10 +85,8 @@ class CsvWriter:
     def close(self) -> None:
         """关闭底层文件句柄。
 
-        参数:
-            无。
-        返回:
-            无返回值；可重复调用。
+        该方法是幂等的；禁用日志或已经关闭时直接返回。关闭后 ``write`` 会退化为 no-op，
+        因此上下文管理器和显式 ``finally`` 中重复调用都是安全的。
         """
 
         if self.file is not None:

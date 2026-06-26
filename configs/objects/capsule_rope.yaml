@@ -21,9 +21,9 @@ rope:
   center: [0.4, -0.55, 0.05]
   # 绳体总质量，内部按 segment 平均分配。
   total_mass: 0.2
-  # segment 几何形状：capsule 更适合绳体接触，box 便于调试。
+  # segment 几何形状：capsule 更适合绳体接触，cuboid 便于调试。
   shape: capsule
-  # 两端端块质量和尺寸；抓取目标通常是 endpoint box。
+  # 两端端块质量和尺寸；抓取目标通常是 endpoint cuboid。
   endpoint_box_mass: 0.5
   endpoint_box_size: [0.04, 0.03, 0.1]
   # 端块和中间绳段刚体阻尼。

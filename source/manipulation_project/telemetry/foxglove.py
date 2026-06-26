@@ -219,10 +219,8 @@ class FoxgloveLogger:
     def close(self) -> None:
         """关闭 Foxglove sink。
 
-        参数:
-            无。
-        返回:
-            无返回值。
+        不同 Foxglove sink 可能是 context object、server handle 或轻量 mock；只有暴露
+        ``close`` 方法时才调用它，因此本方法可安全用于测试替身和上下文管理器清理。
         """
 
         close = getattr(self.sink, "close", None)

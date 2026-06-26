@@ -39,7 +39,11 @@ class JointEffortSample:
 
 
 def _expected_size(robot, joint_indices: np.ndarray | None) -> int:
-    """计算日志数组长度。"""
+    """计算本次 effort 采样应返回的数组长度。
+
+    优先使用显式 ``joint_indices`` 长度；读取全部 DOF 时再回退到 Isaac articulation 的
+    ``num_dof`` 或 ``dof_names``。
+    """
 
     if joint_indices is not None:
         return int(joint_indices.size)
@@ -49,7 +53,7 @@ def _expected_size(robot, joint_indices: np.ndarray | None) -> int:
 
 
 def _nan_vector(size: int) -> np.ndarray:
-    """返回固定长度的 ``nan`` 数组。"""
+    """返回固定长度的 ``nan`` 数组，用于表示未采样或读取失败。"""
 
     return np.full(int(size), np.nan, dtype=float)
 
@@ -100,7 +104,11 @@ def _read_effort_method(
 def _read_effort(
     robot, method_name: str, joint_indices: np.ndarray | None, expected_size: int
 ) -> np.ndarray:
-    """从 robot 或其 articulation view 读取一种 effort。"""
+    """从 robot 或其 articulation view 读取一种 effort。
+
+    Isaac 版本之间 API 暴露位置不同；这里先试高层 articulation，再试底层 view。两处都失败
+    时返回 ``nan``，让日志缺测保持显式但不打断仿真。
+    """
 
     values = _read_effort_method(robot, method_name, joint_indices, expected_size)
     if values is not None:
@@ -231,7 +239,11 @@ class EffortLogger:
         measured_effort: np.ndarray | None = None,
         applied_effort: np.ndarray | None = None,
     ) -> None:
-        """写入一个仿真步的 effort 数据。"""
+        """写入一个仿真步的 effort 数据。
+
+        三类 effort 数组都按 ``joint_names`` 顺序展开。未提供的数组会写为 ``nan``，长度不匹配
+        则抛错，避免 CSV 列和值悄悄错位。
+        """
 
         commanded = self._vector(commanded_effort, "commanded_effort")
         measured = self._vector(measured_effort, "measured_effort")
@@ -249,7 +261,11 @@ class EffortLogger:
         self.writer.write(row)
 
     def close(self) -> None:
-        """关闭内部 CSV writer。"""
+        """关闭内部 CSV writer。
+
+        底层 ``CsvWriter`` 会处理禁用日志和重复关闭，因此调用方可以在任务清理阶段无条件
+        调用本方法。
+        """
 
         self.writer.close()
 

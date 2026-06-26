@@ -83,7 +83,11 @@ class JointTrackingLogger:
         )
 
     def should_write(self, step: int) -> bool:
-        """判断当前 step 是否需要写日志。"""
+        """判断当前 step 是否需要写日志。
+
+        只是转发 ``JointLoggingConfig`` 的采样策略，调用方应在返回 ``True`` 时再读取实际状态，
+        以免降采样配置失效。
+        """
 
         return self.config.should_write_step(step)
 
@@ -243,12 +247,10 @@ class JointTrackingLogger:
         return vector
 
     def close(self) -> None:
-        """关闭内部 CSV writer。
+        """关闭内部 CSV writer；可重复调用。
 
-        参数:
-            无。
-        返回:
-            无返回值。
+        ``CsvWriter`` 会处理禁用日志和已关闭状态，因此任务执行器可以在 ``finally`` 中无条件
+        调用本方法。
         """
 
         self.writer.close()

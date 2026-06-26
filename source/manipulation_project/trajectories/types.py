@@ -110,7 +110,11 @@ class JointTrajectory:
         efforts: np.ndarray | None = None,
         phases: tuple[str, ...] | None = None,
     ) -> "JointTrajectory":
-        """从 cuMotion 风格采样矩阵创建轨迹。"""
+        """从 cuMotion 风格采样矩阵创建轨迹。
+
+        这是 ``__init__`` 的语义化别名，便于调用方表达“这些矩阵来自外部采样结果”。
+        形状校验、缺省导数填零和 phase 校验仍由构造函数完成。
+        """
 
         return cls(
             times=times,
@@ -124,17 +128,27 @@ class JointTrajectory:
         )
 
     def domain(self) -> tuple[float, float]:
-        """返回轨迹时间域 ``(lower, upper)``。"""
+        """返回轨迹时间域 ``(lower, upper)``。
+
+        时间域直接取首尾采样点，不强制要求从 0 开始。
+        """
 
         return float(self.times[0]), float(self.times[-1])
 
     def eval(self, time_s: float) -> np.ndarray:
-        """返回指定时间的关节位置。"""
+        """返回指定时间的关节位置。
+
+        超出时间域的查询会被钳制到首/末样本；需要导数时使用 ``eval_all``。
+        """
 
         return self.eval_all(time_s).position
 
     def eval_all(self, time_s: float) -> TrajectoryEval:
-        """返回指定时间的位置、速度、加速度和 jerk。"""
+        """返回指定时间的位置、速度、加速度和 jerk。
+
+        各列独立线性插值，返回数组顺序与 ``joint_names`` 一致。effort 也会随同插值返回，
+        即使调用方只用 position/velocity 播放轨迹。
+        """
 
         # 对时间做钳制而不是抛错，便于执行循环在浮点舍入导致略微越界时仍返回端点。
         # 这与多数轨迹播放器“超出域保持首/末样本”的行为一致。
@@ -162,7 +176,10 @@ class JointTrajectory:
 def _matrix_or_zeros(
     values: np.ndarray | None, shape: tuple[int, int], label: str
 ) -> np.ndarray:
-    """把可选采样矩阵规范化为指定 shape，缺省时填零。"""
+    """把可选采样矩阵规范化为指定 shape，缺省时填零。
+
+    填零表示“没有提供该导数/effort 曲线”，让轨迹对象始终有完整字段。
+    """
 
     if values is None:
         return np.zeros(shape, dtype=float)
@@ -175,7 +192,10 @@ def _matrix_or_zeros(
 
 
 def _interp_rows(times: np.ndarray, values: np.ndarray, time_s: float) -> np.ndarray:
-    """对每一列独立做一维线性插值。"""
+    """对每一列独立做一维线性插值。
+
+    该 helper 不检查时间单调性；构造轨迹的调用方应保证采样时间来自合法规划或生成流程。
+    """
 
     # 单点轨迹没有可插值区间，直接返回该点副本，避免 ``np.interp`` 在退化时间域上
     # 给出依赖实现细节的结果。

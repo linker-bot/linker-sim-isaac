@@ -1,4 +1,4 @@
-"""Capsule/box 刚体链绳体对象。
+"""Capsule/cuboid 刚体链绳体对象。
 
 本模块只负责“绳体对象”本身：从 YAML 参数生成 USD 资产，或在仿真 stage 中引用已经生成
 好的 USD。场景环境只负责 world、重力、solver 等全局设置；任务层只负责抓取和移动逻辑。
@@ -30,9 +30,9 @@ def _float_tuple(values, default: tuple[float, ...]) -> tuple[float, ...]:
 
 @dataclass(frozen=True)
 class CapsuleRopeConfig:
-    """抓取 demo 使用的 capsule/box 绳体对象参数。
+    """抓取 demo 使用的 capsule/cuboid 绳体对象参数。
 
-    绳体沿局部 X 方向离散为 ``segments`` 个 capsule/box 刚体，两端各有一个 endpoint box
+    绳体沿局部 X 方向离散为 ``segments`` 个 capsule/cuboid 刚体，两端各有一个 endpoint cuboid
     供夹捏抓取。``center`` 是整条绳体在 stage 中的中心位置；实际生成时会按段长计算每个
     prim 的局部平移并用 D6 joint 串联。
 
@@ -43,7 +43,7 @@ class CapsuleRopeConfig:
         segments/length/radius/shape: 中间绳段数量、总长、半径和形状。
         total_mass: 中间绳段总质量，按段均分。
         center: 绳体中心坐标，单位 m。
-        endpoint_box_mass/endpoint_box_size: 两端抓取 box 的质量和尺寸。
+        endpoint_box_mass/endpoint_box_size: 两端抓取 cuboid 的质量和尺寸。
         bend_* / twist_*: D6 joint 弯曲和扭转限制/弹簧阻尼。
         disable_adjacent_collisions: 是否过滤相邻刚体碰撞。
         solver_*_iterations: 绳体刚体 PhysX solver 迭代次数。
@@ -174,12 +174,20 @@ class CapsuleRopeConfig:
         )
 
     def asset_file(self) -> Path:
-        """返回 USD 资产绝对路径。"""
+        """返回生成/引用绳体 USD 资产时使用的绝对路径。
+
+        ``asset_path`` 可以在 YAML 中写成仓库相对路径；这里统一通过 ``repo_path`` 解析，
+        让生成脚本和仿真脚本不依赖启动时的当前工作目录。
+        """
 
         return repo_path(self.asset_path)
 
     def validate(self) -> None:
-        """校验绳体几何、质量和 solver 参数。"""
+        """校验绳体几何、质量和 solver 参数。
+
+        该方法只检查会直接导致 USD 生成失败或 PhysX 数值明显不稳定的约束；材质、
+        关节弹簧等参数允许为 0，以便调用方显式关闭对应效果。
+        """
 
         if self.segments < 2:
             raise ValueError("rope segments must be at least 2")
@@ -193,9 +201,9 @@ class CapsuleRopeConfig:
             raise ValueError("endpoint_box_mass must be positive")
         if any(value <= 0 for value in self.endpoint_box_size):
             raise ValueError("endpoint_box_size values must be positive")
-        if self.shape not in {"capsule", "box"}:
+        if self.shape not in {"capsule", "cuboid"}:
             raise ValueError(f"Unsupported rope shape: {self.shape}")
-        # 半径过大会让相邻 capsule/box 大量重叠，D6 joint 和碰撞过滤都更难稳定；这里用
+        # 半径过大会让相邻 capsule/cuboid 大量重叠，D6 joint 和碰撞过滤都更难稳定；这里用
         # 段距的 45% 作为保守上限，给关节和碰撞留出数值余量。
         segment_pitch = self.length / self.segments
         if self.radius >= 0.45 * segment_pitch:
@@ -213,7 +221,15 @@ def make_physics_material(
     dynamic_friction: float,
     restitution: float,
 ):
-    """创建 USD 物理材质。"""
+    """创建绳端接触使用的 USD/PhysX 物理材质。
+
+    参数:
+        stage: 写入材质 prim 的 USD stage。
+        path: 材质 prim 路径。
+        static_friction/dynamic_friction/restitution: PhysX 接触材质参数。
+    返回:
+        ``UsdShade.Material``；调用方会把它绑定到 endpoint cuboid 的 physics purpose。
+    """
 
     from pxr import PhysxSchema, Sdf, UsdPhysics, UsdShade
 
@@ -230,7 +246,15 @@ def make_physics_material(
 
 
 def make_visual_material(stage, path: str, color):
-    """创建 USD PreviewSurface 可视材质。"""
+    """创建 USD PreviewSurface 可视材质。
+
+    参数:
+        stage: 当前 USD stage。
+        path: 材质 prim 路径。
+        color: RGB 颜色，取值按 USD PreviewSurface 约定写入 ``diffuseColor``。
+    返回:
+        ``UsdShade.Material``；后续可绑定到 endpoint 或 rope segment 的视觉材质槽。
+    """
 
     from pxr import Gf, Sdf, UsdShade
 
@@ -244,7 +268,11 @@ def make_visual_material(stage, path: str, color):
 
 
 def bind_visual_material(prim, material) -> None:
-    """把可视材质绑定到 prim。"""
+    """把可视材质绑定到指定几何 prim。
+
+    只写默认 material binding，不影响 physics purpose；因此可以和
+    ``bind_physics_material`` 同时用于同一个碰撞几何。
+    """
 
     from pxr import UsdShade
 
@@ -252,7 +280,11 @@ def bind_visual_material(prim, material) -> None:
 
 
 def bind_physics_material(prim, material) -> None:
-    """把物理材质绑定到 prim 的 collision purpose。"""
+    """把物理材质绑定到 prim 的 collision/physics purpose。
+
+    绑定强度使用 ``strongerThanDescendants``，用于覆盖 importer 或资产内部已有的弱绑定，
+    但不会改变该 prim 的视觉材质。
+    """
 
     from pxr import UsdShade
 
@@ -264,7 +296,12 @@ def bind_physics_material(prim, material) -> None:
 
 
 def set_xform_translate(prim, xyz) -> None:
-    """给 prim 添加 translate xform op。"""
+    """给 prim 添加平移 xform op。
+
+    参数:
+        prim: 需要定位的 USD prim。
+        xyz: 世界/父坐标系下的平移，单位 m。
+    """
 
     from pxr import Gf, UsdGeom
 
@@ -274,7 +311,11 @@ def set_xform_translate(prim, xyz) -> None:
 def apply_rigid_body(
     prim, mass: float, linear_damping: float, angular_damping: float
 ) -> None:
-    """给 prim 添加碰撞、刚体、质量和阻尼 API。"""
+    """给 prim 添加碰撞、刚体、质量和阻尼 API。
+
+    该 helper 用于 endpoint cuboid 和中间绳段；它不会设置材质、solver iteration 或 joint，
+    这些属性由后续专用函数负责，便于几何创建和物理调参分层。
+    """
 
     from pxr import PhysxSchema, UsdPhysics
 
@@ -296,13 +337,23 @@ def create_endpoint_box(
     visual_material,
     physics_material,
 ):
-    """创建一个绳端端块刚体。"""
+    """创建一个可被夹捏抓取的绳端端块刚体。
+
+    参数:
+        stage/path: 目标 USD stage 和 cube prim 路径。
+        position: 端块中心位置，单位 m。
+        size_xyz: 端块三轴尺寸，单位 m。
+        config: 绳体配置，提供质量、阻尼和材质参数。
+        visual_material/physics_material: 已创建的可视和接触材质。
+    返回:
+        endpoint cuboid 的 USD prim。
+    """
 
     from pxr import Gf, UsdGeom
 
-    box = UsdGeom.Cube.Define(stage, path)
-    box.CreateSizeAttr(1.0)
-    prim = box.GetPrim()
+    cuboid = UsdGeom.Cube.Define(stage, path)
+    cuboid.CreateSizeAttr(1.0)
+    prim = cuboid.GetPrim()
     set_xform_translate(prim, position)
     UsdGeom.Xformable(prim).AddScaleOp().Set(Gf.Vec3f(*size_xyz))
     apply_rigid_body(
@@ -325,14 +376,19 @@ def create_rope_segment(
     config: CapsuleRopeConfig,
     visual_material,
 ):
-    """创建一个中间绳段刚体。"""
+    """创建一个中间绳段刚体。
+
+    根据 ``config.shape`` 生成沿局部 X 轴排列的 cuboid 或 capsule。返回的 prim 已具备
+    RigidBody/Collision/Mass/PhysX damping API 和可视材质，但相邻 D6 joint 会在
+    ``create_rope_model`` 中统一创建。
+    """
 
     from pxr import Gf, UsdGeom
 
     radius = float(config.radius)
-    # box 形状便于调试和稳定接触；capsule 形状更接近柔性绳段。两者都沿局部 X 方向排列，
+    # cuboid 形状便于调试和稳定接触；capsule 形状更接近柔性绳段。两者都沿局部 X 方向排列，
     # 因此后续 D6 joint 的 local_pos 使用 ±0.5*pitch。
-    if config.shape == "box":
+    if config.shape == "cuboid":
         segment = UsdGeom.Cube.Define(stage, path)
         segment.CreateSizeAttr(1.0)
         prim = segment.GetPrim()
@@ -355,7 +411,11 @@ def create_rope_segment(
 
 
 def lock_limit(joint_prim, axis: str) -> None:
-    """锁定 D6 joint 的某个自由度。"""
+    """锁定 D6 joint 的某个自由度。
+
+    USD/PhysX 用 ``low > high`` 表达锁定状态；这里固定写入 ``1/-1``，避免调用方在
+    多处重复依赖这个约定。
+    """
 
     from pxr import UsdPhysics
 
@@ -365,7 +425,13 @@ def lock_limit(joint_prim, axis: str) -> None:
 
 
 def bounded_limit(joint_prim, axis: str, low: float, high: float) -> None:
-    """给 D6 joint 某个自由度设置上下限。"""
+    """给 D6 joint 某个自由度设置上下限。
+
+    参数:
+        joint_prim: 已创建的 joint prim。
+        axis: ``transX``/``rotY`` 等 PhysX LimitAPI 轴名。
+        low/high: 下限和上限；旋转轴在 USD 属性层使用 degree。
+    """
 
     from pxr import UsdPhysics
 
@@ -375,7 +441,11 @@ def bounded_limit(joint_prim, axis: str, low: float, high: float) -> None:
 
 
 def add_angular_drive(joint_prim, axis: str, stiffness: float, damping: float) -> None:
-    """给旋转自由度添加回中弹簧阻尼。"""
+    """给旋转自由度添加回中弹簧阻尼。
+
+    drive target 位置和速度都设为 0，因此它表现为关节弯曲/扭转后的弱回正约束，
+    用于让离散刚体链更接近有柔顺性的绳体。
+    """
 
     from pxr import UsdPhysics
 
@@ -390,12 +460,20 @@ def add_angular_drive(joint_prim, axis: str, stiffness: float, damping: float) -
 def create_d6_rope_joint(
     stage, path: str, body0, body1, local_pos0, local_pos1, config: CapsuleRopeConfig
 ):
-    """在两个绳体刚体之间创建一个 D6 风格关节。"""
+    """在两个绳体刚体之间创建一个 D6 风格关节。
+
+    参数:
+        body0/body1: 需要连接的相邻刚体 prim。
+        local_pos0/local_pos1: 两个刚体局部坐标中的连接点，单位 m。
+        config: 提供弯曲/扭转 limit 和 drive 参数。
+    返回:
+        ``UsdPhysics.Joint``；平移自由度会被锁定，旋转自由度按配置限位/加 drive。
+    """
 
     from pxr import Gf, UsdPhysics
 
     # 这里使用通用 Joint + LimitAPI 组合出 D6 行为：平移全部锁定，绕 X 轴表示扭转，
-    # 绕 Y/Z 轴表示弯曲。这样 capsule/box 链能近似连续绳体，同时仍是刚体系统。
+    # 绕 Y/Z 轴表示弯曲。这样 capsule/cuboid 链能近似连续绳体，同时仍是刚体系统。
     joint = UsdPhysics.Joint.Define(stage, path)
     joint.CreateBody0Rel().SetTargets([body0.GetPath()])
     joint.CreateBody1Rel().SetTargets([body1.GetPath()])
@@ -424,7 +502,11 @@ def create_d6_rope_joint(
 
 
 def filter_collision_pair(body_a, body_b) -> None:
-    """过滤一对相邻绳段/端块之间的碰撞。"""
+    """过滤一对相邻绳段/端块之间的碰撞。
+
+    只给 ``body_a`` 添加对 ``body_b`` 的 filtered pair 关系；本模块调用时按相邻链路逐对
+    写入，避免 joint 连接点附近的重叠几何彼此顶开。
+    """
 
     from pxr import UsdPhysics
 
@@ -436,7 +518,11 @@ def filter_collision_pair(body_a, body_b) -> None:
 def apply_rope_solver_iteration_overrides(
     rope_bodies: list, config: CapsuleRopeConfig
 ) -> None:
-    """给绳体刚体写入 PhysX solver 迭代次数。"""
+    """给绳体刚体写入 PhysX solver 迭代次数。
+
+    迭代次数按刚体逐个覆盖，而不是写到全局 physics scene，目的是只提高绳体链的接触和
+    关节收敛成本，避免拖慢整个场景。
+    """
 
     from pxr import PhysxSchema
 
@@ -455,7 +541,12 @@ def apply_rope_solver_iteration_overrides(
 
 
 def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
-    """在当前 USD stage 中创建完整绳体对象。"""
+    """在当前 USD stage 中创建完整绳体对象。
+
+    该函数写入资产内部结构：root xform、Bodies/Joints scope、两端 endpoint cuboid、中间
+    segments、相邻 D6 joint、材质、碰撞过滤和 solver iteration。返回字典中的 prim/joint
+    句柄供测试或后续引用阶段收集。
+    """
 
     from pxr import Sdf, UsdGeom, UsdPhysics
 
@@ -484,7 +575,7 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
         config.env_restitution,
     )
 
-    # 绳体中心和总长决定两端 attach 点；端块中心再向外偏移半个 box 长度，使端块内侧面
+    # 绳体中心和总长决定两端 attach 点；端块中心再向外偏移半个 cuboid 长度，使端块内侧面
     # 与第一/最后一个绳段的连接点对齐。
     cx, cy, cz = config.center
     segment_pitch = config.length / config.segments
@@ -588,7 +679,14 @@ def create_rope_model(stage, config: CapsuleRopeConfig) -> dict[str, object]:
 
 
 def collect_rope_model_prims(stage, root_path: str) -> dict[str, object]:
-    """从已引用/已生成的 stage 中收集绳体 prim。"""
+    """从已引用/已生成的 stage 中收集绳体 prim。
+
+    参数:
+        stage: 当前 USD stage。
+        root_path: 运行时绳体 root prim 路径，例如 ``/World/CapsuleRope``。
+    返回:
+        与 ``create_rope_model`` 相同形状的字典；若 root 不存在，列表字段为空。
+    """
 
     from pxr import Sdf, Usd, UsdPhysics
 
@@ -667,7 +765,11 @@ def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, ob
 def endpoint_center(
     config: CapsuleRopeConfig, endpoint: str
 ) -> tuple[float, float, float]:
-    """返回指定端块的世界坐标中心。"""
+    """返回指定端块的世界坐标中心。
+
+    ``endpoint`` 支持 ``"left"`` 和 ``"right"``。计算结果只依赖配置里的几何参数，
+    可在真正创建 USD 前用于生成抓取目标或测试断言。
+    """
 
     cx, cy, cz = config.center
     rope_half = 0.5 * config.length

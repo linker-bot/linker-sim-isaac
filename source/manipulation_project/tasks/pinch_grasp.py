@@ -1,6 +1,6 @@
 """夹捏抓取任务流程。
 
-该任务面向机械臂 + 灵巧手 + rope endpoint box 的 scripted demo：先根据闭合手型从 MJCF
+该任务面向机械臂 + 灵巧手 + rope endpoint cuboid 的 scripted demo：先根据闭合手型从 MJCF
 运动链计算 thumb/index 夹捏中心 TCP，再把这个 TCP 写入临时 URDF 供 IK 后端求解，最后把
 approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目标并在 Isaac 中执行。
 
@@ -18,7 +18,8 @@ approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 import tempfile
 
@@ -56,8 +57,128 @@ from manipulation_project.trajectories.types import JointTrajectory
 from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
-_CUMOTION_TRAJECTORY_SAMPLE_DT = 0.01
+_CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE = 1
 _CUMOTION_TRAJECTORY_MIN_SAMPLES = 50
+
+
+@dataclass(frozen=True)
+class PinchMotionPlanningConfig:
+    """pinch_grasp 中关节角到关节角阶段的 cuMotion 规划参数。
+
+    ``path_interpolation`` 控制 cuMotion MotionPlanner 是否返回更密的
+    ``interpolated_path``；``trajectory_mode`` 控制后续 C-space trajectory generator 的入口；
+    ``interpolation_mode`` 只在 ``trajectory_mode='time_stamped'`` 时传给 cuMotion，用于选择
+    waypoint 间的线性或三次样条插值。
+    """
+
+    path_interpolation: bool = True
+    trajectory_mode: str = "time_optimal"
+    interpolation_mode: str = "linear"
+    planner_params: dict[str, object] = field(default_factory=dict)
+    trajectory_limits: dict[str, tuple[float, ...]] = field(default_factory=dict)
+    trajectory_solver_params: dict[str, object] = field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(cls, data) -> "PinchMotionPlanningConfig":
+        """从 ``grasp.motion_planning`` 子字典构造规划配置。
+
+        ``data`` 为 ``None`` 时使用默认规划策略；旧字段名 ``motion_planner_params`` 会被兼容
+        读取到 ``planner_params``，但最终仍统一落在本 dataclass 字段上。
+        """
+
+        if data is None:
+            config = cls()
+        elif not isinstance(data, Mapping):
+            raise ValueError("motion_planning must be a mapping")
+        else:
+            config = cls(
+                path_interpolation=bool(
+                    data.get("path_interpolation", cls.path_interpolation)
+                ),
+                trajectory_mode=_normalize_pinch_trajectory_mode(
+                    data.get("trajectory_mode", cls.trajectory_mode)
+                ),
+                interpolation_mode=_normalize_pinch_interpolation_mode(
+                    data.get("interpolation_mode", cls.interpolation_mode)
+                ),
+                planner_params=_optional_params(
+                    data.get("planner_params")
+                    or data.get("motion_planner_params")
+                ),
+                trajectory_limits=_optional_limit_mapping(
+                    data.get("trajectory_limits")
+                ),
+                trajectory_solver_params=_optional_params(
+                    data.get("trajectory_solver_params")
+                ),
+            )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        """检查 cuMotion 规划参数是否在项目支持的取值范围内。
+
+        这里主要校验项目暴露的枚举和参数 mapping 形状；具体数值是否被 cuMotion 接受会在
+        后端应用参数时继续检查并报出更接近后端字段的错误。
+        """
+
+        if self.trajectory_mode not in {"time_optimal", "time_stamped"}:
+            raise ValueError(
+                "trajectory_mode must be one of: time_optimal, time_stamped"
+            )
+        if self.interpolation_mode not in {"linear", "cubic_spline"}:
+            raise ValueError("interpolation_mode must be one of: linear, cubic_spline")
+        _optional_params(self.planner_params)
+        _optional_limit_mapping(self.trajectory_limits)
+        _optional_params(self.trajectory_solver_params)
+
+
+def _normalize_pinch_trajectory_mode(value) -> str:
+    """规范化 pinch_grasp 暴露给 cuMotion trajectory generator 的模式名。"""
+
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized in {"time_optimal", "optimal", "default"}:
+        return "time_optimal"
+    if normalized in {"time_stamped", "timestamped", "time_stamp"}:
+        return "time_stamped"
+    raise ValueError("trajectory_mode must be one of: time_optimal, time_stamped")
+
+
+def _normalize_pinch_interpolation_mode(value) -> str:
+    """规范化 time-stamped trajectory 的 waypoint 插值模式名。"""
+
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized == "linear":
+        return "linear"
+    if normalized in {"cubic", "cubic_spline", "spline"}:
+        return "cubic_spline"
+    raise ValueError("interpolation_mode must be one of: linear, cubic_spline")
+
+
+def _optional_params(value) -> dict[str, object]:
+    """解析可选 cuMotion 参数映射。"""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("cuMotion motion_planning params must be a mapping")
+    return {str(key): param_value for key, param_value in value.items()}
+
+
+def _optional_limit_mapping(value) -> dict[str, tuple[float, ...]]:
+    """解析可选 trajectory limit 映射。"""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("trajectory_limits must be a mapping")
+    limits = {}
+    for key, limit_value in value.items():
+        array = np.asarray(limit_value, dtype=float).reshape(-1)
+        if array.size == 0:
+            raise ValueError(f"trajectory limit {key!r} cannot be empty")
+        limits[str(key)] = tuple(float(item) for item in array)
+    return limits
 
 
 @dataclass(frozen=True)
@@ -76,6 +197,7 @@ class PinchGraspConfig:
         wiggle_axis: 抬升后摆动方向，世界坐标向量。
         cuMotion 后端参数从 robot config 的 ``cumotion`` 段读取。
         tcp_frame_name: 写入临时 URDF 的 pinch TCP frame 名。
+        motion_planning: 关节角到关节角阶段的 cuMotion 路径/轨迹生成参数。
         pre_pinch_hand_targets: 预夹捏手型的稀疏关节目标，单位 rad。
         closed_pinch_hand_targets: 闭合夹捏手型的稀疏关节目标，单位 rad。
     输出:
@@ -107,6 +229,9 @@ class PinchGraspConfig:
     post_joint_sweep_duration: float = 2.0
     post_joint_sweep_targets: tuple[float, ...] = (2.1, -2.1)
     tcp_frame_name: str = DEFAULT_PINCH_TCP_FRAME
+    motion_planning: PinchMotionPlanningConfig = field(
+        default_factory=PinchMotionPlanningConfig
+    )
     pre_pinch_hand_targets: dict[str, float] | None = None
     closed_pinch_hand_targets: dict[str, float] | None = None
 
@@ -166,6 +291,9 @@ class PinchGraspConfig:
                 )
             ),
             tcp_frame_name=str(grasp.get("tcp_frame_name", cls.tcp_frame_name)),
+            motion_planning=PinchMotionPlanningConfig.from_mapping(
+                grasp.get("motion_planning")
+            ),
             pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"])
             if "pre_pinch_hand_targets" in grasp
             else None,
@@ -238,6 +366,7 @@ class PinchGraspConfig:
             raise ValueError("approach_line_sample_hz must be positive")
         if not self.tcp_frame_name:
             raise ValueError("tcp_frame_name cannot be empty")
+        self.motion_planning.validate()
         if not self.pre_pinch_hand_targets:
             raise ValueError(
                 "pre_pinch_hand_targets must be provided for the selected hand"
@@ -276,6 +405,7 @@ def build_planned_joint_motion_trajectory(
     target_all: np.ndarray,
     duration_s: float,
     phase: str,
+    physics_dt: float | None = None,
 ) -> tuple[JointTrajectory, MotionResult]:
     """用 cuMotion 规划一段完整 DOF 的关节角到关节角运动。
 
@@ -314,7 +444,12 @@ def build_planned_joint_motion_trajectory(
         )
 
     result = motion_planner.plan(
-        MotionRequest(current_q=start_q, goal_q=target_q, mode="collision_aware")
+        MotionRequest(
+            current_q=start_q,
+            goal_q=target_q,
+            mode="collision_aware",
+            duration_s=duration_s,
+        )
     )
     if not result.success or result.joint_path is None:
         raise RuntimeError(
@@ -332,6 +467,7 @@ def build_planned_joint_motion_trajectory(
                 target_all=target,
                 requested_duration_s=duration_s,
                 phase=phase,
+                physics_dt=physics_dt,
             ),
             result,
         )
@@ -365,6 +501,7 @@ def _full_trajectory_from_cumotion_trajectory(
     target_all: np.ndarray,
     requested_duration_s: float,
     phase: str,
+    physics_dt: float | None,
 ) -> JointTrajectory:
     """把 cuMotion time-parameterized C-space trajectory 嵌回完整 DOF 轨迹。
 
@@ -381,6 +518,7 @@ def _full_trajectory_from_cumotion_trajectory(
         joint_names=tuple(motion_planner.joint_names()),
         requested_duration_s=requested_duration_s,
         phase=phase,
+        physics_dt=physics_dt,
     )
     arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
     if cspace_trajectory.positions.shape[1] != arm_indices.size:
@@ -431,10 +569,13 @@ def _sample_and_retime_cumotion_trajectory(
     joint_names: tuple[str, ...],
     requested_duration_s: float,
     phase: str,
+    physics_dt: float | None,
 ) -> JointTrajectory:
     """采样 cuMotion trajectory，并按配置时长做只拉长不压短的时间缩放。"""
 
-    sample_dt = _cumotion_trajectory_sample_dt(cumotion_trajectory)
+    sample_dt = _cumotion_trajectory_sample_dt(
+        cumotion_trajectory, physics_dt=physics_dt
+    )
     trajectory = joint_trajectory_from_cumotion(
         cumotion_trajectory,
         joint_names=joint_names,
@@ -469,15 +610,26 @@ def _sample_and_retime_cumotion_trajectory(
     )
 
 
-def _cumotion_trajectory_sample_dt(cumotion_trajectory) -> float:
-    """根据 cuMotion 轨迹时域选择采样周期。"""
+def _cumotion_trajectory_sample_dt(
+    cumotion_trajectory, *, physics_dt: float | None
+) -> float:
+    """根据 physics step 和 cuMotion 轨迹时域选择采样周期。"""
 
     lower, upper = _trajectory_domain_bounds(cumotion_trajectory)
     span = max(0.0, upper - lower)
+    if physics_dt is not None:
+        step_dt = float(physics_dt)
+        if step_dt <= 0.0:
+            raise ValueError("physics_dt must be positive")
+        base_dt = step_dt * float(_CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE)
+    else:
+        # 测试或离线构建没有 Isaac world 时退回 100 Hz，但运行路径应优先从
+        # world.get_physics_dt() 传入 physics_dt，避免采样点与物理步长错位。
+        base_dt = 0.01
     if span <= 0.0:
-        return _CUMOTION_TRAJECTORY_SAMPLE_DT
+        return base_dt
     return min(
-        _CUMOTION_TRAJECTORY_SAMPLE_DT,
+        base_dt,
         max(span / float(_CUMOTION_TRAJECTORY_MIN_SAMPLES), 1.0e-4),
     )
 
@@ -574,7 +726,7 @@ def grasp_target_position(
 
     参数:
         config: 抓取配置，提供端点选择和目标偏移。
-        rope_config: rope 对象配置，提供端点 box 的几何位置。
+        rope_config: rope 对象配置，提供端点 cuboid 的几何位置。
         lift_height: 额外 z 方向抬升高度，单位 m。
     返回:
         shape 为 ``(3,)`` 的世界坐标位置数组，单位 m。
@@ -590,7 +742,7 @@ def grasp_target_position(
 
 
 class PinchGraspTask:
-    """机械臂+灵巧手对 rope 端点 box 的脚本化夹捏任务。
+    """机械臂+灵巧手对 rope 端点 cuboid 的脚本化夹捏任务。
 
     输入:
         初始化时传入抓取配置、rope 场景配置、MJCF 路径和 cuMotion 后端配置。
@@ -628,11 +780,13 @@ class PinchGraspTask:
         self.parent_frame = cumotion_config.flange_frame
         self.tcp_frame_name = tcp_frame_name or config.tcp_frame_name
 
-    def plan(self, robot) -> dict[str, object]:
+    def plan(self, robot, *, physics_dt: float | None = None) -> dict[str, object]:
         """规划抓取各阶段的 IK 解和完整 DOF 目标。
 
         参数:
             robot: Isaac articulation，需提供 ``dof_names`` 和当前关节位置。
+            physics_dt: 可选 Isaac 物理步长，单位 s；用于让 cuMotion 轨迹采样点对齐
+                physics step。为空时保留离线默认采样周期。
         返回:
             字典，包含:
             ``arm_indices``: cuMotion C-space 关节在完整 DOF 中的索引；
@@ -688,7 +842,7 @@ class PinchGraspTask:
                 replace(
                     self.cumotion_config,
                     urdf_path=tcp_urdf,
-                    default_tcp_frame=self.tcp_frame_name,
+                    custom_tcp_frame=self.tcp_frame_name,
                 )
             )
             ik_joint_names = context.joint_names()
@@ -714,7 +868,19 @@ class PinchGraspTask:
             )
             motion_planner = context.make_motion_planner(
                 tcp_frame_name=self.tcp_frame_name,
+                generate_interpolated_path=(
+                    self.config.motion_planning.path_interpolation
+                ),
                 generate_trajectory=True,
+                trajectory_mode=self.config.motion_planning.trajectory_mode,
+                trajectory_interpolation_mode=(
+                    self.config.motion_planning.interpolation_mode
+                ),
+                motion_planner_params=self.config.motion_planning.planner_params,
+                trajectory_limits=self.config.motion_planning.trajectory_limits,
+                trajectory_solver_params=(
+                    self.config.motion_planning.trajectory_solver_params
+                ),
             )
             # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
             # 保持关节轨迹连续，也减少求解器跳解概率。
@@ -824,6 +990,7 @@ class PinchGraspTask:
                     target_all=approach_all,
                     duration_s=self.config.move_duration,
                     phase="move_to_approach",
+                    physics_dt=physics_dt,
                 )
             )
             lift_trajectory, lift_motion = build_planned_joint_motion_trajectory(
@@ -834,6 +1001,7 @@ class PinchGraspTask:
                 target_all=lifted_all,
                 duration_s=self.config.lift_duration,
                 phase="lift",
+                physics_dt=physics_dt,
             )
             wiggle_trajectories = []
             wiggle_motions = []
@@ -847,6 +1015,7 @@ class PinchGraspTask:
                     target_all=wiggle_all,
                     duration_s=self.config.wiggle_duration,
                     phase=f"wiggle_{index}",
+                    physics_dt=physics_dt,
                 )
                 wiggle_trajectories.append(trajectory)
                 wiggle_motions.append(motion)
@@ -863,6 +1032,7 @@ class PinchGraspTask:
                         target_all=lifted_all,
                         duration_s=self.config.wiggle_duration,
                         phase="wiggle_return_center",
+                        physics_dt=physics_dt,
                     )
                 )
             post_joint_sweep_trajectories = []
@@ -877,6 +1047,7 @@ class PinchGraspTask:
                     target_all=sweep_all,
                     duration_s=self.config.post_joint_sweep_duration,
                     phase=f"post_joint_1_sweep_{index}",
+                    physics_dt=physics_dt,
                 )
                 post_joint_sweep_trajectories.append(trajectory)
                 post_joint_sweep_motions.append(motion)
@@ -927,7 +1098,11 @@ class PinchGraspTask:
         }
 
     def execution_tasks(self, plan: dict[str, object]) -> list[ExecutableTask]:
-        """把抓取 plan 拆成可顺序执行的任务原语列表。"""
+        """把抓取 plan 拆成可顺序执行的任务原语列表。
+
+        ``plan`` 来自 ``build_plan``，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
+        返回的任务列表只负责执行，不再求 IK 或重新规划。
+        """
 
         # plan 阶段只生成目标数组；这里把它们转换成可执行原语，确保 run 的主循环只需要
         # 顺序调用 ``task.run``，便于之后插入/删除阶段。
@@ -1015,7 +1190,8 @@ class PinchGraspTask:
         """
 
         # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
-        plan = self.plan(robot)
+        # cuMotion 连续轨迹采样使用 physics_dt 对齐物理步长，避免固定 0.01s 与仿真频率错位。
+        plan = self.plan(robot, physics_dt=float(world.get_physics_dt()))
         runtime = TaskRuntime(
             robot=robot,
             world=world,

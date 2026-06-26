@@ -59,7 +59,11 @@ class ControllerProfile:
 
 @dataclass(frozen=True)
 class ControllerProfiles:
-    """机械臂和灵巧手控制配置集合。"""
+    """机械臂和灵巧手控制配置集合。
+
+    当前项目显式区分 arm 和 hand 两类 profile。若某个机器人没有灵巧手，调用方仍可提供
+    hand profile 作为默认占位；真正的关节存在性由导入后的 articulation/controller 校验。
+    """
 
     arm: ControllerProfile
     hand: ControllerProfile
@@ -224,7 +228,11 @@ def _component_control_settings(
 def joint_control_settings(
     profiles: ControllerProfiles, *, mode: ControlMode = "position"
 ) -> JointControlSettings:
-    """把 arm/hand profile 转成指定模式的 runtime 关节控制设置。"""
+    """把 arm/hand profile 转成指定模式的 runtime 关节控制设置。
+
+    返回值包含 ``default``、``arm`` 和 ``hand`` 三组参数。``default`` 当前沿用 arm profile，
+    用于未知命名关节的保守回退。
+    """
 
     return JointControlSettings(
         default=_component_control_settings(profiles.arm, mode),
@@ -261,7 +269,11 @@ def _physx_override_config(profile: ControllerProfile) -> PhysxOverrideConfig:
 def physx_override_configs(
     profiles: ControllerProfiles,
 ) -> dict[str, PhysxOverrideConfig]:
-    """把 arm/hand profile 转成 USD/PhysX 覆盖配置。"""
+    """把 arm/hand profile 转成 USD/PhysX 覆盖配置。
+
+    覆盖配置用于资产导入后的 USD/PhysX schema，不等同于运行时 controller action。
+    ``default`` 同样沿用 arm 配置，供未知或未分类刚体使用。
+    """
 
     arm = _physx_override_config(profiles.arm)
     hand = _physx_override_config(profiles.hand)

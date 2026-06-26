@@ -25,7 +25,8 @@ import numpy as np
 class PlanningDiagnostics:
     """规划和解算诊断信息。
 
-    ``metrics`` 用于保存耗时、迭代次数、误差等数值，避免把后端特有字段散落到结果类。
+    ``metrics`` 用于保存耗时、迭代次数、误差等数值，避免把后端特有字段散落到结果类。键名
+    由具体后端定义，但应保持可打印、可写入日志，不存放 pybind 对象或 numpy 大矩阵。
     """
 
     status: str = ""
@@ -38,7 +39,8 @@ class IKResult:
     """逆运动学结果。
 
     ``joint_positions`` 按后端关节顺序排列；失败时可以为空或回退到 warm start。位置误差单位
-    为米，姿态误差单位由后端定义但应保持可比较。
+    为米，姿态误差单位由后端定义但应保持可比较。调用方不能只看 ``joint_positions`` 是否
+    非空来判断可执行性，必须先检查 ``success``。
     """
 
     joint_positions: np.ndarray
@@ -56,6 +58,7 @@ class MotionResult:
 
     ``joint_path`` 通常是离散关节路径，``trajectory`` 可以保存后端生成的更丰富轨迹对象。
     二者允许同时存在，也允许在失败时都为空；调用方应先检查 ``success``，再消费轨迹字段。
+    ``joint_path`` 和 ``trajectory`` 均保持后端关节顺序，不自动扩展成 Isaac 完整 DOF。
     """
 
     joint_path: np.ndarray | None

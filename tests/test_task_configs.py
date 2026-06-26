@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+import pytest
+
 from manipulation_project.assets.asset_paths import (
     DEFAULT_AR5_RIGHT_URDF,
     DEFAULT_L6_RIGHT_URDF,
@@ -33,7 +35,7 @@ def test_robot_configs_are_cumotion_only() -> None:
         assert Path(cumotion.xrdf_path).is_file()
         assert Path(cumotion.urdf_path).is_file()
         assert cumotion.flange_frame
-        assert cumotion.default_tcp_frame
+        assert cumotion.custom_tcp_frame is None or cumotion.custom_tcp_frame
         assert cumotion.position_tolerance >= 0.0
         assert cumotion.orientation_tolerance >= 0.0
         assert cumotion.ccd_max_iterations > 0
@@ -42,6 +44,20 @@ def test_robot_configs_are_cumotion_only() -> None:
         assert "base_urdf" not in config["cumotion"]
         assert "lula" not in config
         assert "ik" not in config
+
+
+def test_cumotion_config_rejects_removed_default_tcp_frame() -> None:
+    config = load_yaml("configs/robots/ar5v2_l.yaml")
+    config["cumotion"]["default_tcp_frame"] = config["cumotion"]["flange_frame"]
+    with pytest.raises(ValueError, match="default_tcp_frame is removed"):
+        CuMotionConfig.from_mapping(config)
+
+
+def test_cumotion_config_rejects_removed_cspace_seeds() -> None:
+    config = load_yaml("configs/robots/ar5v2_l.yaml")
+    config["cumotion"]["cspace_seeds"] = [0.0]
+    with pytest.raises(ValueError, match="cspace_seeds is removed"):
+        CuMotionConfig.from_mapping(config)
 
 
 def test_right_side_urdf_assets_exist() -> None:

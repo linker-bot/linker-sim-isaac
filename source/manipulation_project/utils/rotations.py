@@ -61,7 +61,14 @@ def matrix_to_quat_wxyz(matrix) -> np.ndarray:
 
 
 def normalize_quat_wxyz(quat, *, label: str = "quat_wxyz") -> np.ndarray:
-    """归一化 wxyz 四元数。"""
+    """归一化 wxyz 四元数。
+
+    参数:
+        quat: 任意可转换为长度 4 数组的四元数，顺序为 ``[w, x, y, z]``。
+        label: 报错信息中使用的字段名。
+    返回:
+        单位长度 wxyz 四元数副本；零四元数或长度错误会抛出 ``ValueError``。
+    """
 
     quat_wxyz = np.asarray(quat, dtype=float).reshape(-1)
     if quat_wxyz.size != 4:
@@ -73,7 +80,10 @@ def normalize_quat_wxyz(quat, *, label: str = "quat_wxyz") -> np.ndarray:
 
 
 def quat_wxyz_to_xyzw(quat) -> np.ndarray:
-    """把 wxyz 四元数转换为 SciPy 使用的 xyzw 顺序。"""
+    """把 wxyz 四元数转换为 SciPy 使用的 xyzw 顺序。
+
+    输入会先归一化，避免姿态插值或矩阵转换时把配置里的数值误差继续放大。
+    """
 
     quat_wxyz = normalize_quat_wxyz(quat)
     return np.asarray(
@@ -82,7 +92,13 @@ def quat_wxyz_to_xyzw(quat) -> np.ndarray:
 
 
 def quat_xyzw_to_wxyz(quat) -> np.ndarray:
-    """把 SciPy 使用的 xyzw 四元数转换为项目使用的 wxyz 顺序。"""
+    """把 SciPy 使用的 xyzw 四元数转换为项目使用的 wxyz 顺序。
+
+    参数:
+        quat: SciPy ``Rotation.as_quat`` 风格的 ``[x, y, z, w]``。
+    返回:
+        归一化后的项目标准 ``[w, x, y, z]`` 四元数。
+    """
 
     quat_xyzw = np.asarray(quat, dtype=float).reshape(-1)
     if quat_xyzw.size != 4:

@@ -37,17 +37,29 @@ class TaskRuntime:
 
 
 class ExecutableTask(Protocol):
-    """可顺序执行的任务原语协议。"""
+    """可顺序执行的任务原语协议。
+
+    所有实现都接收同一个 ``TaskRuntime`` 和全局 step，并返回更新后的 step。协议不要求
+    实现一定推进 world；例如控制模式切换任务只改变 runtime 配置并原样返回 step。
+    """
 
     phase: str
 
     def run(self, runtime: TaskRuntime, step: int) -> int:
-        """执行任务并返回新的全局 step。"""
+        """执行任务并返回新的全局 step。
+
+        具体实现可以推进仿真、写日志或只更新 runtime 配置；返回值始终是下一段任务继续
+        计数的起点。
+        """
 
 
 @dataclass(frozen=True)
 class MoveJointTargetTask:
-    """用 smoothstep 在两个完整 DOF 目标之间移动。"""
+    """用 smoothstep 在两个完整 DOF 目标之间移动。
+
+    ``start_all`` 和 ``target_all`` 必须是 Isaac articulation 完整 DOF 顺序；controller 会在
+    下发时裁剪主动命令关节并补齐 mimic follower。
+    """
 
     start_all: np.ndarray
     target_all: np.ndarray
@@ -55,7 +67,11 @@ class MoveJointTargetTask:
     phase: str
 
     def run(self, runtime: TaskRuntime, step: int) -> int:
-        """执行 smoothstep 关节目标移动并返回累计 step。"""
+        """执行 smoothstep 关节目标移动并返回累计 step。
+
+        每个 physics step 都会生成完整 DOF 位置/速度目标，并通过 controller 处理主动关节和
+        mimic follower 的下发。
+        """
 
         return move_joint_target(
             robot=runtime.robot,
@@ -75,13 +91,20 @@ class MoveJointTargetTask:
 
 @dataclass(frozen=True)
 class MoveFullJointTrajectoryTask:
-    """按仿真时钟播放完整 DOF 关节轨迹。"""
+    """按仿真时钟播放完整 DOF 关节轨迹。
+
+    轨迹列必须覆盖完整 articulation DOF，而不是 controller command space 子集。播放时会按
+    ``world.get_physics_dt()`` 重采样，原始采样点不必与物理步长完全一致。
+    """
 
     trajectory: JointTrajectory
     phase: str
 
     def run(self, runtime: TaskRuntime, step: int) -> int:
-        """按轨迹采样时间播放完整 DOF 目标并返回累计 step。"""
+        """按轨迹采样时间播放完整 DOF 目标并返回累计 step。
+
+        轨迹会按 ``world.get_physics_dt()`` 重采样播放；返回值包含实际推进的仿真步数。
+        """
 
         return move_full_joint_trajectory(
             robot=runtime.robot,
@@ -99,14 +122,20 @@ class MoveFullJointTrajectoryTask:
 
 @dataclass(frozen=True)
 class HoldTask:
-    """持续下发同一个完整 DOF 目标，维持姿态。"""
+    """持续下发同一个完整 DOF 目标，维持姿态。
+
+    ``duration <= 0`` 表示无限保持，通常只适合带 GUI/app 生命周期的调试运行。
+    """
 
     target_all: np.ndarray
     duration: float
     phase: str
 
     def run(self, runtime: TaskRuntime, step: int) -> int:
-        """保持固定目标指定时长并返回累计 step。"""
+        """保持固定目标指定时长并返回累计 step。
+
+        目标速度会置零并持续下发；当 ``duration <= 0`` 时依赖 ``simulation_app`` 生命周期退出。
+        """
 
         return hold_joint_target(
             robot=runtime.robot,
@@ -136,7 +165,11 @@ class SwitchControlModeTask:
     phase: str = "switch_control_mode"
 
     def run(self, runtime: TaskRuntime, step: int) -> int:
-        """切换控制器模式并返回未改变的累计 step。"""
+        """切换控制器模式并返回未改变的累计 step。
+
+        该任务不推进 world，只把新的 ``JointControlSettings`` 写入 controller 并重新配置
+        articulation runtime。
+        """
 
         runtime.controller.settings = self.settings
         runtime.controller.configure_runtime()
@@ -157,7 +190,11 @@ def step_joint_target(
     target_effort_all: np.ndarray | None = None,
     drive_logger=None,
 ) -> int:
-    """下发一帧完整 DOF 目标，并推进一个 physics step。"""
+    """下发一帧完整 DOF 目标，并推进一个 physics step。
+
+    ``target_all``、可选速度和 effort 都必须是完整 DOF 数组。controller 会负责把完整目标
+    转换成当前控制模式需要的 Isaac action，并在日志打开时只记录 driven joints。
+    """
 
     # 完整目标进入 controller 后会被分解成主动关节 action 和 follower position drive action。
     # 这样 position/velocity/effort 三种主动控制都能复用同一套 mimic follower 规则。
@@ -199,7 +236,12 @@ def move_joint_target(
     step: int,
     drive_logger=None,
 ) -> int:
-    """用 smoothstep 在两个完整 DOF 目标之间平滑移动。"""
+    """用 smoothstep 在两个完整 DOF 目标之间平滑移动。
+
+    这是任务层的简单插值 fallback，适合手部开合或不需要后端规划的完整 DOF 过渡。机械臂
+    避障或限速轨迹应优先由规划后端生成 ``JointTrajectory`` 后交给
+    ``move_full_joint_trajectory`` 播放。
+    """
 
     physics_dt = float(world.get_physics_dt())
     # 用 round(duration / dt) 贴近用户指定时长，并至少执行一帧，保证 0 或很短 duration
@@ -246,7 +288,11 @@ def move_full_joint_trajectory(
     step: int,
     drive_logger=None,
 ) -> int:
-    """按 physics dt 播放完整 DOF 关节轨迹。"""
+    """按 physics dt 播放完整 DOF 关节轨迹。
+
+    输入轨迹必须已经完成后端关节顺序到完整 DOF 顺序的映射。函数会在每个 physics step
+    调用 ``trajectory.eval_all``，同时下发位置和速度目标。
+    """
 
     # 此原语约定输入是完整 DOF 轨迹；如果传入命令子空间轨迹，应先经控制器扩展，
     # 否则 joint_indices 切片会和数组列数不匹配。
@@ -298,7 +344,11 @@ def hold_joint_target(
     step: int,
     drive_logger=None,
 ) -> int:
-    """保持一个完整 DOF 目标一段时间。"""
+    """保持一个完整 DOF 目标一段时间。
+
+    该函数每步重新下发相同位置并把目标速度置零。它不检查目标是否已经到达，只按时长或
+    app 生命周期决定何时退出。
+    """
 
     physics_dt = float(world.get_physics_dt())
     # duration<=0 表示无限保持，常用于 GUI 调试；有 simulation_app 时窗口关闭会退出，

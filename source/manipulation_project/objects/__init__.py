@@ -1,6 +1,6 @@
 """可复用仿真对象资产与对象生成工具。
 
-objects 子包描述机器人以外的场景对象，例如 capsule rope、端点 box 或未来的夹具/障碍物。
+objects 子包描述机器人以外的场景对象，例如 capsule rope、端点 cuboid 或未来的夹具/障碍物。
 这些模块负责把 YAML 参数转换成 USD prim、材料和 PhysX 关节设置；场景构建层只负责在合适
 位置引用它们。
 

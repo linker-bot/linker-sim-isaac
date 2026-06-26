@@ -55,10 +55,41 @@ class _FakeTrajectory:
 class _FakeTrajectoryGenerator:
     def __init__(self, cumotion) -> None:
         self.cumotion = cumotion
+        self.position_limits = None
+        self.velocity_limits = None
+        self.acceleration_limits = None
+        self.jerk_limits = None
+        self.solver_params = []
 
     def generate_trajectory(self, waypoints):
         self.cumotion.generated_waypoints = waypoints
         return _FakeTrajectory(waypoints)
+
+    def set_position_limits(self, minimum, maximum) -> None:
+        self.position_limits = (minimum, maximum)
+        self.cumotion.trajectory_position_limits = self.position_limits
+
+    def set_velocity_limits(self, values) -> None:
+        self.velocity_limits = values
+        self.cumotion.trajectory_velocity_limits = values
+
+    def set_acceleration_limits(self, values) -> None:
+        self.acceleration_limits = values
+        self.cumotion.trajectory_acceleration_limits = values
+
+    def set_jerk_limits(self, values) -> None:
+        self.jerk_limits = values
+        self.cumotion.trajectory_jerk_limits = values
+
+    def set_solver_param(self, name, value) -> bool:
+        self.solver_params.append((name, value.value))
+        self.cumotion.trajectory_solver_params = self.solver_params
+        return True
+
+
+class _FakeParamValue:
+    def __init__(self, value) -> None:
+        self.value = value
 
 
 class _FakeRotation3:
@@ -80,17 +111,34 @@ class _FakePose3:
 class _FakeCumotion:
     Rotation3 = _FakeRotation3
     Pose3 = _FakePose3
+    MotionPlannerConfig = SimpleNamespace(ParamValue=_FakeParamValue)
+    CSpaceTrajectoryGenerator = SimpleNamespace(
+        SolverParamValue=_FakeParamValue,
+        InterpolationMode=SimpleNamespace(LINEAR="linear", CUBIC_SPLINE="cubic"),
+    )
 
     def __init__(self, planner: _FakePlanner) -> None:
         self.planner = planner
         self.config_calls = []
+        self.config_file_calls = []
         self.generated_waypoints = None
+        self.trajectory_position_limits = None
+        self.trajectory_velocity_limits = None
+        self.trajectory_acceleration_limits = None
+        self.trajectory_jerk_limits = None
+        self.trajectory_solver_params = []
 
     def create_default_motion_planner_config(
         self, robot_description, frame_name, world_view
     ):
         self.config_calls.append((robot_description, frame_name, world_view))
-        return SimpleNamespace(frame_name=frame_name, world_view=world_view)
+        return _FakePlannerConfig(frame_name=frame_name, world_view=world_view)
+
+    def create_motion_planner_config_from_file(
+        self, path, robot_description, frame_name, world_view
+    ):
+        self.config_file_calls.append((path, robot_description, frame_name, world_view))
+        return _FakePlannerConfig(frame_name=frame_name, world_view=world_view)
 
     def create_motion_planner(self, config):
         self.planner.config = config
@@ -101,12 +149,27 @@ class _FakeCumotion:
         return _FakeTrajectoryGenerator(self)
 
 
+class _FakePlannerConfig:
+    def __init__(self, *, frame_name, world_view) -> None:
+        self.frame_name = frame_name
+        self.world_view = world_view
+        self.params = []
+
+    def set_param(self, name, value) -> bool:
+        self.params.append((name, value.value))
+        return True
+
+
 class _FakeContext:
     def __init__(self, cumotion) -> None:
         self.cumotion = cumotion
         self.config = SimpleNamespace(
-            default_tcp_frame="tool",
+            custom_tcp_frame="tool",
             flange_frame="flange",
+            motion_planner_config_path=None,
+            motion_planner_params={},
+            trajectory_limits={},
+            trajectory_solver_params={},
         )
         self.robot_description = "robot_description"
         self.kinematics = "kinematics"
@@ -118,7 +181,7 @@ class _FakeContext:
 def _collision_object() -> CollisionObject:
     return CollisionObject(
         name="table",
-        shape="box",
+        shape="cuboid",
         pose=np.eye(4),
         size=(1.0, 1.0, 0.1),
     )
@@ -266,3 +329,45 @@ def test_motion_planner_failure_returns_failed_motion_result(monkeypatch) -> Non
     assert result.status == "FAILED"
     assert result.joint_path is None
     assert result.trajectory is None
+
+
+def test_motion_planner_applies_config_params_and_trajectory_limits(monkeypatch) -> None:
+    _patch_collision_world(monkeypatch)
+    fake_planner = _FakePlanner(_FakeResults(path=[[0.0, 0.0], [1.0, 1.0]]))
+    fake_cumotion = _FakeCumotion(fake_planner)
+    context = _FakeContext(fake_cumotion)
+    context.config.motion_planner_config_path = "planner.yaml"
+    context.config.motion_planner_params = {"step_size": 0.05}
+    context.config.trajectory_limits = {
+        "position_min": [-1.0, -2.0],
+        "position_max": [1.0, 2.0],
+        "velocity": [0.5, 0.6],
+        "acceleration": [1.5, 1.6],
+        "jerk": [3.0, 3.1],
+    }
+    context.config.trajectory_solver_params = {"max_iterations": 20}
+
+    planner = CuMotionMotionPlanner(
+        context,
+        motion_planner_params={"goal_bias": 0.1},
+        trajectory_solver_params={"smoothness": "high"},
+    )
+    result = planner.plan(
+        MotionRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            goal_q=np.asarray([1.0, 1.0]),
+        )
+    )
+
+    assert result.success
+    assert fake_cumotion.config_file_calls
+    assert fake_planner.config.params == [("step_size", 0.05), ("goal_bias", 0.1)]
+    np.testing.assert_allclose(fake_cumotion.trajectory_position_limits[0], [-1.0, -2.0])
+    np.testing.assert_allclose(fake_cumotion.trajectory_position_limits[1], [1.0, 2.0])
+    np.testing.assert_allclose(fake_cumotion.trajectory_velocity_limits, [0.5, 0.6])
+    np.testing.assert_allclose(fake_cumotion.trajectory_acceleration_limits, [1.5, 1.6])
+    np.testing.assert_allclose(fake_cumotion.trajectory_jerk_limits, [3.0, 3.1])
+    assert fake_cumotion.trajectory_solver_params == [
+        ("max_iterations", 20),
+        ("smoothness", "high"),
+    ]
