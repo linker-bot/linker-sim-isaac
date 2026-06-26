@@ -90,10 +90,6 @@ class CuMotionConfig:
         settings = data.get("cumotion", data)
         if not isinstance(settings, Mapping):
             raise ValueError("cuMotion config must be a mapping")
-        if "default_tcp_frame" in settings:
-            raise ValueError("default_tcp_frame is removed; use custom_tcp_frame")
-        if "cspace_seeds" in settings:
-            raise ValueError("cspace_seeds is removed; use ik_cspace_seeds")
 
         # xrdf_path, urdf_path, flange_frame 是必须的
         missing = [
@@ -293,6 +289,7 @@ class CuMotionContext:
             str(self.kinematics.cspace_coord_name(index))
             for index in range(self.kinematics.num_cspace_coords())
         ]
+        self.expected_cspace_width = len(self._joint_names)
         self._frame_names = [str(name) for name in self.kinematics.frame_names()]
         self._frame_name_set = set(self._frame_names)
         self._validate_model_dependent_config()
@@ -328,19 +325,21 @@ class CuMotionContext:
         这样配置错误会在创建 context 时暴露，而不是等到某次 IK 或规划调用才由 pybind 抛错。
         """
 
-        expected_cspace_width = len(self._joint_names)
         if self.config.ik_cspace_seeds is not None:
             seeds = np.asarray(self.config.ik_cspace_seeds, dtype=float)
             seed_width = seeds.size if seeds.ndim == 1 else seeds.shape[1]
-            if seed_width != expected_cspace_width:
+            if seed_width != self.expected_cspace_width:
                 raise ValueError(
                     "ik_cspace_seeds width mismatch: "
-                    f"expected_cspace_width {expected_cspace_width}, got {seed_width}"
+                    f"expected_cspace_width {self.expected_cspace_width}, got {seed_width}"
                 )
         for key, values in self.config.trajectory_limits.items():
-            if np.asarray(values, dtype=float).reshape(-1).size != expected_cspace_width:
+            if (
+                np.asarray(values, dtype=float).reshape(-1).size
+                != self.expected_cspace_width
+            ):
                 raise ValueError(
-                    f"trajectory_limits.{key} expected_cspace_width {expected_cspace_width} values, "
+                    f"trajectory_limits.{key} expected_cspace_width {self.expected_cspace_width} values, "
                     f"got {np.asarray(values, dtype=float).reshape(-1).size}"
                 )
         for frame_name, label in (

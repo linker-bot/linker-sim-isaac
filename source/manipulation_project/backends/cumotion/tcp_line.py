@@ -122,7 +122,7 @@ def plan_tcp_line_joint_path(
 
     joint_targets = []
     position_errors = []
-    warm_start = current
+    warm_start_ik_cspace_seed = current
     for waypoint_index, waypoint in enumerate(waypoints):
         # 当起点来自当前 FK 时，第一帧已经等于当前关节状态，没有必要再求一次等价 IK。
         # 对冗余机械臂来说，重复求解可能返回另一个等价姿态，导致轨迹第一步小跳变。
@@ -135,7 +135,7 @@ def plan_tcp_line_joint_path(
                 target_position=waypoint.position,
                 target_orientation=waypoint.orientation,
                 tcp_frame_name=request.tcp_frame_name,
-                warm_start=warm_start,
+                warm_start_ik_cspace_seed=warm_start_ik_cspace_seed,
                 position_tolerance=request.position_tolerance,
                 orientation_tolerance=request.orientation_tolerance,
             )
@@ -148,9 +148,11 @@ def plan_tcp_line_joint_path(
                 f"{waypoint_index}/{len(waypoints) - 1}: status={result.status} "
                 f"position_error={result.position_error}"
             )
-        warm_start = np.asarray(result.joint_positions, dtype=float).reshape(-1)
-        # warm_start 更新为上一点成功解，使连续 waypoint 更容易落在同一个 IK 解分支上。
-        joint_targets.append(warm_start.copy())
+        warm_start_ik_cspace_seed = np.asarray(
+            result.joint_positions, dtype=float
+        ).reshape(-1)
+        # warm-start seed 更新为上一点成功解，使连续 waypoint 更容易落在同一个 IK 解分支上。
+        joint_targets.append(warm_start_ik_cspace_seed.copy())
         position_errors.append(float(result.position_error))
 
     diagnostics = TcpLineDiagnostics(

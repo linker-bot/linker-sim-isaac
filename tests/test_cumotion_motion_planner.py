@@ -173,6 +173,7 @@ class _FakeContext:
         )
         self.robot_description = "robot_description"
         self.kinematics = "kinematics"
+        self.expected_cspace_width = 2
 
     def joint_names(self) -> list[str]:
         return ["j0", "j1"]

@@ -28,7 +28,7 @@ from manipulation_project.utils.math_utils import quat_wxyz_to_matrix
 from manipulation_project.utils.rotations import quat_wxyz_to_xyzw
 
 
-def _seed_list(seeds: np.ndarray) -> list[np.ndarray]:
+def _ik_cspace_seeds_list(seeds: np.ndarray) -> list[np.ndarray]:
     """把 1D/2D seed 数组规范化为 cuMotion 接受的数组列表。"""
 
     seed_array = np.asarray(seeds, dtype=float)
@@ -60,9 +60,10 @@ class CuMotionInverseKinematics:
         self.tcp_frame_name = str(tcp_frame_name)
         self.config = self.cumotion.IkConfig()
         self.orientation_weight = context.config.orientation_weight
-        # IkConfig 可复用，但每次请求会覆盖 warm_start 和容差；构造阶段只写全局默认值。
+        # IkConfig 可复用，但每次请求会覆盖 warm-start IK C-space seed 和容差；
+        # 构造阶段只写全局默认值。
         if context.config.ik_cspace_seeds is not None:
-            self.config.cspace_seeds = _seed_list(
+            self.config.cspace_seeds = _ik_cspace_seeds_list(
                 np.asarray(context.config.ik_cspace_seeds, dtype=float)
             )
         self.config.ccd_max_iterations = int(context.config.ccd_max_iterations)
@@ -73,8 +74,8 @@ class CuMotionInverseKinematics:
     def joint_names(self) -> list[str]:
         """返回 IK 输入 seed 和输出解使用的 C-space 关节名顺序。
 
-        ``warm_start``、内部 seed 和 ``IKResult.joint_positions`` 都按该顺序排列；任务层需要
-        再按名称映射到 Isaac 完整 DOF。
+        ``warm_start_ik_cspace_seed``、内部 seed 和 ``IKResult.joint_positions`` 都按该顺序
+        排列；任务层需要再按名称映射到 Isaac 完整 DOF。
         """
 
         return self.context.joint_names()
@@ -95,9 +96,12 @@ class CuMotionInverseKinematics:
         ``joint_positions`` 始终保持 C-space 顺序，调用方需要自行映射回完整 DOF。
         """
 
+        # 先做后端无关的请求结构校验，例如目标位置/姿态维度、容差范围和碰撞对象格式。
         request.validate()
+        # 再做依赖当前 cuMotion robot description 的检查，例如 TCP frame 是否存在、
+        # warm-start IK C-space seed 是否匹配当前 C-space 宽度。
         self._validate_request(request)
-        # 几何 IK 更快，collision-free IK 更保守；请求对象显式选择路径，避免任务层依赖后端默认。
+        # 几何 IK 不考虑环境碰撞, collision-free IK 考虑环境碰撞
         if request.avoid_collisions:
             return self._solve_collision_free(request)
         return self._solve_geometric(request)
@@ -108,11 +112,15 @@ class CuMotionInverseKinematics:
         frame_name = str(request.tcp_frame_name or self.tcp_frame_name)
         if hasattr(self.context, "has_frame") and not self.context.has_frame(frame_name):
             raise ValueError(f"cuMotion frame {frame_name!r} not found")
-        expected = len(self.joint_names())
-        if request.warm_start is not None:
-            size = np.asarray(request.warm_start, dtype=float).reshape(-1).size
-            if size != expected:
-                raise ValueError(f"warm_start expected {expected} values, got {size}")
+        if request.warm_start_ik_cspace_seed is not None:
+            size = np.asarray(
+                request.warm_start_ik_cspace_seed, dtype=float
+            ).reshape(-1).size
+            if size != self.context.expected_cspace_width:
+                raise ValueError(
+                    "warm_start_ik_cspace_seed expected "
+                    f"{self.context.expected_cspace_width} values, got {size}"
+                )
 
     def _target_pose(self, request: IKRequest):
         """构造 cuMotion 目标位姿对象。"""
@@ -124,11 +132,11 @@ class CuMotionInverseKinematics:
     def _apply_request_config(self, request: IKRequest) -> None:
         """把单次请求的 warm start 和容差写入可复用 IK config。"""
 
-        # warm_start 是单次请求优先级最高的 seed，通常来自上一 waypoint 解。无姿态目标时把
-        # orientation tolerance 放宽并把权重置 0，避免后端试图优化未指定的旋转。
-        if request.warm_start is not None:
+        # warm-start IK C-space seed 是单次请求优先级最高的 seed，通常来自上一 waypoint 解。
+        # 无姿态目标时把 orientation tolerance 放宽并把权重置 0，避免后端试图优化未指定的旋转。
+        if request.warm_start_ik_cspace_seed is not None:
             self.config.cspace_seeds = [
-                np.asarray(request.warm_start, dtype=float).reshape(-1)
+                np.asarray(request.warm_start_ik_cspace_seed, dtype=float).reshape(-1)
             ]
         self.config.position_tolerance = float(request.position_tolerance)
         if request.target_orientation is None:
@@ -151,10 +159,17 @@ class CuMotionInverseKinematics:
             self.kinematics, self._target_pose(request), frame_name, self.config
         )
         q = np.asarray(result.cspace_position, dtype=float)
-        orientation_error = max(
-            float(result.x_axis_orientation_error),
-            float(result.y_axis_orientation_error),
-            float(result.z_axis_orientation_error),
+        # cuMotion 几何 IK 分别返回 TCP 坐标轴 x/y/z 的姿态误差；项目结果只保留一个标量，
+        # 因此有姿态目标时取三者最大值作为最保守的 orientation_error。无姿态目标时语义上
+        # 不约束旋转，返回 None。
+        orientation_error = (
+            None
+            if request.target_orientation is None
+            else max(
+                float(result.x_axis_orientation_error),
+                float(result.y_axis_orientation_error),
+                float(result.z_axis_orientation_error),
+            )
         )
         if result.success:
             self.config.cspace_seeds = [q]
@@ -205,11 +220,13 @@ class CuMotionInverseKinematics:
             translation, orientation
         )
         seeds = []
-        if request.warm_start is not None:
-            seeds.append(np.asarray(request.warm_start, dtype=float).reshape(-1))
+        if request.warm_start_ik_cspace_seed is not None:
+            seeds.append(
+                np.asarray(request.warm_start_ik_cspace_seed, dtype=float).reshape(-1)
+            )
         elif self.context.config.ik_cspace_seeds is not None:
             seeds.extend(
-                _seed_list(
+                _ik_cspace_seeds_list(
                     np.asarray(self.context.config.ik_cspace_seeds, dtype=float)
                 )
             )
@@ -227,8 +244,8 @@ class CuMotionInverseKinematics:
             orientation_error = self._orientation_error(q, request, frame_name)
         else:
             q = (
-                np.asarray(request.warm_start, dtype=float).reshape(-1)
-                if request.warm_start is not None
+                np.asarray(request.warm_start_ik_cspace_seed, dtype=float).reshape(-1)
+                if request.warm_start_ik_cspace_seed is not None
                 else np.array([])
             )
             position_error = float("inf")

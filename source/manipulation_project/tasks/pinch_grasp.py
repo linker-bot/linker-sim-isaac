@@ -888,7 +888,7 @@ class PinchGraspTask:
                 IKRequest(
                     target_position=approach_world,
                     target_orientation=ik_orientation,
-                    warm_start=current_cspace,
+                    warm_start_ik_cspace_seed=current_cspace,
                     position_tolerance=context.config.position_tolerance,
                     orientation_tolerance=context.config.orientation_tolerance,
                 )
@@ -928,7 +928,7 @@ class PinchGraspTask:
                 IKRequest(
                     target_position=lifted_world,
                     target_orientation=ik_orientation,
-                    warm_start=grasp_joint_positions,
+                    warm_start_ik_cspace_seed=grasp_joint_positions,
                     position_tolerance=context.config.position_tolerance,
                     orientation_tolerance=context.config.orientation_tolerance,
                 )
@@ -941,7 +941,7 @@ class PinchGraspTask:
                     IKRequest(
                         target_position=target,
                         target_orientation=ik_orientation,
-                        warm_start=warm,
+                        warm_start_ik_cspace_seed=warm,
                         position_tolerance=context.config.position_tolerance,
                         orientation_tolerance=context.config.orientation_tolerance,
                     )

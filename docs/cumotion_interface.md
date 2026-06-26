@@ -197,7 +197,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 | `target_orientation` | TCP 目标姿态，`wxyz`；为 `None` 时只约束位置 |
 | `tcp_frame_name` | 目标 TCP frame；为空时使用 IK 实例默认 frame |
 | `tcp_type` | TCP 类型标签，目前主要作任务层语义字段 |
-| `warm_start` | 上一帧关节解或初始 seed，按 C-space 顺序 |
+| `warm_start_ik_cspace_seed` | 上一帧 IK 关节解或初始 seed，按 C-space 顺序 |
 | `position_tolerance` | 位置容差 |
 | `orientation_tolerance` | 姿态容差 |
 | `avoid_collisions` | 是否使用 collision-free IK |
@@ -219,7 +219,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 连续轨迹注意事项：
 
 - `CuMotionInverseKinematics` 会在几何 IK 成功后把解写回后端 `IkConfig.cspace_seeds`。
-- 对 waypoint 序列，调用方也应把上一点 `joint_positions` 作为下一点 `warm_start`，保证解分支连续。
+- 对 waypoint 序列，调用方也应把上一点 `joint_positions` 作为下一点 `warm_start_ik_cspace_seed`，保证解分支连续。
 
 ## 5. 路径级 Motion Planner 接口
 
@@ -538,7 +538,7 @@ sequenceDiagram
 
     Task->>Ctx: make_inverse_kinematics(tcp_frame_name)
     Ctx-->>Task: IK
-    Task->>IK: IKRequest(target_position, target_orientation, warm_start)
+    Task->>IK: IKRequest(target_position, target_orientation, warm_start_ik_cspace_seed)
     IK->>Cu: solve_ik 或 collision-free solver
     Cu-->>IK: 后端结果
     IK-->>Task: IKResult(joint_positions, success, errors)

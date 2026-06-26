@@ -147,6 +147,7 @@ class _FakeContext:
             orientation_weight=0.5,
             collision_free_ik_params={"max_iterations": 7},
         )
+        self.expected_cspace_width = 2
 
     def joint_names(self):
         return ["j0", "j1"]
@@ -176,7 +177,7 @@ def test_collision_free_ik_uses_tolerances_params_and_recomputes_errors(
         IKRequest(
             target_position=np.asarray([0.0, 0.0, 0.0]),
             target_orientation=np.asarray([1.0, 0.0, 0.0, 0.0]),
-            warm_start=np.asarray([0.1, 0.2]),
+            warm_start_ik_cspace_seed=np.asarray([0.1, 0.2]),
             position_tolerance=0.012,
             orientation_tolerance=0.034,
             avoid_collisions=True,
@@ -203,10 +204,10 @@ def test_ik_request_rejects_wrong_warm_start_length() -> None:
         solver.solve(
             IKRequest(
                 target_position=np.zeros(3),
-                warm_start=np.asarray([0.0]),
+                warm_start_ik_cspace_seed=np.asarray([0.0]),
             )
         )
     except ValueError as exc:
-        assert "warm_start expected 2 values" in str(exc)
+        assert "warm_start_ik_cspace_seed expected 2 values" in str(exc)
     else:
-        raise AssertionError("expected warm_start length validation")
+        raise AssertionError("expected warm_start_ik_cspace_seed length validation")

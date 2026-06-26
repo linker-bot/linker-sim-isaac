@@ -180,9 +180,10 @@ class CuMotionMotionPlanner:
 
         # cuMotion 只知道 XRDF/URDF 中的主动 C-space 关节，通常不包含灵巧手 mimic follower
         # 或组合 articulation 的全部 DOF。长度不匹配时立即报错，比把错误路径写回控制器安全。
-        expected = len(self.joint_names())
-        if values.size != expected:
-            raise ValueError(f"{label} expected {expected} values, got {values.size}")
+        if values.size != self.context.expected_cspace_width:
+            raise ValueError(
+                f"{label} expected {self.context.expected_cspace_width} values, got {values.size}"
+            )
 
     def _motion_result(
         self,

@@ -43,16 +43,17 @@ class PoseTarget:
 class IKRequest:
     """单个 TCP 逆运动学目标。
 
-    ``warm_start`` 用于连续轨迹求解的上一帧关节解；``avoid_collisions`` 为真时后端应使用
-    collision-aware 路径或 IK 模式。``collision_objects`` 是一次请求的环境快照，不表示
-    后端会长期维护动态障碍物。失败时由后端返回 ``IKResult``，不在数据类内抛错。
+    ``warm_start_ik_cspace_seed`` 用于连续轨迹求解的上一帧 C-space 关节解；
+    ``avoid_collisions`` 为真时后端应使用 collision-aware 路径或 IK 模式。
+    ``collision_objects`` 是一次请求的环境快照，不表示后端会长期维护动态障碍物。
+    失败时由后端返回 ``IKResult``，不在数据类内抛错。
     """
 
     target_position: np.ndarray
     target_orientation: np.ndarray | None = None
     tcp_frame_name: str | None = None
     tcp_type: str = "flange"
-    warm_start: np.ndarray | None = None
+    warm_start_ik_cspace_seed: np.ndarray | None = None
     position_tolerance: float = 1.0e-4
     orientation_tolerance: float = 1.0e-3
     avoid_collisions: bool = False
@@ -62,16 +63,18 @@ class IKRequest:
         """检查 IK 请求的结构性约束。
 
         这里不判断目标是否可达，也不检查 frame 是否存在；这些依赖具体机器人模型。
-        warm start 只检查非空，长度是否匹配 C-space 由具体后端在加载模型后检查。
+        warm-start IK C-space seed 只检查非空，长度是否匹配 C-space 由具体后端在加载模型后检查。
         """
 
         np.asarray(self.target_position, dtype=float).reshape(3)
         if self.target_orientation is not None:
             np.asarray(self.target_orientation, dtype=float).reshape(4)
-        if self.warm_start is not None:
-            warm_start = np.asarray(self.warm_start, dtype=float).reshape(-1)
-            if warm_start.size == 0:
-                raise ValueError("warm_start cannot be empty")
+        if self.warm_start_ik_cspace_seed is not None:
+            warm_start_ik_cspace_seed = np.asarray(
+                self.warm_start_ik_cspace_seed, dtype=float
+            ).reshape(-1)
+            if warm_start_ik_cspace_seed.size == 0:
+                raise ValueError("warm_start_ik_cspace_seed cannot be empty")
         if self.position_tolerance < 0 or self.orientation_tolerance < 0:
             raise ValueError("IK tolerances cannot be negative")
         if self.tcp_frame_name is not None and not str(self.tcp_frame_name):

@@ -99,8 +99,12 @@ def test_build_tcp_line_command_trajectory_warm_starts_each_waypoint() -> None:
         trajectory.positions[:, [0, 2]], [[0.2, 0.4], [3.1, 4.1], [3.2, 4.2]]
     )
     assert len(context.solver.requests) == 2
-    np.testing.assert_allclose(context.solver.requests[0].warm_start, [0.2, 0.4])
-    np.testing.assert_allclose(context.solver.requests[1].warm_start, [3.1, 4.1])
+    np.testing.assert_allclose(
+        context.solver.requests[0].warm_start_ik_cspace_seed, [0.2, 0.4]
+    )
+    np.testing.assert_allclose(
+        context.solver.requests[1].warm_start_ik_cspace_seed, [3.1, 4.1]
+    )
     np.testing.assert_allclose(
         context.solver.requests[0].target_orientation, [1.0, 0.0, 0.0, 0.0]
     )
