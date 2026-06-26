@@ -32,21 +32,24 @@ from manipulation_project.backends.cumotion.context import (
 from manipulation_project.backends.cumotion.motion_planner_config import (
     GraphSearchConfig,
     MotionPlannerBackendConfig,
+    SpecifiedPathConfig,
     TrajectoryGenerationConfig,
 )
 from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.backends.cumotion.trajectory_adapter import (
     joint_trajectory_from_cumotion,
 )
-from manipulation_project.planning.requests import IKRequest, MotionRequest
+from manipulation_project.planning.requests import (
+    IKRequest,
+    MotionRequest,
+    SpecifiedPathRequest,
+    TaskSpacePath,
+    TcpLineSegment,
+)
 from manipulation_project.planning.results import MotionResult
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
-from manipulation_project.tasks.move_tcp_line import (
-    MoveTcpLineConfig,
-    build_tcp_line_command_trajectory,
-)
 from manipulation_project.tasks.primitives import (
     ExecutableTask,
     HoldTask,
@@ -232,7 +235,6 @@ class PinchGraspConfig:
         use_orientation: IK 是否约束 TCP 姿态；为假时只约束位置。
         approach_distance: 抓取前从目标正上方接近的高度差，单位 m。
         lift_height: 抓住后抬升高度，单位 m。
-        approach_line_sample_hz: 从 approach 点下沉到抓取点的 TCP 直线 IK 采样频率。
         prep/move/approach/close/lift/wiggle/final/post...: 各阶段持续时间，单位 s。
         wiggle_axis: 抬升后摆动方向，世界坐标向量。
         cuMotion 后端参数从 robot config 的 ``cumotion`` 段读取。
@@ -255,7 +257,6 @@ class PinchGraspConfig:
     use_orientation: bool = True
     approach_distance: float = 0.10
     lift_height: float = 0.4
-    approach_line_sample_hz: float = 100.0
     prep_duration: float = 1.0
     move_duration: float = 3.0
     approach_duration: float = 1.2
@@ -302,9 +303,6 @@ class PinchGraspConfig:
                 grasp.get("approach_distance", cls.approach_distance)
             ),
             lift_height=float(grasp.get("lift_height", cls.lift_height)),
-            approach_line_sample_hz=float(
-                grasp.get("approach_line_sample_hz", cls.approach_line_sample_hz)
-            ),
             prep_duration=float(grasp.get("prep_duration", cls.prep_duration)),
             move_duration=float(grasp.get("move_duration", cls.move_duration)),
             approach_duration=float(
@@ -384,7 +382,6 @@ class PinchGraspConfig:
         nonnegative = {
             "approach_distance": self.approach_distance,
             "lift_height": self.lift_height,
-            "approach_line_sample_hz": self.approach_line_sample_hz,
             "prep_duration": self.prep_duration,
             "move_duration": self.move_duration,
             "approach_duration": self.approach_duration,
@@ -402,8 +399,6 @@ class PinchGraspConfig:
                 raise ValueError(f"{name} cannot be negative")
         if self.wiggle_cycles < 0:
             raise ValueError("wiggle_cycles cannot be negative")
-        if self.approach_line_sample_hz <= 0:
-            raise ValueError("approach_line_sample_hz must be positive")
         if not self.tcp_frame_name:
             raise ValueError("tcp_frame_name cannot be empty")
         self.motion_planning.validate()
@@ -533,6 +528,145 @@ def build_planned_joint_motion_trajectory(
         phase=phase,
     )
     return trajectory, result
+
+
+def build_specified_tcp_line_trajectory(
+    *,
+    context: CuMotionContext,
+    tcp_frame_name: str,
+    dof_names: list[str],
+    arm_indices: np.ndarray,
+    start_all: np.ndarray,
+    target_position: np.ndarray,
+    duration_s: float,
+    phase: str,
+    physics_dt: float | None = None,
+    base_config: MotionPlannerBackendConfig | None = None,
+) -> tuple[JointTrajectory, MotionResult]:
+    """用 specified_path 的 ``TcpLineSegment`` 构建完整 DOF TCP 直线轨迹。
+
+    该函数是任务层到新 specified-path 接口的直接调用点：不再经过旧的 ``tcp_line.py`` 逐点 IK
+    helper，也不保留 ``TcpLineRequest`` 兼容层。cuMotion 只返回 C-space 路径/轨迹；这里负责把
+    机械臂 C-space 列写回完整 articulation DOF。
+    """
+
+    if duration_s < 0:
+        raise ValueError("duration_s cannot be negative")
+    start = np.asarray(start_all, dtype=float).reshape(-1)
+    if start.size != len(dof_names):
+        raise ValueError(f"dof_names expected {start.size} names, got {len(dof_names)}")
+    arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
+    current_q = start[arm_indices]
+    target_position = np.asarray(target_position, dtype=float).reshape(3)
+
+    if duration_s == 0:
+        trajectory = joint_trajectory_from_positions(
+            times=np.asarray([0.0], dtype=float),
+            positions=start.reshape(1, -1),
+            joint_names=tuple(dof_names),
+            phases=(phase,),
+        )
+        return trajectory, MotionResult(
+            joint_path=current_q.reshape(1, -1),
+            trajectory=None,
+            success=True,
+            status="SKIPPED_ZERO_DURATION",
+        )
+
+    specified_planner = context.make_motion_planner(
+        tcp_frame_name=tcp_frame_name,
+        config=_specified_path_config_from_base(base_config),
+    )
+    result = specified_planner.plan(
+        SpecifiedPathRequest(
+            current_q=current_q,
+            tcp_frame_name=tcp_frame_name,
+            duration_s=duration_s,
+            path=TaskSpacePath(
+                segments=(
+                    TcpLineSegment(
+                        target_position=target_position,
+                        orientation_mode="current",
+                    ),
+                )
+            ),
+        )
+    )
+    if not result.success:
+        raise RuntimeError(
+            f"cuMotion specified TCP line planning failed for {phase}: "
+            f"status={result.status}"
+        )
+
+    if result.trajectory is not None:
+        if result.joint_path is None or np.asarray(result.joint_path).shape[0] == 0:
+            raise RuntimeError(
+                f"cuMotion specified TCP line returned trajectory without joint_path "
+                f"for {phase}: status={result.status}"
+            )
+        target_all = start.copy()
+        target_all[arm_indices] = np.asarray(result.joint_path, dtype=float)[-1]
+        return (
+            _full_trajectory_from_cumotion_trajectory(
+                result.trajectory,
+                motion_planner=specified_planner,
+                dof_names=dof_names,
+                arm_indices=arm_indices,
+                start_all=start,
+                target_all=target_all,
+                requested_duration_s=duration_s,
+                phase=phase,
+                physics_dt=physics_dt,
+            ),
+            result,
+        )
+
+    if result.joint_path is None:
+        raise RuntimeError(
+            f"cuMotion specified TCP line returned no path or trajectory for {phase}: "
+            f"status={result.status}"
+        )
+    cspace_path = np.asarray(result.joint_path, dtype=float)
+    if cspace_path.ndim != 2:
+        raise ValueError("specified TCP line joint_path must have shape (N, dof)")
+    if cspace_path.shape[1] != arm_indices.size:
+        raise ValueError(
+            "specified TCP line joint_path dof mismatch: "
+            f"path has {cspace_path.shape[1]} columns, arm_indices has {arm_indices.size}"
+        )
+    times = _times_for_cspace_path(cspace_path, duration_s)
+    full_positions = np.repeat(start.reshape(1, -1), cspace_path.shape[0], axis=0)
+    full_positions[:, arm_indices] = cspace_path
+    trajectory = joint_trajectory_from_positions(
+        times=times,
+        positions=full_positions,
+        joint_names=tuple(dof_names),
+        phase=phase,
+    )
+    return trajectory, result
+
+
+def _specified_path_config_from_base(
+    base_config: MotionPlannerBackendConfig | None,
+) -> MotionPlannerBackendConfig:
+    """从任务主 planner 配置派生 task-space specified-path 配置。"""
+
+    base = base_config or MotionPlannerBackendConfig()
+    return MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        graph_search=base.graph_search,
+        trajectory_generation=base.trajectory_generation,
+        trajectory_optimization=base.trajectory_optimization,
+        specified_path=SpecifiedPathConfig(
+            family="task_space_segments",
+            validate_collision_after_generation=(
+                base.specified_path.validate_collision_after_generation
+            ),
+            cspace_waypoints=base.specified_path.cspace_waypoints,
+            task_space_segments=base.specified_path.task_space_segments,
+            composite=base.specified_path.composite,
+        ),
+    )
 
 
 def _full_trajectory_from_cumotion_trajectory(
@@ -933,24 +1067,21 @@ class PinchGraspTask:
             set_joint_targets_by_indices(
                 approach_all, arm_indices, approach.joint_positions
             )
-            approach_line_config = MoveTcpLineConfig(
-                tcp_frame_name=self.tcp_frame_name,
-                start_position=None,
-                target_position=tuple(float(value) for value in pinch_world),
-                orientation_mode="current",
-                duration_s=self.config.approach_duration,
-                sample_hz=self.config.approach_line_sample_hz,
-                phase="approach_box",
-            )
             # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
-            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的任务意图。
-            grasp_line_trajectory, grasp_line_diagnostics = (
-                build_tcp_line_command_trajectory(
-                    dof_names=dof_names,
-                    command_indices=np.arange(len(dof_names), dtype=int),
-                    current_positions=approach_all,
-                    config=approach_line_config,
+            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的任务意图。TCP 直线现在
+            # 直接使用 specified_path 的 TaskSpacePath/TcpLineSegment，不再经过旧逐点 IK helper。
+            grasp_line_trajectory, grasp_line_motion = (
+                build_specified_tcp_line_trajectory(
                     context=context,
+                    tcp_frame_name=self.tcp_frame_name,
+                    dof_names=dof_names,
+                    arm_indices=arm_indices,
+                    start_all=approach_all,
+                    target_position=pinch_world,
+                    duration_s=self.config.approach_duration,
+                    phase="approach_box",
+                    physics_dt=physics_dt,
+                    base_config=self.config.motion_planning.backend,
                 )
             )
             grasp_joint_positions = np.asarray(
@@ -1107,11 +1238,16 @@ class PinchGraspTask:
                 "tcp_xyz": tcp.xyz,
                 "approach_success": approach.success,
                 "approach_error": approach.position_error,
-                "grasp_success": True,
-                "grasp_error": grasp_line_diagnostics.max_position_error,
-                "approach_line_start": grasp_line_diagnostics.start_position,
-                "approach_line_target": grasp_line_diagnostics.target_position,
-                "approach_line_max_error": grasp_line_diagnostics.max_position_error,
+                "grasp_success": grasp_line_motion.success,
+                "grasp_error": 0.0,
+                "approach_line_start": approach_world,
+                "approach_line_target": pinch_world,
+                "approach_line_waypoints": grasp_line_motion.diagnostics.metrics.get(
+                    "num_waypoints", 0.0
+                ),
+                "approach_line_path_length": grasp_line_motion.diagnostics.metrics.get(
+                    "path_length", 0.0
+                ),
                 "lift_success": lift.success,
                 "lift_error": lift.position_error,
                 "wiggles": [
@@ -1121,6 +1257,7 @@ class PinchGraspTask:
             },
             "motion": {
                 "move_to_approach": move_to_approach_motion,
+                "approach_box": grasp_line_motion,
                 "lift": lift_motion,
                 "wiggles": wiggle_motions,
                 "wiggle_return_center": wiggle_return_motion,

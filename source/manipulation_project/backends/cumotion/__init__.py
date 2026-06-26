@@ -19,10 +19,10 @@ articulation 的完整 DOF，调用方需要按关节名映射回完整 DOF 后�
       specified path pipeline，并统一返回 ``MotionResult``。
     * ``pose_adapter``: 在项目的 4x4 pose / position+quaternion 表示和 cuMotion ``Pose3`` 之间
       做边界转换。
+    * ``path_spec_adapter`` / ``specified_path_planner``: 通过 cuMotion 官方 PathSpec API 处理
+      调用方指定的 C-space/task-space/composite 路径。
     * ``trajectory_adapter``: 把 cuMotion time-parameterized trajectory 采样成项目
       ``JointTrajectory``，统一关节名、时间、位置、速度和 effort 数组。
-    * ``tcp_line``: 生成直线 TCP waypoint，并通过 IK 串接成 C-space 关节路径；适合简单笛卡尔
-      直线移动，不做全局避障路径规划。
     * ``tcp_urdf_builder``: 在临时 URDF 中追加 fixed TCP link/frame，让 cuMotion 能直接以自定义
       TCP frame 做 FK/IK。
 
@@ -73,12 +73,6 @@ from manipulation_project.backends.cumotion.motion_planner_config import (
     TrajectoryOptimizationConfig,
 )
 
-# tcp_line.py: 根据直线 TCP waypoint 串联 IK 解，生成简单笛卡尔直线移动的
-# C-space 关节路径。
-from manipulation_project.backends.cumotion.tcp_line import (
-    plan_tcp_line_joint_path,
-)
-
 # trajectory_adapter.py: 把 cuMotion time-parameterized trajectory 采样并转换成
 # 项目 JointTrajectory。
 from manipulation_project.backends.cumotion.trajectory_adapter import (
@@ -101,5 +95,4 @@ __all__ = [
     "TrajectoryOptimizationConfig",
     "joint_trajectory_from_cumotion",
     "make_collision_world",
-    "plan_tcp_line_joint_path",
 ]

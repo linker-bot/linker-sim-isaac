@@ -1,8 +1,8 @@
 """graph-based cuMotion ``MotionPlanner`` pipeline。
 
-该模块保留项目原有的 graph search 行为：用 cuMotion ``MotionPlanner`` 从当前 C-space
-搜索到目标 C-space / TCP 位置 / TCP 位姿，得到 sparse ``path`` 或 ``interpolated_path``，
-再按 ``trajectory_generation`` 配置可选生成时间参数化 ``Trajectory``。
+用 cuMotion ``MotionPlanner`` 从当前 C-space 搜索到目标 C-space / TCP 位置 / TCP 位姿，
+得到 sparse ``path`` 或 ``interpolated_path``，再按 ``trajectory_generation``
+配置可选生成时间参数化 ``Trajectory``。
 
 graph search 的默认碰撞语义是使用 ``CuMotionContext`` 当前同步的环境 obstacle；如需调试
 忽略环境障碍，应通过 ``GraphSearchConfig.use_environment_obstacles=False`` 显式选择。
@@ -49,10 +49,14 @@ def plan_graph_search(
 ) -> MotionResult:
     """执行 graph planner，并把结果转换成统一 ``MotionResult``。"""
 
+    # 验证 request 是否满足指定结构
     request.validate_structure()
+
     graph_config = config.graph_search
     frame_name = str(request.tcp_frame_name or tcp_frame_name)
     current = np.asarray(request.current_q, dtype=float).reshape(-1)
+
+    # 验证 request 的 current_q 是否满足机械臂关节个数
     validate_cspace_width(context, current, "current_q")
 
     # graph_search 默认使用 context 当前环境；关闭时只切到空 world view，不会修改 context
@@ -96,6 +100,7 @@ def _plan_to_request_target(
 ) -> tuple[object, _PlannerTargetType]:
     """根据 ``MotionRequest`` 的目标类型选择 graph planner API。"""
 
+    # 有 target angles 时先考虑使用 target angles
     if request.goal_q is not None:
         goal = np.asarray(request.goal_q, dtype=float).reshape(-1)
         validate_cspace_width(context, goal, "goal_q")
@@ -105,10 +110,13 @@ def _plan_to_request_target(
             ),
             "cspace",
         )
+
+    # 没有 target angles 也没有 target pose 则报错
     if request.goal_pose is None:
         raise ValueError("Exactly one of goal_q or goal_pose must be provided")
+
+    # 没有 target angles, 有 position, 没有 orientation
     if request.goal_pose.orientation is None:
-        # 只有 position 时调用 translation target，让 cuMotion 不约束 TCP 姿态。
         translation = np.asarray(request.goal_pose.position, dtype=float).reshape(3)
         return (
             planner.plan_to_translation_target(
@@ -116,6 +124,7 @@ def _plan_to_request_target(
             ),
             "translation",
         )
+    # 没有 target angles, 有 position 以及 orientation
     pose_target = pose_from_position_quat_wxyz(
         context.cumotion, request.goal_pose.position, request.goal_pose.orientation
     )

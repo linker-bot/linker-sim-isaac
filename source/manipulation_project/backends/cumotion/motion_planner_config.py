@@ -121,18 +121,23 @@ class SpecifiedPathConfig:
 class MotionPlannerBackendConfig:
     """``CuMotionMotionPlanner`` 顶层配置。
 
-    顶层只选择 pipeline；各 pipeline 的细节参数都放入对应分组。默认值选择
-    ``trajectory_optimization``，符合设计文档中“目标式请求优先用 optimizer”的策略。
+    顶层只选择 pipeline；各 pipeline 的细节参数都放入对应分组。
+    默认值选择``trajectory_optimization``。
     """
 
+    # 选择本次 ``CuMotionMotionPlanner`` 使用哪条规划 pipeline。
     planning_pipeline: PlanningPipeline = "trajectory_optimization"
+    # graph search pipeline 的专属参数：MotionPlanner 配置、是否返回 interpolated path、是否避障。
     graph_search: GraphSearchConfig = field(default_factory=GraphSearchConfig)
+    # 对 graph/specifed path 产生的 C-space path 做时间参数化，生成可执行 trajectory。
     trajectory_generation: TrajectoryGenerationConfig = field(
         default_factory=TrajectoryGenerationConfig
     )
+    # trajectory optimization pipeline 的专属参数：optimizer 配置、环境碰撞开关、后端参数覆盖。
     trajectory_optimization: TrajectoryOptimizationConfig = field(
         default_factory=TrajectoryOptimizationConfig
     )
+    # specified path pipeline 的专属参数：默认路径族、路径转换策略和可选碰撞后验检查。
     specified_path: SpecifiedPathConfig = field(default_factory=SpecifiedPathConfig)
 
     @classmethod

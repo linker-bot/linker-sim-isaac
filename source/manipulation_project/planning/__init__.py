@@ -22,7 +22,6 @@ from manipulation_project.planning.requests import (
     TaskSpaceArcMode,
     TaskSpacePath,
     TcpArcSegment,
-    TcpLineRequest,
     TcpLineSegment,
     TcpPoseSequenceSegment,
     TcpRotationSegment,
@@ -31,8 +30,6 @@ from manipulation_project.planning.results import (
     IKResult,
     MotionResult,
     PlanningDiagnostics,
-    TcpLineDiagnostics,
-    TcpLinePlan,
 )
 
 __all__ = [
@@ -52,9 +49,6 @@ __all__ = [
     "TaskSpaceArcMode",
     "TaskSpacePath",
     "TcpArcSegment",
-    "TcpLineDiagnostics",
-    "TcpLinePlan",
-    "TcpLineRequest",
     "TcpLineSegment",
     "TcpPoseSequenceSegment",
     "TcpRotationSegment",

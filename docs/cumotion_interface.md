@@ -26,12 +26,8 @@ flowchart TD
 
     Request[planning.requests] --> IK
     Request --> Planner
-    Request --> TcpLine[plan_tcp_line_joint_path]
-    FK --> TcpLine
-    IK --> TcpLine
     Planner --> MotionResult[MotionResult]
     IK --> IKResult[IKResult]
-    TcpLine --> TcpLinePlan[TcpLinePlan]
 ```
 
 ## 2. 配置接口
@@ -338,7 +334,9 @@ Pipeline：
 | `tcp_frame_name` | task-space/composite path 使用的 TCP frame；C-space waypoints 不读取该字段 |
 | `duration_s` | `trajectory_generation.mode='time_stamped'` 时的阶段时长 |
 
-`specified_path` 不调用 `tcp_line.py` 逐点 IK fallback；task-space/composite 路径统一走 cuMotion 官方 PathSpec conversion。`tcp_line.py` / `MoveTcpLineConfig` 仍作为独立任务辅助路径保留。
+`specified_path` 不调用旧式逐点 IK fallback；TCP 直线应表达为
+`SpecifiedPathRequest(path=TaskSpacePath(segments=(TcpLineSegment(...),)))`，并统一走 cuMotion
+官方 PathSpec conversion。
 
 ### `MotionResult`
 
@@ -464,58 +462,38 @@ collision_world = context.sync_collision_world(collision_objects)
   - `phases`
   - `joint_names`
 
-## 9. TCP 直线 IK 辅助接口
+## 9. Specified-path task-space segments
 
-### `plan_tcp_line_joint_path(...)`
+TCP 直线、旋转、圆弧和 pose 序列都通过 `SpecifiedPathRequest` 表达，不再有独立
+`TcpLineRequest` / `plan_tcp_line_joint_path(...)` 接口。
 
-位置：`source/manipulation_project/backends/cumotion/tcp_line.py`
+TCP 直线示例：
 
-用途：在后端 C-space 中生成一条 TCP 直线对应的关节路径。
+```python
+planner.plan(
+    SpecifiedPathRequest(
+        current_q=current_q,
+        tcp_frame_name="pinch_tcp",
+        duration_s=1.2,
+        path=TaskSpacePath(
+            segments=(
+                TcpLineSegment(
+                    target_position=np.asarray([0.1, 0.2, 0.3]),
+                    orientation_mode="current",
+                ),
+            )
+        ),
+    )
+)
+```
 
-流程：
+后端流程：
 
-1. 校验 `TcpLineRequest`。
-2. 读取 `context.joint_names()`，检查当前关节向量长度。
-3. 用 FK 计算当前 TCP pose。
-4. 根据 `target_position` 或 `target_offset` 采样任务空间直线。
-5. 对每个 waypoint 调用 IK。
-6. 每个成功 IK 解作为下一点 warm start。
-7. 返回 `TcpLinePlan`。
-
-输入上下文协议：`TcpLineKinematicsContext`
-
-| 方法 | 含义 |
-|---|---|
-| `joint_names()` | 返回后端关节顺序 |
-| `make_forward_kinematics()` | 返回 FK 对象 |
-| `make_inverse_kinematics(tcp_frame_name=None)` | 返回 IK 对象 |
-
-### `TcpLineRequest`
-
-位置：`source/manipulation_project/planning/requests.py`
-
-| 字段 | 含义 |
-|---|---|
-| `tcp_frame_name` | 要沿直线移动的 TCP frame |
-| `current_joint_positions` | 当前 C-space 关节位置 |
-| `start_position` | 直线起点；为 `None` 时使用当前 FK 位置 |
-| `target_position` | 绝对终点；和 `target_offset` 二选一 |
-| `target_offset` | 相对起点位移；和 `target_position` 二选一 |
-| `orientation_mode` | `current`、`target` 或 `none` |
-| `target_orientation` | 目标姿态 `wxyz` |
-| `target_rpy` | 目标姿态 RPY，`orientation_mode='target'` 时可用 |
-| `duration_s` | 直线阶段时长 |
-| `sample_hz` | waypoint 采样频率 |
-| `position_tolerance` | IK 位置容差 |
-| `orientation_tolerance` | IK 姿态容差 |
-
-### `TcpLinePlan`
-
-| 字段 | 含义 |
-|---|---|
-| `times` | waypoint 时间戳 |
-| `joint_positions` | 每个 waypoint 的 C-space 关节解 |
-| `diagnostics` | 起终点、姿态端点、关节名、最大位置误差 |
+1. 用 `context.kinematics.pose(current_q, tcp_frame_name)` 读取初始 TCP pose。
+2. 创建 `TaskSpacePathSpec(initial_pose)`。
+3. 将 `TcpLineSegment` 映射为 `add_translation(...)` 或 `add_linear_path(...)`。
+4. 调用 `convert_task_space_path_spec_to_cspace(...)` 转成 `LinearCSpacePath`。
+5. 读取 `LinearCSpacePath.waypoints()`，再按 `trajectory_generation` 配置生成可选 trajectory。
 
 ## 10. 自定义 TCP URDF 接口
 
@@ -641,15 +619,15 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `create_motion_planner_config_from_file(config_file, robot_description, tool_frame_name, world_view)` | 已接入 | 从配置文件读取 graph planner 参数，再绑定机器人、工具 frame 和 world view。适合调 `step_size`、采样策略、迭代预算等 planner 细项。 |
 | `create_cspace_trajectory_generator(num_cspace_coords)` | 未接入 | 按自由度数量创建 C-space 轨迹生成器，不自动继承机器人限位。需要调用方手动设置位置/速度/加速度/jerk limits。 |
 | `create_cspace_trajectory_generator(kinematics)` | 已接入 | 从 `Kinematics` 创建 C-space 轨迹生成器，通常会继承机器人 C-space 维度和约束，用于给 waypoint path 做时间参数化。 |
-| `create_default_trajectory_optimizer_config(robot_description, tool_frame_name, world_view)` | 未接入 | 生成 trajectory optimizer 默认配置，用于直接优化 collision-free trajectory，而不是先 graph 搜索再后处理。 |
-| `create_trajectory_optimizer(config)` | 未接入 | 创建 trajectory optimization 求解器，可直接规划到 C-space target、task-space target 或 goalset，并返回 `Trajectory`。 |
-| `create_trajectory_optimizer_config_from_file(config_file, robot_description, tool_frame_name, world_view)` | 未接入 | 从文件读取 trajectory optimizer 参数，适合调优化权重、约束和收敛行为。 |
-| `create_cspace_path_spec(initial_cspace_position)` | 未接入 | 创建程序化 C-space 路径规格，后续通过 `add_cspace_waypoint(...)` 追加关节空间 waypoint。 |
-| `create_task_space_path_spec(initial_pose)` | 未接入 | 创建程序化 task-space 路径规格，后续可追加直线、平移、旋转、圆弧等 TCP 路径段。 |
-| `create_composite_path_spec(initial_cspace_position)` | 未接入 | 创建混合路径规格，可以把 C-space path spec 和 task-space path spec 拼成一条复合路径。 |
-| `create_linear_cspace_path(cspace_path_spec)` | 未接入 | 把 `CSpacePathSpec` 转成可连续求值的 `LinearCSpacePath`，可按路径参数 `s` 采样关节位置。 |
-| `convert_task_space_path_spec_to_cspace(task_space_path_spec, kinematics, control_frame, ...)` | 未接入 | 用 IK/path conversion 把 task-space TCP 路径离散/转换为 C-space path。可替代当前自写 TCP 直线逐点 IK 的一部分。 |
-| `convert_composite_path_spec_to_cspace(composite_path_spec, kinematics, control_frame, ...)` | 未接入 | 把混合 C-space/task-space 规格转换成统一的 C-space path，适合多段任务路径。 |
+| `create_default_trajectory_optimizer_config(robot_description, tool_frame_name, world_view)` | 已接入 | 生成 trajectory optimizer 默认配置，用于直接优化 collision-free trajectory，而不是先 graph 搜索再后处理。 |
+| `create_trajectory_optimizer(config)` | 已接入 | 创建 trajectory optimization 求解器，可直接规划到 C-space target 或 task-space target，并返回 `Trajectory`。 |
+| `create_trajectory_optimizer_config_from_file(config_file, robot_description, tool_frame_name, world_view)` | 已接入 | 从文件读取 trajectory optimizer 参数，适合调优化权重、约束和收敛行为。 |
+| `create_cspace_path_spec(initial_cspace_position)` | 已接入 | 创建程序化 C-space 路径规格，后续通过 `add_cspace_waypoint(...)` 追加关节空间 waypoint。 |
+| `create_task_space_path_spec(initial_pose)` | 已接入 | 创建程序化 task-space 路径规格，后续可追加直线、平移、旋转、圆弧等 TCP 路径段。 |
+| `create_composite_path_spec(initial_cspace_position)` | 已接入 | 创建混合路径规格，可以把 C-space path spec 和 task-space path spec 拼成一条复合路径。 |
+| `create_linear_cspace_path(cspace_path_spec)` | 已接入 | 把 `CSpacePathSpec` 转成可连续求值的 `LinearCSpacePath`，可按路径参数 `s` 采样关节位置。 |
+| `convert_task_space_path_spec_to_cspace(task_space_path_spec, kinematics, control_frame, ...)` | 已接入 | 用 IK/path conversion 把 task-space TCP 路径离散/转换为 C-space path；TCP 直线也走这条官方路径。 |
+| `convert_composite_path_spec_to_cspace(composite_path_spec, kinematics, control_frame, ...)` | 已接入 | 把混合 C-space/task-space 规格转换成统一的 C-space path，适合多段任务路径。 |
 | `load_cspace_path_spec_from_file(path)` | 未接入 | 从 YAML 文件读取 C-space path spec，适合把离线路径规格写成配置。 |
 | `load_cspace_path_spec_from_memory(yaml)` | 未接入 | 从 YAML 字符串读取 C-space path spec。 |
 | `load_task_space_path_spec_from_file(path)` | 未接入 | 从 YAML 文件读取 task-space path spec。 |
@@ -773,7 +751,9 @@ cuMotion 配置文件和官方约定为准。
 | `CompositePathSpec.PathSpecType` | 未接入 | 复合路径中子段类型枚举。 | `TASK_SPACE` 表示 task-space 子段；`CSPACE` 表示 C-space 子段。 |
 | `CompositePathSpec.TransitionMode` | 已接入 | 复合路径子段之间的过渡方式。 | `SKIP` 跳过过渡；`FREE` 允许自由过渡；`LINEAR_TASK_SPACE` 用 task-space 线性方式过渡。 |
 
-这些 API 用于构造连续 task-space/C-space 路径，再转换为 C-space waypoint path。`specified_path` 已接入官方 C-space、task-space 和 composite PathSpec conversion；`plan_tcp_line_joint_path(...)` 仍作为独立逐点 IK helper 保留。
+这些 API 用于构造连续 task-space/C-space 路径，再转换为 C-space waypoint path。`specified_path`
+已接入官方 C-space、task-space 和 composite PathSpec conversion；TCP 直线也统一走
+`TaskSpacePath(TcpLineSegment(...))`。
 
 ### 13.9 C-space trajectory 与 trajectory generator
 
@@ -884,18 +864,18 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 - collision-free IK 会传入位置/姿态容差并复算误差，但只封装了单个 task-space target；array/goalset 和 `axis(...)` 姿态约束未接入。
 - `IKRequest.validate_structure()` 和 request/model-match 校验覆盖基础结构；`IkConfig` 的更多细粒度参数还没有 YAML 入口。
 - `RobotWorldInspector` 有 wrapper，但还没有自动接入 `MotionResult.diagnostics.metrics`；目前需要调用方显式创建 inspector 做诊断。
-- `plan_tcp_line_joint_path(...)` 是自写 waypoint + IK 串联，不是 cuMotion 官方 `TaskSpacePathSpec`/`convert_task_space_path_spec_to_cspace(...)` 流程；可控但能力较窄。
 
 ### 14.3 是否应该修改当前封装边界
 
-不建议把完整 DOF 映射、手部轨迹补齐、mimic 展开等逻辑移动到 `backends/cumotion/`。原因是 cuMotion 的机器人描述通常只包含机械臂 C-space；完整 articulation 的命令空间、mimic follower 和任务语义属于 Isaac/controller/任务层。当前把这些留在 `tasks.move_tcp_line`、`tasks.pinch_grasp` 是合理的。
+不建议把完整 DOF 映射、手部轨迹补齐、mimic 展开等逻辑移动到 `backends/cumotion/`。原因是
+cuMotion 的机器人描述通常只包含机械臂 C-space；完整 articulation 的命令空间、mimic follower
+和任务语义属于 Isaac/controller/任务层。当前把这些留在 `tasks.pinch_grasp` 等任务层是合理的。
 
 更值得做的是在 cuMotion 后端内部继续补齐“更高阶后端能力”：
 
 - 为 collision-free IK 增加 axis orientation constraint、array/goalset 的项目级 API。
 - 把 inspector 诊断自动汇总进 `MotionResult.diagnostics.metrics`，用于规划请求的自碰和障碍距离检查。
 - 增加 SDF obstacle 适配，用于更复杂的环境几何。
-- 增加官方 `TaskSpacePathSpec` / `convert_task_space_path_spec_to_cspace(...)` 流程，作为 TCP 直线移动的可选实现。
 - 试验 `TrajectoryOptimizer` 和 RMPflow，分别覆盖离线 collision-free trajectory optimization 与在线 reactive motion policy。
 
 ## 15. 能否更全局地替换使用 cuMotion
@@ -911,7 +891,10 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 
 ### 15.2 可以替换但需要新封装的部分
 
-- TCP 直线路径：可以从当前逐点 IK 切到 `TaskSpacePathSpec.add_translation(...)` / `add_linear_path(...)` + `convert_task_space_path_spec_to_cspace(...)`，再用 trajectory generator 参数化。这样更贴近官方 path API，但需要处理转换失败、姿态约束和 waypoint 密度。
+- TCP 直线路径：使用 `SpecifiedPathRequest(TaskSpacePath(TcpLineSegment(...)))`，由
+  `TaskSpacePathSpec.add_translation(...)` / `add_linear_path(...)` +
+  `convert_task_space_path_spec_to_cspace(...)` 生成 C-space path，再用 trajectory generator
+  参数化。
 - 抬升、wiggle 等 task-space 目标序列：可以用 `CompositePathSpec` 或 `TrajectoryOptimizer` 表达，减少多段独立 planner 造成的段间不连续。
 - 真实 collision-free trajectory：可以接入 `TrajectoryOptimizer`，把终端目标、path constraint、world view 放进同一个优化问题，而不是 graph path + 后处理轨迹。
 - 动态避障/目标跟踪：可以新增 RMPflow 后端，但这属于 reactive controller，不是当前离线轨迹执行接口的直接替代。
@@ -925,9 +908,8 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 ### 15.4 建议的推进路线
 
 1. 先把 inspector 诊断接进 `MotionResult.diagnostics.metrics`，记录自碰、最小障碍距离、path waypoint 数等。
-2. 把 `plan_tcp_line_joint_path(...)` 增加一个可选实现：优先走官方 `TaskSpacePathSpec` conversion，失败或配置关闭时回退到当前逐点 IK。
-3. 对多段 task-space 任务引入 `TrajectoryOptimizer` 试验入口，先只在 pinch grasp 的 lift/wiggle 或独立 demo 中启用。
-4. 如果需要复杂环境避障，再补 SDF obstacle 和 SDF inspection。
+2. 对多段 task-space 任务引入 `TrajectoryOptimizer` 试验入口，先只在 pinch grasp 的 lift/wiggle 或独立 demo 中启用。
+3. 如果需要复杂环境避障，再补 SDF obstacle 和 SDF inspection。
 5. 若需要在线目标跟踪，再单独设计 RMPflow controller/adapter，不要把它塞进现有离线 `JointTrajectory` 接口里。
 
 结论：当前 `cumotion` 文件夹作为第一层封装是稳的；它覆盖了项目最需要的 FK、IK、规划、trajectory 生成和 primitive world。要“更全局地替换”，推荐沿着 config/diagnostics/path conversion/trajectory optimizer/RMPflow 的顺序渐进扩展，而不是拆掉现有任务层映射。

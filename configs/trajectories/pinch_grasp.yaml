@@ -28,8 +28,6 @@ grasp:
   # 抓取后额外扫动第 1 轴，帮助观察动态响应。
   post_joint_sweep_duration: 2.0
   post_joint_sweep_targets: [2.1, -2.1]
-  # 从 approach 点下沉到抓取点时，TCP 直线 IK waypoint 的采样频率。
-  approach_line_sample_hz: 100.0
   # 写入临时 cuMotion URDF 的 TCP frame 名。
   tcp_frame_name: pinch_tcp
   # 关节角到关节角阶段的 cuMotion 路径/轨迹规划参数。

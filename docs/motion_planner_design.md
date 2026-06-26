@@ -465,7 +465,7 @@ Trajectory
 | 子类型 | 输入 | 中间处理 | 说明 |
 |---|---|---|---|
 | `cspace_waypoints` | 一组 C-space waypoint | 直接生成 C-space path | 最简单的指定路径；`[start_q, goal_q]` 是它的退化特例 |
-| `task_space_segments` | TCP 直线、平移、旋转、圆弧、位姿序列 | 通过 IK/path conversion 转成 C-space path | 当前 `TcpLineRequest` 属于这一类 |
+| `task_space_segments` | TCP 直线、平移、旋转、圆弧、位姿序列 | 通过 IK/path conversion 转成 C-space path | `TcpLineSegment` 属于这一类 |
 | `composite` | C-space 段和 task-space 段混合 | 转成统一 C-space path | 适合复杂多段任务 |
 
 结构关系：
@@ -566,9 +566,9 @@ TaskSpacePathSpec
     -> CSpaceTrajectoryGenerator
 ```
 
-### 9.7 `TcpLineRequest` 作为 task-space segment
+### 9.7 `TcpLineSegment` 作为 task-space segment
 
-`TcpLineRequest` 不是典型的：
+TCP 直线不是典型的：
 
 ```text
 起点 + 终点，让 planner 自己搜索路径
@@ -580,47 +580,25 @@ TaskSpacePathSpec
 明确指定 TCP 要沿一条直线走。
 ```
 
-`TcpLineRequest` 中这些字段已经在描述路径几何形状：
+因此它直接建模为 `TaskSpacePath` 的一个 segment：
 
 ```python
-start_position
-target_position
-target_offset
-orientation_mode
-duration_s
-sample_hz
+SpecifiedPathRequest(
+    current_q=current_q,
+    tcp_frame_name="pinch_tcp",
+    duration_s=duration_s,
+    path=TaskSpacePath(
+        segments=(
+            TcpLineSegment(
+                target_position=target_position,
+                orientation_mode="current",
+            ),
+        )
+    ),
+)
 ```
 
-尤其是：
-
-```text
-start_position -> target_position
-```
-
-或者：
-
-```text
-start_position + target_offset
-```
-
-这本质上是一个 task-space line segment。
-
-因此它属于：
-
-```text
-specified_path.task_space_segments.tcp_line
-```
-
-当前实现方式更像：
-
-```text
-TCP line
-    -> task-space samples
-    -> per-waypoint IK
-    -> joint path
-```
-
-未来可以映射到 cuMotion 官方路径接口：
+后端映射到 cuMotion 官方路径接口：
 
 ```python
 TaskSpacePathSpec.add_linear_path(...)
@@ -628,7 +606,8 @@ convert_task_space_path_spec_to_cspace(...)
 CSpaceTrajectoryGenerator.generate_trajectory(...)
 ```
 
-也就是说，`TcpLineRequest` 不应该作为独立于 `specified_path` 的第四种 pipeline，而应该作为 `specified_path` pipeline 下的一种路径段或请求类型。
+旧的 `TcpLineRequest` / `plan_tcp_line_joint_path(...)` 逐点 IK 辅助不再保留；任务层需要 TCP
+直线时直接发 `SpecifiedPathRequest(TaskSpacePath(TcpLineSegment(...)))`。
 
 ### 9.8 `composite`
 
@@ -825,7 +804,7 @@ source/manipulation_project/backends/cumotion/
 | `motion_planner_config.py` | 定义 `MotionPlannerBackendConfig` 及各分组配置 |
 | `graph_motion_planner.py` | MotionPlanner graph-search 逻辑 |
 | `trajectory_optimizer_planner.py` | TrajectoryOptimizer pipeline |
-| `specified_path_planner.py` | PathSpec / PathGeneration / `TcpLineRequest` pipeline |
+| `specified_path_planner.py` | PathSpec / PathGeneration pipeline |
 | `trajectory_generation.py` | 统一封装 `CSpaceTrajectoryGenerator` 时间参数化 |
 | `trajectory_adapter.py` | cuMotion Trajectory 转项目 JointTrajectory |
 | `pose_adapter.py` | pose / quaternion / matrix 适配 |
@@ -1169,7 +1148,7 @@ TaskSpaceSegment = (
 )
 ```
 
-`TcpLineRequest` 收敛成 `TaskSpacePathSegment` 的一种：
+TCP 直线收敛成 `TaskSpacePathSegment` 的一种：
 
 ```python
 @dataclass(frozen=True)
@@ -1496,7 +1475,7 @@ SpecifiedPathRequest(path=CompositePath(...))
 - `TaskSpacePath` 映射到 `TaskSpacePathSpec` + `convert_task_space_path_spec_to_cspace(...)`。
 - `CompositePath` 映射到 `CompositePathSpec` + `convert_composite_path_spec_to_cspace(...)`。
 - 不静默 fallback 到 `tcp_line.py` 逐点 IK。
-- `tcp_line.py` 作为任务辅助路径保留，适合简单 TCP 直线移动。
+- 不保留独立 `tcp_line.py` / `MoveTcpLineConfig` 路线。
 
 验收标准：
 
@@ -1518,8 +1497,7 @@ SpecifiedPathRequest(path=CompositePath(...))
   - 用 `MotionPlannerBackendConfig` 构造 motion planner 配置。
   - 默认关节目标阶段走 `trajectory_optimization`。
   - 如需要图搜索路线，在任务配置中显式设置 `planning_pipeline: graph_search`。
-- `move_tcp_line.py`：
-  - 使用 `plan_tcp_line_joint_path(...)` 处理简单 TCP 直线移动。
+  - 从 approach 点下沉到 grasp 点的 TCP 直线使用 `SpecifiedPathRequest(TaskSpacePath(TcpLineSegment(...)))`。
 
 验收标准：
 
@@ -1570,7 +1548,7 @@ SpecifiedPathRequest(path=CompositePath(...))
 ```bash
 pytest tests/test_cumotion_motion_planner.py
 pytest tests/test_cumotion_context.py
-pytest tests/test_move_tcp_line.py
+pytest tests/test_pinch_grasp_motion_planning.py
 pytest tests/test_task_configs.py
 ```
 
@@ -1603,7 +1581,7 @@ graph_search:
 specified_path:
     用户指定路径族，内部细分为 cspace_waypoints、task_space_segments 和 composite。
     所有子类型最终都应转换成 C-space path，再做时间参数化；默认不做避障搜索。
-    TcpLineRequest 可以视为 task_space_segments.tcp_line 的现有特例。
+    TCP 直线通过 TaskSpacePath(TcpLineSegment(...)) 表达。
 
 trajectory_optimization:
     目标式请求的默认路线，直接优化出 trajectory。

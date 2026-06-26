@@ -212,6 +212,10 @@ class CuMotionCollisionWorld:
 class CuMotionWorldInspector:
     """轻量封装 cuMotion ``WorldInspector``。
 
+    ``WorldInspector`` 是 cuMotion 提供的环境障碍物查询接口：它只看 ``WorldView`` 中的
+    obstacle，不涉及机器人模型。这里的 wrapper 用于回答“某个点/球和当前环境障碍物的
+    距离或碰撞关系是什么”，常用于单元测试、调试碰撞世界是否构造正确，以及打印诊断信息。
+
     该 wrapper 只负责把输入点规范化成 3D numpy 数组，并把 pybind 返回值转成 Python
     ``bool``/``float``/``list``。它不缓存查询结果；每次调用都读取当前 ``world_view``。
     """
@@ -311,6 +315,11 @@ class CuMotionWorldInspector:
 @dataclass
 class CuMotionRobotWorldInspector:
     """轻量封装 cuMotion ``RobotWorldInspector``。
+
+    ``RobotWorldInspector`` 是 cuMotion 提供的机器人碰撞诊断接口：它根据机器人描述和可选
+    ``WorldView``，检查机器人自身 collision spheres 的自碰，以及机器人 world-collision
+    spheres 与环境 obstacle 的碰撞/距离关系。这里的 wrapper 用于回答“当前关节构型是否自碰、
+    是否碰到环境、最近环境障碍物距离是多少”，不参与轨迹规划决策本身。
 
     输入的 ``cspace_position`` 始终按 ``CuMotionContext.joint_names()`` 的 C-space 顺序排列。
     该对象面向诊断和测试：它不会改变 planner/IK 行为，也不会自动写入 ``MotionResult``。
