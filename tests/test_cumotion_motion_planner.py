@@ -464,7 +464,7 @@ def test_trajectory_optimizer_plans_to_translation_and_pose_targets() -> None:
     )
 
 
-def test_trajectory_optimizer_failure_does_not_fallback_by_default() -> None:
+def test_trajectory_optimizer_failure_returns_failure_directly() -> None:
     optimizer = _FakeOptimizer(
         _FakeOptimizerResults(status="TRAJECTORY_OPTIMIZATION_FAILURE")
     )
@@ -486,37 +486,19 @@ def test_trajectory_optimizer_failure_does_not_fallback_by_default() -> None:
     assert graph_planner.cspace_calls == []
 
 
-def test_trajectory_optimizer_fallback_to_graph_search_records_diagnostics() -> None:
-    optimizer = _FakeOptimizer(
-        _FakeOptimizerResults(status="TRAJECTORY_OPTIMIZATION_FAILURE")
-    )
-    graph_planner = _FakeGraphPlanner(
-        _FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]])
-    )
-    config = MotionPlannerBackendConfig(
-        trajectory_optimization=TrajectoryOptimizationConfig(
-            fallback_pipeline="graph_search"
+def test_trajectory_optimizer_config_rejects_fallback_pipeline() -> None:
+    try:
+        MotionPlannerBackendConfig.from_mapping(
+            {
+                "trajectory_optimization": {
+                    "fallback_pipeline": "graph_search",
+                }
+            }
         )
-    )
-    context = _FakeContext(_FakeCumotion(graph_planner=graph_planner, optimizer=optimizer))
-
-    planner = CuMotionMotionPlanner(context, config=config)
-    result = planner.plan(
-        MotionRequest(
-            current_q=np.asarray([0.0, 0.0]),
-            goal_q=np.asarray([1.0, 1.0]),
-        )
-    )
-
-    assert result.success
-    np.testing.assert_allclose(result.joint_path, [[0.0, 0.0], [1.0, 1.0]])
-    assert graph_planner.cspace_calls
-    assert "requested_pipeline=trajectory_optimization" in result.diagnostics.message
-    assert "actual_pipeline=graph_search" in result.diagnostics.message
-    assert "optimizer_status=TRAJECTORY_OPTIMIZATION_FAILURE" in (
-        result.diagnostics.message
-    )
-    assert result.diagnostics.metrics["optimizer_failed"] == 1.0
+    except ValueError as exc:
+        assert "fallback_pipeline is not supported" in str(exc)
+    else:
+        raise AssertionError("expected fallback_pipeline to be rejected")
 
 
 def test_graph_search_uses_graph_config_and_trajectory_generation() -> None:

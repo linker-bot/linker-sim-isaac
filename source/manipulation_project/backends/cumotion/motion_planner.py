@@ -6,8 +6,7 @@ cuMotion planner，而是根据 ``MotionPlannerBackendConfig.planning_pipeline``
 
 * ``trajectory_optimization``：默认目标式规划路线，直接调用 cuMotion
   ``TrajectoryOptimizer``，成功时主要输出 ``Trajectory``。
-* ``graph_search``：显式选择或 optimizer fallback 时使用的图搜索路线，先生成 C-space
-  path，再按配置可选做时间参数化。
+* ``graph_search``：显式选择的图搜索路线，先生成 C-space path，再按配置可选做时间参数化。
 * ``specified_path``：调用方明确给定路径几何的路线，支持 C-space waypoint path。
 
 这样做的目的是把“任务层选择哪种运动生成策略”和“后端怎样调用 cuMotion API”分开，避免
@@ -15,8 +14,6 @@ cuMotion planner，而是根据 ``MotionPlannerBackendConfig.planning_pipeline``
 """
 
 from __future__ import annotations
-
-from dataclasses import replace
 
 from manipulation_project.backends.cumotion.graph_motion_planner import (
     plan_graph_search,
@@ -31,7 +28,7 @@ from manipulation_project.backends.cumotion.trajectory_optimizer_planner import 
     plan_trajectory_optimization,
 )
 from manipulation_project.planning.requests import MotionRequest, SpecifiedPathRequest
-from manipulation_project.planning.results import MotionResult, PlanningDiagnostics
+from manipulation_project.planning.results import MotionResult
 
 
 class CuMotionMotionPlanner:
@@ -114,56 +111,17 @@ class CuMotionMotionPlanner:
         )
 
     def _plan_trajectory_optimization(self, request: MotionRequest) -> MotionResult:
-        """执行默认 optimizer pipeline，并按配置决定是否显式 fallback。
+        """执行 optimizer pipeline。
 
-        默认不静默 fallback：optimizer 失败和 graph search 成功代表不同质量、不同约束语义的
-        结果。只有配置里写明 ``fallback_pipeline="graph_search"`` 时才回退，并把原始失败
-        状态写入 diagnostics。
+        该方法只调用 trajectory optimizer；失败结果直接返回给调用方。需要 graph search 或
+        其它兜底策略时，任务层应显式选择对应 pipeline 或发起第二次规划请求。
         """
 
-        result = plan_trajectory_optimization(
+        return plan_trajectory_optimization(
             self.context,
             request,
             self.config,
             tcp_frame_name=self.tcp_frame_name,
-        )
-        fallback_pipeline = self.config.trajectory_optimization.fallback_pipeline
-        if result.success or fallback_pipeline is None:
-            return result
-        if fallback_pipeline != "graph_search":
-            raise ValueError(
-                "trajectory_optimization.fallback_pipeline must be graph_search or None"
-            )
-
-        fallback_config = replace(self.config, planning_pipeline="graph_search")
-        fallback = plan_graph_search(
-            self.context,
-            request,
-            fallback_config,
-            tcp_frame_name=self.tcp_frame_name,
-        )
-        fallback_metrics = dict(fallback.diagnostics.metrics)
-        fallback_metrics.update(
-            {
-                "optimizer_failed": 1.0,
-            }
-        )
-        fallback_diagnostics = PlanningDiagnostics(
-            status=fallback.diagnostics.status,
-            message=(
-                "requested_pipeline=trajectory_optimization "
-                "actual_pipeline=graph_search "
-                f"optimizer_status={result.status} "
-                f"fallback_reason={result.diagnostics.message}"
-            ),
-            metrics=fallback_metrics,
-        )
-        return MotionResult(
-            joint_path=fallback.joint_path,
-            trajectory=fallback.trajectory,
-            success=fallback.success,
-            status=fallback.status,
-            diagnostics=fallback_diagnostics,
         )
 
 

@@ -71,7 +71,7 @@ class PinchMotionPlanningConfig:
     """pinch_grasp 中关节角到关节角阶段的 cuMotion 规划参数。
 
     任务层使用 grouped ``MotionPlannerBackendConfig``，默认走 trajectory optimization；
-    graph-search 和 trajectory-generation 细节只在对应 pipeline 或 fallback 中生效。
+    graph-search 和 trajectory-generation 细节只在对应 pipeline 中生效。
     """
 
     backend: MotionPlannerBackendConfig = field(

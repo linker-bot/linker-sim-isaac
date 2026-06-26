@@ -5,7 +5,7 @@ pipeline，各 pipeline 的参数分别放在作用域清晰的 dataclass 中：
 
 * ``graph_search`` 只保存 graph ``MotionPlanner`` 相关参数。
 * ``trajectory_generation`` 只保存 ``CSpaceTrajectoryGenerator`` 的时间参数化参数。
-* ``trajectory_optimization`` 只保存 ``TrajectoryOptimizer`` 相关参数和 fallback 策略。
+* ``trajectory_optimization`` 只保存 ``TrajectoryOptimizer`` 相关参数。
 * ``specified_path`` 只保存指定路径族的默认行为。
 
 这样可以避免一个参数名在不同 pipeline 中产生歧义。例如
@@ -32,7 +32,6 @@ PlanningPipeline = Literal[
 TrajectoryGenerationMode = Literal["time_optimal", "time_stamped"]
 TrajectoryInterpolationMode = Literal["linear", "cubic_spline"]
 SpecifiedPathFamily = Literal["cspace_waypoints", "task_space_segments", "composite"]
-TrajectoryOptimizerFallback = Literal["graph_search"]
 
 
 @dataclass(frozen=True)
@@ -70,13 +69,12 @@ class TrajectoryGenerationConfig:
 class TrajectoryOptimizationConfig:
     """cuMotion ``TrajectoryOptimizer`` 专属配置。
 
-    ``fallback_pipeline`` 默认为 ``None``，表示 optimizer 失败时直接返回失败。只有显式配置
-    为 ``"graph_search"`` 时 facade 才会回退，并在 diagnostics 中记录原始失败状态。
+    optimizer pipeline 只执行 trajectory optimizer 本身。失败时返回 optimizer 的失败结果；
+    如果调用方需要其它路线，应在任务层显式发起第二次规划。
     """
 
     config_path: Path | None = None
     use_environment_obstacles: bool = True
-    fallback_pipeline: TrajectoryOptimizerFallback | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -210,19 +208,11 @@ class MotionPlannerBackendConfig:
             solver_params=trajectory_solver_params,
         )
 
-        # YAML 中常见的空值写法可能会被解析成 None、空字符串或字符串 "null"/"none"。
-        # 这里统一归一化成 None，避免后面分支重复处理。
-        fallback_pipeline = optimizer_settings.get(
-            "fallback_pipeline", TrajectoryOptimizationConfig.fallback_pipeline
-        )
-        if fallback_pipeline in {"", "none", "null"}:
-            fallback_pipeline = None
-        if fallback_pipeline is not None:
-            fallback_pipeline = str(fallback_pipeline)
-            if fallback_pipeline != "graph_search":
-                raise ValueError(
-                    "trajectory_optimization.fallback_pipeline must be graph_search or null"
-                )
+        if "fallback_pipeline" in optimizer_settings:
+            raise ValueError(
+                "trajectory_optimization.fallback_pipeline is not supported; "
+                "choose planning_pipeline=graph_search or retry explicitly in task code"
+            )
 
         trajectory_optimization = TrajectoryOptimizationConfig(
             config_path=_optional_repo_path(optimizer_settings.get("config_path")),
@@ -232,7 +222,6 @@ class MotionPlannerBackendConfig:
                     TrajectoryOptimizationConfig.use_environment_obstacles,
                 )
             ),
-            fallback_pipeline=fallback_pipeline,
             params=_params_mapping(optimizer_settings.get("params")),
         )
 
@@ -302,13 +291,6 @@ class MotionPlannerBackendConfig:
             raise ValueError(
                 "trajectory_generation.interpolation_mode must be one of: linear, "
                 "cubic_spline"
-            )
-        if (
-            self.trajectory_optimization.fallback_pipeline is not None
-            and self.trajectory_optimization.fallback_pipeline != "graph_search"
-        ):
-            raise ValueError(
-                "trajectory_optimization.fallback_pipeline must be graph_search or None"
             )
         if self.specified_path.family not in {
             "cspace_waypoints",

@@ -84,8 +84,6 @@ cumotion:
   orientation_weight: 0.25
   motion_planner:
     planning_pipeline: trajectory_optimization
-    trajectory_optimization:
-      fallback_pipeline: null
     graph_search:
       generate_interpolated_path: true
       motion_planner_params: {}
@@ -288,7 +286,7 @@ Pipeline：
 - `trajectory_optimization`
   - 直接返回 cuMotion `Trajectory`。
   - 默认 `MotionResult.joint_path=None`，`trajectory` 是主输出。
-  - 失败时默认不 fallback；若 `trajectory_optimization.fallback_pipeline="graph_search"`，失败后显式走 graph search，并在 diagnostics 记录 requested/actual pipeline。
+  - 失败时直接返回 optimizer 的失败结果；需要其它路线时由任务层显式选择 `graph_search` 或重新发起请求。
 - `graph_search.generate_interpolated_path=True`
   - 优先消费 cuMotion `interpolated_path`。
   - 若后端未返回，则回退到 sparse `path`。
@@ -904,7 +902,7 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 
 ### 15.1 立即适合替换的部分
 
-- 关节角到关节角运动：优先走 `CuMotionMotionPlanner.plan(MotionRequest(goal_q=...))`，失败时再考虑项目侧插值 fallback。
+- 关节角到关节角运动：优先走 `CuMotionMotionPlanner.plan(MotionRequest(goal_q=...))`；需要保守路线时显式选择 `graph_search` 或项目侧插值策略。
 - TCP 位姿目标：优先用 `MotionRequest(goal_pose=PoseTarget(...))` 做路径级规划，而不是“单点 IK + 关节插值”。
 - C-space 轨迹时间参数化：统一用 `CSpaceTrajectoryGenerator` 输出速度/加速度/jerk，再由 `trajectory_adapter` 转项目 `JointTrajectory`。
 - 碰撞诊断：接入 `RobotWorldInspector` 后，可以在执行前检查起点/终点/路径采样是否自碰或碰环境。

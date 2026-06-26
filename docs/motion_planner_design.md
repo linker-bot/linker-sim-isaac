@@ -21,7 +21,7 @@
 目标是支持三种运动生成方式：
 
 1. `trajectory_optimization`: Trajectory Optimization，目标式运动生成的默认路线。
-2. `graph_search`: Graph-Based Path Planning / MotionPlanner + Trajectory Generation，作为可选搜索路线或 fallback。
+2. `graph_search`: Graph-Based Path Planning / MotionPlanner + Trajectory Generation，作为显式选择的搜索路线。
 3. `specified_path`: 用户指定路径族 / Path Generation + Trajectory Generation。
 
 ---
@@ -67,7 +67,7 @@ MotionResult
 也就是说，文档里的三 pipeline 设计是目标架构；当前代码还没有完整拆出
 `specified_path` 和 `trajectory_optimization` pipeline。后续大改时，目标默认路线应从当前
 已实现的 `graph_search` 切换到 `trajectory_optimization`；`graph_search` 保留为显式选择
-或配置化 fallback。
+或由任务层显式发起第二次规划。
 
 ---
 
@@ -253,25 +253,18 @@ planning_pipeline: trajectory_optimization
 `graph_search` 的定位是：
 
 - 作为显式选择的图搜索 pipeline。
-- 作为 `trajectory_optimization` 不可用或失败时的可配置 fallback。
 - 作为调试路径可达性、粗略避障路径和参数对比的工具。
 
-默认不静默 fallback。原因是 optimizer 失败和 graph search 成功代表两种不同质量和约束语义；
-任务层或配置应明确选择 fallback 策略。
+facade 不做自动回退。原因是 optimizer 失败和 graph search 成功代表两种不同质量和约束语义；
+需要保守路线时，任务层应显式选择 `graph_search` 或自行发起第二次规划。
 
 配置：
 
 ```yaml
-trajectory_optimization:
-  fallback_pipeline: null        # null 表示失败即失败
-  # fallback_pipeline: graph_search
+planning_pipeline: graph_search
 ```
 
-如果启用 fallback，`MotionResult.diagnostics` 必须记录：
-
-- 原始 pipeline：`trajectory_optimization`
-- 实际成功 pipeline：例如 `graph_search`
-- optimizer 失败状态和 fallback 原因
+这样 diagnostics 只记录实际执行的 pipeline，不混合多条路线的状态。
 
 ---
 
@@ -968,7 +961,6 @@ CSpaceTrajectoryGenerator
 ```yaml
 trajectory_optimization:
   config_path: ...
-  fallback_pipeline: null
   params:
     ...
 ```
@@ -979,9 +971,8 @@ trajectory_optimization:
 TrajectoryOptimizerConfig.set_param(...)
 ```
 
-`fallback_pipeline` 默认为 `null`，表示 optimizer 失败时直接返回失败。若显式设为
-`graph_search`，facade 可以在 optimizer 失败后调用 graph-search pipeline，但诊断信息必须
-记录 fallback 发生过。
+optimizer 失败时直接返回失败结果。需要 graph-search 作为保守路线时，由任务层显式切换
+`planning_pipeline: graph_search` 后重新规划。
 
 ### 15.5 Specified Path 参数
 
@@ -1026,7 +1017,6 @@ trajectory_generation:
 
 trajectory_optimization:
     config_path: null
-    fallback_pipeline: null
     params: {}
 
 specified_path:
@@ -1083,7 +1073,6 @@ class TrajectoryGenerationConfig:
 class TrajectoryOptimizationConfig:
     config_path: Path | None = None
     use_environment_obstacles: bool = True
-    fallback_pipeline: Literal["graph_search"] | None = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -1461,8 +1450,7 @@ plan_trajectory_optimization(
   - 否则创建默认 config
   - 应用 `TrajectoryOptimizationConfig.params`
 - 使用 `TrajectoryOptimizationConfig.use_environment_obstacles` 选择当前 world 或 empty world。
-- 默认失败即返回失败。
-- 当 `fallback_pipeline == "graph_search"` 时，失败后显式调用 graph-search pipeline。
+- 失败即返回 optimizer 的失败结果。
 
 验收标准：
 
@@ -1471,13 +1459,9 @@ plan_trajectory_optimization(
   - `MotionResult.trajectory` 是 optimizer trajectory
   - `MotionResult.joint_path` 默认为 `None`
   - diagnostics 记录实际 pipeline 为 `trajectory_optimization`
-- optimizer 失败且无 fallback 时：
+- optimizer 失败时：
   - `success=False`
   - 不调用 graph-search
-- optimizer 失败且 fallback 为 graph_search 时：
-  - 调用 graph-search
-  - diagnostics 记录 requested pipeline 为 `trajectory_optimization`，实际 pipeline 为 `graph_search`
-  - diagnostics 记录 optimizer 原始失败状态
 
 ### 19.5 Phase 5：specified_path
 
@@ -1523,7 +1507,7 @@ SpecifiedPathRequest(path=CSpaceWaypointPath(...))
 - `pinch_grasp.py`：
   - 用 `MotionPlannerBackendConfig` 构造 motion planner 配置。
   - 默认关节目标阶段走 `trajectory_optimization`。
-  - 如需要保守回退，在任务配置中显式设置 `trajectory_optimization.fallback_pipeline: graph_search`。
+  - 如需要图搜索路线，在任务配置中显式设置 `planning_pipeline: graph_search`。
 - `move_tcp_line.py`：
   - 使用 `plan_tcp_line_joint_path(...)` 处理简单 TCP 直线移动。
 
@@ -1542,8 +1526,8 @@ SpecifiedPathRequest(path=CSpaceWaypointPath(...))
 - `test_motion_planner_config_defaults_to_trajectory_optimization`
 - `test_motion_request_rejects_mode_keyword`
 - `test_facade_dispatches_to_trajectory_optimizer_by_default`
-- `test_trajectory_optimizer_failure_does_not_fallback_by_default`
-- `test_trajectory_optimizer_fallback_to_graph_search_records_diagnostics`
+- `test_trajectory_optimizer_failure_returns_failure_directly`
+- `test_trajectory_optimizer_config_rejects_fallback_pipeline`
 - `test_graph_search_uses_graph_config_and_trajectory_generation`
 - `test_trajectory_generation_rejects_unknown_limit_keys`
 - `test_specified_path_cspace_waypoints_generates_joint_path`
@@ -1586,7 +1570,7 @@ planning_pipeline=trajectory_optimization
 成功标准：
 
 - 默认 pipeline 是 `trajectory_optimization`。
-- graph-search 只能通过显式配置或 fallback 被调用。
+- graph-search 只能通过显式配置被调用。
 - specified-path 的 C-space waypoint 可用。
 - 未实现的 task-space/composite path 明确失败。
 
@@ -1600,7 +1584,7 @@ planning_pipeline=trajectory_optimization
 
 ```text
 graph_search:
-    可选路线或 fallback，自动搜索避障 path，再做时间参数化；默认考虑当前环境障碍。
+    显式选择的搜索路线，自动搜索避障 path，再做时间参数化；默认考虑当前环境障碍。
 
 specified_path:
     用户指定路径族，内部细分为 cspace_waypoints、task_space_segments 和 composite。
@@ -1610,7 +1594,7 @@ specified_path:
 trajectory_optimization:
     目标式请求的默认路线，直接优化出 trajectory。
     适合对轨迹平滑性和约束一致性要求更高的任务；默认考虑当前环境障碍。
-    失败时默认直接返回失败，只有显式配置 fallback_pipeline=graph_search 时才回退。
+    失败时直接返回失败结果，不自动调用其它 pipeline。
 ```
 
 最终顶层配置只需要：
