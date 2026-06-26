@@ -1,11 +1,11 @@
 """specified-path cuMotion pipeline。
 
 specified path 的核心语义是“路径几何由调用方指定”，而不是让 graph planner 或 optimizer 自己
-搜索到目标。本模块支持 ``CSpaceWaypointPath``：调用方直接给出一组 C-space waypoint，
-后端可选用 ``CSpaceTrajectoryGenerator`` 做时间参数化。
+搜索到目标。后端会把指定路径转成 C-space waypoint path，再可选用
+``CSpaceTrajectoryGenerator`` 做时间参数化。
 
-``TaskSpacePath`` 和 ``CompositePath`` 在本模块中作为未实现的请求类型处理，并明确抛出
-``NotImplementedError``。
+``CSpaceWaypointPath``、``TaskSpacePath`` 和 ``CompositePath`` 都通过 cuMotion 官方
+PathSpec/conversion API 生成 C-space waypoint path。
 """
 
 from __future__ import annotations
@@ -18,6 +18,11 @@ from manipulation_project.backends.cumotion.motion_planner_config import (
 from manipulation_project.backends.cumotion.motion_planner_utils import (
     path_length,
     validate_cspace_width,
+)
+from manipulation_project.backends.cumotion.path_spec_adapter import (
+    composite_path_to_joint_path,
+    cspace_waypoints_to_joint_path,
+    task_space_path_to_joint_path,
 )
 from manipulation_project.backends.cumotion.trajectory_generation import (
     generate_cspace_trajectory,
@@ -47,20 +52,33 @@ def plan_specified_path(
     request.validate_structure()
     current = np.asarray(request.current_q, dtype=float).reshape(-1)
     validate_cspace_width(context, current, "current_q")
-    # C-space waypoint 路径不使用 TCP frame；这里解析 frame 只是保持请求边界一致。
-    _frame_name = str(request.tcp_frame_name or tcp_frame_name)
+    # Task-space 和 composite 路径需要控制 frame；C-space waypoint 路径不读取该 frame，但仍在
+    # 入口处统一解析，保证 diagnostics 和请求边界行为一致。
+    frame_name = str(request.tcp_frame_name or tcp_frame_name)
 
     if isinstance(request.path, CSpaceWaypointPath):
-        joint_path = _cspace_waypoint_path(context, request.path)
+        family = "cspace_waypoints"
+        # C-space waypoint 路径走官方 CSpacePathSpec -> LinearCSpacePath，而不是直接 vstack。
+        # 这样三类 specified-path 都经过 cuMotion 官方 path API，行为更接近真实运行环境。
+        joint_path = cspace_waypoints_to_joint_path(context, request, config)
     elif isinstance(request.path, TaskSpacePath):
-        # 不静默 fallback 到逐点 IK，避免调用方以为自己使用了官方 PathSpec conversion。
-        raise NotImplementedError(
-            "specified_path.task_space_segments is not implemented; "
-            "use CSpaceWaypointPath or tcp_line helper"
+        family = "task_space_segments"
+        # TaskSpacePath 明确使用 TaskSpacePathSpec + convert_task_space_path_spec_to_cspace。
+        # 不 fallback 到 tcp_line.py，避免“指定路径”语义和逐点 IK helper 混在一起。
+        joint_path = task_space_path_to_joint_path(
+            context,
+            request,
+            config,
+            tcp_frame_name=frame_name,
         )
     elif isinstance(request.path, CompositePath):
-        raise NotImplementedError(
-            "specified_path.composite is not implemented"
+        family = "composite"
+        # CompositePath 由 adapter 拼成 CompositePathSpec，再由 cuMotion 统一转换成 C-space。
+        joint_path = composite_path_to_joint_path(
+            context,
+            request,
+            config,
+            tcp_frame_name=frame_name,
         )
     else:
         raise ValueError(f"Unsupported specified path type: {type(request.path).__name__}")
@@ -73,13 +91,15 @@ def plan_specified_path(
     )
     metrics = {
         "num_waypoints": float(joint_path.shape[0]),
+        # specified_path 本身是 collision-unaware path generation；当前实现不读取环境 world。
+        # validate_collision_after_generation 只进入 diagnostics，真正后验碰撞检查留给后续实现。
         "num_collision_objects": 0.0,
         "path_length": float(path_length(joint_path)),
     }
     diagnostics = PlanningDiagnostics(
         status="SUCCESS",
         message=(
-            "pipeline=specified_path family=cspace_waypoints "
+            f"pipeline=specified_path family={family} path_conversion=official "
             f"collision_check={config.specified_path.validate_collision_after_generation}"
         ),
         metrics=metrics,
@@ -91,16 +111,3 @@ def plan_specified_path(
         status=diagnostics.status,
         diagnostics=diagnostics,
     )
-
-
-def _cspace_waypoint_path(context, path: CSpaceWaypointPath) -> np.ndarray:
-    """校验并堆叠调用方指定的 C-space waypoints。"""
-
-    waypoints = [
-        np.asarray(waypoint, dtype=float).reshape(-1) for waypoint in path.waypoints
-    ]
-    if len(waypoints) < 2:
-        raise ValueError("CSpaceWaypointPath requires at least 2 waypoints")
-    for index, waypoint in enumerate(waypoints):
-        validate_cspace_width(context, waypoint, f"path.waypoints[{index}]")
-    return np.vstack([waypoint.reshape(1, -1) for waypoint in waypoints])

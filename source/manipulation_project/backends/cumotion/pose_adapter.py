@@ -43,3 +43,23 @@ def pose_from_matrix(cumotion, matrix):
 
     pose = np.asarray(matrix, dtype=float).reshape(4, 4)
     return cumotion.Pose3(cumotion.Rotation3.from_matrix(pose[:3, :3]), pose[:3, 3])
+
+
+def rotation_from_axis_angle(cumotion, axis, angle):
+    """从轴角构造 cuMotion ``Rotation3``。"""
+
+    axis_array = np.asarray(axis, dtype=float).reshape(3)
+    return cumotion.Rotation3.from_axis_angle(axis_array, float(angle))
+
+
+def rotation_from_scaled_axis(cumotion, scaled_axis):
+    """从 scaled-axis 向量构造 cuMotion ``Rotation3``。"""
+
+    scaled_axis_array = np.asarray(scaled_axis, dtype=float).reshape(3)
+    return cumotion.Rotation3.from_scaled_axis(scaled_axis_array)
+
+
+def pose_from_rotation_translation(cumotion, rotation, translation):
+    """从 cuMotion ``Rotation3`` 和 3D 平移构造 ``Pose3``。"""
+
+    return cumotion.Pose3(rotation, np.asarray(translation, dtype=float).reshape(3))

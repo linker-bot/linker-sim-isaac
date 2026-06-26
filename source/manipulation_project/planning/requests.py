@@ -23,6 +23,11 @@ import numpy as np
 
 
 OrientationMode = Literal["current", "target", "none"]
+# Task-space specified path 只在请求层表达几何意图；具体如何调用 cuMotion
+# TaskSpacePathSpec 由后端 adapter 决定。
+TaskSpaceArcMode = Literal["tangent", "three_point"]
+# Composite transition mode 暴露稳定字符串，避免把 cuMotion pybind enum 泄漏到任务层。
+CompositeTransitionMode = Literal["skip", "free", "linear_task_space"]
 
 
 @dataclass(frozen=True)
@@ -127,7 +132,12 @@ class MotionRequest:
 
 @dataclass(frozen=True)
 class CSpaceWaypointPath:
-    """调用方显式指定的一组 C-space waypoint。"""
+    """调用方显式指定的一组 C-space waypoint。
+
+    waypoint 的关节顺序必须和后端 ``joint_names()`` 一致。请求层会检查每个 waypoint 与
+    ``current_q`` 同宽；真实 robot C-space 宽度、首点是否必须匹配 ``current_q`` 等后端策略在
+    cuMotion adapter 中校验。
+    """
 
     waypoints: tuple[np.ndarray, ...]
 
@@ -137,7 +147,9 @@ class TcpLineSegment:
     """specified-path 中的 TCP 直线段描述。
 
     ``target_position`` 表示 base/world 约定坐标系下的绝对终点，``target_offset`` 表示相对
-    起点的位移；二者由使用该 segment 的 pipeline 解释为互斥目标。
+    起点的位移；二者由使用该 segment 的 pipeline 解释为互斥目标。``orientation_mode`` 控制
+    后端映射到 cuMotion PathSpec 的姿态约束：``none`` 只约束位置，``current`` 保持当前 tracked
+    TCP 姿态，``target`` 使用 ``target_orientation`` 作为终点姿态。
     """
 
     start_position: np.ndarray | None = None
@@ -147,21 +159,83 @@ class TcpLineSegment:
     target_orientation: np.ndarray | None = None
 
 
-TaskSpaceSegment = TcpLineSegment
+@dataclass(frozen=True)
+class TcpRotationSegment:
+    """specified-path 中的 TCP 原地旋转段描述。
+
+    ``target_orientation`` 是 wxyz 四元数；后端会把它转换成 cuMotion ``Rotation3`` 并追加
+    ``TaskSpacePathSpec.add_rotation(...)``。
+    """
+
+    target_orientation: np.ndarray
+
+
+@dataclass(frozen=True)
+class TcpArcSegment:
+    """specified-path 中的 TCP 圆弧段描述。
+
+    ``arc_mode='tangent'`` 使用当前路径切线和目标点定义圆弧；``arc_mode='three_point'`` 还需要
+    ``intermediate_position``。若提供 ``target_orientation``，后端使用 cuMotion 的
+    ``*_with_orientation_target`` 圆弧 API。
+    """
+
+    target_position: np.ndarray
+    intermediate_position: np.ndarray | None = None
+    target_orientation: np.ndarray | None = None
+    arc_mode: TaskSpaceArcMode = "tangent"
+    constant_orientation: bool = True
+
+
+@dataclass(frozen=True)
+class TcpPoseSequenceSegment:
+    """specified-path 中的一串完整 TCP pose 直线段描述。
+
+    每个 pose 都必须带 orientation，因为该 segment 表示多段完整 pose 直线，而不是
+    position-only 平移序列。需要只约束位置时应使用 ``TcpLineSegment(orientation_mode='none')``。
+    """
+
+    poses: tuple[PoseTarget, ...]
+    blend_radius: float = 0.0
+
+
+TaskSpaceSegment = (
+    TcpLineSegment | TcpRotationSegment | TcpArcSegment | TcpPoseSequenceSegment
+)
 
 
 @dataclass(frozen=True)
 class TaskSpacePath:
-    """调用方显式指定的一组 task-space path segments。"""
+    """调用方显式指定的一组 task-space path segments。
+
+    这些 segment 会在 cuMotion 后端映射到 ``TaskSpacePathSpec``，再通过官方 path conversion
+    转成 C-space path。请求层不检查 frame 是否存在，也不判断 IK 可达性。
+    """
 
     segments: tuple[TaskSpaceSegment, ...]
 
 
 @dataclass(frozen=True)
-class CompositePath:
-    """混合 C-space 和 task-space 子路径的指定路径。"""
+class CompositePathPart:
+    """Composite path 子段及其过渡方式。
 
-    parts: tuple[CSpaceWaypointPath | TaskSpacePath, ...]
+    ``transition_mode`` 为 ``None`` 时使用后端配置中的
+    ``specified_path.composite.default_transition_mode``。这里使用 wrapper 的原因是直接放
+    ``CSpaceWaypointPath`` / ``TaskSpacePath`` 时仍能保持简洁。
+    """
+
+    path: CSpaceWaypointPath | TaskSpacePath
+    transition_mode: CompositeTransitionMode | None = None
+
+
+@dataclass(frozen=True)
+class CompositePath:
+    """混合 C-space 和 task-space 子路径的指定路径。
+
+    每个 part 可以是裸子路径，也可以是 ``CompositePathPart`` 以指定段间 transition。后端会
+    把它转换成 cuMotion ``CompositePathSpec``。
+    """
+
+    parts: tuple[CSpaceWaypointPath | TaskSpacePath | CompositePathPart, ...]
 
 
 @dataclass(frozen=True)
@@ -169,7 +243,8 @@ class SpecifiedPathRequest:
     """指定路径规划请求。
 
     ``current_q`` 使用后端 C-space 关节顺序；``path`` 描述调用方指定的路径几何。
-    cuMotion facade 当前支持 ``CSpaceWaypointPath``。
+    cuMotion facade 支持 ``CSpaceWaypointPath``、``TaskSpacePath`` 和 ``CompositePath``，并将
+    它们统一转换成 C-space joint path 后再做可选时间参数化。
     """
 
     current_q: np.ndarray
@@ -178,7 +253,12 @@ class SpecifiedPathRequest:
     duration_s: float | None = None
 
     def validate_structure(self) -> None:
-        """检查指定路径请求的基础结构。"""
+        """检查指定路径请求的基础结构。
+
+        该方法只做后端无关的 shape/枚举/互斥关系校验。C-space waypoint 会被检查为与
+        ``current_q`` 同宽；真实 robot C-space 宽度、frame 存在性、首点容差和 task-space
+        可达性都依赖具体 cuMotion context，留给后端 adapter 处理。
+        """
 
         current = np.asarray(self.current_q, dtype=float).reshape(-1)
         if current.size == 0:
@@ -201,12 +281,130 @@ class SpecifiedPathRequest:
         if isinstance(self.path, TaskSpacePath):
             if not self.path.segments:
                 raise ValueError("TaskSpacePath requires at least one segment")
+            for index, segment in enumerate(self.path.segments):
+                _validate_task_space_segment(segment, f"path.segments[{index}]")
             return
         if isinstance(self.path, CompositePath):
             if not self.path.parts:
                 raise ValueError("CompositePath requires at least one part")
+            for index, part in enumerate(self.path.parts):
+                _validate_composite_path_part(part, f"path.parts[{index}]")
             return
         raise ValueError(f"Unsupported specified path type: {type(self.path).__name__}")
+
+
+def _validate_task_space_segment(segment: TaskSpaceSegment, label: str) -> None:
+    """检查 task-space segment 的后端无关结构。
+
+    这里保持“纯数据边界”：确保 numpy reshape 能得到预期维度、枚举值有效、必填字段存在。
+    不创建任何 cuMotion 对象，也不根据机器人模型判断路径是否可执行。
+    """
+
+    if isinstance(segment, TcpLineSegment):
+        _validate_tcp_line_segment(segment, label)
+        return
+    if isinstance(segment, TcpRotationSegment):
+        np.asarray(segment.target_orientation, dtype=float).reshape(4)
+        return
+    if isinstance(segment, TcpArcSegment):
+        np.asarray(segment.target_position, dtype=float).reshape(3)
+        if segment.arc_mode not in {"tangent", "three_point"}:
+            raise ValueError(f"{label}.arc_mode must be one of: tangent, three_point")
+        if segment.arc_mode == "three_point" and segment.intermediate_position is None:
+            raise ValueError(
+                f"{label}.intermediate_position is required for three_point arc"
+            )
+        if segment.intermediate_position is not None:
+            np.asarray(segment.intermediate_position, dtype=float).reshape(3)
+        if segment.target_orientation is not None:
+            np.asarray(segment.target_orientation, dtype=float).reshape(4)
+        return
+    if isinstance(segment, TcpPoseSequenceSegment):
+        if not segment.poses:
+            raise ValueError(f"{label}.poses requires at least one pose")
+        if segment.blend_radius < 0:
+            raise ValueError(f"{label}.blend_radius cannot be negative")
+        for pose_index, pose in enumerate(segment.poses):
+            np.asarray(pose.position, dtype=float).reshape(3)
+            if pose.orientation is None:
+                raise ValueError(
+                    f"{label}.poses[{pose_index}].orientation is required"
+                )
+            np.asarray(pose.orientation, dtype=float).reshape(4)
+        return
+    raise ValueError(f"Unsupported task-space segment type: {type(segment).__name__}")
+
+
+def _validate_tcp_line_segment(segment: TcpLineSegment, label: str) -> None:
+    """检查 ``TcpLineSegment`` 的后端无关结构。
+
+    绝对终点和相对 offset 必须二选一；target orientation 只在 ``orientation_mode='target'`` 时
+    强制要求，但若调用方额外提供了 orientation，也会检查它是 wxyz 四元数形状。
+    """
+
+    if segment.orientation_mode not in {"current", "target", "none"}:
+        raise ValueError(
+            f"{label}.orientation_mode must be one of: current, target, none"
+        )
+    if (segment.target_position is None) == (segment.target_offset is None):
+        raise ValueError(
+            f"{label} exactly one of target_position or target_offset must be provided"
+        )
+    if segment.start_position is not None:
+        np.asarray(segment.start_position, dtype=float).reshape(3)
+    if segment.target_position is not None:
+        np.asarray(segment.target_position, dtype=float).reshape(3)
+    if segment.target_offset is not None:
+        np.asarray(segment.target_offset, dtype=float).reshape(3)
+    if segment.orientation_mode == "target" and segment.target_orientation is None:
+        raise ValueError(f"{label}.target_orientation is required")
+    if segment.target_orientation is not None:
+        np.asarray(segment.target_orientation, dtype=float).reshape(4)
+
+
+def _validate_composite_path_part(
+    part: CSpaceWaypointPath | TaskSpacePath | CompositePathPart,
+    label: str,
+) -> None:
+    """检查 composite path 子段结构。
+
+    Composite 子段的 C-space waypoint 这里只检查非空，不检查宽度或首点连续性。宽度取决于
+    robot C-space；首点连续性取决于配置和前序子段类型，均由 cuMotion adapter 处理。
+    """
+
+    if isinstance(part, CompositePathPart):
+        if part.transition_mode is not None and part.transition_mode not in {
+            "skip",
+            "free",
+            "linear_task_space",
+        }:
+            raise ValueError(
+                f"{label}.transition_mode must be one of: skip, free, linear_task_space"
+            )
+        nested = part.path
+    else:
+        nested = part
+    if isinstance(nested, CSpaceWaypointPath):
+        if len(nested.waypoints) < 2:
+            raise ValueError(
+                f"{label}.path CSpaceWaypointPath requires at least 2 waypoints"
+            )
+        for waypoint_index, waypoint in enumerate(nested.waypoints):
+            waypoint_array = np.asarray(waypoint, dtype=float).reshape(-1)
+            if waypoint_array.size == 0:
+                raise ValueError(
+                    f"{label}.path.waypoints[{waypoint_index}] cannot be empty"
+                )
+        return
+    if isinstance(nested, TaskSpacePath):
+        if not nested.segments:
+            raise ValueError(f"{label}.path TaskSpacePath requires at least one segment")
+        for segment_index, segment in enumerate(nested.segments):
+            _validate_task_space_segment(
+                segment, f"{label}.path.segments[{segment_index}]"
+            )
+        return
+    raise ValueError(f"Unsupported composite path part type: {type(nested).__name__}")
 
 
 @dataclass(frozen=True)

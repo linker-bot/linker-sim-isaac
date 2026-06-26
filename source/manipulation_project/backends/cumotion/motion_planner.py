@@ -7,7 +7,8 @@ cuMotion planner，而是根据 ``MotionPlannerBackendConfig.planning_pipeline``
 * ``trajectory_optimization``：默认目标式规划路线，直接调用 cuMotion
   ``TrajectoryOptimizer``，成功时主要输出 ``Trajectory``。
 * ``graph_search``：显式选择的图搜索路线，先生成 C-space path，再按配置可选做时间参数化。
-* ``specified_path``：调用方明确给定路径几何的路线，支持 C-space waypoint path。
+* ``specified_path``：调用方明确给定路径几何的路线，支持 C-space waypoint、task-space segment
+  和 composite path，并统一转成 C-space path 后做可选时间参数化。
 
 这样做的目的是把“任务层选择哪种运动生成策略”和“后端怎样调用 cuMotion API”分开，避免
 不同 pipeline 的参数互相影响。

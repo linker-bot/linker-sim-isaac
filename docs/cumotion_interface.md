@@ -271,7 +271,7 @@ Pipeline：
 |---|---|---|---|
 | `trajectory_optimization` | `MotionRequest` | `TrajectoryOptimizer` | 使用当前环境障碍 |
 | `graph_search` | `MotionRequest` | `MotionPlanner` + `CSpaceTrajectoryGenerator` | 使用当前环境障碍 |
-| `specified_path` | `SpecifiedPathRequest` | C-space waypoints + `CSpaceTrajectoryGenerator` | 不做避障搜索 |
+| `specified_path` | `SpecifiedPathRequest` | `CSpacePathSpec` / `TaskSpacePathSpec` / `CompositePathSpec` + path conversion + `CSpaceTrajectoryGenerator` | 不做避障搜索 |
 
 `MotionRequest` 目标类型：
 
@@ -333,10 +333,12 @@ Pipeline：
 |---|---|
 | `current_q` | 当前 C-space 关节向量，必填 |
 | `path=CSpaceWaypointPath(...)` | 至少两个 C-space waypoint，全部按 cuMotion C-space 顺序 |
-| `tcp_frame_name` | task-space path 使用的 TCP frame；C-space waypoints 不读取该字段 |
+| `path=TaskSpacePath(...)` | TCP 直线、旋转、圆弧或 pose 序列，通过官方 `TaskSpacePathSpec` 转成 C-space path |
+| `path=CompositePath(...)` | C-space/task-space 子段混合，通过官方 `CompositePathSpec` 转成 C-space path |
+| `tcp_frame_name` | task-space/composite path 使用的 TCP frame；C-space waypoints 不读取该字段 |
 | `duration_s` | `trajectory_generation.mode='time_stamped'` 时的阶段时长 |
 
-`TaskSpacePath` 和 `CompositePath` 在当前 facade 中会抛出明确 `NotImplementedError`；TCP 直线移动使用 `tcp_line.py` / `MoveTcpLineConfig` 辅助路径。
+`specified_path` 不调用 `tcp_line.py` 逐点 IK fallback；task-space/composite 路径统一走 cuMotion 官方 PathSpec conversion。`tcp_line.py` / `MoveTcpLineConfig` 仍作为独立任务辅助路径保留。
 
 ### `MotionResult`
 
@@ -759,19 +761,19 @@ cuMotion 配置文件和官方约定为准。
 
 | 类型 | 状态 | 功能说明 | 主要接口功能 |
 |---|---|---|---|
-| `CSpacePathSpec` | 未接入 | 程序化关节空间路径规格，用离散 C-space waypoint 描述一条路径。 | `add_cspace_waypoint(waypoint)` 追加一个关节 waypoint；`num_cspace_coords()` 返回路径维度。 |
+| `CSpacePathSpec` | 已接入 | 程序化关节空间路径规格，用离散 C-space waypoint 描述一条路径。 | `add_cspace_waypoint(waypoint)` 追加一个关节 waypoint；`num_cspace_coords()` 返回路径维度。 |
 | `CSpacePath` | 未接入 | 连续 C-space path 抽象，可按路径参数 `s` 求值，不带时间参数化。 | `domain()` 返回 `s` 范围；`eval(s)` 采样关节位置；`num_cspace_coords()` 返回维度；`path_length()` 返回 C-space 路径长度；`min_position()`/`max_position()` 返回路径上每个坐标的最小/最大值。 |
 | `CSpacePath.Domain` | 辅助/底层 | C-space path 的参数域。 | `lower`/`upper` 是参数下上界；`span()` 返回区间长度。 |
-| `LinearCSpacePath` | 未接入 | 由 C-space waypoint 线性连接得到的具体 path。 | `domain()`/`eval(s)` 连续采样；`waypoints()` 返回原始 waypoint；`num_cspace_coords()`/`path_length()`/`min_position()`/`max_position()` 查询维度和范围。 |
-| `TaskSpacePathSpec` | 未接入 | 程序化 TCP/task-space 路径规格，可表达直线、平移、旋转和圆弧段。 | `add_translation(...)` 追加只约束位置的平移段；`add_linear_path(...)` 追加完整 pose 直线段；`add_rotation(...)` 追加原地旋转；`add_tangent_arc(...)`/`add_three_point_arc(...)` 添加圆弧；`*_with_orientation_target(...)` 版本同时指定终点姿态；`generate_path()` 生成可连续求值的 `TaskSpacePath`。 |
+| `LinearCSpacePath` | 已接入 | 由 C-space waypoint 线性连接得到的具体 path。 | `domain()`/`eval(s)` 连续采样；`waypoints()` 返回原始 waypoint；`num_cspace_coords()`/`path_length()`/`min_position()`/`max_position()` 查询维度和范围。 |
+| `TaskSpacePathSpec` | 已接入 | 程序化 TCP/task-space 路径规格，可表达直线、平移、旋转和圆弧段。 | `add_translation(...)` 追加只约束位置的平移段；`add_linear_path(...)` 追加完整 pose 直线段；`add_rotation(...)` 追加原地旋转；`add_tangent_arc(...)`/`add_three_point_arc(...)` 添加圆弧；`*_with_orientation_target(...)` 版本同时指定终点姿态；`generate_path()` 生成可连续求值的 `TaskSpacePath`。 |
 | `TaskSpacePath` | 未接入 | 连续 task-space path 抽象，可按路径参数 `s` 求 TCP pose。 | `domain()` 返回参数范围；`eval(s)` 返回 `Pose3`；`path_length()` 返回平移路径长度；`accumulated_rotation()` 返回累计旋转量；`min_position()`/`max_position()` 返回路径包围范围。 |
 | `TaskSpacePath.Domain` | 辅助/底层 | task-space path 的参数域。 | `lower`/`upper` 是参数下上界；`span()` 返回区间长度。 |
-| `TaskSpacePathConversionConfig` | 未接入 | task-space path 转 C-space path 时的数值配置，控制步长、迭代和允许偏差。 | `initial_s_step_size`/`initial_s_step_size_delta` 控制起始步长搜索；`min_s_step_size`/`min_s_step_size_delta` 控制最小步长；`alpha` 是步长/收敛相关系数；`max_iterations` 是转换迭代上限；`min_position_deviation`/`max_position_deviation` 控制 task-space 路径逼近误差。 |
-| `CompositePathSpec` | 未接入 | 复合路径规格，可以把关节空间段和 task-space 段按顺序拼接。 | `add_cspace_path_spec(...)`/`add_task_space_path_spec(...)` 添加子路径；`num_path_specs()` 返回子段数；`num_cspace_coords()` 返回维度；`path_spec_type(index)` 查询子段类型；`cspace_path_spec(index)`/`task_space_path_spec(index)` 取回子段。 |
+| `TaskSpacePathConversionConfig` | 已接入 | task-space path 转 C-space path 时的数值配置，控制步长、迭代和允许偏差。 | `initial_s_step_size`/`initial_s_step_size_delta` 控制起始步长搜索；`min_s_step_size`/`min_s_step_size_delta` 控制最小步长；`alpha` 是步长/收敛相关系数；`max_iterations` 是转换迭代上限；`min_position_deviation`/`max_position_deviation` 控制 task-space 路径逼近误差。 |
+| `CompositePathSpec` | 已接入 | 复合路径规格，可以把关节空间段和 task-space 段按顺序拼接。 | `add_cspace_path_spec(...)`/`add_task_space_path_spec(...)` 添加子路径；`num_path_specs()` 返回子段数；`num_cspace_coords()` 返回维度；`path_spec_type(index)` 查询子段类型；`cspace_path_spec(index)`/`task_space_path_spec(index)` 取回子段。 |
 | `CompositePathSpec.PathSpecType` | 未接入 | 复合路径中子段类型枚举。 | `TASK_SPACE` 表示 task-space 子段；`CSPACE` 表示 C-space 子段。 |
-| `CompositePathSpec.TransitionMode` | 未接入 | 复合路径子段之间的过渡方式。 | `SKIP` 跳过过渡；`FREE` 允许自由过渡；`LINEAR_TASK_SPACE` 用 task-space 线性方式过渡。 |
+| `CompositePathSpec.TransitionMode` | 已接入 | 复合路径子段之间的过渡方式。 | `SKIP` 跳过过渡；`FREE` 允许自由过渡；`LINEAR_TASK_SPACE` 用 task-space 线性方式过渡。 |
 
-这些 API 可以用于构造连续 task-space/C-space 路径，再转换为 C-space waypoint path。目前本项目的 TCP 直线移动使用自写 `plan_tcp_line_joint_path(...)` 逐点 IK，没有接入官方 `TaskSpacePathSpec`/path conversion 流程。
+这些 API 用于构造连续 task-space/C-space 路径，再转换为 C-space waypoint path。`specified_path` 已接入官方 C-space、task-space 和 composite PathSpec conversion；`plan_tcp_line_joint_path(...)` 仍作为独立逐点 IK helper 保留。
 
 ### 13.9 C-space trajectory 与 trajectory generator
 
@@ -852,7 +854,7 @@ RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；�
 | `interpolated_path` | 是 | 已通过 `generate_interpolated_path` 接入 |
 | CSpaceTrajectoryGenerator | 是 | 已接入 time-optimal/time-stamped 两种生成 |
 | trajectory generator limits/solver params | 是 | 已接入 context 和任务配置 |
-| PathSpec / path conversion | 是 | specified_path 支持 C-space waypoints；task-space/composite conversion 未接入 |
+| PathSpec / path conversion | 是 | specified_path 支持 C-space waypoints、task-space segments 和 composite path 的官方 conversion |
 | TrajectoryOptimizer | 是 | 已作为默认 `trajectory_optimization` pipeline 接入 |
 | RMPflow | 是 | 未接入 |
 | Collision sphere generation | 是 | 未接入 |
@@ -869,7 +871,7 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 - FK、IK、MotionPlanner、CollisionWorld、TrajectoryAdapter 分模块实现，和 cuMotion 官方能力块基本对齐，维护边界清楚。
 - `joint_names()` 作为 C-space 顺序的唯一来源，任务层通过名称映射回 Isaac DOF，这比假设索引一致安全。
 - `pose_adapter.py` 集中处理项目 `wxyz` 四元数到 cuMotion `Rotation3/Pose3` 的转换，减少姿态顺序错误。
-- `motion_planner.py` 作为 facade 接入三条 pipeline：默认 `trajectory_optimization`、显式 `graph_search`、以及 `specified_path.cspace_waypoints`。
+- `motion_planner.py` 作为 facade 接入三条 pipeline：默认 `trajectory_optimization`、显式 `graph_search`、以及 `specified_path` 的 C-space/task-space/composite 路径族。
 - graph planner config file、planner 参数映射、trajectory generation limits 和 trajectory solver params 都有分组配置入口，pinch grasp 也能从任务配置覆盖这些参数。
 - `CuMotionCollisionWorld` 支持 obstacle 增量同步、启停、删除、pose 更新、几何变化重建，并提供 World/RobotWorld inspector wrapper。
 - `trajectory_adapter.py` 兼容真实 cuMotion `eval_all(t)` 四元组和测试替身对象，这对 pybind 版本变化有一定韧性。

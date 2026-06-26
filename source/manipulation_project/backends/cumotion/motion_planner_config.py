@@ -33,6 +33,20 @@ TrajectoryGenerationMode = Literal["time_optimal", "time_stamped"]
 TrajectoryInterpolationMode = Literal["linear", "cubic_spline"]
 SpecifiedPathFamily = Literal["cspace_waypoints", "task_space_segments", "composite"]
 
+_TASK_SPACE_CONVERSION_KEYS = {
+    "initial_s_step_size",
+    "initial_s_step_size_delta",
+    "min_s_step_size",
+    "min_s_step_size_delta",
+    "alpha",
+    "max_iterations",
+    "min_position_deviation",
+    "max_position_deviation",
+}
+# 项目侧 composite transition 使用字符串表达，adapter 再映射到
+# cumotion.CompositePathSpec.TransitionMode enum。
+_COMPOSITE_TRANSITION_MODES = {"skip", "free", "linear_task_space"}
+
 
 @dataclass(frozen=True)
 class GraphSearchConfig:
@@ -83,8 +97,17 @@ class SpecifiedPathConfig:
     """调用方指定路径族的配置。
 
     ``family`` 表示默认指定路径族。真实路径几何在 ``SpecifiedPathRequest.path`` 中表达，而不
-    放在 config 中。当前实现支持 ``cspace_waypoints``；``task_space_segments`` 和
-    ``composite`` 作为显式路径族保留在 schema 中，由 planner 在请求边界返回未实现错误。
+    放在 config 中。当前实现支持三类路径族：
+
+    * ``cspace_waypoints``：调用方给出完整 C-space waypoint，后端用官方 CSpacePathSpec 生成
+      LinearCSpacePath。
+    * ``task_space_segments``：调用方给出 TCP 几何段，后端用 TaskSpacePathSpec 和官方 path
+      conversion 转成 C-space。
+    * ``composite``：调用方混合 C-space/task-space 子段，后端用 CompositePathSpec 转成统一
+      C-space path。
+
+    ``cspace_waypoints``、``task_space_segments`` 和 ``composite`` 保持 mapping 形态，便于 YAML
+    直接表达官方 conversion 参数和少量项目侧策略键。
     """
 
     family: SpecifiedPathFamily = "task_space_segments"
@@ -304,6 +327,7 @@ class MotionPlannerBackendConfig:
         _params_mapping(self.specified_path.cspace_waypoints)
         _params_mapping(self.specified_path.task_space_segments)
         _params_mapping(self.specified_path.composite)
+        _validate_specified_path_settings(self.specified_path)
 
 
 def _mapping(value, label: str) -> Mapping[str, Any]:
@@ -349,6 +373,101 @@ def _limit_mapping(value) -> dict[str, np.ndarray]:
             raise ValueError(f"trajectory generation limit {key!r} cannot be empty")
         limits[key] = array
     return limits
+
+
+def _validate_specified_path_settings(config: SpecifiedPathConfig) -> None:
+    """校验 specified-path mapping 中项目侧已知的策略键。
+
+    mapping 里的字段会在 adapter 中写入 cuMotion 对象。这里提前做白名单和数值范围检查，能把
+    配置拼写错误停在 Python 层，而不是等 pybind conversion 失败后再倒查。
+    """
+
+    cspace_settings = _params_mapping(config.cspace_waypoints)
+    # require_start_match 是项目侧保护策略，不是 cuMotion 官方字段；它控制 adapter 是否要求
+    # C-space 路径首点与 request.current_q 一致。
+    if "require_start_match" in cspace_settings and not isinstance(
+        cspace_settings["require_start_match"], bool
+    ):
+        raise ValueError("specified_path.cspace_waypoints.require_start_match must be bool")
+    if "start_match_tolerance" in cspace_settings:
+        tolerance = float(cspace_settings["start_match_tolerance"])
+        if tolerance < 0:
+            raise ValueError(
+                "specified_path.cspace_waypoints.start_match_tolerance cannot be negative"
+            )
+
+    task_settings = _params_mapping(config.task_space_segments)
+    # conversion 子 mapping 对应 cuMotion TaskSpacePathConversionConfig 的公开字段。保持白名单
+    # 可以避免用户把 IK 或其它 planner 参数误放进 conversion config。
+    conversion = _mapping(
+        task_settings.get("conversion"), "specified_path.task_space_segments.conversion"
+    )
+    unknown_conversion_keys = set(map(str, conversion)) - _TASK_SPACE_CONVERSION_KEYS
+    if unknown_conversion_keys:
+        raise ValueError(
+            "Unsupported specified_path.task_space_segments.conversion key(s): "
+            f"{sorted(unknown_conversion_keys)}"
+        )
+    _validate_conversion_numeric_ranges(conversion)
+    # ik 子 mapping 只放 path conversion 的 IK seed 策略。实际 IK 容差/迭代次数复用
+    # CuMotionConfig 上已有字段，由 path_spec_adapter._ik_config_for_path_conversion 复制。
+    ik_settings = _mapping(
+        task_settings.get("ik"), "specified_path.task_space_segments.ik"
+    )
+    if "use_current_q_as_seed" in ik_settings and not isinstance(
+        ik_settings["use_current_q_as_seed"], bool
+    ):
+        raise ValueError(
+            "specified_path.task_space_segments.ik.use_current_q_as_seed must be bool"
+        )
+
+    composite_settings = _params_mapping(config.composite)
+    # 未单独指定 CompositePathPart.transition_mode 的子段会使用这个默认 transition。
+    if "default_transition_mode" in composite_settings:
+        transition_mode = str(composite_settings["default_transition_mode"])
+        if transition_mode not in _COMPOSITE_TRANSITION_MODES:
+            raise ValueError(
+                "specified_path.composite.default_transition_mode must be one of: "
+                "skip, free, linear_task_space"
+            )
+
+
+def _validate_conversion_numeric_ranges(conversion: Mapping[str, Any]) -> None:
+    """校验 ``TaskSpacePathConversionConfig`` 的项目侧数值约束。
+
+    这些范围来自 conversion 参数的基本数值语义：步长必须为正、迭代次数必须为正、误差上下界
+    必须形成非空区间。真实 robot/路径是否能转换成功仍由 cuMotion conversion 判断。
+    """
+
+    for key in {
+        "initial_s_step_size",
+        "initial_s_step_size_delta",
+        "min_s_step_size",
+        "min_s_step_size_delta",
+    }:
+        if key in conversion and float(conversion[key]) <= 0:
+            raise ValueError(
+                f"specified_path.task_space_segments.conversion.{key} must be positive"
+            )
+    if "alpha" in conversion and float(conversion["alpha"]) <= 1:
+        raise ValueError(
+            "specified_path.task_space_segments.conversion.alpha must be greater than 1"
+        )
+    if "max_iterations" in conversion and int(conversion["max_iterations"]) <= 0:
+        raise ValueError(
+            "specified_path.task_space_segments.conversion.max_iterations must be positive"
+        )
+    if (
+        "min_position_deviation" in conversion
+        or "max_position_deviation" in conversion
+    ):
+        min_deviation = float(conversion.get("min_position_deviation", 0.001))
+        max_deviation = float(conversion.get("max_position_deviation", 0.003))
+        if min_deviation <= 0 or max_deviation <= min_deviation:
+            raise ValueError(
+                "specified_path.task_space_segments.conversion requires "
+                "0 < min_position_deviation < max_position_deviation"
+            )
 
 
 def _merged_mapping(*mappings) -> dict[str, Any]:

@@ -48,7 +48,10 @@
 │   └── visualization/        # Isaac viewport、debug draw 和本地 marker
 ├── tests/                    # 不启动 Isaac Sim 的轻量测试
 ├── ASSET_NAMING_CONVENTIONS.md
-├── CUMOTION_PLANNING.md
+├── docs/
+│   ├── cumotion_interface.md
+│   ├── motion_planner_design.md
+│   └── specified_path_final_plan.md
 ├── pyproject.toml
 └── README.md
 ```

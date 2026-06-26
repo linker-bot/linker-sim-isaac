@@ -10,11 +10,22 @@ cuMotion、加入采样规划器或 mock 求解器时，不需要改动任务层
 
 from manipulation_project.planning.collision_objects import CollisionObject
 from manipulation_project.planning.requests import (
+    CSpaceWaypointPath,
+    CompositePath,
+    CompositePathPart,
+    CompositeTransitionMode,
     IKRequest,
     MotionRequest,
     OrientationMode,
     PoseTarget,
+    SpecifiedPathRequest,
+    TaskSpaceArcMode,
+    TaskSpacePath,
+    TcpArcSegment,
     TcpLineRequest,
+    TcpLineSegment,
+    TcpPoseSequenceSegment,
+    TcpRotationSegment,
 )
 from manipulation_project.planning.results import (
     IKResult,
@@ -26,6 +37,10 @@ from manipulation_project.planning.results import (
 
 __all__ = [
     "CollisionObject",
+    "CompositePath",
+    "CompositePathPart",
+    "CompositeTransitionMode",
+    "CSpaceWaypointPath",
     "IKRequest",
     "IKResult",
     "MotionRequest",
@@ -33,7 +48,14 @@ __all__ = [
     "OrientationMode",
     "PlanningDiagnostics",
     "PoseTarget",
+    "SpecifiedPathRequest",
+    "TaskSpaceArcMode",
+    "TaskSpacePath",
+    "TcpArcSegment",
     "TcpLineDiagnostics",
     "TcpLinePlan",
     "TcpLineRequest",
+    "TcpLineSegment",
+    "TcpPoseSequenceSegment",
+    "TcpRotationSegment",
 ]

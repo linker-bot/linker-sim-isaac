@@ -15,12 +15,17 @@ from manipulation_project.backends.cumotion.motion_planner_config import (
 )
 from manipulation_project.planning.collision_objects import CollisionObject
 from manipulation_project.planning.requests import (
+    CompositePath,
+    CompositePathPart,
     CSpaceWaypointPath,
     MotionRequest,
     PoseTarget,
     SpecifiedPathRequest,
     TaskSpacePath,
+    TcpArcSegment,
     TcpLineSegment,
+    TcpPoseSequenceSegment,
+    TcpRotationSegment,
 )
 
 
@@ -149,6 +154,133 @@ class _FakePose3:
         return _FakePose3(None, translation)
 
 
+class _FakeCSpacePathSpec:
+    """记录 CSpacePathSpec 调用，验证 specified_path 使用官方 C-space API。"""
+
+    def __init__(self, initial_cspace_position) -> None:
+        self.waypoints = [np.asarray(initial_cspace_position, dtype=float)]
+        self.calls = []
+
+    def add_cspace_waypoint(self, waypoint) -> bool:
+        waypoint = np.asarray(waypoint, dtype=float)
+        self.calls.append(("add_cspace_waypoint", waypoint))
+        self.waypoints.append(waypoint)
+        return True
+
+
+class _FakeLinearCSpacePath:
+    """最小 LinearCSpacePath 替身，只暴露 adapter 需要读取的 waypoints。"""
+
+    def __init__(self, waypoints) -> None:
+        self._waypoints = [np.asarray(waypoint, dtype=float) for waypoint in waypoints]
+
+    def waypoints(self):
+        return self._waypoints
+
+
+class _FakeTaskSpacePathSpec:
+    """记录 TaskSpacePathSpec 追加段的官方 API 名称和参数。
+
+    fake 不尝试模拟 cuMotion 的 task-space 几何，只把 adapter 是否调用了正确 ``add_*`` 方法
+    暴露给测试断言。
+    """
+
+    def __init__(self, initial_pose) -> None:
+        self.initial_pose = initial_pose
+        self.calls = []
+
+    def add_translation(self, target_position, blend_radius=0.0) -> bool:
+        self.calls.append(
+            ("add_translation", np.asarray(target_position, dtype=float), blend_radius)
+        )
+        return True
+
+    def add_linear_path(self, target_pose, blend_radius=0.0) -> bool:
+        self.calls.append(("add_linear_path", target_pose, blend_radius))
+        return True
+
+    def add_rotation(self, target_rotation) -> bool:
+        self.calls.append(("add_rotation", target_rotation))
+        return True
+
+    def add_tangent_arc(self, target_position, constant_orientation=True) -> bool:
+        self.calls.append(
+            (
+                "add_tangent_arc",
+                np.asarray(target_position, dtype=float),
+                constant_orientation,
+            )
+        )
+        return True
+
+    def add_tangent_arc_with_orientation_target(self, target_pose) -> bool:
+        self.calls.append(("add_tangent_arc_with_orientation_target", target_pose))
+        return True
+
+    def add_three_point_arc(
+        self, target_position, intermediate_position, constant_orientation=True
+    ) -> bool:
+        self.calls.append(
+            (
+                "add_three_point_arc",
+                np.asarray(target_position, dtype=float),
+                np.asarray(intermediate_position, dtype=float),
+                constant_orientation,
+            )
+        )
+        return True
+
+    def add_three_point_arc_with_orientation_target(
+        self, target_pose, intermediate_position
+    ) -> bool:
+        self.calls.append(
+            (
+                "add_three_point_arc_with_orientation_target",
+                target_pose,
+                np.asarray(intermediate_position, dtype=float),
+            )
+        )
+        return True
+
+
+class _FakeTaskSpacePathConversionConfig:
+    pass
+
+
+class _FakeIkConfig:
+    pass
+
+
+class _FakeCompositePathSpec:
+    """记录 CompositePathSpec 子路径和 transition mode 的调用顺序。"""
+
+    class TransitionMode:
+        SKIP = "skip"
+        FREE = "free"
+        LINEAR_TASK_SPACE = "linear_task_space"
+
+    def __init__(self, initial_cspace_position) -> None:
+        self.initial_cspace_position = np.asarray(initial_cspace_position, dtype=float)
+        self.calls = []
+
+    def add_cspace_path_spec(self, path_spec, transition_mode) -> bool:
+        self.calls.append(("add_cspace_path_spec", path_spec, transition_mode))
+        return True
+
+    def add_task_space_path_spec(self, path_spec, transition_mode) -> bool:
+        self.calls.append(("add_task_space_path_spec", path_spec, transition_mode))
+        return True
+
+
+class _FakeKinematics:
+    def __init__(self) -> None:
+        self.pose_calls = []
+
+    def pose(self, current_q, frame_name):
+        self.pose_calls.append((np.asarray(current_q, dtype=float), frame_name))
+        return _FakePose3(_FakeRotation3(1.0, 0.0, 0.0, 0.0), [0.0, 0.0, 0.0])
+
+
 class _FakeOptimizerType:
     class CSpaceTarget:
         class TranslationPathConstraint:
@@ -229,6 +361,9 @@ class _FakeCumotion:
     MotionPlannerConfig = SimpleNamespace(ParamValue=_FakeParamValue)
     TrajectoryOptimizerConfig = SimpleNamespace(ParamValue=_FakeParamValue)
     TrajectoryOptimizer = _FakeOptimizerType
+    CompositePathSpec = _FakeCompositePathSpec
+    TaskSpacePathConversionConfig = _FakeTaskSpacePathConversionConfig
+    IkConfig = _FakeIkConfig
     CSpaceTrajectoryGenerator = SimpleNamespace(
         SolverParamValue=_FakeParamValue,
         InterpolationMode=SimpleNamespace(LINEAR="linear", CUBIC_SPLINE="cubic"),
@@ -255,6 +390,12 @@ class _FakeCumotion:
         self.trajectory_acceleration_limits = None
         self.trajectory_jerk_limits = None
         self.trajectory_solver_params = []
+        self.cspace_path_specs = []
+        self.linear_cspace_paths = []
+        self.task_space_path_specs = []
+        self.task_space_conversion_calls = []
+        self.composite_path_specs = []
+        self.composite_conversion_calls = []
 
     def create_default_motion_planner_config(
         self, robot_description, frame_name, world_view
@@ -298,6 +439,42 @@ class _FakeCumotion:
         self.trajectory_generator_kinematics = kinematics
         return _FakeTrajectoryGenerator(self)
 
+    def create_cspace_path_spec(self, initial_cspace_position):
+        path_spec = _FakeCSpacePathSpec(initial_cspace_position)
+        self.cspace_path_specs.append(path_spec)
+        return path_spec
+
+    def create_linear_cspace_path(self, cspace_path_spec):
+        linear_path = _FakeLinearCSpacePath(cspace_path_spec.waypoints)
+        self.linear_cspace_paths.append(linear_path)
+        return linear_path
+
+    def create_task_space_path_spec(self, initial_pose):
+        path_spec = _FakeTaskSpacePathSpec(initial_pose)
+        self.task_space_path_specs.append(path_spec)
+        return path_spec
+
+    def convert_task_space_path_spec_to_cspace(
+        self, path_spec, kinematics, control_frame, conversion_config, ik_config
+    ):
+        self.task_space_conversion_calls.append(
+            (path_spec, kinematics, control_frame, conversion_config, ik_config)
+        )
+        return _FakeLinearCSpacePath([[0.0, 0.0], [0.2, 0.4], [1.0, 1.0]])
+
+    def create_composite_path_spec(self, initial_cspace_position):
+        path_spec = _FakeCompositePathSpec(initial_cspace_position)
+        self.composite_path_specs.append(path_spec)
+        return path_spec
+
+    def convert_composite_path_spec_to_cspace(
+        self, path_spec, kinematics, control_frame, conversion_config, ik_config
+    ):
+        self.composite_conversion_calls.append(
+            (path_spec, kinematics, control_frame, conversion_config, ik_config)
+        )
+        return _FakeLinearCSpacePath([[0.0, 0.0], [0.3, 0.5], [1.0, 1.0]])
+
 
 class _FakeContext:
     def __init__(self, cumotion) -> None:
@@ -312,7 +489,7 @@ class _FakeContext:
             motion_planner=None,
         )
         self.robot_description = "robot_description"
-        self.kinematics = "kinematics"
+        self.kinematics = _FakeKinematics()
         self.expected_cspace_width = 2
         self.collision_world_calls = []
         self.empty_collision_world_calls = 0
@@ -331,6 +508,9 @@ class _FakeContext:
     def empty_collision_world(self):
         self.empty_collision_world_calls += 1
         return SimpleNamespace(world_view="empty_world_view", handles={})
+
+    def has_frame(self, frame_name) -> bool:
+        return frame_name in {"tool", "flange", "pinch_tcp"}
 
 
 def _collision_object() -> CollisionObject:
@@ -679,8 +859,125 @@ def test_trajectory_generation_rejects_unknown_limit_keys() -> None:
         raise AssertionError("expected trajectory limit key validation")
 
 
+def test_specified_path_conversion_config_rejects_unknown_keys() -> None:
+    try:
+        MotionPlannerBackendConfig(
+            specified_path=SpecifiedPathConfig(
+                task_space_segments={"conversion": {"bad_key": 1.0}}
+            )
+        ).validate()
+    except ValueError as exc:
+        assert "conversion key" in str(exc)
+        assert "bad_key" in str(exc)
+    else:
+        raise AssertionError("expected conversion key validation")
+
+
+def test_specified_path_conversion_config_validates_numeric_ranges() -> None:
+    try:
+        MotionPlannerBackendConfig(
+            specified_path=SpecifiedPathConfig(
+                task_space_segments={
+                    "conversion": {
+                        "min_position_deviation": 0.01,
+                        "max_position_deviation": 0.001,
+                    }
+                }
+            )
+        ).validate()
+    except ValueError as exc:
+        assert "min_position_deviation" in str(exc)
+    else:
+        raise AssertionError("expected conversion numeric validation")
+
+
+def test_tcp_line_segment_requires_target_for_target_orientation_mode() -> None:
+    request = SpecifiedPathRequest(
+        current_q=np.asarray([0.0, 0.0]),
+        path=TaskSpacePath(
+            segments=(
+                TcpLineSegment(
+                    target_position=np.asarray([0.1, 0.2, 0.3]),
+                    orientation_mode="target",
+                ),
+            )
+        ),
+    )
+    try:
+        request.validate_structure()
+    except ValueError as exc:
+        assert "target_orientation" in str(exc)
+    else:
+        raise AssertionError("expected target_orientation validation")
+
+
+def test_tcp_arc_segment_requires_intermediate_for_three_point_arc() -> None:
+    request = SpecifiedPathRequest(
+        current_q=np.asarray([0.0, 0.0]),
+        path=TaskSpacePath(
+            segments=(
+                TcpArcSegment(
+                    target_position=np.asarray([0.1, 0.2, 0.3]),
+                    arc_mode="three_point",
+                ),
+            )
+        ),
+    )
+    try:
+        request.validate_structure()
+    except ValueError as exc:
+        assert "intermediate_position" in str(exc)
+    else:
+        raise AssertionError("expected arc intermediate validation")
+
+
+def test_tcp_pose_sequence_requires_orientations() -> None:
+    request = SpecifiedPathRequest(
+        current_q=np.asarray([0.0, 0.0]),
+        path=TaskSpacePath(
+            segments=(
+                TcpPoseSequenceSegment(
+                    poses=(PoseTarget(position=np.asarray([0.1, 0.2, 0.3])),)
+                ),
+            )
+        ),
+    )
+    try:
+        request.validate_structure()
+    except ValueError as exc:
+        assert "orientation" in str(exc)
+    else:
+        raise AssertionError("expected pose orientation validation")
+
+
+def test_composite_path_part_validates_transition_mode() -> None:
+    request = SpecifiedPathRequest(
+        current_q=np.asarray([0.0, 0.0]),
+        path=CompositePath(
+            parts=(
+                CompositePathPart(
+                    path=CSpaceWaypointPath(
+                        waypoints=(
+                            np.asarray([0.0, 0.0]),
+                            np.asarray([1.0, 1.0]),
+                        )
+                    ),
+                    transition_mode="bad",  # type: ignore[arg-type]
+                ),
+            )
+        ),
+    )
+    try:
+        request.validate_structure()
+    except ValueError as exc:
+        assert "transition_mode" in str(exc)
+    else:
+        raise AssertionError("expected transition mode validation")
+
+
 def test_specified_path_cspace_waypoints_generates_joint_path() -> None:
-    context = _FakeContext(_FakeCumotion())
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="cspace_waypoints"),
@@ -702,33 +999,252 @@ def test_specified_path_cspace_waypoints_generates_joint_path() -> None:
     )
 
     assert result.success
+    assert len(fake_cumotion.cspace_path_specs) == 1
+    assert len(fake_cumotion.linear_cspace_paths) == 1
     np.testing.assert_allclose(
         result.joint_path,
         [[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]],
     )
     assert isinstance(result.trajectory, _FakeTrajectory)
     assert "pipeline=specified_path" in result.diagnostics.message
+    assert "path_conversion=official" in result.diagnostics.message
 
 
-def test_specified_path_rejects_task_space_until_conversion_is_implemented() -> None:
+def test_specified_path_cspace_requires_start_match() -> None:
     context = _FakeContext(_FakeCumotion())
-    config = MotionPlannerBackendConfig(planning_pipeline="specified_path")
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="cspace_waypoints"),
+    )
     planner = CuMotionMotionPlanner(context, config=config)
 
     try:
         planner.plan(
             SpecifiedPathRequest(
                 current_q=np.asarray([0.0, 0.0]),
-                path=TaskSpacePath(
-                    segments=(
-                        TcpLineSegment(
-                            target_position=np.asarray([0.1, 0.2, 0.3])
-                        ),
+                path=CSpaceWaypointPath(
+                    waypoints=(
+                        np.asarray([0.1, 0.0]),
+                        np.asarray([1.0, 1.0]),
                     )
                 ),
             )
         )
-    except NotImplementedError as exc:
-        assert "specified_path.task_space_segments" in str(exc)
+    except ValueError as exc:
+        assert "first waypoint" in str(exc)
+        assert "current_q" in str(exc)
     else:
-        raise AssertionError("expected task-space path NotImplementedError")
+        raise AssertionError("expected first waypoint mismatch")
+
+
+def test_specified_path_tcp_line_none_orientation_uses_add_translation() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    result = planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpLineSegment(
+                        target_position=np.asarray([0.1, 0.2, 0.3]),
+                        orientation_mode="none",
+                    ),
+                )
+            ),
+        )
+    )
+
+    assert result.success
+    calls = fake_cumotion.task_space_path_specs[0].calls
+    assert calls[0][0] == "add_translation"
+    np.testing.assert_allclose(calls[0][1], [0.1, 0.2, 0.3])
+    assert fake_cumotion.task_space_conversion_calls
+    assert "family=task_space_segments" in result.diagnostics.message
+
+
+def test_specified_path_tcp_line_target_orientation_uses_add_linear_path() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpLineSegment(
+                        target_position=np.asarray([0.1, 0.2, 0.3]),
+                        orientation_mode="target",
+                        target_orientation=np.asarray([1.0, 0.0, 0.0, 0.0]),
+                    ),
+                )
+            ),
+        )
+    )
+
+    call = fake_cumotion.task_space_path_specs[0].calls[0]
+    assert call[0] == "add_linear_path"
+    pose = call[1]
+    np.testing.assert_allclose(pose.translation, [0.1, 0.2, 0.3])
+    np.testing.assert_allclose(pose.rotation.quaternion_wxyz, [1.0, 0.0, 0.0, 0.0])
+
+
+def test_specified_path_tcp_rotation_uses_add_rotation() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(TcpRotationSegment(np.asarray([1.0, 0.0, 0.0, 0.0])),)
+            ),
+        )
+    )
+
+    call = fake_cumotion.task_space_path_specs[0].calls[0]
+    assert call[0] == "add_rotation"
+    np.testing.assert_allclose(call[1].quaternion_wxyz, [1.0, 0.0, 0.0, 0.0])
+
+
+def test_specified_path_three_point_arc_uses_official_arc_api() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpArcSegment(
+                        target_position=np.asarray([0.2, 0.0, 0.1]),
+                        intermediate_position=np.asarray([0.1, 0.0, 0.1]),
+                        arc_mode="three_point",
+                    ),
+                )
+            ),
+        )
+    )
+
+    call = fake_cumotion.task_space_path_specs[0].calls[0]
+    assert call[0] == "add_three_point_arc"
+    np.testing.assert_allclose(call[1], [0.2, 0.0, 0.1])
+    np.testing.assert_allclose(call[2], [0.1, 0.0, 0.1])
+
+
+def test_specified_path_pose_sequence_uses_linear_path_segments() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpPoseSequenceSegment(
+                        poses=(
+                            PoseTarget(
+                                position=np.asarray([0.1, 0.0, 0.0]),
+                                orientation=np.asarray([1.0, 0.0, 0.0, 0.0]),
+                            ),
+                            PoseTarget(
+                                position=np.asarray([0.2, 0.0, 0.0]),
+                                orientation=np.asarray([1.0, 0.0, 0.0, 0.0]),
+                            ),
+                        )
+                    ),
+                )
+            ),
+        )
+    )
+
+    calls = fake_cumotion.task_space_path_specs[0].calls
+    assert [call[0] for call in calls] == ["add_linear_path", "add_linear_path"]
+
+
+def test_specified_path_composite_converts_to_cspace() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(
+            family="composite",
+            composite={"default_transition_mode": "free"},
+        ),
+        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    result = planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=CompositePath(
+                parts=(
+                    CompositePathPart(
+                        path=CSpaceWaypointPath(
+                            waypoints=(
+                                np.asarray([0.0, 0.0]),
+                                np.asarray([0.4, 0.4]),
+                            )
+                        ),
+                        transition_mode="skip",
+                    ),
+                    TaskSpacePath(
+                        segments=(
+                            TcpLineSegment(
+                                target_position=np.asarray([0.1, 0.0, 0.0]),
+                                orientation_mode="none",
+                            ),
+                        )
+                    ),
+                )
+            ),
+        )
+    )
+
+    assert result.success
+    composite_spec = fake_cumotion.composite_path_specs[0]
+    assert [call[0] for call in composite_spec.calls] == [
+        "add_cspace_path_spec",
+        "add_task_space_path_spec",
+    ]
+    assert composite_spec.calls[0][2] == "skip"
+    assert composite_spec.calls[1][2] == "free"
+    assert fake_cumotion.composite_conversion_calls
+    assert "family=composite" in result.diagnostics.message

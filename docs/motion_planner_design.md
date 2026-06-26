@@ -1468,7 +1468,7 @@ plan_trajectory_optimization(
 目标：
 
 - 建立 specified-path 请求模型。
-- 支持 `cspace_waypoints`，并为 task-space/composite 请求提供明确错误边界。
+- 使用 cuMotion 官方 PathSpec/path conversion 完成 `cspace_waypoints`、`task_space_segments` 和 `composite` 三类指定路径。
 
 修改内容：
 
@@ -1478,14 +1478,24 @@ plan_trajectory_optimization(
   - `TaskSpacePath`
   - `CompositePath`
   - `TcpLineSegment`
+  - `TcpRotationSegment`
+  - `TcpArcSegment`
+  - `TcpPoseSequenceSegment`
+  - `CompositePathPart`
 - 新增 `source/manipulation_project/backends/cumotion/specified_path_planner.py`。
+- 新增 `source/manipulation_project/backends/cumotion/path_spec_adapter.py`。
 - 支持的请求：
 
 ```python
 SpecifiedPathRequest(path=CSpaceWaypointPath(...))
+SpecifiedPathRequest(path=TaskSpacePath(...))
+SpecifiedPathRequest(path=CompositePath(...))
 ```
 
-- `TaskSpacePath` 和 `CompositePath` 抛出明确的 `NotImplementedError`。
+- `CSpaceWaypointPath` 映射到 `CSpacePathSpec` + `LinearCSpacePath`。
+- `TaskSpacePath` 映射到 `TaskSpacePathSpec` + `convert_task_space_path_spec_to_cspace(...)`。
+- `CompositePath` 映射到 `CompositePathSpec` + `convert_composite_path_spec_to_cspace(...)`。
+- 不静默 fallback 到 `tcp_line.py` 逐点 IK。
 - `tcp_line.py` 作为任务辅助路径保留，适合简单 TCP 直线移动。
 
 验收标准：
@@ -1494,7 +1504,7 @@ SpecifiedPathRequest(path=CSpaceWaypointPath(...))
 - 所有 waypoint 宽度必须等于 `context.expected_cspace_width`。
 - 输出 `joint_path` 等于请求指定的 C-space waypoints。
 - 若 `trajectory_generation.enabled=True`，生成 `trajectory`。
-- `TaskSpacePath` / `CompositePath` 未实现时给出明确错误，不静默 fallback。
+- `TaskSpacePath` / `CompositePath` 能通过官方 path conversion 生成 C-space path。
 
 ### 19.6 Phase 6：任务层调用
 
@@ -1531,7 +1541,11 @@ SpecifiedPathRequest(path=CSpaceWaypointPath(...))
 - `test_graph_search_uses_graph_config_and_trajectory_generation`
 - `test_trajectory_generation_rejects_unknown_limit_keys`
 - `test_specified_path_cspace_waypoints_generates_joint_path`
-- `test_specified_path_rejects_task_space_until_conversion_is_implemented`
+- `test_specified_path_cspace_requires_start_match`
+- `test_specified_path_tcp_line_none_orientation_uses_add_translation`
+- `test_specified_path_tcp_rotation_uses_add_rotation`
+- `test_specified_path_three_point_arc_uses_official_arc_api`
+- `test_specified_path_composite_converts_to_cspace`
 
 ### 20.2 Fake cuMotion 覆盖
 
