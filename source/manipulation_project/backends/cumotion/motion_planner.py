@@ -104,24 +104,15 @@ class CuMotionMotionPlanner:
         if pipeline == "trajectory_optimization":
             if not isinstance(request, MotionRequest):
                 raise ValueError("trajectory_optimization requires MotionRequest")
-            return self._plan_trajectory_optimization(request)
+            return plan_trajectory_optimization(
+                self.context,
+                request,
+                self.config,
+                tcp_frame_name=self.tcp_frame_name,
+            )
         raise ValueError(
             "planning_pipeline must be one of: graph_search, specified_path, "
             "trajectory_optimization"
-        )
-
-    def _plan_trajectory_optimization(self, request: MotionRequest) -> MotionResult:
-        """执行 optimizer pipeline。
-
-        该方法只调用 trajectory optimizer；失败结果直接返回给调用方。需要 graph search 或
-        其它兜底策略时，任务层应显式选择对应 pipeline 或发起第二次规划请求。
-        """
-
-        return plan_trajectory_optimization(
-            self.context,
-            request,
-            self.config,
-            tcp_frame_name=self.tcp_frame_name,
         )
 
 
