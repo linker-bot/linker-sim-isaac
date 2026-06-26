@@ -260,7 +260,7 @@ def expand_targets_with_mjcf_equalities(
         新字典；保留原目标，并为已知 master 生成 follower 目标。
     """
 
-    # 返回新字典，避免把调用方的稀疏配置原地改成“含 follower”的临时表示。
+    # 返回新字典，避免在调用方传入的稀疏配置上原地补 follower。
     expanded = dict(targets)
     for equality in parse_mjcf_joint_equalities(path):
         if equality.master_joint not in expanded:

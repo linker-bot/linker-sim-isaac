@@ -78,7 +78,7 @@ class MoveTcpLineConfig:
                 "TCP line config must contain top-level trajectory section"
             )
         trajectory = data["trajectory"]
-        # 轨迹类型只接受当前接口名 ``tcp_line``；不再保留多套等价写法。
+        # 轨迹类型只接受接口名 ``tcp_line``，便于配置和运行日志保持一致。
         trajectory_type = str(trajectory.get("type", "tcp_line"))
         if trajectory_type != "tcp_line":
             raise ValueError(

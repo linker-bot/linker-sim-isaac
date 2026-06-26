@@ -4,25 +4,18 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from manipulation_project.backends.cumotion import inverse_kinematics as ik_module
 from manipulation_project.backends.cumotion.inverse_kinematics import (
     CuMotionInverseKinematics,
 )
 from manipulation_project.planning.requests import IKRequest
 
 
-class _FakeRotation:
-    def __init__(self, matrix=None) -> None:
-        self._matrix = np.eye(3) if matrix is None else np.asarray(matrix, dtype=float)
-
-    def matrix(self):
-        return self._matrix
-
-
 class _FakePose:
     def __init__(self, translation=None, rotation=None) -> None:
         self.translation = np.zeros(3) if translation is None else translation
-        self.rotation = _FakeRotation(rotation)
+        self.rotation = (
+            _FakeRotation3(1.0, 0.0, 0.0, 0.0) if rotation is None else rotation
+        )
 
 
 class _FakeKinematics:
@@ -101,9 +94,21 @@ class _FakeSolver:
 
 
 class _FakeRotation3:
+    def __init__(self, w, x, y, z) -> None:
+        self.quaternion_wxyz = np.asarray([w, x, y, z], dtype=float)
+
     @staticmethod
     def from_matrix(matrix):
-        return _FakeRotation(matrix)
+        matrix = np.asarray(matrix, dtype=float)
+        if np.allclose(matrix, np.eye(3)):
+            return _FakeRotation3(1.0, 0.0, 0.0, 0.0)
+        raise AssertionError("fake Rotation3.from_matrix only supports identity")
+
+    @staticmethod
+    def distance(rotation0, rotation1):
+        return float(
+            np.linalg.norm(rotation0.quaternion_wxyz - rotation1.quaternion_wxyz)
+        )
 
 
 class _FakeCumotion:
@@ -148,6 +153,8 @@ class _FakeContext:
             collision_free_ik_params={"max_iterations": 7},
         )
         self.expected_cspace_width = 2
+        self.collision_world_calls = []
+        self.current_world_view = "world"
 
     def joint_names(self):
         return ["j0", "j1"]
@@ -158,18 +165,14 @@ class _FakeContext:
     def has_frame(self, frame_name):
         return frame_name == "tool"
 
+    def collision_world(self):
+        self.collision_world_calls.append(())
+        return SimpleNamespace(world_view=self.current_world_view)
 
-def test_collision_free_ik_uses_tolerances_params_and_recomputes_errors(
-    monkeypatch,
-) -> None:
+
+def test_collision_free_ik_uses_tolerances_params_and_recomputes_errors() -> None:
     context = _FakeContext()
 
-    def fake_make_collision_world(_context, collision_objects):
-        assert _context is context
-        assert collision_objects == ()
-        return SimpleNamespace(world_view="world")
-
-    monkeypatch.setattr(ik_module, "make_collision_world", fake_make_collision_world)
     _FakeTranslationConstraint.calls = []
     solver = CuMotionInverseKinematics(context, tcp_frame_name="tool")
 
@@ -189,11 +192,33 @@ def test_collision_free_ik_uses_tolerances_params_and_recomputes_errors(
     assert result.position_error == 0.1
     assert result.orientation_error == 0.0
     assert context.cumotion.config.params == [("max_iterations", 7)]
+    assert context.collision_world_calls == [()]
+    assert context.cumotion.config_call == ("robot", "tool", "world")
     translation_target, deviation_limit = _FakeTranslationConstraint.calls[0]
     np.testing.assert_allclose(translation_target, [0.0, 0.0, 0.0])
     assert deviation_limit == 0.012
     _target, seeds = context.cumotion.solve_calls[0]
     np.testing.assert_allclose(seeds[0], [0.1, 0.2])
+    np.testing.assert_allclose(
+        _target.orientation[1].quaternion_wxyz, [1.0, 0.0, 0.0, 0.0]
+    )
+
+
+def test_collision_free_ik_uses_context_collision_world() -> None:
+    context = _FakeContext()
+    context.current_world_view = "synced_world"
+    solver = CuMotionInverseKinematics(context, tcp_frame_name="tool")
+
+    result = solver.solve(
+        IKRequest(
+            target_position=np.asarray([0.0, 0.0, 0.0]),
+            avoid_collisions=True,
+        )
+    )
+
+    assert result.success
+    assert context.collision_world_calls == [()]
+    assert context.cumotion.config_call == ("robot", "tool", "synced_world")
 
 
 def test_ik_request_rejects_wrong_warm_start_length() -> None:

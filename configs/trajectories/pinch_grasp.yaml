@@ -34,12 +34,18 @@ grasp:
   tcp_frame_name: pinch_tcp
   # 关节角到关节角阶段的 cuMotion 路径/轨迹规划参数。
   motion_planning:
-    # true 时优先使用 cuMotion 返回的 interpolated_path；false 时只使用 planner 的 sparse path。
-    path_interpolation: False
-    # time_optimal 让 cuMotion 按机器人约束自动时间参数化；time_stamped 使用阶段时长生成时间戳。
-    trajectory_mode: time_optimal # time_stamped # time_optimal
-    # trajectory_mode=time_stamped 时生效，可选 linear 或 cubic_spline。
-    interpolation_mode: cubic_spline
+    # 默认目标式请求走 trajectory_optimization；如需 graph fallback，显式设为 graph_search。
+    planning_pipeline: trajectory_optimization
+    trajectory_optimization:
+      fallback_pipeline: null
+    graph_search:
+      # 仅 graph_search pipeline 或 optimizer fallback 时生效。
+      generate_interpolated_path: false
+    trajectory_generation:
+      # 仅 graph_search/specified_path 这类输出 C-space path 的 pipeline 生效。
+      enabled: true
+      mode: time_optimal
+      interpolation_mode: cubic_spline
   # 接近目标前的半开手型。
   pre_pinch_hand_targets:
     L6V1_L_hand_thumb_cmc_roll: 0.95

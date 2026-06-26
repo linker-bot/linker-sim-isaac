@@ -79,6 +79,22 @@ def normalize_quat_wxyz(quat, *, label: str = "quat_wxyz") -> np.ndarray:
     return quat_wxyz / norm
 
 
+def normalize_quat_wxyz_or_identity(quat, *, label: str = "quat_wxyz") -> np.ndarray:
+    """归一化 wxyz 四元数；零四元数按单位旋转处理。
+
+    该函数适合底层适配层保持容错行为。需要严格拒绝零四元数的请求/配置校验应使用
+    ``normalize_quat_wxyz``。
+    """
+
+    quat_wxyz = np.asarray(quat, dtype=float).reshape(-1)
+    if quat_wxyz.size != 4:
+        raise ValueError(f"{label} expected 4 quaternion values, got {quat_wxyz.size}")
+    norm = float(np.linalg.norm(quat_wxyz))
+    if norm <= 0.0:
+        return np.asarray([1.0, 0.0, 0.0, 0.0], dtype=float)
+    return quat_wxyz / norm
+
+
 def quat_wxyz_to_xyzw(quat) -> np.ndarray:
     """把 wxyz 四元数转换为 SciPy 使用的 xyzw 顺序。
 

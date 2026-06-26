@@ -1,28 +1,38 @@
-"""项目姿态数据与 cuMotion Pose3/Rotation3 的互转。
+"""项目姿态数据到 cuMotion Pose3/Rotation3 的边界适配。
 
-项目内部和配置边界使用 ``wxyz`` 四元数，而 cuMotion ``Rotation3`` 更常通过旋转矩阵
-构造。这里集中处理格式转换，避免 IK/FK/碰撞世界适配代码各自重复并引入顺序错误。
+项目内部和配置边界使用 ``wxyz`` 四元数；cuMotion ``Rotation3`` 构造函数同样接受
+``w, x, y, z`` 分量，因此目标姿态可以直接从四元数构造。本模块只负责创建 cuMotion
+原生对象，不承担通用姿态数学；通用四元数/矩阵转换放在 ``utils`` 中。
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.utils.math_utils import quat_wxyz_to_matrix
+from manipulation_project.utils.rotations import normalize_quat_wxyz_or_identity
 
 
-def target_pose(cumotion, position, orientation=None):
-    """构造 cuMotion ``Pose3``。
+def rotation_from_quat_wxyz(cumotion, quaternion):
+    """从项目统一的 wxyz 四元数构造 cuMotion ``Rotation3``。
+
+    输入会先归一化；零四元数按单位旋转处理，四元数存在小于 0 的情况下使用恒等变换。
+    """
+
+    w, x, y, z = normalize_quat_wxyz_or_identity(quaternion)
+    return cumotion.Rotation3(float(w), float(x), float(y), float(z))
+
+
+def pose_from_position_quat_wxyz(cumotion, position, orientation=None):
+    """从位置和可选 wxyz 四元数构造 cuMotion ``Pose3``。
 
     ``orientation`` 为 ``None`` 时只约束平移，适合只关心 TCP 位置的任务；否则按 wxyz
-    四元数转换为旋转矩阵再交给 cuMotion。
+    四元数直接构造 cuMotion ``Rotation3``。
     """
 
     translation = np.asarray(position, dtype=float).reshape(3)
     if orientation is None:
         return cumotion.Pose3.from_translation(translation)
-    rotation_matrix = quat_wxyz_to_matrix(orientation)
-    return cumotion.Pose3(cumotion.Rotation3.from_matrix(rotation_matrix), translation)
+    return cumotion.Pose3(rotation_from_quat_wxyz(cumotion, orientation), translation)
 
 
 def pose_from_matrix(cumotion, matrix):

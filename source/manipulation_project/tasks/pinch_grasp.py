@@ -29,6 +29,11 @@ from manipulation_project.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
+from manipulation_project.backends.cumotion.motion_planner_config import (
+    GraphSearchConfig,
+    MotionPlannerBackendConfig,
+    TrajectoryGenerationConfig,
+)
 from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
 from manipulation_project.backends.cumotion.trajectory_adapter import (
     joint_trajectory_from_cumotion,
@@ -65,25 +70,20 @@ _CUMOTION_TRAJECTORY_MIN_SAMPLES = 50
 class PinchMotionPlanningConfig:
     """pinch_grasp 中关节角到关节角阶段的 cuMotion 规划参数。
 
-    ``path_interpolation`` 控制 cuMotion MotionPlanner 是否返回更密的
-    ``interpolated_path``；``trajectory_mode`` 控制后续 C-space trajectory generator 的入口；
-    ``interpolation_mode`` 只在 ``trajectory_mode='time_stamped'`` 时传给 cuMotion，用于选择
-    waypoint 间的线性或三次样条插值。
+    任务层使用 grouped ``MotionPlannerBackendConfig``，默认走 trajectory optimization；
+    graph-search 和 trajectory-generation 细节只在对应 pipeline 或 fallback 中生效。
     """
 
-    path_interpolation: bool = True
-    trajectory_mode: str = "time_optimal"
-    interpolation_mode: str = "linear"
-    planner_params: dict[str, object] = field(default_factory=dict)
-    trajectory_limits: dict[str, tuple[float, ...]] = field(default_factory=dict)
-    trajectory_solver_params: dict[str, object] = field(default_factory=dict)
+    backend: MotionPlannerBackendConfig = field(
+        default_factory=MotionPlannerBackendConfig
+    )
 
     @classmethod
     def from_mapping(cls, data) -> "PinchMotionPlanningConfig":
         """从 ``grasp.motion_planning`` 子字典构造规划配置。
 
-        ``data`` 为 ``None`` 时使用默认规划策略；旧字段名 ``motion_planner_params`` 会被兼容
-        读取到 ``planner_params``，但最终仍统一落在本 dataclass 字段上。
+        ``data`` 为 ``None`` 时使用默认规划策略。配置可以直接使用 grouped
+        ``MotionPlannerBackendConfig`` schema，也可以使用 pinch grasp 的任务级简写字段。
         """
 
         if data is None:
@@ -91,46 +91,86 @@ class PinchMotionPlanningConfig:
         elif not isinstance(data, Mapping):
             raise ValueError("motion_planning must be a mapping")
         else:
-            config = cls(
-                path_interpolation=bool(
-                    data.get("path_interpolation", cls.path_interpolation)
-                ),
-                trajectory_mode=_normalize_pinch_trajectory_mode(
-                    data.get("trajectory_mode", cls.trajectory_mode)
-                ),
-                interpolation_mode=_normalize_pinch_interpolation_mode(
-                    data.get("interpolation_mode", cls.interpolation_mode)
-                ),
-                planner_params=_optional_params(
-                    data.get("planner_params")
-                    or data.get("motion_planner_params")
-                ),
-                trajectory_limits=_optional_limit_mapping(
-                    data.get("trajectory_limits")
-                ),
-                trajectory_solver_params=_optional_params(
-                    data.get("trajectory_solver_params")
-                ),
-            )
+            grouped = _pinch_motion_planner_backend_config(data)
+            config = cls(backend=grouped)
         config.validate()
         return config
 
     def validate(self) -> None:
-        """检查 cuMotion 规划参数是否在项目支持的取值范围内。
+        """检查 cuMotion 规划参数是否在项目支持的取值范围内。"""
 
-        这里主要校验项目暴露的枚举和参数 mapping 形状；具体数值是否被 cuMotion 接受会在
-        后端应用参数时继续检查并报出更接近后端字段的错误。
-        """
+        self.backend.validate()
 
-        if self.trajectory_mode not in {"time_optimal", "time_stamped"}:
-            raise ValueError(
-                "trajectory_mode must be one of: time_optimal, time_stamped"
-            )
-        if self.interpolation_mode not in {"linear", "cubic_spline"}:
-            raise ValueError("interpolation_mode must be one of: linear, cubic_spline")
-        _optional_params(self.planner_params)
-        _optional_limit_mapping(self.trajectory_limits)
-        _optional_params(self.trajectory_solver_params)
+
+def _pinch_motion_planner_backend_config(
+    data: Mapping[str, object]
+) -> MotionPlannerBackendConfig:
+    """解析 pinch_grasp 的 motion planner 配置。
+
+    支持 grouped ``MotionPlannerBackendConfig`` schema，也接受 pinch grasp 的任务级简写字段：
+
+    * ``path_interpolation`` -> ``graph_search.generate_interpolated_path``
+    * ``planner_params`` / ``motion_planner_params`` -> ``graph_search.motion_planner_params``
+    * ``trajectory_mode`` / ``interpolation_mode`` -> ``trajectory_generation`` 分组
+    * ``trajectory_limits`` / ``trajectory_solver_params`` -> ``trajectory_generation`` 分组
+
+    合并原则是先解析 grouped 配置，再用任务级简写字段覆盖对应分组。
+    """
+
+    backend = MotionPlannerBackendConfig.from_mapping(data)
+    shorthand_fields = {
+        "path_interpolation",
+        "trajectory_mode",
+        "interpolation_mode",
+        "planner_params",
+        "motion_planner_params",
+        "trajectory_limits",
+        "trajectory_solver_params",
+    }
+    if not any(field_name in data for field_name in shorthand_fields):
+        return backend
+
+    graph = backend.graph_search
+    trajectory_generation = backend.trajectory_generation
+    graph_params = _optional_params(
+        data.get("planner_params") or data.get("motion_planner_params")
+    )
+    if graph_params:
+        graph_params = {**dict(graph.motion_planner_params), **graph_params}
+    else:
+        graph_params = dict(graph.motion_planner_params)
+    graph = GraphSearchConfig(
+        generate_interpolated_path=bool(
+            data.get("path_interpolation", graph.generate_interpolated_path)
+        ),
+        use_environment_obstacles=graph.use_environment_obstacles,
+        motion_planner_config_path=graph.motion_planner_config_path,
+        motion_planner_params=graph_params,
+    )
+    trajectory_generation = TrajectoryGenerationConfig(
+        enabled=trajectory_generation.enabled,
+        mode=_normalize_pinch_trajectory_mode(
+            data.get("trajectory_mode", trajectory_generation.mode)
+        ),
+        interpolation_mode=_normalize_pinch_interpolation_mode(
+            data.get("interpolation_mode", trajectory_generation.interpolation_mode)
+        ),
+        limits=(
+            _optional_limit_mapping(data.get("trajectory_limits"))
+            or trajectory_generation.limits
+        ),
+        solver_params=(
+            _optional_params(data.get("trajectory_solver_params"))
+            or trajectory_generation.solver_params
+        ),
+    )
+    return MotionPlannerBackendConfig(
+        planning_pipeline=backend.planning_pipeline,
+        graph_search=graph,
+        trajectory_generation=trajectory_generation,
+        trajectory_optimization=backend.trajectory_optimization,
+        specified_path=backend.specified_path,
+    )
 
 
 def _normalize_pinch_trajectory_mode(value) -> str:
@@ -411,8 +451,8 @@ def build_planned_joint_motion_trajectory(
 
     ``motion_planner`` 只处理 cuMotion C-space 关节；本函数负责把完整 articulation
     DOF 中的机械臂关节切出来调用 ``MotionRequest(goal_q=...)``，再把返回的 C-space
-    path 嵌回完整 DOF 轨迹。非 C-space DOF 会按 start/target 线性插值，便于未来复用到
-    夹爪和机械臂同时变化的阶段。
+    path 嵌回完整 DOF 轨迹。非 C-space DOF 会按 start/target 线性插值，用于夹爪和
+    机械臂同时变化的阶段。
     """
 
     if duration_s < 0:
@@ -447,11 +487,10 @@ def build_planned_joint_motion_trajectory(
         MotionRequest(
             current_q=start_q,
             goal_q=target_q,
-            mode="collision_aware",
             duration_s=duration_s,
         )
     )
-    if not result.success or result.joint_path is None:
+    if not result.success:
         raise RuntimeError(
             f"cuMotion joint motion planning failed for {phase}: status={result.status}"
         )
@@ -472,6 +511,11 @@ def build_planned_joint_motion_trajectory(
             result,
         )
 
+    if result.joint_path is None:
+        raise RuntimeError(
+            f"cuMotion joint motion planning returned no path or trajectory for {phase}: "
+            f"status={result.status}"
+        )
     cspace_path = _normalize_cspace_path(result.joint_path, start_q, target_q)
     times = _times_for_cspace_path(cspace_path, duration_s)
     full_positions = _full_positions_from_cspace_path(
@@ -868,19 +912,7 @@ class PinchGraspTask:
             )
             motion_planner = context.make_motion_planner(
                 tcp_frame_name=self.tcp_frame_name,
-                generate_interpolated_path=(
-                    self.config.motion_planning.path_interpolation
-                ),
-                generate_trajectory=True,
-                trajectory_mode=self.config.motion_planning.trajectory_mode,
-                trajectory_interpolation_mode=(
-                    self.config.motion_planning.interpolation_mode
-                ),
-                motion_planner_params=self.config.motion_planning.planner_params,
-                trajectory_limits=self.config.motion_planning.trajectory_limits,
-                trajectory_solver_params=(
-                    self.config.motion_planning.trajectory_solver_params
-                ),
+                config=self.config.motion_planning.backend,
             )
             # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
             # 保持关节轨迹连续，也减少求解器跳解概率。
@@ -977,10 +1009,9 @@ class PinchGraspTask:
                 sweep_all[arm_indices[0]] = float(joint_1_target)
                 post_joint_sweep_targets.append(sweep_all)
 
-            # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动。原来用完整 DOF smoothstep
-            # 直接插值，现在先让 cuMotion MotionPlanner 在 C-space 中找避障路径，再把路径嵌回
-            # 完整 DOF 轨迹播放。手指开合阶段仍保留 smoothstep，因为手部 DOF 不属于 cuMotion
-            # 机器人描述的 C-space。
+            # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动：cuMotion MotionPlanner
+            # 在 C-space 中生成路径，再把路径嵌回完整 DOF 轨迹播放。手指开合阶段使用
+            # smoothstep，因为手部 DOF 不属于 cuMotion 机器人描述的 C-space。
             move_to_approach_trajectory, move_to_approach_motion = (
                 build_planned_joint_motion_trajectory(
                     motion_planner=motion_planner,
@@ -1101,7 +1132,7 @@ class PinchGraspTask:
         """把抓取 plan 拆成可顺序执行的任务原语列表。
 
         ``plan`` 来自 ``build_plan``，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
-        返回的任务列表只负责执行，不再求 IK 或重新规划。
+        返回的任务列表只负责执行，IK 和运动规划都在 ``build_plan`` 中完成。
         """
 
         # plan 阶段只生成目标数组；这里把它们转换成可执行原语，确保 run 的主循环只需要

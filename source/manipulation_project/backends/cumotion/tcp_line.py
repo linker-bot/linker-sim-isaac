@@ -85,7 +85,7 @@ def plan_tcp_line_joint_path(
         ``TcpLinePlan``，其中 ``joint_positions`` 每行都是后端关节顺序的一帧目标。
     """
 
-    request.validate()
+    request.validate_structure()
     ik_joint_names = tuple(context.joint_names())
     current = np.asarray(request.current_joint_positions, dtype=float).reshape(-1)
     if current.size != len(ik_joint_names):

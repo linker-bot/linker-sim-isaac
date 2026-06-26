@@ -1,7 +1,7 @@
 # TCP 笛卡尔直线轨迹。
 trajectory:
   type: tcp_line
-  # 使用法兰作为默认 TCP；也可以改成 robot config 中存在的其它 frame。
+  # 使用法兰作为默认 TCP；也可以填写 robot config 中存在的其它 frame。
   tcp_frame_name: AR5V2_L_arm_flan_link
   # current 表示以当前 TCP FK 位置为起点。
   start_position: current

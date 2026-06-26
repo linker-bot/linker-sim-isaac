@@ -64,7 +64,6 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_path() -> None:
     assert len(planner.requests) == 1
     np.testing.assert_allclose(planner.requests[0].current_q, [0.0, 0.0])
     np.testing.assert_allclose(planner.requests[0].goal_q, [1.0, -1.0])
-    assert planner.requests[0].mode == "collision_aware"
     np.testing.assert_allclose(trajectory.positions[:, [0, 2]], planner.joint_path)
     np.testing.assert_allclose(trajectory.positions[[0, -1], 1], [2.0, 4.0])
     np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 2.0])

@@ -337,8 +337,8 @@ class CuMotionRobotWorldInspector:
     def clear_world_view(self) -> None:
         """清空 world view；后续查询只涉及机器人自碰。
 
-        清空后 ``in_collision_with_obstacle`` 和距离到 obstacle 的查询不再包含环境障碍物，
-        但 ``in_self_collision`` 仍可继续使用。
+        清空后 ``in_collision_with_obstacle`` 和距离到 obstacle 的查询只返回空环境语义；
+        ``in_self_collision`` 仍可继续使用。
         """
 
         self.inspector.clear_world_view()

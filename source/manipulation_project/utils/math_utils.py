@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.spatial.transform import Rotation
+from manipulation_project.utils.rotations import normalize_quat_wxyz_or_identity
 
 
 def as_vector(
@@ -76,12 +77,8 @@ def quat_wxyz_to_matrix(quat) -> np.ndarray:
         shape ``(3, 3)`` 的旋转矩阵；零范数输入返回单位矩阵。
     """
 
-    quat_wxyz = as_vector(quat, length=4, label="quat_wxyz")
-    norm = float(np.linalg.norm(quat_wxyz))
-    if norm <= 0.0:
-        # 零四元数通常来自缺省/坏配置；返回单位旋转比让 SciPy 抛晦涩异常更适合作为底层工具。
-        return np.eye(3, dtype=float)
-    w, x, y, z = quat_wxyz / norm
+    # 零四元数通常来自缺省/坏配置；底层工具按单位旋转处理，避免 SciPy 抛晦涩异常。
+    w, x, y, z = normalize_quat_wxyz_or_identity(quat)
     return Rotation.from_quat([x, y, z, w]).as_matrix()
 
 

@@ -1,8 +1,8 @@
 """运动解算请求数据结构。
 
 请求对象是任务层与后端层之间的公共输入格式。它们不包含求解器实例，也不持有 Isaac
-runtime 对象，只携带目标、初值、容差和碰撞对象。这样任务层可以用同一种数据结构调用
-cuMotion、测试替身或未来其它规划后端。
+runtime 对象，只携带目标、初值、容差或路径几何。环境障碍由具体后端 context 和所选
+planning pipeline 解释，这样任务层可以用同一种数据结构调用 cuMotion 或测试替身。
 
 单位/坐标约定:
     * 位置单位为 m；姿态使用 wxyz 四元数；角度容差使用 rad。
@@ -20,8 +20,6 @@ from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
-
-from manipulation_project.planning.collision_objects import CollisionObject
 
 
 OrientationMode = Literal["current", "target", "none"]
@@ -45,21 +43,19 @@ class IKRequest:
 
     ``warm_start_ik_cspace_seed`` 用于连续轨迹求解的上一帧 C-space 关节解；
     ``avoid_collisions`` 为真时后端应使用 collision-aware 路径或 IK 模式。
-    ``collision_objects`` 是一次请求的环境快照，不表示后端会长期维护动态障碍物。
+    环境障碍不放在请求里，支持环境管理的后端应从自身 context 读取当前 world。
     失败时由后端返回 ``IKResult``，不在数据类内抛错。
     """
 
     target_position: np.ndarray
     target_orientation: np.ndarray | None = None
     tcp_frame_name: str | None = None
-    tcp_type: str = "flange"
     warm_start_ik_cspace_seed: np.ndarray | None = None
     position_tolerance: float = 1.0e-4
     orientation_tolerance: float = 1.0e-3
     avoid_collisions: bool = False
-    collision_objects: tuple[CollisionObject, ...] = ()
 
-    def validate(self) -> None:
+    def validate_structure(self) -> None:
         """检查 IK 请求的结构性约束。
 
         这里不判断目标是否可达，也不检查 frame 是否存在；这些依赖具体机器人模型。
@@ -86,24 +82,21 @@ class MotionRequest:
     """路径级运动规划请求。
 
     ``current_q`` 和 ``goal_q`` 使用后端关节顺序；``goal_pose`` 用于任务空间目标。
-    ``mode`` 是后端可解释的策略标签，默认表示优先考虑环境障碍和机器人碰撞。``duration_s``
-    只描述期望阶段时长，主要供 time-stamped trajectory generator 使用；普通 graph path
-    search 不会因为它而改变目标。
+    ``duration_s`` 只描述期望阶段时长，主要供 time-stamped trajectory generator 使用；
+    是否使用环境障碍由 motion-planner pipeline 配置决定，而不是由请求对象携带。
     """
 
     current_q: np.ndarray
     goal_q: np.ndarray | None = None
     goal_pose: PoseTarget | None = None
     tcp_frame_name: str | None = None
-    collision_objects: tuple[CollisionObject, ...] = ()
-    mode: str = "collision_aware"
     duration_s: float | None = None
 
-    def validate(self) -> None:
+    def validate_structure(self) -> None:
         """检查路径级请求是否描述了唯一目标。
 
-        结构校验只保证数组形状、目标互斥关系和非负时长；frame 存在性、关节维度与碰撞
-        支持能力仍由后端 context/planner 判断。
+        结构校验只保证数组形状、目标互斥关系和非负时长；frame 存在性、关节维度与
+        pipeline 支持能力仍由后端 context/planner 判断。
         """
 
         # MotionRequest 不知道具体机器人模型，因此这里只做结构性检查：当前构型必须是非空
@@ -130,6 +123,90 @@ class MotionRequest:
             np.asarray(self.goal_pose.position, dtype=float).reshape(3)
             if self.goal_pose.orientation is not None:
                 np.asarray(self.goal_pose.orientation, dtype=float).reshape(4)
+
+
+@dataclass(frozen=True)
+class CSpaceWaypointPath:
+    """调用方显式指定的一组 C-space waypoint。"""
+
+    waypoints: tuple[np.ndarray, ...]
+
+
+@dataclass(frozen=True)
+class TcpLineSegment:
+    """specified-path 中的 TCP 直线段描述。
+
+    ``target_position`` 表示 base/world 约定坐标系下的绝对终点，``target_offset`` 表示相对
+    起点的位移；二者由使用该 segment 的 pipeline 解释为互斥目标。
+    """
+
+    start_position: np.ndarray | None = None
+    target_position: np.ndarray | None = None
+    target_offset: np.ndarray | None = None
+    orientation_mode: OrientationMode = "current"
+    target_orientation: np.ndarray | None = None
+
+
+TaskSpaceSegment = TcpLineSegment
+
+
+@dataclass(frozen=True)
+class TaskSpacePath:
+    """调用方显式指定的一组 task-space path segments。"""
+
+    segments: tuple[TaskSpaceSegment, ...]
+
+
+@dataclass(frozen=True)
+class CompositePath:
+    """混合 C-space 和 task-space 子路径的指定路径。"""
+
+    parts: tuple[CSpaceWaypointPath | TaskSpacePath, ...]
+
+
+@dataclass(frozen=True)
+class SpecifiedPathRequest:
+    """指定路径规划请求。
+
+    ``current_q`` 使用后端 C-space 关节顺序；``path`` 描述调用方指定的路径几何。
+    cuMotion facade 当前支持 ``CSpaceWaypointPath``。
+    """
+
+    current_q: np.ndarray
+    path: CSpaceWaypointPath | TaskSpacePath | CompositePath
+    tcp_frame_name: str | None = None
+    duration_s: float | None = None
+
+    def validate_structure(self) -> None:
+        """检查指定路径请求的基础结构。"""
+
+        current = np.asarray(self.current_q, dtype=float).reshape(-1)
+        if current.size == 0:
+            raise ValueError("current_q cannot be empty")
+        if self.duration_s is not None and self.duration_s < 0:
+            raise ValueError("duration_s cannot be negative")
+        if self.tcp_frame_name is not None and not str(self.tcp_frame_name):
+            raise ValueError("tcp_frame_name cannot be empty")
+        if isinstance(self.path, CSpaceWaypointPath):
+            if len(self.path.waypoints) < 2:
+                raise ValueError("CSpaceWaypointPath requires at least 2 waypoints")
+            for index, waypoint in enumerate(self.path.waypoints):
+                waypoint_array = np.asarray(waypoint, dtype=float).reshape(-1)
+                if waypoint_array.size != current.size:
+                    raise ValueError(
+                        f"CSpaceWaypointPath waypoint {index} expected {current.size} values, "
+                        f"got {waypoint_array.size}"
+                    )
+            return
+        if isinstance(self.path, TaskSpacePath):
+            if not self.path.segments:
+                raise ValueError("TaskSpacePath requires at least one segment")
+            return
+        if isinstance(self.path, CompositePath):
+            if not self.path.parts:
+                raise ValueError("CompositePath requires at least one part")
+            return
+        raise ValueError(f"Unsupported specified path type: {type(self.path).__name__}")
 
 
 @dataclass(frozen=True)
@@ -165,7 +242,7 @@ class TcpLineRequest:
     position_tolerance: float = 1.0e-3
     orientation_tolerance: float = 1.0e-2
 
-    def validate(self) -> None:
+    def validate_structure(self) -> None:
         """检查请求是否足够生成 TCP 直线 IK 路径。
 
         这里只校验不需要机器人模型即可判断的结构性约束。frame 是否存在、目标是否可达、

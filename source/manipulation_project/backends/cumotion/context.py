@@ -1,13 +1,14 @@
 """cuMotion 机器人模型和共享资源上下文。
 
-``CuMotionContext`` 是后端对象的共享缓存：它加载 XRDF/URDF、持有 kinematics 对象，并为
-FK/IK 封装提供统一的关节名和 frame 名查询。cuMotion 导入被放到构造函数中，保证没有安装
-该库时仍可运行配置解析和非后端相关测试。
+``CuMotionContext`` 是后端对象的共享缓存：它加载 XRDF/URDF、持有 kinematics 对象和当前
+环境的 cuMotion collision world，并为 FK/IK/planner 封装提供统一的关节名、frame 名和
+world view 查询。cuMotion 导入被放到构造函数中，保证没有安装该库时仍可运行配置解析和
+非后端相关测试。
 
 职责边界:
     * 配置类只把 YAML/Mapping 中的路径、frame 名和后端参数规范化。
-    * Context 只负责加载机器人描述和创建 FK/IK/planner 包装器，不直接执行任务流程。
-    * 具体求解误差、碰撞世界和轨迹适配由同包其它模块负责。
+    * Context 负责加载机器人描述、维护当前环境 world，并创建 FK/IK/planner 包装器。
+    * 具体求解误差、collision obstacle 适配和轨迹适配由同包其它模块负责。
 
 坐标/顺序约定:
     cuMotion 的关节顺序来自 XRDF/URDF 解析后的 C-space，而不一定等于 Isaac articulation
@@ -16,14 +17,18 @@ FK/IK 封装提供统一的关节名和 frame 名查询。cuMotion 导入被放�
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from manipulation_project.planning.collision_objects import CollisionObject
 from manipulation_project.utils.paths import repo_path
+from manipulation_project.backends.cumotion.motion_planner_config import (
+    MotionPlannerBackendConfig,
+)
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,7 @@ class CuMotionConfig:
     custom_tcp_frame: str | None = None
     # IK warm-start seed
     # 按 cuMotion C-space 关节顺序排列；可为单条 1D seed 或多条 2D seeds
+    # 为 None 时项目侧不提供默认 seed，未提供 seed 时使用 cuMotion 默认初始化逻辑
     ik_cspace_seeds: np.ndarray | None = None
     # IK 位置收敛容差，单位 m
     # 几何 IK 和 collision-free IK 都会使用该默认值
@@ -65,8 +71,9 @@ class CuMotionConfig:
     orientation_weight: float = 0.25
     # collision-free IK 的额外后端参数，按名称写入 cuMotion solver config
     collision_free_ik_params: dict[str, Any] = field(default_factory=dict)
-    # 可选 cuMotion MotionPlanner 配置文件路径
-    # 为空时使用 cuMotion 默认 planner config
+    # graph planner / trajectory generator 的默认参数来源。
+    # from_mapping 会把这些字段作为 motion_planner 分组配置的默认值。
+    # 可选 cuMotion MotionPlanner 配置文件路径；为空时使用 cuMotion 默认 planner config
     motion_planner_config_path: str | Path | None = None
     # MotionPlanner 的额外参数覆盖，按名称写入 cuMotion motion planner config
     motion_planner_params: dict[str, Any] = field(default_factory=dict)
@@ -75,6 +82,8 @@ class CuMotionConfig:
     trajectory_limits: dict[str, np.ndarray] = field(default_factory=dict)
     # C-space trajectory generator 的 solver 参数覆盖，例如迭代次数或平滑相关参数
     trajectory_solver_params: dict[str, Any] = field(default_factory=dict)
+    # motion-planner facade 的分组配置；为 None 时 context 会用上面的默认参数构造配置
+    motion_planner: MotionPlannerBackendConfig | None = None
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "CuMotionConfig":
@@ -107,6 +116,13 @@ class CuMotionConfig:
         if custom_tcp_frame == settings["flange_frame"]:
             custom_tcp_frame = None
 
+        # 顶层 planner 字段作为分组配置的默认值来源；motion_planner 分组中的显式字段优先。
+        motion_planner_base_defaults = {
+            "motion_planner_config_path": settings.get("motion_planner_config_path"),
+            "motion_planner_params": settings.get("motion_planner_params"),
+            "trajectory_limits": settings.get("trajectory_limits"),
+            "trajectory_solver_params": settings.get("trajectory_solver_params"),
+        }
         config = cls(
             xrdf_path=repo_path(settings["xrdf_path"]),
             urdf_path=repo_path(settings["urdf_path"]),
@@ -147,6 +163,10 @@ class CuMotionConfig:
             trajectory_solver_params=_parse_optional_params_mapping(
                 settings.get("trajectory_solver_params")
             ),
+            motion_planner=MotionPlannerBackendConfig.from_mapping(
+                settings.get("motion_planner"),
+                base_defaults=motion_planner_base_defaults,
+            ),
         )
         config.validate()
         return config
@@ -180,6 +200,8 @@ class CuMotionConfig:
         _parse_optional_params_mapping(self.motion_planner_params)
         _parse_optional_array_mapping(self.trajectory_limits)
         _parse_optional_params_mapping(self.trajectory_solver_params)
+        if self.motion_planner is not None:
+            self.motion_planner.validate()
 
         # 可选 planner 配置文件路径允许为 None，但如果显式传入 Path/字符串则不能是空值。
         if self.motion_planner_config_path is not None and not str(
@@ -292,6 +314,8 @@ class CuMotionContext:
         self.expected_cspace_width = len(self._joint_names)
         self._frame_names = [str(name) for name in self.kinematics.frame_names()]
         self._frame_name_set = set(self._frame_names)
+        self._collision_world = None
+        self._empty_collision_world = None
         self._validate_model_dependent_config()
 
     def joint_names(self) -> list[str]:
@@ -318,6 +342,63 @@ class CuMotionContext:
 
         return str(frame_name) in self._frame_name_set
 
+    def collision_world(self):
+        """返回 context 当前管理的环境 collision world。
+
+        如果还没有设置过环境，会创建一个空 ``CuMotionCollisionWorld``。因此 IK/planner 可以
+        总是从 context 获取 world view，而不需要在求解点临时决定是否构造后端 ``World``。
+        """
+
+        if self._collision_world is None:
+            return self.sync_collision_world(())
+        return self._collision_world
+
+    def sync_collision_world(
+        self, collision_objects: Sequence[CollisionObject] = ()
+    ):
+        """用最新环境对象同步 context 持有的 cuMotion collision world。
+
+        ``collision_objects`` 是当前环境快照，按名称增量同步到同一个后端 ``World``：
+        新对象会添加，缺失对象会删除，已有对象会更新 pose/启停状态。任务层可以在环境变化后
+        调用本方法一次，后续 IK/planner 请求会复用同步后的 ``world_view``。
+        """
+
+        from manipulation_project.backends.cumotion.collision_world import (
+            CuMotionCollisionWorld,
+        )
+
+        objects = tuple(collision_objects)
+        if self._collision_world is None:
+            self._collision_world = CuMotionCollisionWorld(self, objects)
+        else:
+            self._collision_world.sync(objects)
+        return self._collision_world
+
+    def clear_collision_world(self):
+        """清空 context 当前环境，并返回清空后的 collision world。
+
+        这会修改 context 管理的真实环境缓存；如果只想为某次几何规划临时使用空 world，
+        应使用 ``empty_collision_world``，避免误删当前环境。
+        """
+
+        return self.sync_collision_world(())
+
+    def empty_collision_world(self):
+        """返回 context 复用的空 collision world。
+
+        该 world 不包含环境 obstacle，专供几何/忽略环境障碍的规划分支使用。它与
+        ``collision_world`` 维护的真实环境分离，并会在 context 内缓存复用；调用方不应向它
+        添加或同步 obstacle，避免污染后续无障碍规划。
+        """
+
+        from manipulation_project.backends.cumotion.collision_world import (
+            CuMotionCollisionWorld,
+        )
+
+        if self._empty_collision_world is None:
+            self._empty_collision_world = CuMotionCollisionWorld(self, ())
+        return self._empty_collision_world
+
     def _validate_model_dependent_config(self) -> None:
         """检查需要加载机器人模型后才能判断的配置。
 
@@ -339,9 +420,24 @@ class CuMotionContext:
                 != self.expected_cspace_width
             ):
                 raise ValueError(
-                    f"trajectory_limits.{key} expected_cspace_width {self.expected_cspace_width} values, "
+                    f"trajectory_limits.{key} expected_cspace_width "
+                    f"{self.expected_cspace_width} values, "
                     f"got {np.asarray(values, dtype=float).reshape(-1).size}"
                 )
+        if self.config.motion_planner is not None:
+            for (
+                key,
+                values,
+            ) in self.config.motion_planner.trajectory_generation.limits.items():
+                if (
+                    np.asarray(values, dtype=float).reshape(-1).size
+                    != self.expected_cspace_width
+                ):
+                    raise ValueError(
+                        "motion_planner.trajectory_generation.limits."
+                        f"{key} expected_cspace_width {self.expected_cspace_width} values, "
+                        f"got {np.asarray(values, dtype=float).reshape(-1).size}"
+                    )
         for frame_name, label in (
             (self.config.flange_frame, "flange_frame"),
             (self.config.custom_tcp_frame, "custom_tcp_frame"),
@@ -388,25 +484,21 @@ class CuMotionContext:
         self,
         *,
         tcp_frame_name: str | None = None,
-        generate_interpolated_path: bool = True,
-        generate_trajectory: bool = True,
-        trajectory_mode: str = "time_optimal",
-        trajectory_interpolation_mode: str = "linear",
-        motion_planner_params: Mapping[str, Any] | None = None,
-        trajectory_limits: Mapping[str, Any] | None = None,
-        trajectory_solver_params: Mapping[str, Any] | None = None,
+        config: MotionPlannerBackendConfig | None = None,
     ):
         """创建路径级运动规划组件。
 
-        构造参数会作为本次 planner 的覆盖配置；同名键优先级高于 ``CuMotionConfig`` 中的
-        默认映射。返回对象仍只处理 C-space 关节，不负责完整 articulation DOF 映射。
+        ``config`` 是新分组配置模型；为空时使用 ``CuMotionConfig.motion_planner``，再
+        回退到默认 ``MotionPlannerBackendConfig``。返回对象仍只处理 C-space 关节，不负责
+        完整 articulation DOF 映射。
         """
 
         from manipulation_project.backends.cumotion.motion_planner import (
             CuMotionMotionPlanner,
         )
-        
-        # tcp_frame_name, custom_tcp_frame, flange_frame, 从左到右取第一个有效值
+
+        # tcp_frame_name, custom_tcp_frame, flange_frame 从左到右取第一个有效值。这里不动态
+        # 写自定义 TCP URDF；frame 必须已经存在于创建 context 时加载的 robot description。
         return CuMotionMotionPlanner(
             self,
             tcp_frame_name=(
@@ -414,11 +506,5 @@ class CuMotionContext:
                 or self.config.custom_tcp_frame
                 or self.config.flange_frame
             ),
-            generate_interpolated_path=generate_interpolated_path,
-            generate_trajectory=generate_trajectory,
-            trajectory_mode=trajectory_mode,
-            trajectory_interpolation_mode=trajectory_interpolation_mode,
-            motion_planner_params=motion_planner_params,
-            trajectory_limits=trajectory_limits,
-            trajectory_solver_params=trajectory_solver_params,
+            config=config,
         )

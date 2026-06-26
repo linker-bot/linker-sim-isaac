@@ -13,7 +13,7 @@ cuMotion 后端只处理 **机器人描述中的 C-space 主动关节**，不直
 - 角度单位：弧度 `rad`。
 - 姿态格式：项目边界使用 `wxyz` 四元数；调用 cuMotion 前在局部转换为旋转矩阵或 `Rotation3`。
 - TCP/frame：必须存在于 cuMotion 加载的 URDF/XRDF 机器人描述中。自定义 TCP 需要先写入临时 URDF。
-- 碰撞世界：由请求中的 `CollisionObject` 临时转换为 cuMotion `WorldView`，不自动从 Isaac stage 抽取。
+- 碰撞世界：由 `CuMotionContext` 持有当前 cuMotion `WorldView`；任务层可把 `CollisionObject` 环境快照同步到 context，但后端不自动从 Isaac stage 抽取。
 
 ```mermaid
 flowchart TD
@@ -57,10 +57,11 @@ flowchart TD
 | `bfgs_max_iterations` | `int` | BFGS IK 最大迭代次数 |
 | `orientation_weight` | `float` | IK 姿态误差权重 |
 | `collision_free_ik_params` | `dict[str, Any]` | 传给 `CollisionFreeIkSolverConfig.set_param(...)` 的参数覆盖 |
-| `motion_planner_config_path` | `str \| Path \| None` | 可选 graph planner 配置文件路径 |
-| `motion_planner_params` | `dict[str, Any]` | 传给 `MotionPlannerConfig.set_param(...)` 的参数覆盖 |
-| `trajectory_limits` | `dict[str, np.ndarray]` | 传给 `CSpaceTrajectoryGenerator` 的位置/速度/加速度/jerk 限制 |
-| `trajectory_solver_params` | `dict[str, Any]` | 传给 `CSpaceTrajectoryGenerator.set_solver_param(...)` 的参数覆盖 |
+| `motion_planner` | `MotionPlannerBackendConfig \| None` | motion planner facade 的分组配置；默认 pipeline 为 `trajectory_optimization` |
+| `motion_planner_config_path` | `str \| Path \| None` | graph planner 配置文件路径；作为 `motion_planner.graph_search` 的默认值来源 |
+| `motion_planner_params` | `dict[str, Any]` | graph planner 参数；作为 `motion_planner.graph_search.motion_planner_params` 的默认值来源 |
+| `trajectory_limits` | `dict[str, np.ndarray]` | trajectory generation limits；作为 `motion_planner.trajectory_generation.limits` 的默认值来源 |
+| `trajectory_solver_params` | `dict[str, Any]` | trajectory generation solver 参数；作为 `motion_planner.trajectory_generation.solver_params` 的默认值来源 |
 
 构造入口：
 
@@ -81,16 +82,25 @@ cumotion:
   ccd_max_iterations: 180
   bfgs_max_iterations: 80
   orientation_weight: 0.25
-  motion_planner_params: {}
-  trajectory_limits:
-    velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+  motion_planner:
+    planning_pipeline: trajectory_optimization
+    trajectory_optimization:
+      fallback_pipeline: null
+    graph_search:
+      generate_interpolated_path: true
+      motion_planner_params: {}
+    trajectory_generation:
+      enabled: true
+      mode: time_optimal
+      limits:
+        velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 ```
 
 ### `CuMotionContext`
 
 位置：`source/manipulation_project/backends/cumotion/context.py`
 
-用途：进入真实 cuMotion 后端的共享上下文。负责延迟导入 `cumotion`、加载 XRDF/URDF，并缓存 `robot_description` 和 `kinematics`。
+用途：进入真实 cuMotion 后端的共享上下文。负责延迟导入 `cumotion`、加载 XRDF/URDF，缓存 `robot_description` / `kinematics`，并维护当前环境的 `CuMotionCollisionWorld`。
 
 主要属性：
 
@@ -100,6 +110,7 @@ cumotion:
 | `config` | `CuMotionConfig` |
 | `robot_description` | `cumotion.load_robot_from_file(...)` 返回的机器人描述 |
 | `kinematics` | `robot_description.kinematics()` |
+| `expected_cspace_width` | cuMotion C-space 主动关节数量，用于 seed/path 宽度校验 |
 
 主要方法：
 
@@ -108,6 +119,10 @@ cumotion:
 | `joint_names()` | `list[str]` | cuMotion C-space 主动关节名 |
 | `frame_names()` | `list[str]` | cuMotion 可查询 frame 名 |
 | `has_frame(frame_name)` | `bool` | 检查 frame 是否存在 |
+| `collision_world()` | `CuMotionCollisionWorld` | 返回 context 当前环境；未设置时创建空环境 |
+| `sync_collision_world(collision_objects)` | `CuMotionCollisionWorld` | 用环境快照按名称增量同步当前 world |
+| `clear_collision_world()` | `CuMotionCollisionWorld` | 清空 context 当前环境 |
+| `empty_collision_world()` | `CuMotionCollisionWorld` | 返回 context 复用的空 world，供几何/忽略障碍模式使用 |
 | `make_inverse_kinematics(tcp_frame_name=None)` | `CuMotionInverseKinematics` | 创建 IK 封装 |
 | `make_forward_kinematics()` | `CuMotionForwardKinematics` | 创建 FK 封装 |
 | `make_motion_planner(...)` | `CuMotionMotionPlanner` | 创建路径级规划器 |
@@ -117,13 +132,7 @@ cumotion:
 | 参数 | 默认值 | 含义 |
 |---|---:|---|
 | `tcp_frame_name` | `None` | 任务空间目标使用的 TCP frame |
-| `generate_interpolated_path` | `True` | 是否优先请求 cuMotion 返回插值后的密集路径 |
-| `generate_trajectory` | `True` | 是否对 path 做时间参数化 |
-| `trajectory_mode` | `"time_optimal"` | `time_optimal` 或 `time_stamped` |
-| `trajectory_interpolation_mode` | `"linear"` | `linear` 或 `cubic_spline`，仅 `time_stamped` 时使用 |
-| `motion_planner_params` | `None` | 本次 planner 参数覆盖，会叠加到 `CuMotionConfig.motion_planner_params` |
-| `trajectory_limits` | `None` | 本次 trajectory generator 约束覆盖 |
-| `trajectory_solver_params` | `None` | 本次 trajectory generator solver 参数覆盖 |
+| `config` | `None` | `MotionPlannerBackendConfig`；为空时使用 `CuMotionConfig.motion_planner` 或默认配置 |
 
 ## 3. 正运动学 FK 接口
 
@@ -179,7 +188,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 - `request.avoid_collisions == False`
   - 调用几何 IK：`cumotion.solve_ik(...)`。
 - `request.avoid_collisions == True`
-  - 根据 `request.collision_objects` 构造静态 `WorldView`。
+  - 使用 `CuMotionContext` 当前管理的 `WorldView`。
   - 应用 `collision_free_ik_params`。
   - 用 `position_tolerance` / `orientation_tolerance` 构造 cuMotion 约束。
   - 调用 collision-free IK solver，并用 FK 复算位置/姿态误差。
@@ -196,12 +205,10 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 | `target_position` | TCP 目标位置，shape `(3,)`，单位 m |
 | `target_orientation` | TCP 目标姿态，`wxyz`；为 `None` 时只约束位置 |
 | `tcp_frame_name` | 目标 TCP frame；为空时使用 IK 实例默认 frame |
-| `tcp_type` | TCP 类型标签，目前主要作任务层语义字段 |
 | `warm_start_ik_cspace_seed` | 上一帧 IK 关节解或初始 seed，按 C-space 顺序 |
 | `position_tolerance` | 位置容差 |
 | `orientation_tolerance` | 姿态容差 |
 | `avoid_collisions` | 是否使用 collision-free IK |
-| `collision_objects` | 静态碰撞对象 tuple |
 
 ### `IKResult`
 
@@ -220,6 +227,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 - `CuMotionInverseKinematics` 会在几何 IK 成功后把解写回后端 `IkConfig.cspace_seeds`。
 - 对 waypoint 序列，调用方也应把上一点 `joint_positions` 作为下一点 `warm_start_ik_cspace_seed`，保证解分支连续。
+- 如果请求、上一帧成功解和 `ik_cspace_seeds` 都没有提供 seed，则不在项目侧构造 fallback；未提供 seed 时使用 cuMotion 默认初始化逻辑。
 
 ## 5. 路径级 Motion Planner 接口
 
@@ -227,20 +235,28 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 位置：`source/manipulation_project/backends/cumotion/motion_planner.py`
 
-用途：把项目 `MotionRequest` 转换成 cuMotion `MotionPlanner` 请求，返回离散关节路径和可选的 cuMotion trajectory。
+用途：统一封装三条 cuMotion 运动生成 pipeline：`trajectory_optimization`、`graph_search` 和
+`specified_path`。facade 根据 `MotionPlannerBackendConfig.planning_pipeline` 分发，并统一返回
+`MotionResult`。
 
 创建：
 
 ```python
 planner = context.make_motion_planner(
     tcp_frame_name="pinch_tcp",
-    generate_interpolated_path=True,
-    generate_trajectory=True,
-    trajectory_mode="time_stamped",
-    trajectory_interpolation_mode="cubic_spline",
-    motion_planner_params={"step_size": 0.05},
-    trajectory_limits={"velocity": [1.0] * 6},
-    trajectory_solver_params={"max_iterations": 200},
+    config=MotionPlannerBackendConfig(
+        planning_pipeline="graph_search",
+        graph_search=GraphSearchConfig(
+            generate_interpolated_path=True,
+            motion_planner_params={"step_size": 0.05},
+        ),
+        trajectory_generation=TrajectoryGenerationConfig(
+            mode="time_stamped",
+            interpolation_mode="cubic_spline",
+            limits={"velocity": [1.0] * 6},
+            solver_params={"max_iterations": 200},
+        ),
+    ),
 )
 ```
 
@@ -249,30 +265,42 @@ planner = context.make_motion_planner(
 | 方法 | 输入 | 输出 | 含义 |
 |---|---|---|---|
 | `joint_names()` | - | `list[str]` | planner C-space 关节名 |
-| `plan(request)` | `MotionRequest` | `MotionResult` | 路径级规划 |
+| `plan(request)` | `MotionRequest \| SpecifiedPathRequest` | `MotionResult` | 按配置 pipeline 规划 |
 
-规划目标类型：
+Pipeline：
+
+| Pipeline | 请求类型 | cuMotion 能力 | 默认碰撞语义 |
+|---|---|---|---|
+| `trajectory_optimization` | `MotionRequest` | `TrajectoryOptimizer` | 使用当前环境障碍 |
+| `graph_search` | `MotionRequest` | `MotionPlanner` + `CSpaceTrajectoryGenerator` | 使用当前环境障碍 |
+| `specified_path` | `SpecifiedPathRequest` | C-space waypoints + `CSpaceTrajectoryGenerator` | 不做避障搜索 |
+
+`MotionRequest` 目标类型：
 
 | 请求字段 | cuMotion 调用 | 含义 |
 |---|---|---|
-| `goal_q` | `planner.plan_to_cspace_target(...)` | 规划到目标 C-space 构型 |
-| `goal_pose.position` 且无 orientation | `planner.plan_to_translation_target(...)` | 规划到 TCP 位置目标 |
-| `goal_pose.position + orientation` | `planner.plan_to_pose_target(...)` | 规划到 TCP 位姿目标 |
+| `goal_q` | optimizer 或 graph planner 的 C-space target | 规划到目标 C-space 构型 |
+| `goal_pose.position` 且无 orientation | optimizer task-space target 或 graph translation target | 规划到 TCP 位置目标 |
+| `goal_pose.position + orientation` | optimizer task-space target 或 graph pose target | 规划到 TCP 位姿目标 |
 
 路径与轨迹：
 
-- `generate_interpolated_path=True`
+- `trajectory_optimization`
+  - 直接返回 cuMotion `Trajectory`。
+  - 默认 `MotionResult.joint_path=None`，`trajectory` 是主输出。
+  - 失败时默认不 fallback；若 `trajectory_optimization.fallback_pipeline="graph_search"`，失败后显式走 graph search，并在 diagnostics 记录 requested/actual pipeline。
+- `graph_search.generate_interpolated_path=True`
   - 优先消费 cuMotion `interpolated_path`。
   - 若后端未返回，则回退到 sparse `path`。
-- `generate_interpolated_path=False`
+- `graph_search.generate_interpolated_path=False`
   - 只消费 sparse `path`。
-- `generate_trajectory=True`
-  - 将 `joint_path` 交给 `CSpaceTrajectoryGenerator` 做时间参数化。
-  - 若配置了 `trajectory_limits`，会设置 position/velocity/acceleration/jerk 限制。
-  - 若配置了 `trajectory_solver_params`，会调用 `set_solver_param(...)`。
-- `trajectory_mode="time_optimal"`
+- `trajectory_generation.enabled=True`
+  - 对 graph_search 或 specified_path 产生的 `joint_path` 做时间参数化。
+  - 若配置了 `trajectory_generation.limits`，会设置 position/velocity/acceleration/jerk 限制。
+  - 若配置了 `trajectory_generation.solver_params`，会调用 `set_solver_param(...)`。
+- `trajectory_generation.mode="time_optimal"`
   - 调用 `generator.generate_trajectory(waypoints)`。
-- `trajectory_mode="time_stamped"`
+- `trajectory_generation.mode="time_stamped"`
   - 需要 `MotionRequest.duration_s`。
   - 按 C-space 路径段长度给 waypoint 分配 `[0, duration_s]` 时间戳。
   - 调用 `generator.generate_time_stamped_trajectory(...)`。
@@ -287,24 +315,30 @@ planner = context.make_motion_planner(
 | `goal_q` | 目标 C-space 关节向量；和 `goal_pose` 二选一 |
 | `goal_pose` | TCP 目标；和 `goal_q` 二选一 |
 | `tcp_frame_name` | 任务空间目标使用的 TCP frame |
-| `collision_objects` | 环境障碍物 |
-| `mode` | 后端策略标签，默认 `collision_aware` |
-| `duration_s` | `trajectory_mode='time_stamped'` 时的阶段时长 |
+| `duration_s` | `trajectory_generation.mode='time_stamped'` 时的阶段时长 |
 
-碰撞模式：
+碰撞语义：
 
-`mode` 为以下值时，不把环境障碍物传给 cuMotion world：
+- `MotionRequest` 只描述目标，不携带碰撞模式字段。
+- `trajectory_optimization.use_environment_obstacles` 和 `graph_search.use_environment_obstacles` 控制是否使用当前环境。
+- `specified_path` 默认不把环境障碍作为规划约束；如需安全性，应做后验碰撞检查或任务层保证路径安全。
 
-- `geometric`
-- `ignore_collision`
-- `ignore_collisions`
-- `no_collision`
-- `no_collisions`
-- `no_obstacle`
-- `no_obstacles`
-- `collision_unaware`
+注意：不使用环境障碍只是不读取 context 当前环境；机器人自身碰撞和关节限制仍由 cuMotion robot description / 后端 config 决定。该分支不会清空 `CuMotionContext.collision_world()` 中已经同步好的环境。
 
-注意：这只是不传入环境障碍；机器人自身碰撞和关节限制仍由 cuMotion robot description / planner config 决定。
+### `SpecifiedPathRequest`
+
+位置：`source/manipulation_project/planning/requests.py`
+
+支持的路径输入：
+
+| 字段 | 含义 |
+|---|---|
+| `current_q` | 当前 C-space 关节向量，必填 |
+| `path=CSpaceWaypointPath(...)` | 至少两个 C-space waypoint，全部按 cuMotion C-space 顺序 |
+| `tcp_frame_name` | task-space path 使用的 TCP frame；C-space waypoints 不读取该字段 |
+| `duration_s` | `trajectory_generation.mode='time_stamped'` 时的阶段时长 |
+
+`TaskSpacePath` 和 `CompositePath` 在当前 facade 中会抛出明确 `NotImplementedError`；TCP 直线移动使用 `tcp_line.py` / `MoveTcpLineConfig` 辅助路径。
 
 ### `MotionResult`
 
@@ -324,12 +358,12 @@ planner = context.make_motion_planner(
 
 位置：`source/manipulation_project/backends/cumotion/collision_world.py`
 
-用途：把项目 `CollisionObject` 转换成 cuMotion `World` obstacle，并创建 `world_view`。
+用途：把项目 `CollisionObject` 转换成 cuMotion `World` obstacle，并创建/维护 `world_view`。通常由 `CuMotionContext.sync_collision_world(...)` 持有和复用。
 
 创建：
 
 ```python
-collision_world = make_collision_world(context, collision_objects)
+collision_world = context.sync_collision_world(collision_objects)
 ```
 
 主要属性：
@@ -367,6 +401,7 @@ collision_world = make_collision_world(context, collision_objects)
 - `CollisionObject.enabled == False` 时不会加入后端 world。
 - 位姿通过 `obj.pose_matrix()` 转换为 cuMotion `Pose3`。
 - 构造后立即 `world_view.update()`。
+- `context.empty_collision_world()` 返回的空 world 与当前环境分离并在 context 内复用，适合几何规划或临时忽略障碍；调用方不应向它添加 obstacle。
 
 ### `CuMotionWorldInspector` / `CuMotionRobotWorldInspector`
 
@@ -388,10 +423,12 @@ collision_world = make_collision_world(context, collision_objects)
 
 | 函数 | 输入 | 输出 | 含义 |
 |---|---|---|---|
-| `target_pose(cumotion, position, orientation=None)` | 位置和可选 `wxyz` 四元数 | cuMotion `Pose3` | 构造任务空间目标 pose |
+| `pose_from_position_quat_wxyz(cumotion, position, orientation=None)` | 位置和可选 `wxyz` 四元数 | cuMotion `Pose3` | 构造任务空间目标 pose；无姿态时只约束平移 |
+| `rotation_from_quat_wxyz(cumotion, quaternion)` | `wxyz` 四元数 | cuMotion `Rotation3` | 直接从项目标准四元数构造 cuMotion 旋转 |
 | `pose_from_matrix(cumotion, matrix)` | `4x4` 齐次矩阵 | cuMotion `Pose3` | 构造碰撞物体 pose |
 
-注意：项目边界用 `wxyz`，cuMotion 侧用 `Rotation3.from_matrix(...)`。
+注意：项目边界用 `wxyz`。任务空间目标直接用 `Rotation3(w, x, y, z)` 构造；碰撞物体的
+齐次矩阵 pose 仍用 `Rotation3.from_matrix(...)` 构造。
 
 ## 8. 轨迹适配接口
 
@@ -514,16 +551,21 @@ collision_world = make_collision_world(context, collision_objects)
 sequenceDiagram
     participant Task as 任务层
     participant Ctx as CuMotionContext
-    participant Planner as CuMotionMotionPlanner
-    participant Cu as cuMotion MotionPlanner
+    participant Planner as CuMotionMotionPlanner facade
+    participant Cu as cuMotion backend
 
-    Task->>Ctx: make_motion_planner(...)
+    Task->>Ctx: make_motion_planner(config=MotionPlannerBackendConfig(...))
     Ctx-->>Task: Planner
-    Task->>Planner: MotionRequest(current_q, goal_q, collision_objects, duration_s)
-    Planner->>Cu: plan_to_cspace_target(current, goal, generate_interpolated_path)
-    Cu-->>Planner: Results(path, interpolated_path, path_found)
-    Planner->>Planner: 选择 interpolated_path 或 path
-    Planner->>Cu: 可选 generate_trajectory / generate_time_stamped_trajectory
+    Task->>Ctx: sync_collision_world(collision_objects)
+    Task->>Planner: MotionRequest(current_q, goal_q, duration_s)
+    alt trajectory_optimization
+        Planner->>Cu: TrajectoryOptimizer.plan_to_cspace_target(...)
+        Cu-->>Planner: Results(status, trajectory)
+    else graph_search
+        Planner->>Cu: MotionPlanner.plan_to_cspace_target(..., generate_interpolated_path)
+        Cu-->>Planner: Results(path, interpolated_path, path_found)
+        Planner->>Cu: 可选 CSpaceTrajectoryGenerator
+    end
     Planner-->>Task: MotionResult(joint_path, trajectory, diagnostics)
 ```
 
@@ -536,6 +578,7 @@ sequenceDiagram
     participant IK as CuMotionInverseKinematics
     participant Cu as cuMotion IK
 
+    Task->>Ctx: 可选 sync_collision_world(collision_objects)
     Task->>Ctx: make_inverse_kinematics(tcp_frame_name)
     Ctx-->>Task: IK
     Task->>IK: IKRequest(target_position, target_orientation, warm_start_ik_cspace_seed)
@@ -558,9 +601,9 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 - 不要假设 cuMotion C-space 顺序等于 Isaac articulation DOF 顺序；必须用关节名对齐。
 - `MotionRequest.goal_q` 和 `current_q` 必须长度一致，并且都使用 C-space 顺序。
 - `IKRequest.target_orientation=None` 表示只约束位置；IK 封装会放宽姿态容差并把姿态权重置 0。
-- `trajectory_mode='time_stamped'` 时必须传 `MotionRequest.duration_s`，且必须为正数。
-- `generate_interpolated_path=True` 只影响最终优先使用哪条离散路径，不代表一定会生成时间参数化 trajectory。
-- `mode='geometric'` 等只是不传环境障碍物，不等于关闭 cuMotion 内部所有约束。
+- `trajectory_generation.mode='time_stamped'` 时必须传 `duration_s`，且必须为正数。
+- `graph_search.generate_interpolated_path=True` 只影响 graph pipeline 最终优先使用哪条离散路径。
+- 是否使用环境障碍由 pipeline 分组配置决定；`MotionRequest` 只描述目标。
 - 自定义 TCP 必须先写入 URDF，否则 cuMotion 无法对该 frame 做 FK/IK/规划。
 - `CollisionObject.enabled=False` 的障碍物会被跳过。
 - 失败的 `MotionResult` 中 `joint_path` 会是 `None`，调用方应先检查 `success`。
@@ -590,7 +633,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `create_world()` | 已接入 | 创建可变的碰撞世界容器 `World`。障碍物先加到 `World`，再通过 `add_world_view()` 生成 solver/planner 可用的静态视图。 |
 | `create_obstacle(type)` | 已接入 | 按 `Obstacle.Type` 创建一个障碍物壳对象；随后必须通过 `set_attribute(...)` 填半径、边长、高度或 SDF grid。 |
 | `create_world_inspector(world_view)` | 已接入 | 创建只读世界距离/碰撞查询器，可查询点或球到障碍物的距离、是否碰撞、最小距离和 obstacle pose。用于调试 world 本身。 |
-| `create_robot_world_inspector(robot_description, world_view=None)` | 已接入 | 创建机器人碰撞球检查器，可检查自碰、机器人与 world 障碍物碰撞、最小距离和每个碰撞球位置。适合规划前后诊断。 |
+| `create_robot_world_inspector(robot_description, world_view=None)` | 已接入 | 创建机器人碰撞球检查器，可检查自碰、机器人与 world 障碍物碰撞、最小距离和每个碰撞球位置。适合规划请求诊断。 |
 | `create_default_collision_free_ik_solver_config(robot_description, tool_frame_name, world_view)` | 已接入 | 基于机器人、工具 frame 和 world view 生成 collision-free IK 默认配置，包含碰撞模型和求解器默认参数。 |
 | `create_collision_free_ik_solver(config)` | 已接入 | 根据 `CollisionFreeIkSolverConfig` 创建 collision-free IK 求解器，用 `TaskSpaceTarget` + seed 求无碰撞 C-space 解。 |
 | `create_default_motion_planner_config(robot_description, tool_frame_name, world_view)` | 已接入 | 生成 graph-based `MotionPlanner` 的默认配置，把机器人、工具 frame 和 world view 绑定到 planner。 |
@@ -617,9 +660,9 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `export_task_space_path_spec_to_memory(task_space_path_spec)` | 未接入 | 把 task-space path spec 导出成 YAML 字符串。 |
 | `export_composite_path_spec_to_memory(composite_path_spec)` | 未接入 | 把 composite path spec 导出成 YAML 字符串。 |
 | `create_rmpflow_config_from_file(config_file, robot_description, world_view)` | 未接入 | 从文件创建 RMPflow 配置，绑定机器人和 world view，用于 reactive motion policy。 |
-| `create_rmpflow_config_from_file(config_file, robot_description, end_effector_frame, world_view)` | 未接入 | 旧版 overload，额外传 end effector frame；官方已标记 deprecated。 |
+| `create_rmpflow_config_from_file(config_file, robot_description, end_effector_frame, world_view)` | 未接入 | deprecated overload，额外传 end effector frame；官方已标记 deprecated。 |
 | `create_rmpflow_config_from_memory(config_yaml, robot_description, world_view)` | 未接入 | 从 YAML 字符串创建 RMPflow 配置。 |
-| `create_rmpflow_config_from_memory(config_yaml, robot_description, end_effector_frame, world_view)` | 未接入 | 旧版 memory overload，官方已标记 deprecated。 |
+| `create_rmpflow_config_from_memory(config_yaml, robot_description, end_effector_frame, world_view)` | 未接入 | deprecated memory overload，额外传 end effector frame。 |
 | `create_rmpflow(config)` | 未接入 | 根据 `RmpFlowConfig` 创建 reactive policy；运行时输入当前关节状态/速度，输出 C-space 加速度或力/metric。 |
 | `create_collision_sphere_generator(vertices, triangles)` | 未接入 | 为一个 mesh 创建碰撞球生成器，后续可多次采样/生成 sphere set。 |
 | `generate_collision_spheres(vertices, triangles, ...)` | 未接入 | 一次性从 mesh 顶点和三角面生成碰撞球，通常用于制作 XRDF 中的碰撞模型。 |
@@ -635,7 +678,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `Rotation3` | 部分接入 | 表示三维旋转，内部可由四元数、旋转矩阵、轴角或 scaled axis 构造；用于 pose、姿态目标、姿态误差和旋转插值。 | `identity()` 生成单位旋转；`from_matrix()`/`from_axis_angle()`/`from_scaled_axis()` 从不同表示构造；`slerp()` 做球面插值；`distance()` 计算两个旋转的角距离；`inverse()` 求逆；`matrix()`/`scaled_axis()`/`w()`/`x()`/`y()`/`z()` 导出表示；乘法用于旋转组合。 |
 | `Pose3` | 已接入 | 表示三维刚体位姿，即 `Rotation3 + translation`；用于 TCP 目标、FK 输出和障碍物 pose。 | `identity()` 生成单位位姿；`from_translation()` 生成只含平移的位姿；`from_rotation()` 生成只含旋转的位姿；构造函数可直接传旋转和平移；`inverse()` 求逆；`matrix()` 导出 4x4 矩阵；`rotation`/`translation` 读取组成部分；乘法用于 pose 组合或坐标变换。 |
 
-本项目通过 `pose_adapter.py` 主要使用 `Rotation3.from_matrix(...)` 和 `Pose3(...)` 构造目标 pose 或障碍物 pose。
+本项目通过 `pose_adapter.py` 主要使用 `Rotation3(w, x, y, z)` 从项目标准 `wxyz` 四元数构造目标旋转，并使用 `Rotation3.from_matrix(...)` 从齐次矩阵构造障碍物 pose。
 
 ### 13.3 机器人描述与运动学
 
@@ -663,7 +706,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 |---|---|---|---|
 | `CollisionFreeIkSolverConfig` | 部分接入 | collision-free IK 求解器配置，绑定机器人、工具 frame、world view 和 solver 参数。 | `set_param(param_name, ParamValue)` 修改底层优化参数，例如迭代预算、权重或距离阈值；具体参数名由 cuMotion 配置约定。 |
 | `CollisionFreeIkSolverConfig.ParamValue` | 辅助/底层 | `set_param(...)` 使用的类型包装。 | 支持 `int` 和 `float`，用于把 Python 数值传给 pybind 配置对象。 |
-| `CollisionFreeIkSolver` | 部分接入 | 显式考虑机器人碰撞/环境障碍的 IK 求解器，返回满足 task-space 约束且无碰撞的 C-space 解。 | `solve(...)` 解单个 target；`solve_array(...)` 一次解多个 problem/target；`solve_goalset(...)` 从多个可选目标中找可行解，官方标记为旧式 goalset 接口。 |
+| `CollisionFreeIkSolver` | 部分接入 | 显式考虑机器人碰撞/环境障碍的 IK 求解器，返回满足 task-space 约束且无碰撞的 C-space 解。 | `solve(...)` 解单个 target；`solve_array(...)` 一次解多个 problem/target；`solve_goalset(...)` 从多个可选目标中找可行解，官方标记为 deprecated goalset 接口。 |
 | `CollisionFreeIkSolver.TranslationConstraint` | 部分接入 | 单目标平移约束，描述 TCP 应到达的世界/base 位置。 | `target(translation_target, deviation_limit=None)` 创建位置目标；`deviation_limit` 是允许偏差。当前实现会传入 `IKRequest.position_tolerance`。 |
 | `CollisionFreeIkSolver.TranslationConstraintArray` | 未接入 | 多 problem、多 target 的平移约束容器。 | `target(...)` 从嵌套 translation target 列表创建；`num_constraints(problem_index)` 查询某个 problem 的目标数；`num_problems()` 查询 problem 数。 |
 | `CollisionFreeIkSolver.TranslationConstraintGoalset` | 未接入 | goalset 版本平移约束，表示多个候选目标位置。 | `target(...)` 创建候选位置集合；官方已推荐用 array 接口替代。 |
@@ -709,7 +752,10 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `MotionPlanner` | 已接入 | graph-based 全局路径规划器，从初始 C-space 构型搜索到目标构型或 TCP 目标，输出离散 C-space path。 | `plan_to_cspace_target(...)` 规划到目标关节构型；`plan_to_translation_target(...)` 规划到 TCP 目标位置；`plan_to_pose_target(...)` 规划到 TCP 目标位姿；`generate_interpolated_path` 决定是否返回更密路径；`reset()` 清理 planner 内部状态。 |
 | `MotionPlanner.Results` | 已接入 | `MotionPlanner` 的路径结果。 | `path_found` 表示是否找到路径；`path` 是 sparse 搜索路径；`interpolated_path` 是 planner 后插值的密集路径。 |
 
-本项目可以创建默认 `MotionPlannerConfig`，也可以通过 `motion_planner_config_path` 从文件创建，并通过 `motion_planner_params` / 任务层 `planner_params` 调用 `MotionPlannerConfig.set_param(...)`。具体参数名仍以 cuMotion 配置文件和官方约定为准。
+本项目可以创建默认 `MotionPlannerConfig`，也可以通过
+`graph_search.motion_planner_config_path` 从文件创建，并通过
+`graph_search.motion_planner_params` 调用 `MotionPlannerConfig.set_param(...)`。具体参数名仍以
+cuMotion 配置文件和官方约定为准。
 
 ### 13.8 C-space path specification 与 path conversion
 
@@ -739,28 +785,34 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `CSpaceTrajectoryGenerator.InterpolationMode` | 已接入 | time-stamped 轨迹的 waypoint 插值方式。 | `LINEAR` 表示分段线性；`CUBIC_SPLINE` 表示三次样条。 |
 | `CSpaceTrajectoryGenerator.SolverParamValue` | 辅助/底层 | `set_solver_param(...)` 的值包装。 | 支持 `int`、`float`、`str`，用于传底层轨迹求解器参数。 |
 
-本项目已使用 `generate_trajectory(...)` 实现 `trajectory_mode='time_optimal'`，使用 `generate_time_stamped_trajectory(...)` 实现 `trajectory_mode='time_stamped'`。轨迹生成器的 position/velocity/acceleration/jerk limit setter 和 `set_solver_param(...)` 已通过 `trajectory_limits`、`trajectory_solver_params` 暴露到 context 和 pinch_grasp 任务配置。
+本项目已使用 `generate_trajectory(...)` 实现
+`trajectory_generation.mode='time_optimal'`，使用
+`generate_time_stamped_trajectory(...)` 实现
+`trajectory_generation.mode='time_stamped'`。轨迹生成器的 position/velocity/acceleration/jerk
+limit setter 和 `set_solver_param(...)` 已通过 `trajectory_generation.limits`、
+`trajectory_generation.solver_params` 暴露到 context 和 pinch_grasp 任务配置。
 
 ### 13.10 Trajectory Optimizer
 
 | 类型 | 状态 | 功能说明 | 主要接口功能 |
 |---|---|---|---|
-| `TrajectoryOptimizerConfig` | 未接入 | collision-free trajectory optimizer 的配置对象，绑定机器人、工具 frame、world view 和优化参数。 | `set_param(param_name, ParamValue)` 设置底层优化参数，如权重、迭代预算、碰撞距离参数等。 |
+| `TrajectoryOptimizerConfig` | 部分接入 | collision-free trajectory optimizer 的配置对象，绑定机器人、工具 frame、world view 和优化参数。 | `set_param(param_name, ParamValue)` 设置底层优化参数，如权重、迭代预算、碰撞距离参数等。 |
 | `TrajectoryOptimizerConfig.ParamValue` | 辅助/底层 | `set_param(...)` 的值包装。 | 支持 `bool`、`int`、`float`。 |
-| `TrajectoryOptimizer` | 未接入 | 直接优化一条 collision-free `Trajectory` 的求解器，可同时考虑目标、路径约束和碰撞。 | `plan_to_cspace_target(...)` 规划到关节目标；`plan_to_task_space_target(...)` 规划到单个 TCP 目标；`plan_to_task_space_goalset(...)` 在多个 TCP 目标中选择可行轨迹。 |
-| `TrajectoryOptimizer.Results` | 未接入 | trajectory optimizer 的规划结果。 | `status()` 返回状态枚举；`trajectory()` 返回优化出的 `Trajectory`；`target_index()` 返回命中的 goalset 目标索引。 |
-| `TrajectoryOptimizer.Results.Status` | 未接入 | trajectory optimizer 状态枚举，区分配置错误、IK 失败、几何规划失败和优化失败。 | `SUCCESS` 成功；`INVALID_INITIAL_CSPACE_POSITION` 起点非法；`INVALID_TARGET_CSPACE_POSITION` 目标关节非法；`INVALID_TARGET_SPECIFICATION` 目标约束非法；`INVERSE_KINEMATICS_FAILURE` IK 阶段失败；`GEOMETRIC_PLANNING_FAILURE` 几何路径失败；`TRAJECTORY_OPTIMIZATION_FAILURE` 优化失败。 |
-| `TrajectoryOptimizer.CSpaceTarget` | 未接入 | 关节空间终端目标，可额外附加 TCP 平移/姿态路径约束。 | 构造函数接收终端 `cspace_position_terminal_target`，可带 `TranslationPathConstraint` 和 `OrientationPathConstraint`。 |
+| `TrajectoryOptimizer` | 已接入 | 直接优化一条 collision-free `Trajectory` 的求解器，可同时考虑目标、路径约束和碰撞。 | 已接入 `plan_to_cspace_target(...)` 和 `plan_to_task_space_target(...)`；`plan_to_task_space_goalset(...)` 尚未封装。 |
+| `TrajectoryOptimizer.Results` | 已接入 | trajectory optimizer 的规划结果。 | `status()` 返回状态枚举；`trajectory()` 返回优化出的 `Trajectory`；`target_index()` 返回命中的 goalset 目标索引。 |
+| `TrajectoryOptimizer.Results.Status` | 已接入 | trajectory optimizer 状态枚举，区分配置错误、IK 失败、几何规划失败和优化失败。 | `SUCCESS` 成功；`INVALID_INITIAL_CSPACE_POSITION` 起点非法；`INVALID_TARGET_CSPACE_POSITION` 目标关节非法；`INVALID_TARGET_SPECIFICATION` 目标约束非法；`INVERSE_KINEMATICS_FAILURE` IK 阶段失败；`GEOMETRIC_PLANNING_FAILURE` 几何路径失败；`TRAJECTORY_OPTIMIZATION_FAILURE` 优化失败。 |
+| `TrajectoryOptimizer.CSpaceTarget` | 部分接入 | 关节空间终端目标，可额外附加 TCP 平移/姿态路径约束。 | 当前仅用于终端 C-space 目标，路径约束使用 `none()`。 |
 | `TrajectoryOptimizer.CSpaceTarget.TranslationPathConstraint` | 未接入 | 对 C-space 目标规划过程中的 TCP 平移路径施加约束。 | `none()` 不约束；`linear(path_deviation_limit=None)` 要求 TCP 平移尽量沿直线路径并限制偏差。 |
 | `TrajectoryOptimizer.CSpaceTarget.OrientationPathConstraint` | 未接入 | 对 C-space 目标规划过程中的 TCP 姿态路径施加约束。 | `none()` 不约束；`constant(...)` 约束姿态尽量保持；`axis(...)` 约束某个工具轴沿目标方向。 |
-| `TrajectoryOptimizer.TaskSpaceTarget` | 未接入 | 单个 task-space 轨迹目标，由 terminal/path 平移约束和姿态约束组成。 | 构造函数组合 `TranslationConstraint` 与 `OrientationConstraint`。 |
+| `TrajectoryOptimizer.TaskSpaceTarget` | 部分接入 | 单个 task-space 轨迹目标，由 terminal/path 平移约束和姿态约束组成。 | 当前接入终点 translation target，以及无姿态或终点完整姿态约束。 |
 | `TrajectoryOptimizer.TaskSpaceTargetGoalset` | 未接入 | 多个 task-space 候选目标的 goalset。 | 构造函数组合 goalset 版本的 translation/orientation constraints，optimizer 可选择其中一个目标。 |
-| `TrajectoryOptimizer.TranslationConstraint` | 未接入 | task-space 轨迹的平移约束。 | `target(...)` 只约束终点位置；`linear_path_constraint(...)` 同时约束终点和沿途直线偏差。 |
+| `TrajectoryOptimizer.TranslationConstraint` | 部分接入 | task-space 轨迹的平移约束。 | 当前接入 `target(...)` 终点位置；`linear_path_constraint(...)` 尚未封装。 |
 | `TrajectoryOptimizer.TranslationConstraintGoalset` | 未接入 | 多候选目标版本的平移约束。 | `target(...)` 创建多个终点候选；`linear_path_constraint(...)` 创建多个直线路径候选。 |
-| `TrajectoryOptimizer.OrientationConstraint` | 未接入 | task-space 轨迹的姿态约束，可分别约束终点和路径。 | `none()` 不约束；`constant(...)` 保持姿态；`terminal_axis(...)`/`terminal_target(...)` 只约束终点；`terminal_and_path_axis(...)`/`terminal_and_path_target(...)` 同时约束终点和路径；`terminal_target_and_path_axis(...)` 混合终点完整姿态和路径轴约束。 |
+| `TrajectoryOptimizer.OrientationConstraint` | 部分接入 | task-space 轨迹的姿态约束，可分别约束终点和路径。 | 当前接入 `none()` 和 `terminal_target(...)`；路径姿态约束和轴约束尚未封装。 |
 | `TrajectoryOptimizer.OrientationConstraintGoalset` | 未接入 | 多候选目标版本的姿态约束。 | 与 `OrientationConstraint` 同族方法一致，但输入是候选目标列表。 |
 
-这组接口与当前使用的 graph `MotionPlanner` + `CSpaceTrajectoryGenerator` 不同：它直接做 collision-free trajectory optimization。当前项目尚未接入。
+这组接口与 graph `MotionPlanner` + `CSpaceTrajectoryGenerator` 不同：它直接做 collision-free
+trajectory optimization。当前项目已把它作为目标式请求的默认 pipeline 接入，goalset 和路径约束细项后续再扩展。
 
 ### 13.11 RMPflow
 
@@ -802,12 +854,12 @@ RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；�
 | `interpolated_path` | 是 | 已通过 `generate_interpolated_path` 接入 |
 | CSpaceTrajectoryGenerator | 是 | 已接入 time-optimal/time-stamped 两种生成 |
 | trajectory generator limits/solver params | 是 | 已接入 context 和任务配置 |
-| PathSpec / path conversion | 是 | 未接入 |
-| TrajectoryOptimizer | 是 | 未接入 |
+| PathSpec / path conversion | 是 | specified_path 支持 C-space waypoints；task-space/composite conversion 未接入 |
+| TrajectoryOptimizer | 是 | 已作为默认 `trajectory_optimization` pipeline 接入 |
 | RMPflow | 是 | 未接入 |
 | Collision sphere generation | 是 | 未接入 |
 
-因此，官方文档中的接口并不是“很多没有实现”，而是 cuMotion Python 包暴露的 API 远多于本项目当前封装的范围。当前后端已经覆盖 FK/IK/graph planner/trajectory generator/primitive world/inspector 这些主路径；后续真正的大块扩展主要是 SDF、PathSpec/path conversion、TrajectoryOptimizer、RMPflow 和 collision sphere generation。
+cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端覆盖 FK/IK/trajectory optimizer/graph planner/trajectory generator/primitive world/inspector 这些主路径；SDF、task-space/composite PathSpec conversion、RMPflow 和 collision sphere generation 属于独立能力块。
 
 ## 14. 当前 `backends/cumotion` 实现评估
 
@@ -819,20 +871,19 @@ RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；�
 - FK、IK、MotionPlanner、CollisionWorld、TrajectoryAdapter 分模块实现，和 cuMotion 官方能力块基本对齐，维护边界清楚。
 - `joint_names()` 作为 C-space 顺序的唯一来源，任务层通过名称映射回 Isaac DOF，这比假设索引一致安全。
 - `pose_adapter.py` 集中处理项目 `wxyz` 四元数到 cuMotion `Rotation3/Pose3` 的转换，减少姿态顺序错误。
-- `motion_planner.py` 已经接入三类目标：C-space、translation、pose，并能优先消费 `interpolated_path`，再用 `CSpaceTrajectoryGenerator` 生成 time-optimal 或 time-stamped trajectory。
-- planner config file、planner 参数映射、trajectory limits 和 trajectory solver params 都已经有后端入口，pinch grasp 也能从任务配置覆盖这些参数。
-- `CuMotionCollisionWorld` 已经支持 obstacle 增量同步、启停、删除、pose 更新、几何变化重建，并提供 World/RobotWorld inspector wrapper。
+- `motion_planner.py` 作为 facade 接入三条 pipeline：默认 `trajectory_optimization`、显式 `graph_search`、以及 `specified_path.cspace_waypoints`。
+- graph planner config file、planner 参数映射、trajectory generation limits 和 trajectory solver params 都有分组配置入口，pinch grasp 也能从任务配置覆盖这些参数。
+- `CuMotionCollisionWorld` 支持 obstacle 增量同步、启停、删除、pose 更新、几何变化重建，并提供 World/RobotWorld inspector wrapper。
 - `trajectory_adapter.py` 兼容真实 cuMotion `eval_all(t)` 四元组和测试替身对象，这对 pybind 版本变化有一定韧性。
 - `tcp_urdf_builder.py` 用临时 URDF 写入自定义 TCP，是符合 cuMotion “frame 必须存在于机器人描述中” 这一约束的现实做法。
 
 ### 14.2 主要风险和缺口
 
-- `CuMotionMotionPlanner.plan(...)` 每次请求都会重新 `create_default_motion_planner_config(...)` 和 `create_motion_planner(...)`。这简单可靠，但如果高频规划或大量 waypoint 规划，开销会偏大；更合适的是在环境/配置不变时缓存 planner，在 world 改变时刷新。
 - `CuMotionMotionPlanner.plan(...)` 每次请求仍会重新创建 planner config 和 planner。对当前离线任务简单可靠；如果之后做高频 replanning，可以按 world/config 缓存 planner。
-- `CuMotionCollisionWorld` 支持增量同步，但目前仍由请求显式传入 primitive 障碍；它不会自动扫描 Isaac stage，也尚未支持 SDF obstacle。
-- collision-free IK 现在会传入位置/姿态容差并复算误差，但只封装了单个 task-space target；array/goalset 和 `axis(...)` 姿态约束仍未接入。
-- `IKRequest.validate()` 和 frame/seed 长度校验已经补上，但 `IkConfig` 的更多细粒度参数还没有 YAML 入口。
-- `RobotWorldInspector` 已经有 wrapper，但还没有自动接入 `MotionResult.diagnostics.metrics`；目前需要调用方显式创建 inspector 做诊断。
+- `CuMotionContext` 持有并复用当前 `CuMotionCollisionWorld`，但环境需要任务层显式同步 `CollisionObject`；后端不会自动扫描 Isaac stage，也不支持 SDF obstacle。
+- collision-free IK 会传入位置/姿态容差并复算误差，但只封装了单个 task-space target；array/goalset 和 `axis(...)` 姿态约束未接入。
+- `IKRequest.validate_structure()` 和 request/model-match 校验覆盖基础结构；`IkConfig` 的更多细粒度参数还没有 YAML 入口。
+- `RobotWorldInspector` 有 wrapper，但还没有自动接入 `MotionResult.diagnostics.metrics`；目前需要调用方显式创建 inspector 做诊断。
 - `plan_tcp_line_joint_path(...)` 是自写 waypoint + IK 串联，不是 cuMotion 官方 `TaskSpacePathSpec`/`convert_task_space_path_spec_to_cspace(...)` 流程；可控但能力较窄。
 
 ### 14.3 是否应该修改当前封装边界
@@ -842,14 +893,14 @@ RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；�
 更值得做的是在 cuMotion 后端内部继续补齐“更高阶后端能力”：
 
 - 为 collision-free IK 增加 axis orientation constraint、array/goalset 的项目级 API。
-- 把 inspector 诊断自动汇总进 `MotionResult.diagnostics.metrics`，用于规划前后检查自碰和障碍距离。
+- 把 inspector 诊断自动汇总进 `MotionResult.diagnostics.metrics`，用于规划请求的自碰和障碍距离检查。
 - 增加 SDF obstacle 适配，用于更复杂的环境几何。
 - 增加官方 `TaskSpacePathSpec` / `convert_task_space_path_spec_to_cspace(...)` 流程，作为 TCP 直线移动的可选实现。
 - 试验 `TrajectoryOptimizer` 和 RMPflow，分别覆盖离线 collision-free trajectory optimization 与在线 reactive motion policy。
 
 ## 15. 能否更全局地替换使用 cuMotion
 
-可以，但应该按“后端能力替换”逐步推进，而不是一次性把所有轨迹/任务逻辑都改成 cuMotion。更全局使用 cuMotion 的方向主要有四类。
+可以，但应该按“后端能力替换”逐步推进，而不是一次性把所有轨迹/任务逻辑都交给 cuMotion。更全局使用 cuMotion 的方向主要有四类。
 
 ### 15.1 立即适合替换的部分
 
