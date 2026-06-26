@@ -56,13 +56,9 @@ class CuMotionMotionPlanner:
             or context.config.flange_frame
         )
         # 优先使用调用方本次传入的配置；否则使用 CuMotionConfig 中的分组配置。
-        # 手动构造的 CuMotionConfig 可能只提供 planner 默认值字段，这里统一转换成分组配置。
         self.config = config or getattr(context.config, "motion_planner", None)
         if self.config is None:
-            self.config = MotionPlannerBackendConfig.from_mapping(
-                None,
-                base_defaults=_planner_base_defaults(context.config),
-            )
+            self.config = MotionPlannerBackendConfig.from_mapping(None)
         self.config.validate()
 
     def joint_names(self) -> list[str]:
@@ -115,20 +111,3 @@ class CuMotionMotionPlanner:
             "planning_pipeline must be one of: graph_search, specified_path, "
             "trajectory_optimization"
         )
-
-
-def _planner_base_defaults(config) -> dict[str, object]:
-    """读取 ``CuMotionConfig`` 上的 graph/trajectory 默认参数。
-
-    这些字段作为 ``MotionPlannerBackendConfig`` 对应分组的默认值来源；显式传入的
-    ``MotionPlannerBackendConfig`` 优先级更高。
-    """
-
-    return {
-        "motion_planner_config_path": getattr(
-            config, "motion_planner_config_path", None
-        ),
-        "motion_planner_params": getattr(config, "motion_planner_params", {}),
-        "trajectory_limits": getattr(config, "trajectory_limits", {}),
-        "trajectory_solver_params": getattr(config, "trajectory_solver_params", {}),
-    }

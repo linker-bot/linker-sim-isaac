@@ -32,13 +32,121 @@ from manipulation_project.backends.cumotion.motion_planner_config import (
 
 
 @dataclass(frozen=True)
+class CuMotionIkConfig:
+    """cuMotion kinematics/IK 参数。
+
+    这些字段最终会写入几何 IK 的 ``IkConfig``，或作为 collision-free IK 的 solver/config
+    参数来源。容差单位为 m/rad，seed 按 cuMotion C-space 顺序排列。
+    """
+
+    # IK warm-start seed
+    # 按 cuMotion C-space 关节顺序排列；可为单条 1D seed 或多条 2D seeds
+    # 为 None 时项目侧不提供默认 seed，未提供 seed 时使用 cuMotion 默认初始化逻辑
+    cspace_seeds: np.ndarray | None = None
+    # IK 位置收敛容差，单位 m
+    # 几何 IK 和 collision-free IK 都会使用该默认值
+    position_tolerance: float = 0.005
+    # IK 姿态收敛容差，单位 rad
+    # 无姿态目标的请求会在 IK 层临时放宽/忽略该项
+    orientation_tolerance: float = 0.75
+    # cuMotion IK CCD 阶段最大迭代次数
+    ccd_max_iterations: int = 180
+    # cuMotion IK BFGS 精修阶段最大迭代次数
+    bfgs_max_iterations: int = 80
+    # IK 姿态误差权重
+    orientation_weight: float = 0.25
+    # collision-free IK 的额外后端参数，按名称写入 cuMotion solver config
+    collision_free_params: dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionIkConfig":
+        """从 ``cumotion.kinematics.ik`` 或旧式 flat mapping 解析 IK 配置。"""
+
+        settings = _mapping_or_empty(data, "cumotion.kinematics.ik")
+        seeds = settings.get("cspace_seeds", settings.get("ik_cspace_seeds"))
+        collision_free_params = settings.get(
+            "collision_free_params",
+            settings.get("collision_free_ik_params"),
+        )
+        config = cls(
+            cspace_seeds=_parse_optional_cspace_seeds(seeds),
+            position_tolerance=float(
+                settings.get("position_tolerance", cls.position_tolerance)
+            ),
+            orientation_tolerance=float(
+                settings.get("orientation_tolerance", cls.orientation_tolerance)
+            ),
+            ccd_max_iterations=int(
+                settings.get("ccd_max_iterations", cls.ccd_max_iterations)
+            ),
+            bfgs_max_iterations=int(
+                settings.get("bfgs_max_iterations", cls.bfgs_max_iterations)
+            ),
+            orientation_weight=float(
+                settings.get("orientation_weight", cls.orientation_weight)
+            ),
+            collision_free_params=_parse_optional_params_mapping(collision_free_params),
+        )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        if self.position_tolerance < 0 or self.orientation_tolerance < 0:
+            raise ValueError("cuMotion kinematics.ik tolerances cannot be negative")
+        if self.ccd_max_iterations <= 0 or self.bfgs_max_iterations <= 0:
+            raise ValueError("cuMotion kinematics.ik iteration counts must be positive")
+        if self.orientation_weight < 0:
+            raise ValueError("kinematics.ik.orientation_weight cannot be negative")
+        _parse_optional_cspace_seeds(self.cspace_seeds)
+        _parse_optional_params_mapping(self.collision_free_params)
+
+
+@dataclass(frozen=True)
+class CuMotionFkConfig:
+    """cuMotion FK 参数占位。
+
+    当前 FK 封装没有可调后端参数，但保留该分组，让 YAML 和 dataclass 层次表达
+    ``kinematics.fk`` / ``kinematics.ik`` 的边界。后续若要配置 base frame、输出 frame 策略等，
+    可以在这里扩展。
+    """
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionFkConfig":
+        _mapping_or_empty(data, "cumotion.kinematics.fk")
+        return cls()
+
+    def validate(self) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class CuMotionKinematicsConfig:
+    """cuMotion kinematics 分组配置。"""
+
+    ik: CuMotionIkConfig = field(default_factory=CuMotionIkConfig)
+    fk: CuMotionFkConfig = field(default_factory=CuMotionFkConfig)
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionKinematicsConfig":
+        settings = _mapping_or_empty(data, "cumotion.kinematics")
+        config = cls(
+            ik=CuMotionIkConfig.from_mapping(settings.get("ik")),
+            fk=CuMotionFkConfig.from_mapping(settings.get("fk")),
+        )
+        config.validate()
+        return config
+
+    def validate(self) -> None:
+        self.ik.validate()
+        self.fk.validate()
+
+
+@dataclass(frozen=True)
 class CuMotionConfig:
     """cuMotion 后端配置。
 
-    路径字段指向 cuMotion 使用的 XRDF/URDF；frame 字段必须与 URDF link 名一致。
-    容差单位为米和弧度，seed 数组按 cuMotion C-space 关节顺序排列。planner/trajectory
-    参数会在具体后端对象创建时写入 cuMotion config 或 generator；本 dataclass 只保存
-    项目侧可序列化的配置值。
+    路径字段指向 cuMotion 使用的 XRDF/URDF；frame 字段必须与 URDF link 名一致。kinematics
+    和 motion planner 参数分别进入对应分组；本 dataclass 只保存项目侧可序列化的配置值。
     """
 
     # cuMotion XRDF 配置路径
@@ -53,35 +161,8 @@ class CuMotionConfig:
     # 自定义 TCP frame 名
     # 只有 URDF/XRDF 中已经包含额外工具坐标系，或任务临时写入 fixed TCP frame 时才设置
     custom_tcp_frame: str | None = None
-    # IK warm-start seed
-    # 按 cuMotion C-space 关节顺序排列；可为单条 1D seed 或多条 2D seeds
-    # 为 None 时项目侧不提供默认 seed，未提供 seed 时使用 cuMotion 默认初始化逻辑
-    ik_cspace_seeds: np.ndarray | None = None
-    # IK 位置收敛容差，单位 m
-    # 几何 IK 和 collision-free IK 都会使用该默认值
-    position_tolerance: float = 0.005
-    # IK 姿态收敛容差，单位 rad
-    # 无姿态目标的请求会在 IK 层临时放宽/忽略该项
-    orientation_tolerance: float = 0.75
-    # cuMotion IK CCD 阶段最大迭代次数
-    ccd_max_iterations: int = 180
-    # cuMotion IK BFGS 精修阶段最大迭代次数
-    bfgs_max_iterations: int = 80
-    # IK 姿态误差权重
-    orientation_weight: float = 0.25
-    # collision-free IK 的额外后端参数，按名称写入 cuMotion solver config
-    collision_free_ik_params: dict[str, Any] = field(default_factory=dict)
-    # graph planner / trajectory generator 的默认参数来源。
-    # from_mapping 会把这些字段作为 motion_planner 分组配置的默认值。
-    # 可选 cuMotion MotionPlanner 配置文件路径；为空时使用 cuMotion 默认 planner config
-    motion_planner_config_path: str | Path | None = None
-    # MotionPlanner 的额外参数覆盖，按名称写入 cuMotion motion planner config
-    motion_planner_params: dict[str, Any] = field(default_factory=dict)
-    # 轨迹生成的关节限制覆盖，例如速度/加速度/jerk 上限
-    # 每项按 C-space 关节顺序排列
-    trajectory_limits: dict[str, np.ndarray] = field(default_factory=dict)
-    # C-space trajectory generator 的 solver 参数覆盖，例如迭代次数或平滑相关参数
-    trajectory_solver_params: dict[str, Any] = field(default_factory=dict)
+    # FK/IK 相关参数
+    kinematics: CuMotionKinematicsConfig = field(default_factory=CuMotionKinematicsConfig)
     # motion-planner facade 的分组配置；为 None 时 context 会用上面的默认参数构造配置
     motion_planner: MotionPlannerBackendConfig | None = None
 
@@ -116,7 +197,12 @@ class CuMotionConfig:
         if custom_tcp_frame == settings["flange_frame"]:
             custom_tcp_frame = None
 
+        # 新结构推荐把 IK/FK 参数放在 cumotion.kinematics 下；这里保留旧式 flat 字段兼容，
+        # 让已有 robot YAML 可以逐步迁移。
+        kinematics = _kinematics_config_from_settings(settings)
+
         # 顶层 planner 字段作为分组配置的默认值来源；motion_planner 分组中的显式字段优先。
+        # 这些旧式字段仍兼容，但新配置推荐直接写 cumotion.motion_planner。
         motion_planner_base_defaults = {
             "motion_planner_config_path": settings.get("motion_planner_config_path"),
             "motion_planner_params": settings.get("motion_planner_params"),
@@ -130,39 +216,7 @@ class CuMotionConfig:
             custom_tcp_frame=None
             if custom_tcp_frame is None
             else str(custom_tcp_frame),
-            ik_cspace_seeds=_parse_optional_cspace_seeds(
-                settings.get("ik_cspace_seeds")
-            ),
-            position_tolerance=float(
-                settings.get("position_tolerance", cls.position_tolerance)
-            ),
-            orientation_tolerance=float(
-                settings.get("orientation_tolerance", cls.orientation_tolerance)
-            ),
-            ccd_max_iterations=int(
-                settings.get("ccd_max_iterations", cls.ccd_max_iterations)
-            ),
-            bfgs_max_iterations=int(
-                settings.get("bfgs_max_iterations", cls.bfgs_max_iterations)
-            ),
-            orientation_weight=float(
-                settings.get("orientation_weight", cls.orientation_weight)
-            ),
-            collision_free_ik_params=_parse_optional_params_mapping(
-                settings.get("collision_free_ik_params")
-            ),
-            motion_planner_config_path=_parse_optional_repo_path(
-                settings.get("motion_planner_config_path")
-            ),
-            motion_planner_params=_parse_optional_params_mapping(
-                settings.get("motion_planner_params")
-            ),
-            trajectory_limits=_parse_optional_array_mapping(
-                settings.get("trajectory_limits")
-            ),
-            trajectory_solver_params=_parse_optional_params_mapping(
-                settings.get("trajectory_solver_params")
-            ),
+            kinematics=kinematics,
             motion_planner=MotionPlannerBackendConfig.from_mapping(
                 settings.get("motion_planner"),
                 base_defaults=motion_planner_base_defaults,
@@ -187,27 +241,41 @@ class CuMotionConfig:
             raise ValueError("flange_frame cannot be empty")
         if self.custom_tcp_frame is not None and not self.custom_tcp_frame:
             raise ValueError("custom_tcp_frame cannot be empty")
-        if self.position_tolerance < 0 or self.orientation_tolerance < 0:
-            raise ValueError("cuMotion tolerances cannot be negative")
-        if self.ccd_max_iterations <= 0 or self.bfgs_max_iterations <= 0:
-            raise ValueError("cuMotion iteration counts must be positive")
-        if self.orientation_weight < 0:
-            raise ValueError("orientation_weight cannot be negative")
 
         # 解析函数并校验可选字段，确保手动构造 CuMotionConfig 时也满足同样约束。
-        _parse_optional_cspace_seeds(self.ik_cspace_seeds)
-        _parse_optional_params_mapping(self.collision_free_ik_params)
-        _parse_optional_params_mapping(self.motion_planner_params)
-        _parse_optional_array_mapping(self.trajectory_limits)
-        _parse_optional_params_mapping(self.trajectory_solver_params)
+        self.kinematics.validate()
         if self.motion_planner is not None:
             self.motion_planner.validate()
 
-        # 可选 planner 配置文件路径允许为 None，但如果显式传入 Path/字符串则不能是空值。
-        if self.motion_planner_config_path is not None and not str(
-            self.motion_planner_config_path
-        ):
-            raise ValueError("motion_planner_config_path cannot be empty")
+    @property
+    def ik_cspace_seeds(self) -> np.ndarray | None:
+        """兼容旧属性；新代码优先使用 ``config.kinematics.ik.cspace_seeds``。"""
+
+        return self.kinematics.ik.cspace_seeds
+
+    @property
+    def position_tolerance(self) -> float:
+        return self.kinematics.ik.position_tolerance
+
+    @property
+    def orientation_tolerance(self) -> float:
+        return self.kinematics.ik.orientation_tolerance
+
+    @property
+    def ccd_max_iterations(self) -> int:
+        return self.kinematics.ik.ccd_max_iterations
+
+    @property
+    def bfgs_max_iterations(self) -> int:
+        return self.kinematics.ik.bfgs_max_iterations
+
+    @property
+    def orientation_weight(self) -> float:
+        return self.kinematics.ik.orientation_weight
+
+    @property
+    def collision_free_ik_params(self) -> dict[str, Any]:
+        return self.kinematics.ik.collision_free_params
 
 
 def _parse_optional_cspace_seeds(value) -> np.ndarray | None:
@@ -223,6 +291,44 @@ def _parse_optional_cspace_seeds(value) -> np.ndarray | None:
     if seeds.ndim not in {1, 2} or seeds.size == 0:
         raise ValueError("ik_cspace_seeds must be a non-empty 1D or 2D array")
     return seeds
+
+
+def _mapping_or_empty(value, label: str) -> Mapping[str, Any]:
+    """解析可选 mapping，用于分组配置入口。"""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be a mapping")
+    return value
+
+
+def _kinematics_config_from_settings(
+    settings: Mapping[str, Any]
+) -> CuMotionKinematicsConfig:
+    """解析新式 ``kinematics`` 分组，并兼容旧式 flat IK 字段。"""
+
+    kinematics_settings = dict(_mapping_or_empty(settings.get("kinematics"), "kinematics"))
+    ik_settings = dict(_mapping_or_empty(kinematics_settings.get("ik"), "kinematics.ik"))
+    fk_settings = _mapping_or_empty(kinematics_settings.get("fk"), "kinematics.fk")
+    legacy_ik_keys = {
+        "ik_cspace_seeds",
+        "cspace_seeds",
+        "position_tolerance",
+        "orientation_tolerance",
+        "ccd_max_iterations",
+        "bfgs_max_iterations",
+        "orientation_weight",
+        "collision_free_ik_params",
+        "collision_free_params",
+    }
+    for key in legacy_ik_keys:
+        if key in settings and key not in ik_settings:
+            ik_settings[key] = settings[key]
+    return CuMotionKinematicsConfig(
+        ik=CuMotionIkConfig.from_mapping(ik_settings),
+        fk=CuMotionFkConfig.from_mapping(fk_settings),
+    )
 
 
 def _parse_optional_params_mapping(value) -> dict[str, Any]:
@@ -243,40 +349,6 @@ def _parse_optional_params_mapping(value) -> dict[str, Any]:
             raise ValueError("cuMotion param names cannot be empty")
         params[key] = param_value
     return params
-
-
-def _parse_optional_array_mapping(value) -> dict[str, np.ndarray]:
-    """解析可选 C-space limit 映射。
-
-    ``trajectory_limits`` 中每个值都转为 1D float 数组，长度是否等于机器人 C-space
-    维度由 ``CuMotionContext`` 加载模型后检查。
-    """
-
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping):
-        raise ValueError("trajectory_limits must be a mapping")
-    limits = {}
-    for key, limit_value in value.items():
-        key = str(key)
-        if not key:
-            raise ValueError("trajectory limit names cannot be empty")
-        array = np.asarray(limit_value, dtype=float).reshape(-1)
-        if array.size == 0:
-            raise ValueError(f"trajectory limit {key!r} cannot be empty")
-        limits[key] = array
-    return limits
-
-
-def _parse_optional_repo_path(value) -> Path | None:
-    """按仓库根目录解析可选路径。
-
-    空字符串视为未配置，便于 YAML 中显式保留键但关闭 config-file 覆盖。
-    """
-
-    if value is None or value == "":
-        return None
-    return repo_path(value)
 
 
 class CuMotionContext:
@@ -413,16 +485,6 @@ class CuMotionContext:
                 raise ValueError(
                     "ik_cspace_seeds width mismatch: "
                     f"expected_cspace_width {self.expected_cspace_width}, got {seed_width}"
-                )
-        for key, values in self.config.trajectory_limits.items():
-            if (
-                np.asarray(values, dtype=float).reshape(-1).size
-                != self.expected_cspace_width
-            ):
-                raise ValueError(
-                    f"trajectory_limits.{key} expected_cspace_width "
-                    f"{self.expected_cspace_width} values, "
-                    f"got {np.asarray(values, dtype=float).reshape(-1).size}"
                 )
         if self.config.motion_planner is not None:
             for (

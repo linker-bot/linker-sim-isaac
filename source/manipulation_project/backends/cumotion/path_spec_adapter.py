@@ -418,7 +418,7 @@ def _ik_config_for_path_conversion(
     )
     if bool(ik_settings.get("use_current_q_as_seed", True)):
         ik_config.cspace_seeds = [np.asarray(current_q, dtype=float).reshape(-1)]
-    backend_config = context.config
+    backend_config = context.config.kinematics.ik
     _set_if_present(ik_config, "position_tolerance", backend_config)
     _set_if_present(ik_config, "orientation_tolerance", backend_config)
     _set_if_present(ik_config, "ccd_max_iterations", backend_config, cast=int)

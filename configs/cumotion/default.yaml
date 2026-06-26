@@ -1,0 +1,40 @@
+# cuMotion 默认 profile。
+#
+# 加载顺序：
+#   configs/cumotion/default.yaml < configs/robots/*.yaml < configs/trajectories/*.yaml
+#
+# 本文件只提供项目通用 cuMotion 默认值。具体机器人资产字段（xrdf_path、urdf_path、
+# flange_frame）仍由 configs/robots/*.yaml 提供；具体任务可以在
+# grasp.motion_planning 中覆盖规划策略。
+
+cumotion:
+  kinematics:
+    ik:
+      position_tolerance: 0.002
+      orientation_tolerance: 0.01
+      ccd_max_iterations: 180
+      bfgs_max_iterations: 80
+      orientation_weight: 0.25
+    fk: {}
+
+  motion_planner:
+    planning_pipeline: trajectory_optimization
+    trajectory_optimization:
+      use_environment_obstacles: true
+      params: {}
+    graph_search:
+      generate_interpolated_path: false
+      use_environment_obstacles: true
+      motion_planner_params: {}
+    trajectory_generation:
+      enabled: true
+      mode: time_optimal
+      interpolation_mode: cubic_spline
+      limits: {}
+      solver_params: {}
+    specified_path:
+      family: task_space_segments
+      validate_collision_after_generation: false
+      cspace_waypoints: {}
+      task_space_segments: {}
+      composite: {}

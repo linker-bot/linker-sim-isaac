@@ -128,19 +128,30 @@ config/script
 - `tcp_urdf_builder.py`：复制 URDF 并临时追加 fixed TCP link/joint。
 - `trajectory_adapter.py`：将 cuMotion `Trajectory.eval_all()` 采样成项目 `JointTrajectory`。
 
-`CuMotionConfig` 的主要字段：
+`CuMotionConfig` 的主要字段按模块分组：机器人描述和 frame 保持在顶层，FK/IK 参数放在
+`kinematics`，路径级 planner 参数放在 `motion_planner`。
 
 ```python
+from manipulation_project.backends.cumotion.context import (
+    CuMotionConfig,
+    CuMotionIkConfig,
+    CuMotionKinematicsConfig,
+)
+
 CuMotionConfig(
     xrdf_path="assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf",
     urdf_path="assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
     flange_frame="AR5V2_L_arm_flan_link",
-    default_tcp_frame="ar5_l6_pinch_tcp",
-    position_tolerance=0.005,
-    orientation_tolerance=0.75,
-    ccd_max_iterations=180,
-    bfgs_max_iterations=80,
-    orientation_weight=0.25,
+    custom_tcp_frame="pinch_tcp",
+    kinematics=CuMotionKinematicsConfig(
+        ik=CuMotionIkConfig(
+            position_tolerance=0.005,
+            orientation_tolerance=0.75,
+            ccd_max_iterations=180,
+            bfgs_max_iterations=80,
+            orientation_weight=0.25,
+        )
+    ),
 )
 ```
 
@@ -163,7 +174,9 @@ TCP 相关代码位于 `source/manipulation_project/tcp/`：
 - `custom_tcp.py`：在任意父 frame 下定义固定 `xyz/rpy` 偏移。
 - `pinch_tcp.py`：读取 MJCF body 链，在闭合手型下计算 thumb tip 和 index tip 中点。
 
-Pinch grasp 会先根据闭合手型计算夹捏中心，再用 `backends/cumotion/tcp_urdf_builder.py` 生成临时 URDF。这样 cuMotion 可以直接以夹捏中心 link 作为 IK frame。
+Pinch grasp 会先根据闭合手型计算夹捏中心，再通过 `backends/cumotion/tcp_context.py`
+装配带临时 TCP URDF 的 `CuMotionContext`。底层 `tcp_urdf_builder.py` 仍负责纯 URDF 写入，
+但任务层不直接管理临时文件。
 
 ### Trajectory
 
@@ -206,6 +219,30 @@ tcp:
   type: flange
   frame_name: AR5V2_L_arm_flan_link
 ```
+
+### cuMotion profile
+
+`configs/cumotion/` 提供后端通用 profile 和带注释的配置示例：
+
+```text
+configs/cumotion/
+├── default.yaml
+└── example.yaml
+```
+
+`scripts/run_pinch_grasp.py` 默认加载 `configs/cumotion/default.yaml`。`example.yaml` 不作为
+默认运行配置，而是详细说明每个字段可以怎么写、缺省时走什么行为。加载顺序为：
+
+```text
+configs/cumotion/default.yaml
+  < configs/robots/*.yaml
+  < configs/trajectories/*.yaml
+```
+
+其中 profile 的 `cumotion` 段作为机器人级后端默认值，robot YAML 继续负责覆盖
+`xrdf_path`、`urdf_path` 和 `flange_frame`；profile 的 `cumotion.motion_planner` 段作为
+planner 默认值，运行 pinch grasp 时会映射为 `grasp.motion_planning` 的默认值。trajectory
+YAML 的 `grasp.motion_planning` 继续拥有最高优先级。
 
 ### 控制器
 
@@ -299,12 +336,19 @@ grasp:
   tcp_frame_name: pinch_tcp
 ```
 
-cuMotion IK 求解器默认参数放在 `configs/robots/*.yaml` 的 `cumotion` 段：
+cuMotion IK/FK 求解器默认参数可放在 `configs/cumotion/default.yaml` 的
+`cumotion.kinematics` 段，并由具体 robot YAML 覆盖：
 
 ```yaml
 cumotion:
-  position_tolerance: 0.002
-  orientation_tolerance: 0.01
+  kinematics:
+    ik:
+      position_tolerance: 0.002
+      orientation_tolerance: 0.01
+      ccd_max_iterations: 180
+      bfgs_max_iterations: 80
+      orientation_weight: 0.25
+    fk: {}
 ```
 
 ## 执行流程
@@ -325,8 +369,8 @@ cumotion:
 2. 引用 capsule rope USD。
 3. 导入 AR5+L6 组合 MJCF，并按 `--control-mode` 选择当前 runtime controller 配置。
 4. 用闭合手型和 MJCF body 链计算 thumb/index 夹捏中心 TCP。
-5. 临时复制 AR5 URDF 并追加 pinch TCP link。
-6. 创建 `CuMotionContext` 和 `CuMotionInverseKinematics`。
+5. 通过 `make_cumotion_context(...)` 创建带 pinch TCP 的 cuMotion context。
+6. 基于 context 创建 `CuMotionInverseKinematics` 和 motion planner wrapper。
 7. 求解 approach、grasp、lift、wiggle 的 TCP IK。
 8. 将 IK 结果写入完整 articulation DOF 目标，并同步 mimic follower。
 9. 分阶段执行 prep、move、approach、close、lift、wiggle、hold，并记录 CSV。

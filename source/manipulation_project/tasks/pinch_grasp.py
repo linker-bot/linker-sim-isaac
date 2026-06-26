@@ -1010,6 +1010,7 @@ class PinchGraspTask:
         # IK 后端只认识机器人描述里的 frame。cuMotion backend 负责把 pinch TCP 装配进
         # 临时 URDF/context，任务层只保留 TCP 几何和完整 DOF 映射逻辑。
         with make_cumotion_context(self.cumotion_config, tcp=tcp) as context:
+            ik_defaults = context.config.kinematics.ik
             ik_joint_names = context.joint_names()
             dof_names = list(robot.dof_names)
             dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
@@ -1042,8 +1043,8 @@ class PinchGraspTask:
                     target_position=approach_world,
                     target_orientation=ik_orientation,
                     warm_start_ik_cspace_seed=current_cspace,
-                    position_tolerance=context.config.position_tolerance,
-                    orientation_tolerance=context.config.orientation_tolerance,
+                    position_tolerance=ik_defaults.position_tolerance,
+                    orientation_tolerance=ik_defaults.orientation_tolerance,
                 )
             )
             initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
@@ -1079,8 +1080,8 @@ class PinchGraspTask:
                     target_position=lifted_world,
                     target_orientation=ik_orientation,
                     warm_start_ik_cspace_seed=grasp_joint_positions,
-                    position_tolerance=context.config.position_tolerance,
-                    orientation_tolerance=context.config.orientation_tolerance,
+                    position_tolerance=ik_defaults.position_tolerance,
+                    orientation_tolerance=ik_defaults.orientation_tolerance,
                 )
             )
             # wiggle 阶段每个目标都用上一目标热启动，减少在冗余机械臂上突然换解的概率。
@@ -1092,8 +1093,8 @@ class PinchGraspTask:
                         target_position=target,
                         target_orientation=ik_orientation,
                         warm_start_ik_cspace_seed=warm,
-                        position_tolerance=context.config.position_tolerance,
-                        orientation_tolerance=context.config.orientation_tolerance,
+                        position_tolerance=ik_defaults.position_tolerance,
+                        orientation_tolerance=ik_defaults.orientation_tolerance,
                     )
                 )
                 wiggles.append((target, result))

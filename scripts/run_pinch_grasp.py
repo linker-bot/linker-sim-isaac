@@ -64,7 +64,7 @@ from manipulation_project.objects.capsule_rope import (
 )
 from manipulation_project.robots.mimic import mjcf_equality_follower_joint_names
 from manipulation_project.tasks.pinch_grasp import PinchGraspConfig, PinchGraspTask
-from manipulation_project.utils.config import load_yaml
+from manipulation_project.utils.config import deep_merge, load_yaml
 from manipulation_project.utils.paths import repo_path
 
 
@@ -96,6 +96,15 @@ def parse_args() -> argparse.Namespace:
         "--grasp-config",
         type=Path,
         default=Path("configs/trajectories/pinch_grasp.yaml"),
+    )
+    parser.add_argument(
+        "--cumotion-config",
+        type=Path,
+        default=Path("configs/cumotion/default.yaml"),
+        help=(
+            "cuMotion profile YAML. Its cumotion section is used as robot-level "
+            "defaults, and cumotion.motion_planner is used as task-level planner defaults."
+        ),
     )
     parser.add_argument(
         "--logging-config",
@@ -167,6 +176,49 @@ def solver_settings(env_config: dict) -> SolverIterationConfig | None:
         hand_position_iterations=int(solver.get("hand_position_iterations", 32)),
         hand_velocity_iterations=int(solver.get("hand_velocity_iterations", 4)),
         apply_scope=str(solver.get("apply_scope", "arm_hand")),
+    )
+
+
+def merged_robot_config_with_cumotion_profile(
+    robot_config: dict, cumotion_profile: dict
+) -> dict:
+    """把 cuMotion profile 的后端默认值合入 robot config。
+
+    profile 只提供通用 ``cumotion`` 默认参数；具体机器人 YAML 仍负责覆盖
+    ``xrdf_path``、``urdf_path``、``flange_frame`` 等资产相关字段。
+    """
+
+    profile_cumotion = cumotion_profile.get("cumotion")
+    if profile_cumotion is None:
+        return dict(robot_config)
+    if not isinstance(profile_cumotion, dict):
+        raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
+    return deep_merge({"cumotion": profile_cumotion}, robot_config)
+
+
+def merged_grasp_config_with_cumotion_profile(
+    grasp_config: dict, cumotion_profile: dict
+) -> dict:
+    """把 cuMotion profile 的 motion_planner 默认值合入 grasp config。
+
+    加载顺序是 profile 默认值 < trajectory YAML。这样任务配置只需要写自己想覆盖的字段。
+    """
+
+    profile_cumotion = cumotion_profile.get("cumotion")
+    if profile_cumotion is None:
+        return dict(grasp_config)
+    if not isinstance(profile_cumotion, dict):
+        raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
+    profile_motion_planner = profile_cumotion.get("motion_planner")
+    if profile_motion_planner is None:
+        return dict(grasp_config)
+    if not isinstance(profile_motion_planner, dict):
+        raise ValueError(
+            "cuMotion profile key 'cumotion.motion_planner' must be a mapping"
+        )
+    return deep_merge(
+        {"grasp": {"motion_planning": profile_motion_planner}},
+        grasp_config,
     )
 
 
@@ -254,11 +306,16 @@ def main() -> None:
 
     # 先加载所有 YAML 配置。这里还没有启动 Isaac Sim，尽量把纯 Python 的配置错误提前暴露，
     # 避免启动 GUI 后才因为路径或字段缺失失败。
-    robot_config = load_yaml(args.robot_config)
+    cumotion_profile = load_yaml(args.cumotion_config)
+    robot_config = merged_robot_config_with_cumotion_profile(
+        load_yaml(args.robot_config), cumotion_profile
+    )
     controller_profiles = load_controller_profiles(args.controller_config)
     env_config = load_yaml(args.env_config)
     rope_config_data = load_yaml(args.rope_config)
-    grasp_config_data = load_yaml(args.grasp_config)
+    grasp_config_data = merged_grasp_config_with_cumotion_profile(
+        load_yaml(args.grasp_config), cumotion_profile
+    )
     logging_config = joint_logging_config_from_mapping(load_yaml(args.logging_config))
     logging_config = override_logging_config(
         logging_config,

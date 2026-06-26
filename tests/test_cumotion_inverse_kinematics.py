@@ -146,11 +146,15 @@ class _FakeContext:
         self.kinematics = _FakeKinematics()
         self.robot_description = "robot"
         self.config = SimpleNamespace(
-            ik_cspace_seeds=np.asarray([0.0, 0.0]),
-            ccd_max_iterations=10,
-            bfgs_max_iterations=20,
-            orientation_weight=0.5,
-            collision_free_ik_params={"max_iterations": 7},
+            kinematics=SimpleNamespace(
+                ik=SimpleNamespace(
+                    cspace_seeds=np.asarray([0.0, 0.0]),
+                    ccd_max_iterations=10,
+                    bfgs_max_iterations=20,
+                    orientation_weight=0.5,
+                    collision_free_params={"max_iterations": 7},
+                )
+            ),
         )
         self.expected_cspace_width = 2
         self.collision_world_calls = []

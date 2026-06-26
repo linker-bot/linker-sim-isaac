@@ -482,10 +482,15 @@ class _FakeContext:
         self.config = SimpleNamespace(
             custom_tcp_frame="tool",
             flange_frame="flange",
-            motion_planner_config_path=None,
-            motion_planner_params={},
-            trajectory_limits={},
-            trajectory_solver_params={},
+            kinematics=SimpleNamespace(
+                ik=SimpleNamespace(
+                    position_tolerance=0.005,
+                    orientation_tolerance=0.75,
+                    ccd_max_iterations=180,
+                    bfgs_max_iterations=80,
+                    orientation_weight=0.25,
+                )
+            ),
             motion_planner=None,
         )
         self.robot_description = "robot_description"

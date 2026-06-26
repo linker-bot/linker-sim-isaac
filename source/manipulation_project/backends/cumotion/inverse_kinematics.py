@@ -60,18 +60,19 @@ class CuMotionInverseKinematics:
         self.kinematics = context.kinematics
         self.tcp_frame_name = str(tcp_frame_name)
         self.config = self.cumotion.IkConfig()
-        self.orientation_weight = context.config.orientation_weight
+        ik_config = context.config.kinematics.ik
+        self.orientation_weight = ik_config.orientation_weight
         # IkConfig 可复用；构造阶段只写 YAML 中显式配置的默认 IK seeds。若未配置
-        # ik_cspace_seeds，则保持 cuMotion IkConfig 的原生默认值；首帧没有 warm start 时
+        # kinematics.ik.cspace_seeds，则保持 cuMotion IkConfig 的原生默认值；首帧没有 warm start 时
         # 不在项目侧构造 seed，未提供 seed 时使用 cuMotion 默认初始化逻辑。
-        if context.config.ik_cspace_seeds is not None:
+        if ik_config.cspace_seeds is not None:
             self.config.cspace_seeds = _ik_cspace_seeds_list(
-                np.asarray(context.config.ik_cspace_seeds, dtype=float)
+                np.asarray(ik_config.cspace_seeds, dtype=float)
             )
-        self.config.ccd_max_iterations = int(context.config.ccd_max_iterations)
-        self.config.bfgs_max_iterations = int(context.config.bfgs_max_iterations)
-        self.config.ccd_orientation_weight = float(context.config.orientation_weight)
-        self.config.bfgs_orientation_weight = float(context.config.orientation_weight)
+        self.config.ccd_max_iterations = int(ik_config.ccd_max_iterations)
+        self.config.bfgs_max_iterations = int(ik_config.bfgs_max_iterations)
+        self.config.ccd_orientation_weight = float(ik_config.orientation_weight)
+        self.config.bfgs_orientation_weight = float(ik_config.orientation_weight)
 
     def joint_names(self) -> list[str]:
         """返回 IK 输入 seed 和输出解使用的 C-space 关节名顺序。
@@ -199,7 +200,7 @@ class CuMotionInverseKinematics:
         )
         _apply_config_params(
             config,
-            self.context.config.collision_free_ik_params,
+            self.context.config.kinematics.ik.collision_free_params,
             self.cumotion.CollisionFreeIkSolverConfig.ParamValue,
         )
         solver = self.cumotion.create_collision_free_ik_solver(config)
@@ -228,10 +229,13 @@ class CuMotionInverseKinematics:
             seeds.append(
                 np.asarray(request.warm_start_ik_cspace_seed, dtype=float).reshape(-1)
             )
-        elif self.context.config.ik_cspace_seeds is not None:
+        elif self.context.config.kinematics.ik.cspace_seeds is not None:
             seeds.extend(
                 _ik_cspace_seeds_list(
-                    np.asarray(self.context.config.ik_cspace_seeds, dtype=float)
+                    np.asarray(
+                        self.context.config.kinematics.ik.cspace_seeds,
+                        dtype=float,
+                    )
                 )
             )
         # cuMotion collision-free IK 明确允许空 seed 列表；当请求和配置都没有 seed 时，

@@ -36,7 +36,7 @@ flowchart TD
 
 位置：`source/manipulation_project/backends/cumotion/context.py`
 
-用途：保存 cuMotion 后端需要的机器人描述文件、默认 frame 和 IK 参数。
+用途：保存 cuMotion 后端需要的机器人描述文件、默认 frame，以及按模块分组的 FK/IK/planner 参数。
 
 主要字段：
 
@@ -46,18 +46,16 @@ flowchart TD
 | `urdf_path` | `str \| Path` | cuMotion URDF 路径，描述机器人 link/joint |
 | `flange_frame` | `str` | 机械臂法兰 link/frame；没有自定义 TCP 时作为默认末端 frame |
 | `custom_tcp_frame` | `str \| None` | 可选自定义 TCP frame；通常由临时 URDF 或工具 URDF 显式加入 |
-| `ik_cspace_seeds` | `np.ndarray \| None` | IK 默认 seed，按 cuMotion C-space 顺序，写入 cuMotion `IkConfig.cspace_seeds` |
-| `position_tolerance` | `float` | IK 位置容差，单位 m |
-| `orientation_tolerance` | `float` | IK 姿态容差，单位 rad |
-| `ccd_max_iterations` | `int` | CCD IK 最大迭代次数 |
-| `bfgs_max_iterations` | `int` | BFGS IK 最大迭代次数 |
-| `orientation_weight` | `float` | IK 姿态误差权重 |
-| `collision_free_ik_params` | `dict[str, Any]` | 传给 `CollisionFreeIkSolverConfig.set_param(...)` 的参数覆盖 |
+| `kinematics` | `CuMotionKinematicsConfig` | FK/IK 分组配置 |
+| `kinematics.ik.cspace_seeds` | `np.ndarray \| None` | IK 默认 seed，按 cuMotion C-space 顺序，写入 cuMotion `IkConfig.cspace_seeds` |
+| `kinematics.ik.position_tolerance` | `float` | IK 位置容差，单位 m |
+| `kinematics.ik.orientation_tolerance` | `float` | IK 姿态容差，单位 rad |
+| `kinematics.ik.ccd_max_iterations` | `int` | CCD IK 最大迭代次数 |
+| `kinematics.ik.bfgs_max_iterations` | `int` | BFGS IK 最大迭代次数 |
+| `kinematics.ik.orientation_weight` | `float` | IK 姿态误差权重 |
+| `kinematics.ik.collision_free_params` | `dict[str, Any]` | 传给 `CollisionFreeIkSolverConfig.set_param(...)` 的参数覆盖 |
+| `kinematics.fk` | `CuMotionFkConfig` | FK 参数分组；当前无可调字段，保留扩展位 |
 | `motion_planner` | `MotionPlannerBackendConfig \| None` | motion planner facade 的分组配置；默认 pipeline 为 `trajectory_optimization` |
-| `motion_planner_config_path` | `str \| Path \| None` | graph planner 配置文件路径；作为 `motion_planner.graph_search` 的默认值来源 |
-| `motion_planner_params` | `dict[str, Any]` | graph planner 参数；作为 `motion_planner.graph_search.motion_planner_params` 的默认值来源 |
-| `trajectory_limits` | `dict[str, np.ndarray]` | trajectory generation limits；作为 `motion_planner.trajectory_generation.limits` 的默认值来源 |
-| `trajectory_solver_params` | `dict[str, Any]` | trajectory generation solver 参数；作为 `motion_planner.trajectory_generation.solver_params` 的默认值来源 |
 
 构造入口：
 
@@ -73,11 +71,14 @@ cumotion:
   xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
   flange_frame: AR5V2_L_arm_flan_link
-  position_tolerance: 0.001
-  orientation_tolerance: 0.1
-  ccd_max_iterations: 180
-  bfgs_max_iterations: 80
-  orientation_weight: 0.25
+  kinematics:
+    ik:
+      position_tolerance: 0.001
+      orientation_tolerance: 0.1
+      ccd_max_iterations: 180
+      bfgs_max_iterations: 80
+      orientation_weight: 0.25
+    fk: {}
   motion_planner:
     planning_pipeline: trajectory_optimization
     graph_search:
@@ -183,8 +184,8 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
   - 调用几何 IK：`cumotion.solve_ik(...)`。
 - `request.avoid_collisions == True`
   - 使用 `CuMotionContext` 当前管理的 `WorldView`。
-  - 应用 `collision_free_ik_params`。
-  - 用 `position_tolerance` / `orientation_tolerance` 构造 cuMotion 约束。
+  - 应用 `kinematics.ik.collision_free_params`。
+  - 用 `IKRequest.position_tolerance` / `IKRequest.orientation_tolerance` 构造 cuMotion 约束。
   - 调用 collision-free IK solver，并用 FK 复算位置/姿态误差。
 
 进入后端前会校验目标 shape、warm start 非空、容差非负、TCP frame 非空；进入具体
@@ -221,7 +222,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 - `CuMotionInverseKinematics` 会在几何 IK 成功后把解写回后端 `IkConfig.cspace_seeds`。
 - 对 waypoint 序列，调用方也应把上一点 `joint_positions` 作为下一点 `warm_start_ik_cspace_seed`，保证解分支连续。
-- 如果请求、上一帧成功解和 `ik_cspace_seeds` 都没有提供 seed，则不在项目侧构造 fallback；未提供 seed 时使用 cuMotion 默认初始化逻辑。
+- 如果请求、上一帧成功解和 `kinematics.ik.cspace_seeds` 都没有提供 seed，则不在项目侧构造 fallback；未提供 seed 时使用 cuMotion 默认初始化逻辑。
 
 ## 5. 路径级 Motion Planner 接口
 
@@ -704,7 +705,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 
 | 类型 | 状态 | 功能说明 | 主要接口功能 |
 |---|---|---|---|
-| `IkConfig` | 部分接入 | 几何 IK 的参数集合，控制目标容差、seed、多次 descent、CCD/BFGS 迭代和目标误差权重。 | `position_tolerance`/`orientation_tolerance` 定义成功阈值；cuMotion 原生 `cspace_seeds` 提供一个或多个初值，项目配置字段为 `ik_cspace_seeds`；`ccd_max_iterations`/`bfgs_max_iterations` 控制两阶段迭代预算；`ccd_*_weight`/`bfgs_*_weight` 控制位置/姿态误差权重；`max_num_descents`/`sampling_seed`/`irwin_hall_sampling_order` 控制多 seed/采样行为；`*_termination*` 控制收敛；`bfgs_cspace_limit_*` 控制靠近关节限位时的 bias/penalty。 |
+| `IkConfig` | 部分接入 | 几何 IK 的参数集合，控制目标容差、seed、多次 descent、CCD/BFGS 迭代和目标误差权重。 | `position_tolerance`/`orientation_tolerance` 定义成功阈值；cuMotion 原生 `cspace_seeds` 提供一个或多个初值，项目配置字段为 `kinematics.ik.cspace_seeds`；`ccd_max_iterations`/`bfgs_max_iterations` 控制两阶段迭代预算；`ccd_*_weight`/`bfgs_*_weight` 控制位置/姿态误差权重；`max_num_descents`/`sampling_seed`/`irwin_hall_sampling_order` 控制多 seed/采样行为；`*_termination*` 控制收敛；`bfgs_cspace_limit_*` 控制靠近关节限位时的 bias/penalty。 |
 | `IkConfig.CSpaceLimitBiasing` | 未接入 | 控制 BFGS 阶段是否对 C-space 关节限位做 bias。 | `AUTO` 由 cuMotion 决定；`ENABLE` 强制启用；`DISABLE` 强制关闭。 |
 | `IkResults` | 已接入 | 几何 IK 的单次结果对象，保存是否成功、解和误差。 | `success` 表示是否满足容差；`cspace_position` 是 C-space 解；`position_error` 是位置误差；`x/y/z_axis_orientation_error` 是姿态三轴误差；`num_descents` 是实际 descent 次数。 |
 
@@ -730,7 +731,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 | `CollisionFreeIkSolver.Results.Status` | 辅助/底层 | collision-free IK 状态枚举。 | `SUCCESS` 表示找到解；`INVERSE_KINEMATICS_FAILURE` 表示未找到满足约束的解。 |
 | `CollisionFreeIkSolver.ResultsArray` | 未接入 | `solve_array(...)` 的输出，每个 problem 有一个 `Results`。 | `num_problems()` 返回 problem 数；`num_successes()` 返回成功数量；`problem(index)` 取单个 problem 的结果。 |
 
-本项目 collision-free IK 只使用单个 task-space target；数组、多目标 goalset、`axis(...)` 约束尚未暴露。`CollisionFreeIkSolverConfig.set_param(...)` 已通过 `collision_free_ik_params` 开放到底层后端配置。
+本项目 collision-free IK 只使用单个 task-space target；数组、多目标 goalset、`axis(...)` 约束尚未暴露。`CollisionFreeIkSolverConfig.set_param(...)` 已通过 `kinematics.ik.collision_free_params` 开放到底层后端配置。
 
 ### 13.6 障碍物、World 与距离查询
 
