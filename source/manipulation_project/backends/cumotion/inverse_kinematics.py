@@ -42,7 +42,7 @@ class CuMotionInverseKinematics:
     """使用 cuMotion 求解 TCP 逆运动学。
 
     ``tcp_frame_name`` 必须是 cuMotion robot description 中存在的 link/frame；自定义 TCP
-    通常由 ``tcp_urdf_builder`` 预先写入临时 URDF。实例会复用上一帧成功解作为 seed，
+    通常由 ``tcp_context.make_cumotion_context`` 装配进临时 URDF/context。实例会复用上一帧成功解作为 seed，
     以提高连续轨迹的求解稳定性。
     """
 

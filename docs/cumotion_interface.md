@@ -495,13 +495,45 @@ planner.plan(
 4. 调用 `convert_task_space_path_spec_to_cspace(...)` 转成 `LinearCSpacePath`。
 5. 读取 `LinearCSpacePath.waypoints()`，再按 `trajectory_generation` 配置生成可选 trajectory。
 
-## 10. 自定义 TCP URDF 接口
+## 10. 自定义 TCP context 装配
+
+### `make_cumotion_context(...)`
+
+位置：`source/manipulation_project/backends/cumotion/tcp_context.py`
+
+用途：根据可选 `TcpFrame` 创建 `CuMotionContext`。如果 TCP frame 不在基础 URDF 中，后端会写出带 fixed TCP link 的临时 URDF，并用它创建 context；临时目录由 context manager 持有，退出时清理。
+
+示例：
+
+```python
+with make_cumotion_context(config, tcp=pinch_tcp) as context:
+    solver = context.make_inverse_kinematics()
+    planner = context.make_motion_planner()
+```
+
+参数：
+
+| 参数 | 含义 |
+|---|---|
+| `config` | 基础 `CuMotionConfig` |
+| `tcp` | `TcpFrame | None`；为空时等价于 `CuMotionContext(config)` |
+| `output_dir` | 可选输出目录；为空时使用并管理临时目录 |
+
+行为：
+
+- `tcp is None`：直接创建普通 `CuMotionContext`。
+- `tcp.frame_name == config.flange_frame`、`tcp.parent_frame == config.flange_frame` 且零 offset：视作法兰 TCP，不写临时 URDF，并清空 `custom_tcp_frame`。
+- `tcp.frame_name` 已存在且不是上述法兰 TCP：抛出 `ValueError`，避免传入的 `xyz/rpy` 被静默忽略。
+- `tcp.frame_name` 不存在：写出追加 fixed TCP link 的 URDF，使用 `custom_tcp_frame=tcp.frame_name` 创建 context。
+- context 创建后校验 `tcp.frame_name` 已进入 cuMotion frame 集合。
+
+任务层通常应使用这个入口，而不是直接管理 `TemporaryDirectory`、`write_tcp_urdf(...)` 和 `replace(CuMotionConfig, ...)`。
 
 ### `write_tcp_urdf(...)`
 
 位置：`source/manipulation_project/backends/cumotion/tcp_urdf_builder.py`
 
-用途：复制基础 URDF，并在指定 parent frame 下追加一个 fixed TCP link/joint。cuMotion 只能对 URDF 中已有 link 求解，因此 pinch TCP 等自定义 TCP 必须先写入 URDF。
+用途：复制基础 URDF，并在指定 parent frame 下追加一个 fixed TCP link/joint。它是底层 URDF 写入工具，通常由 `make_cumotion_context(...)` 调用；只有测试、诊断或离线生成 URDF 时才需要直接使用。
 
 参数：
 
@@ -855,7 +887,7 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 - graph planner config file、planner 参数映射、trajectory generation limits 和 trajectory solver params 都有分组配置入口，pinch grasp 也能从任务配置覆盖这些参数。
 - `CuMotionCollisionWorld` 支持 obstacle 增量同步、启停、删除、pose 更新、几何变化重建，并提供 World/RobotWorld inspector wrapper。
 - `trajectory_adapter.py` 兼容真实 cuMotion `eval_all(t)` 四元组和测试替身对象，这对 pybind 版本变化有一定韧性。
-- `tcp_urdf_builder.py` 用临时 URDF 写入自定义 TCP，是符合 cuMotion “frame 必须存在于机器人描述中” 这一约束的现实做法。
+- `tcp_context.py` 把临时 URDF 生命周期和 `custom_tcp_frame` 配置收在后端；`tcp_urdf_builder.py` 保持为底层 URDF 写入工具。
 
 ### 14.2 主要风险和缺口
 

@@ -108,7 +108,10 @@ handle，但对任务层公开的主要入口仍应保持“传入 config/tcp，
 | `config` | 基础 `CuMotionConfig` |
 | `tcp` | `TcpFrame | None`，为空时直接创建普通 `CuMotionContext` |
 | `output_dir` | 可选；为空时使用临时目录 |
-| `overwrite_existing` | 可选；默认 `False`，避免静默覆盖已有 frame |
+
+首版不建议提供 `overwrite_existing`。当前 `write_tcp_urdf(...)` 是“追加 fixed link”的纯工具，
+不是安全重写已有 link/joint 的 URDF 编辑器。已有 frame 的使用应通过基础 URDF/XRDF 和
+`CuMotionConfig.custom_tcp_frame` 表达，避免传入的 `TcpFrame.xyz/rpy` 被静默忽略。
 
 推荐行为：
 
@@ -116,10 +119,10 @@ handle，但对任务层公开的主要入口仍应保持“传入 config/tcp，
    - 直接创建 `CuMotionContext(config)`。
 2. 如果 `tcp.frame_name == config.flange_frame` 且 offset 为零：
    - 视作使用法兰 TCP，不写临时 URDF。
+   - 使用 `replace(config, custom_tcp_frame=None)` 创建 context，保证未显式传 `tcp_frame_name` 的 IK/planner 回到法兰 frame。
   - 零 offset 应使用 `np.allclose(tcp.xyz, 0.0)` 和 `np.allclose(tcp.rpy, 0.0)` 判断，避免浮点精度问题。
 3. 如果 `tcp.frame_name` 已经存在于基础 URDF link：
-  - 默认不写临时 URDF。
-  - 如果 `overwrite_existing=False` 且传入的 `tcp.frame_name` 不是零 offset 法兰 TCP，应抛出 `ValueError`，不要静默跳过。
+  - 如果不是第 2 条的零 offset 法兰 TCP，应抛出 `ValueError`，不要静默跳过。
   - 如果确实要使用已经存在的工具 link，应通过基础 `CuMotionConfig.custom_tcp_frame` 或显式 frame 名配置表达，而不是传入一个会被忽略 offset 的 `TcpFrame`。
 4. 如果 `tcp.frame_name` 不存在：
    - 在临时目录中写出追加 fixed TCP link 的 URDF。
@@ -226,7 +229,7 @@ source/manipulation_project/backends/cumotion/
 后端装配入口应该尽早给出清晰错误：
 
 - `tcp.parent_frame` 不在基础 URDF link 中：抛出 `ValueError`。
-- `tcp.frame_name` 已存在但 `overwrite_existing=False` 且不是零 offset 法兰 TCP：抛出 `ValueError`，不要静默跳过写入。
+- `tcp.frame_name` 已存在且不是零 offset 法兰 TCP：抛出 `ValueError`，不要静默跳过写入。
 - 临时 URDF 写入成功但 `CuMotionContext` 加载后找不到 `tcp.frame_name`：抛出 `ValueError`，提示 URDF/XRDF 或 cuMotion 解析问题。
 - `custom_tcp_frame` 和 `flange_frame` 相同：保持现有语义，视为无自定义 TCP。
 
@@ -249,7 +252,7 @@ source/manipulation_project/backends/cumotion/
   - 使用已经存在的 flange frame。
   - 确认不会重复添加 link。
 - `test_context_with_existing_non_flange_tcp_rejects_ignored_offset`
-  - 当 `tcp.frame_name` 已存在于基础 URDF，且不是零 offset 法兰 TCP 时，默认抛出 `ValueError`。
+  - 当 `tcp.frame_name` 已存在于基础 URDF，且不是零 offset 法兰 TCP 时，抛出 `ValueError`。
   - 避免传入的 offset 被静默忽略。
 - `test_pinch_grasp_no_longer_imports_tcp_urdf_builder`
   - 可选，用更行为化的测试替代直接检查 import。

@@ -70,11 +70,9 @@ def task_space_path_to_joint_path(
 ) -> np.ndarray:
     """把 ``TaskSpacePath`` 经官方 path conversion 转为 joint path。
 
-    Task-space 路径的输入是 TCP 几何段，而最终的轨迹生成器消费 C-space waypoint。cuMotion
-    官方流程是先构造 ``TaskSpacePathSpec``，再通过
-    ``convert_task_space_path_spec_to_cspace`` 做 IK/path conversion。这里显式使用官方
-    conversion，不调用旧的 ``tcp_line.py`` 逐点 IK helper，避免调用方误以为使用了 PathSpec
-    流程却实际走了 fallback。
+    Task-space 路径的输入是 TCP 几何段，而最终的轨迹生成器消费 C-space waypoint。
+    cuMotion官方流程是先构造 ``TaskSpacePathSpec``，再通过
+    ``convert_task_space_path_spec_to_cspace`` 做 IK/path conversion。
     """
 
     current = np.asarray(request.current_q, dtype=float).reshape(-1)
@@ -472,17 +470,14 @@ def _composite_part_and_transition(
 
 
 def _current_pose(context, current_q: np.ndarray, tcp_frame_name: str):
-    """读取当前 TCP pose，兼容 kinematics.pose 的常见签名。
+    """读取当前 TCP pose。
 
-    不同 cuMotion/测试替身版本对 ``kinematics.pose`` 的参数个数略有差异：有的只需要
-    ``(q, frame)``，有的还接受一个 base frame 字符串。这里做轻量兼容，避免把版本差异扩散到
-    主流程。
+    项目侧统一使用 ``kinematics.pose(q, frame)`` 这个调用形态，和 FK/IK wrapper 以及测试替身
+    保持一致。若后续真实 cuMotion 版本需要显式 base frame，应在统一适配层集中处理，而不是
+    在路径转换主流程中用 ``TypeError`` 猜测签名。
     """
 
-    try:
-        return context.kinematics.pose(current_q, tcp_frame_name)
-    except TypeError:
-        return context.kinematics.pose(current_q, tcp_frame_name, "")
+    return context.kinematics.pose(current_q, tcp_frame_name)
 
 
 def _line_target_position(current_pose, segment: TcpLineSegment) -> np.ndarray:

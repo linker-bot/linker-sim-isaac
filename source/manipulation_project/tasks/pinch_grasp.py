@@ -1,7 +1,7 @@
 """夹捏抓取任务流程。
 
 该任务面向机械臂 + 灵巧手 + rope endpoint cuboid 的 scripted demo：先根据闭合手型从 MJCF
-运动链计算 thumb/index 夹捏中心 TCP，再把这个 TCP 写入临时 URDF 供 IK 后端求解，最后把
+运动链计算 thumb/index 夹捏中心 TCP，再由 cuMotion 后端装配带 TCP 的 context，最后把
 approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目标并在 Isaac 中执行。
 
 职责边界:
@@ -19,9 +19,8 @@ approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目�
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
-import tempfile
 
 import numpy as np
 
@@ -35,7 +34,7 @@ from manipulation_project.backends.cumotion.motion_planner_config import (
     SpecifiedPathConfig,
     TrajectoryGenerationConfig,
 )
-from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
+from manipulation_project.backends.cumotion.tcp_context import make_cumotion_context
 from manipulation_project.backends.cumotion.trajectory_adapter import (
     joint_trajectory_from_cumotion,
 )
@@ -1008,21 +1007,9 @@ class PinchGraspTask:
 
         target_orientation = rpy_xyz_to_quat_wxyz(self.config.target_rpy)
         ik_orientation = target_orientation if self.config.use_orientation else None
-        # IK 后端只认识机器人描述里的 frame。这里临时写一个“附加 pinch TCP”的 URDF，
-        # 避免改动仓库里的基础 URDF，同时让求解器直接以夹捏中心作为末端。
-        with tempfile.TemporaryDirectory(prefix="pinch_ik_tcp_") as temp_dir:
-            base_urdf_path = Path(self.cumotion_config.urdf_path)
-            tcp_urdf = (
-                Path(temp_dir) / f"{base_urdf_path.stem}_{self.tcp_frame_name}.urdf"
-            )
-            write_tcp_urdf(base_urdf_path, tcp_urdf, tcp)
-            context = CuMotionContext(
-                replace(
-                    self.cumotion_config,
-                    urdf_path=tcp_urdf,
-                    custom_tcp_frame=self.tcp_frame_name,
-                )
-            )
+        # IK 后端只认识机器人描述里的 frame。cuMotion backend 负责把 pinch TCP 装配进
+        # 临时 URDF/context，任务层只保留 TCP 几何和完整 DOF 映射逻辑。
+        with make_cumotion_context(self.cumotion_config, tcp=tcp) as context:
             ik_joint_names = context.joint_names()
             dof_names = list(robot.dof_names)
             dof_index_by_name = {name: index for index, name in enumerate(dof_names)}

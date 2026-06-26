@@ -64,7 +64,6 @@ def plan_specified_path(
     elif isinstance(request.path, TaskSpacePath):
         family = "task_space_segments"
         # TaskSpacePath 明确使用 TaskSpacePathSpec + convert_task_space_path_spec_to_cspace。
-        # 不 fallback 到 tcp_line.py，避免“指定路径”语义和逐点 IK helper 混在一起。
         joint_path = task_space_path_to_joint_path(
             context,
             request,
