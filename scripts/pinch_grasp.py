@@ -48,7 +48,6 @@ from linkerbot_sim.assets.usd_overrides import (
 )
 from linkerbot_sim.backends.cumotion.context import (
     CuMotionConfig,
-    CuMotionContext,
 )
 from linkerbot_sim.backends.cumotion.motion_planner_config import (
     MotionPlannerBackendConfig,
@@ -65,7 +64,7 @@ from linkerbot_sim.controllers.config import (
 )
 from linkerbot_sim.controllers.joint_controller import JointController
 from linkerbot_sim.envs.scene_builder import build_world, configure_visuals
-from linkerbot_sim.execution.runtime import ExecutionRuntime, ExecutionStep
+from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.execution.steps import (
     CommandPositionTrajectoryStep,
     HoldCommandPositionTargetStep,
@@ -88,13 +87,12 @@ from linkerbot_sim.planning.requests import (
     TaskSpacePath,
     TcpLineSegment,
 )
+from linkerbot_sim.planning.command_trajectory import (
+    command_trajectory_from_arm_trajectory,
+)
 from linkerbot_sim.robots.joint_groups import target_vector_from_mapping
 from linkerbot_sim.robots.mimic import mjcf_equality_follower_joint_names
 from linkerbot_sim.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
-from linkerbot_sim.trajectories.joint_trajectory_builder import (
-    joint_trajectory_from_positions,
-)
-from linkerbot_sim.trajectories.types import JointTrajectory
 from linkerbot_sim.utils.config import deep_merge, load_yaml
 from linkerbot_sim.utils.paths import repo_path
 from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
@@ -128,314 +126,22 @@ TARGET_RPY = (0.0, 2.007128639793479, -1.5707963267948966)
 USE_ORIENTATION = True
 APPROACH_DISTANCE = 0.10
 LIFT_HEIGHT = 0.4
-PREP_DURATION = 1.0
-MOVE_DURATION = 3.0
-APPROACH_DURATION = 1.2
-CLOSE_DURATION = 1.0
-LIFT_DURATION = 2.0
+PREP_DURATION = 2.0
+MOVE_DURATION = 6.0
+APPROACH_DURATION = 2.2
+CLOSE_DURATION = 2.0
+LIFT_DURATION = 4.0
 WIGGLE_CYCLES = 2
 WIGGLE_AMPLITUDE = 0.2
-WIGGLE_DURATION = 2.0
+WIGGLE_DURATION = 4.0
 WIGGLE_AXIS = (1.0, 0.0, 0.0)
-FINAL_HOLD_DURATION = 5.0
-POST_JOINT_SWEEP_DURATION = 2.0
+FINAL_HOLD_DURATION = 3.0
+POST_JOINT_SWEEP_DURATION = 5.0
 POST_JOINT_SWEEP_TARGETS = (2.1, -2.1)
 TCP_FRAME_NAME = DEFAULT_PINCH_TCP_FRAME
 
 SHORT_SMOKE_DURATION = 0.02
 SHORT_SMOKE_LIFT_HEIGHT = 0.05
-
-
-def build_planned_joint_motion_trajectory(
-    *,
-    motion_planner,
-    command_joint_names: tuple[str, ...],
-    arm_command_indices: np.ndarray,
-    start_command: np.ndarray,
-    target_command: np.ndarray,
-    duration_s: float,
-    phase: str,
-    physics_dt: float | None = None,
-) -> JointTrajectory:
-    """用 cuMotion 规划一段 command-space 的关节角到关节角运动。
-
-    ``motion_planner`` 只处理机械臂 C-space；本函数负责把 command-space 中的机械臂列
-    切出来调用 ``MotionRequest(goal_q=...)``，再把返回的 C-space trajectory 写回
-    command-space 轨迹。手部 master 等非 C-space 主动关节会在采样矩阵上按起终点补齐。
-    """
-
-    start = np.asarray(start_command, dtype=float).reshape(-1)
-    target = np.asarray(target_command, dtype=float).reshape(-1)
-    arm_command_indices = np.asarray(arm_command_indices, dtype=int).reshape(-1)
-    start_q = start[arm_command_indices]
-    target_q = target[arm_command_indices]
-    result = motion_planner.plan(
-        MotionRequest(
-            current_q=start_q,
-            goal_q=target_q,
-            duration_s=duration_s,
-        )
-    )
-    if not result.success:
-        raise RuntimeError(
-            f"cuMotion joint motion planning failed for {phase}: status={result.status}"
-        )
-
-    if result.trajectory is None:
-        raise RuntimeError(
-            f"cuMotion joint motion planning returned no trajectory for {phase}: "
-            f"status={result.status}"
-        )
-    return _command_trajectory_from_cumotion_trajectory(
-        result.trajectory,
-        motion_planner=motion_planner,
-        command_joint_names=command_joint_names,
-        arm_command_indices=arm_command_indices,
-        start_command=start,
-        target_command=target,
-        phase=phase,
-        physics_dt=physics_dt,
-    )
-
-
-def build_specified_tcp_line_trajectory(
-    *,
-    context: CuMotionContext,
-    tcp_frame_name: str,
-    command_joint_names: tuple[str, ...],
-    arm_command_indices: np.ndarray,
-    start_command: np.ndarray,
-    target_position: np.ndarray,
-    duration_s: float,
-    phase: str,
-    physics_dt: float | None = None,
-    base_config: MotionPlannerBackendConfig | None = None,
-) -> JointTrajectory:
-    """用 specified_path 的 ``TcpLineSegment`` 构建 command-space TCP 直线轨迹。
-
-    该函数是动作脚本到新 specified-path 接口的直接调用点：不再经过旧的 ``tcp_line.py`` 逐点 IK
-    helper，也不保留 ``TcpLineRequest`` 兼容层。cuMotion 只返回 C-space 路径/轨迹；这里只把
-    机械臂 C-space 列写回 command-space，mimic follower 继续留给 controller。
-    """
-
-    start = np.asarray(start_command, dtype=float).reshape(-1)
-    arm_command_indices = np.asarray(arm_command_indices, dtype=int).reshape(-1)
-    current_q = start[arm_command_indices]
-    target_position = np.asarray(target_position, dtype=float).reshape(3)
-
-    specified_planner = context.make_motion_planner(
-        tcp_frame_name=tcp_frame_name,
-        config=_specified_path_config_from_base(base_config),
-    )
-    result = specified_planner.plan(
-        SpecifiedPathRequest(
-            current_q=current_q,
-            tcp_frame_name=tcp_frame_name,
-            duration_s=duration_s,
-            path=TaskSpacePath(
-                segments=(
-                    TcpLineSegment(
-                        target_position=target_position,
-                        orientation_mode="current",
-                    ),
-                )
-            ),
-        )
-    )
-    if not result.success:
-        raise RuntimeError(
-            f"cuMotion specified TCP line planning failed for {phase}: "
-            f"status={result.status}"
-        )
-
-    if result.trajectory is None:
-        raise RuntimeError(
-            f"cuMotion specified TCP line returned no trajectory for {phase}: "
-            f"status={result.status}"
-        )
-    if result.path is None or np.asarray(result.path).shape[0] == 0:
-        raise RuntimeError(
-            f"cuMotion specified TCP line returned trajectory without path "
-            f"for {phase}: status={result.status}"
-        )
-    target_command = start.copy()
-    target_command[arm_command_indices] = np.asarray(result.path, dtype=float)[-1]
-    return _command_trajectory_from_cumotion_trajectory(
-        result.trajectory,
-        motion_planner=specified_planner,
-        command_joint_names=command_joint_names,
-        arm_command_indices=arm_command_indices,
-        start_command=start,
-        target_command=target_command,
-        phase=phase,
-        physics_dt=physics_dt,
-    )
-
-
-def _specified_path_config_from_base(
-    base_config: MotionPlannerBackendConfig | None,
-) -> MotionPlannerBackendConfig:
-    """从动作主 planner 配置派生 task-space specified-path 配置。"""
-
-    base = base_config or MotionPlannerBackendConfig()
-    return MotionPlannerBackendConfig(
-        planning_pipeline="specified_path",
-        graph_search=base.graph_search,
-        trajectory_generation=base.trajectory_generation,
-        trajectory_optimization=base.trajectory_optimization,
-        specified_path=SpecifiedPathConfig(
-            family="task_space_segments",
-            validate_collision_after_generation=(
-                base.specified_path.validate_collision_after_generation
-            ),
-            cspace_waypoints=base.specified_path.cspace_waypoints,
-            task_space_segments=base.specified_path.task_space_segments,
-            composite=base.specified_path.composite,
-        ),
-    )
-
-
-def _command_trajectory_from_cumotion_trajectory(
-    cumotion_trajectory,
-    *,
-    motion_planner,
-    command_joint_names: tuple[str, ...],
-    arm_command_indices: np.ndarray,
-    start_command: np.ndarray,
-    target_command: np.ndarray,
-    phase: str,
-    physics_dt: float | None,
-) -> JointTrajectory:
-    """把 cuMotion time-parameterized C-space trajectory 嵌回 command-space 轨迹。
-
-    cuMotion ``MotionPlanner`` 负责找路径，``CSpaceTrajectoryGenerator`` 负责按照机器人
-    约束生成带时间、速度、加速度和 jerk 的轨迹。项目侧只负责按 physics step 采样该
-    轨迹函数，并把机械臂 C-space 列写回 controller command space；不再拉长、压短或
-    retime 已生成的项目 ``JointTrajectory``。
-    """
-
-    cspace_trajectory = _sample_cumotion_trajectory(
-        cumotion_trajectory,
-        joint_names=tuple(motion_planner.joint_names()),
-        phase=phase,
-        physics_dt=physics_dt,
-    )
-    arm_command_indices = np.asarray(arm_command_indices, dtype=int).reshape(-1)
-    if cspace_trajectory.positions.shape[1] != arm_command_indices.size:
-        raise ValueError(
-            "cuMotion trajectory dof mismatch: "
-            f"trajectory has {cspace_trajectory.positions.shape[1]} columns, "
-            f"arm_command_indices has {arm_command_indices.size}"
-        )
-
-    duration_s = _trajectory_duration_from_times(cspace_trajectory.times)
-    command_positions = _command_positions_from_cspace_path(
-        cspace_trajectory.positions,
-        times=cspace_trajectory.times,
-        duration_s=duration_s,
-        start_command=start_command,
-        target_command=target_command,
-        arm_command_indices=arm_command_indices,
-    )
-
-    # 先用 command-space 位置矩阵做一次有限差分，给非 C-space 主动关节生成一致的
-    # 速度/加速度诊断；随后用 cuMotion 的导数覆盖机械臂列，确保执行层能拿到后端真实的
-    # 加减速规划结果。
-    baseline = joint_trajectory_from_positions(
-        times=cspace_trajectory.times,
-        positions=command_positions,
-        joint_names=tuple(command_joint_names),
-        phase=phase,
-    )
-    velocities = baseline.velocities.copy()
-    accelerations = baseline.accelerations.copy()
-    jerks = baseline.jerks.copy()
-    velocities[:, arm_command_indices] = cspace_trajectory.velocities
-    accelerations[:, arm_command_indices] = cspace_trajectory.accelerations
-    jerks[:, arm_command_indices] = cspace_trajectory.jerks
-    return JointTrajectory.from_samples(
-        times=cspace_trajectory.times,
-        positions=command_positions,
-        velocities=velocities,
-        accelerations=accelerations,
-        jerks=jerks,
-        phases=tuple(phase for _ in range(cspace_trajectory.times.size)),
-        joint_names=tuple(command_joint_names),
-    )
-
-
-def _sample_cumotion_trajectory(
-    cumotion_trajectory,
-    *,
-    joint_names: tuple[str, ...],
-    phase: str,
-    physics_dt: float | None,
-) -> JointTrajectory:
-    """按 physics step 采样 cuMotion trajectory。
-
-    ``joint_trajectory_from_cumotion`` 会在采样边界自动去掉首样本，因此返回矩阵第 0 行就是
-    下一帧要下发的目标。轨迹时长由 cuMotion 自身决定，本函数不做 retime。
-    """
-
-    sample_dt = _cumotion_trajectory_sample_dt(
-        cumotion_trajectory, physics_dt=physics_dt
-    )
-    return joint_trajectory_from_cumotion(
-        cumotion_trajectory,
-        joint_names=joint_names,
-        sample_dt=sample_dt,
-        phase=phase,
-    )
-
-
-def _cumotion_trajectory_sample_dt(
-    cumotion_trajectory, *, physics_dt: float | None
-) -> float:
-    """根据 physics step 和 cuMotion 轨迹时域选择采样周期。"""
-
-    if physics_dt is not None:
-        return float(physics_dt) * float(_CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE)
-    # 测试或离线构建没有 Isaac world 时退回 100 Hz，但运行路径应优先从
-    # world.get_physics_dt() 传入 physics_dt，避免采样点与物理步长错位。
-    return 0.01
-
-
-def _trajectory_duration_from_times(times: np.ndarray) -> float:
-    """从已经去首样本的轨迹时间网格估计持续时间。"""
-
-    times = np.asarray(times, dtype=float).reshape(-1)
-    if times.size == 0:
-        return 0.0
-    return float(times[-1])
-
-
-def _command_positions_from_cspace_path(
-    cspace_path: np.ndarray,
-    *,
-    times: np.ndarray,
-    duration_s: float,
-    start_command: np.ndarray,
-    target_command: np.ndarray,
-    arm_command_indices: np.ndarray,
-) -> np.ndarray:
-    """把 C-space path 嵌回 command-space 位置矩阵。"""
-
-    start = np.asarray(start_command, dtype=float).reshape(-1)
-    target = np.asarray(target_command, dtype=float).reshape(-1)
-    times = np.asarray(times, dtype=float).reshape(-1)
-    if duration_s <= 0:
-        alpha = np.ones((times.size, 1), dtype=float)
-    else:
-        alpha = (times / float(duration_s)).reshape(-1, 1)
-    command_positions = start.reshape(1, -1) + alpha * (target - start).reshape(1, -1)
-    command_positions[:, np.asarray(arm_command_indices, dtype=int).reshape(-1)] = (
-        cspace_path
-    )
-    command_positions[-1] = target
-    command_positions[:, np.asarray(arm_command_indices, dtype=int).reshape(-1)] = (
-        cspace_path
-    )
-    return command_positions
 
 
 def grasp_target_position(
@@ -460,22 +166,27 @@ def grasp_target_position(
     )
 
 
-def plan_pinch_grasp(
-    robot,
-    controller,
+def run_pinch_grasp_action(
     *,
+    robot,
+    world,
+    articulation_action_type,
+    controller,
+    simulation_app,
+    render: bool,
     rope_config: CapsuleRopeConfig,
     mjcf_path: str | Path,
     cumotion_config: CuMotionConfig,
     motion_planner_config: MotionPlannerBackendConfig,
     endpoint: str,
     short_smoke: bool,
-    physics_dt: float | None = None,
+    drive_logger=None,
 ) -> dict[str, object]:
-    """规划夹捏抓取各阶段的 IK 解和 command-space 目标。"""
+    """按脚本顺序规划并执行完整夹捏抓取动作。"""
 
     mjcf_path = Path(mjcf_path)
     tcp_frame_name = TCP_FRAME_NAME
+    physics_dt = float(world.get_physics_dt())
     lift_height = SHORT_SMOKE_LIFT_HEIGHT if short_smoke else LIFT_HEIGHT
     move_duration = SHORT_SMOKE_DURATION if short_smoke else MOVE_DURATION
     approach_duration = SHORT_SMOKE_DURATION if short_smoke else APPROACH_DURATION
@@ -556,6 +267,138 @@ def plan_pinch_grasp(
             tcp_frame_name=tcp_frame_name,
             config=motion_planner_config,
         )
+        sample_dt = (
+            float(physics_dt) * float(_CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE)
+            if physics_dt is not None
+            else 0.01
+        )
+
+        def command_trajectory_from_joint_motion(
+            *,
+            start_command: np.ndarray,
+            target_command: np.ndarray,
+            duration_s: float,
+            phase: str,
+        ):
+            """在当前脚本流程内规划一段机械臂关节运动并嵌入 command-space。"""
+
+            start = np.asarray(start_command, dtype=float).reshape(-1)
+            target = np.asarray(target_command, dtype=float).reshape(-1)
+            result = motion_planner.plan(
+                MotionRequest(
+                    current_q=start[arm_command_indices],
+                    goal_q=target[arm_command_indices],
+                    duration_s=duration_s,
+                )
+            )
+            if not result.success:
+                raise RuntimeError(
+                    f"cuMotion joint motion planning failed for {phase}: "
+                    f"status={result.status}"
+                )
+            if result.trajectory is None:
+                raise RuntimeError(
+                    f"cuMotion joint motion planning returned no trajectory for {phase}: "
+                    f"status={result.status}"
+                )
+            # cuMotion trajectory function 只在 sampler 边界离散；后续只处理项目
+            # JointTrajectory，并由 planning helper 嵌入 controller command-space。
+            arm_trajectory = joint_trajectory_from_cumotion(
+                result.trajectory,
+                joint_names=tuple(motion_planner.joint_names()),
+                sample_dt=sample_dt,
+                phase=phase,
+            )
+            return command_trajectory_from_arm_trajectory(
+                arm_trajectory=arm_trajectory,
+                command_joint_names=command_joint_names,
+                arm_command_indices=arm_command_indices,
+                start_command=start,
+                target_command=target,
+                phase=phase,
+            )
+
+        def command_trajectory_from_tcp_line(
+            *,
+            start_command: np.ndarray,
+            target_position: np.ndarray,
+            duration_s: float,
+            phase: str,
+        ):
+            """在当前脚本流程内规划一段 specified-path TCP 直线并嵌入 command-space。"""
+
+            start = np.asarray(start_command, dtype=float).reshape(-1)
+            specified_path_config = MotionPlannerBackendConfig(
+                planning_pipeline="specified_path",
+                graph_search=motion_planner_config.graph_search,
+                trajectory_generation=motion_planner_config.trajectory_generation,
+                trajectory_optimization=motion_planner_config.trajectory_optimization,
+                specified_path=SpecifiedPathConfig(
+                    family="task_space_segments",
+                    validate_collision_after_generation=(
+                        motion_planner_config.specified_path.validate_collision_after_generation
+                    ),
+                    cspace_waypoints=motion_planner_config.specified_path.cspace_waypoints,
+                    task_space_segments=motion_planner_config.specified_path.task_space_segments,
+                    composite=motion_planner_config.specified_path.composite,
+                ),
+            )
+            specified_planner = context.make_motion_planner(
+                tcp_frame_name=tcp_frame_name,
+                config=specified_path_config,
+            )
+            result = specified_planner.plan(
+                SpecifiedPathRequest(
+                    current_q=start[arm_command_indices],
+                    tcp_frame_name=tcp_frame_name,
+                    duration_s=duration_s,
+                    path=TaskSpacePath(
+                        segments=(
+                            TcpLineSegment(
+                                target_position=np.asarray(
+                                    target_position, dtype=float
+                                ).reshape(3),
+                                orientation_mode="current",
+                            ),
+                        )
+                    ),
+                )
+            )
+            if not result.success:
+                raise RuntimeError(
+                    f"cuMotion specified TCP line planning failed for {phase}: "
+                    f"status={result.status}"
+                )
+            if result.trajectory is None:
+                raise RuntimeError(
+                    f"cuMotion specified TCP line returned no trajectory for {phase}: "
+                    f"status={result.status}"
+                )
+            if result.path is None or np.asarray(result.path).shape[0] == 0:
+                raise RuntimeError(
+                    "cuMotion specified TCP line returned trajectory without path "
+                    f"for {phase}: status={result.status}"
+                )
+
+            target_command = start.copy()
+            target_command[arm_command_indices] = np.asarray(result.path, dtype=float)[
+                -1
+            ]
+            arm_trajectory = joint_trajectory_from_cumotion(
+                result.trajectory,
+                joint_names=tuple(specified_planner.joint_names()),
+                sample_dt=sample_dt,
+                phase=phase,
+            )
+            return command_trajectory_from_arm_trajectory(
+                arm_trajectory=arm_trajectory,
+                command_joint_names=command_joint_names,
+                arm_command_indices=arm_command_indices,
+                start_command=start,
+                target_command=target_command,
+                phase=phase,
+            )
+
         # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
         # 保持关节轨迹连续，也减少求解器跳解概率。
         approach = solver.solve(
@@ -581,17 +424,11 @@ def plan_pinch_grasp(
         # approach_command 是接近点的主动命令姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
         # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的动作意图。TCP 直线现在
         # 直接使用 specified_path 的 TaskSpacePath/TcpLineSegment，不再经过旧逐点 IK helper。
-        grasp_line_trajectory = build_specified_tcp_line_trajectory(
-            context=context,
-            tcp_frame_name=tcp_frame_name,
-            command_joint_names=command_joint_names,
-            arm_command_indices=arm_command_indices,
+        grasp_line_trajectory = command_trajectory_from_tcp_line(
             start_command=approach_command,
             target_position=pinch_world,
             duration_s=approach_duration,
             phase="approach_box",
-            physics_dt=physics_dt,
-            base_config=motion_planner_config,
         )
         grasp_joint_positions = np.asarray(
             grasp_line_trajectory.positions[-1], dtype=float
@@ -652,83 +489,109 @@ def plan_pinch_grasp(
             post_joint_sweep_targets.append(sweep_command)
 
         # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动：cuMotion MotionPlanner
-        # 在 C-space 中生成路径，再把路径嵌回完整 DOF 轨迹播放。手指开合阶段使用
-        # smoothstep，因为手部 DOF 不属于 cuMotion 机器人描述的 C-space。
-        move_to_approach_trajectory = build_planned_joint_motion_trajectory(
-            motion_planner=motion_planner,
-            command_joint_names=command_joint_names,
-            arm_command_indices=arm_command_indices,
+        # 在 C-space 中生成轨迹函数，sampler 按 physics dt 离散成机械臂 JointTrajectory，
+        # 再由 planning helper 嵌入 controller command-space。手指开合阶段使用 smoothstep，
+        # 因为手部 DOF 不属于 cuMotion 机器人描述的 C-space。
+        move_to_approach_trajectory = command_trajectory_from_joint_motion(
             start_command=pre_pinch_command,
             target_command=approach_command,
             duration_s=move_duration,
             phase="move_to_approach",
-            physics_dt=physics_dt,
         )
-        lift_trajectory = build_planned_joint_motion_trajectory(
-            motion_planner=motion_planner,
-            command_joint_names=command_joint_names,
-            arm_command_indices=arm_command_indices,
+        lift_trajectory = command_trajectory_from_joint_motion(
             start_command=grasp_closed_command,
             target_command=lifted_command,
             duration_s=lift_duration,
             phase="lift",
-            physics_dt=physics_dt,
         )
         wiggle_trajectories = []
         previous_target = lifted_command
         for index, wiggle_command in enumerate(wiggle_command_targets, start=1):
-            trajectory = build_planned_joint_motion_trajectory(
-                motion_planner=motion_planner,
-                command_joint_names=command_joint_names,
-                arm_command_indices=arm_command_indices,
+            trajectory = command_trajectory_from_joint_motion(
                 start_command=previous_target,
                 target_command=wiggle_command,
                 duration_s=wiggle_duration,
                 phase=f"wiggle_{index}",
-                physics_dt=physics_dt,
             )
             wiggle_trajectories.append(trajectory)
             previous_target = wiggle_command
         wiggle_return_trajectory = None
         if wiggle_command_targets:
-            wiggle_return_trajectory = build_planned_joint_motion_trajectory(
-                motion_planner=motion_planner,
-                command_joint_names=command_joint_names,
-                arm_command_indices=arm_command_indices,
+            wiggle_return_trajectory = command_trajectory_from_joint_motion(
                 start_command=previous_target,
                 target_command=lifted_command,
                 duration_s=wiggle_duration,
                 phase="wiggle_return_center",
-                physics_dt=physics_dt,
             )
         post_joint_sweep_trajectories = []
         previous_target = lifted_command
         for index, sweep_command in enumerate(post_joint_sweep_targets, start=1):
-            trajectory = build_planned_joint_motion_trajectory(
-                motion_planner=motion_planner,
-                command_joint_names=command_joint_names,
-                arm_command_indices=arm_command_indices,
+            trajectory = command_trajectory_from_joint_motion(
                 start_command=previous_target,
                 target_command=sweep_command,
                 duration_s=post_joint_sweep_duration,
                 phase=f"post_joint_1_sweep_{index}",
-                physics_dt=physics_dt,
             )
             post_joint_sweep_trajectories.append(trajectory)
             previous_target = sweep_command
 
+    prep_duration = SHORT_SMOKE_DURATION if short_smoke else PREP_DURATION
+    close_duration = SHORT_SMOKE_DURATION if short_smoke else CLOSE_DURATION
+    final_hold_duration = SHORT_SMOKE_DURATION if short_smoke else FINAL_HOLD_DURATION
+
+    runtime = ExecutionRuntime(
+        articulation=robot,
+        simulation_world=world,
+        articulation_action_type=articulation_action_type,
+        joint_controller=controller,
+        simulation_app=simulation_app,
+        render_enabled=render,
+        drive_logger=drive_logger,
+    )
+    execution_steps = [
+        SmoothCommandPositionTargetStep(
+            start_command=initial_command,
+            target_command=pre_pinch_command,
+            duration=prep_duration,
+            phase="pre_pinch",
+        ),
+        CommandPositionTrajectoryStep(
+            trajectory=move_to_approach_trajectory,
+        ),
+        CommandPositionTrajectoryStep(
+            trajectory=grasp_line_trajectory,
+        ),
+        SmoothCommandPositionTargetStep(
+            start_command=grasp_open_command,
+            target_command=grasp_closed_command,
+            duration=close_duration,
+            phase="close_fingers",
+        ),
+        CommandPositionTrajectoryStep(
+            trajectory=lift_trajectory,
+        ),
+    ]
+    for trajectory in wiggle_trajectories:
+        execution_steps.append(CommandPositionTrajectoryStep(trajectory=trajectory))
+    if wiggle_return_trajectory is not None:
+        execution_steps.append(
+            CommandPositionTrajectoryStep(trajectory=wiggle_return_trajectory)
+        )
+    execution_steps.append(
+        HoldCommandPositionTargetStep(
+            target_command=lifted_command,
+            duration=final_hold_duration,
+            phase="final",
+        )
+    )
+    for trajectory in post_joint_sweep_trajectories:
+        execution_steps.append(CommandPositionTrajectoryStep(trajectory=trajectory))
+
+    step = 0
+    for execution_step in execution_steps:
+        step = execution_step.run(runtime, step)
     return {
-        "initial_command": initial_command,
-        "pre_pinch_command": pre_pinch_command,
-        "move_to_approach_trajectory": move_to_approach_trajectory,
-        "approach_line_trajectory": grasp_line_trajectory,
-        "grasp_open_command": grasp_open_command,
-        "grasp_closed_command": grasp_closed_command,
-        "lifted_command": lifted_command,
-        "lift_trajectory": lift_trajectory,
-        "wiggle_trajectories": wiggle_trajectories,
-        "wiggle_return_trajectory": wiggle_return_trajectory,
-        "post_joint_sweep_trajectories": post_joint_sweep_trajectories,
+        "steps": step,
         "ik": {
             "pinch_world": pinch_world,
             "approach_world": approach_world,
@@ -744,101 +607,6 @@ def plan_pinch_grasp(
             ],
         },
     }
-
-
-def pinch_grasp_execution_steps(
-    plan: dict[str, object], *, short_smoke: bool
-) -> list[ExecutionStep]:
-    """把抓取 plan 拆成可顺序执行的执行步骤列表。"""
-
-    prep_duration = SHORT_SMOKE_DURATION if short_smoke else PREP_DURATION
-    close_duration = SHORT_SMOKE_DURATION if short_smoke else CLOSE_DURATION
-    final_hold_duration = SHORT_SMOKE_DURATION if short_smoke else FINAL_HOLD_DURATION
-    steps: list[ExecutionStep] = [
-        SmoothCommandPositionTargetStep(
-            start_command=plan["initial_command"],
-            target_command=plan["pre_pinch_command"],
-            duration=prep_duration,
-            phase="pre_pinch",
-        ),
-        CommandPositionTrajectoryStep(
-            trajectory=plan["move_to_approach_trajectory"],
-        ),
-        CommandPositionTrajectoryStep(
-            trajectory=plan["approach_line_trajectory"],
-        ),
-        SmoothCommandPositionTargetStep(
-            start_command=plan["grasp_open_command"],
-            target_command=plan["grasp_closed_command"],
-            duration=close_duration,
-            phase="close_fingers",
-        ),
-        CommandPositionTrajectoryStep(
-            trajectory=plan["lift_trajectory"],
-        ),
-    ]
-    for index, trajectory in enumerate(plan["wiggle_trajectories"], start=1):
-        steps.append(CommandPositionTrajectoryStep(trajectory=trajectory))
-    if plan["wiggle_return_trajectory"] is not None:
-        steps.append(
-            CommandPositionTrajectoryStep(trajectory=plan["wiggle_return_trajectory"])
-        )
-    steps.append(
-        HoldCommandPositionTargetStep(
-            target_command=plan["lifted_command"],
-            duration=final_hold_duration,
-            phase="final",
-        )
-    )
-    for index, trajectory in enumerate(plan["post_joint_sweep_trajectories"], start=1):
-        steps.append(CommandPositionTrajectoryStep(trajectory=trajectory))
-    return steps
-
-
-def run_pinch_grasp_action(
-    *,
-    robot,
-    world,
-    articulation_action_type,
-    controller,
-    simulation_app,
-    render: bool,
-    rope_config: CapsuleRopeConfig,
-    mjcf_path: str | Path,
-    cumotion_config: CuMotionConfig,
-    motion_planner_config: MotionPlannerBackendConfig,
-    endpoint: str,
-    short_smoke: bool,
-    drive_logger=None,
-) -> dict[str, object]:
-    """规划并执行完整夹捏抓取脚本。"""
-
-    # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
-    # cuMotion 连续轨迹采样使用 physics_dt 对齐物理步长，避免固定 0.01s 与仿真频率错位。
-    plan = plan_pinch_grasp(
-        robot,
-        controller,
-        rope_config=rope_config,
-        mjcf_path=mjcf_path,
-        cumotion_config=cumotion_config,
-        motion_planner_config=motion_planner_config,
-        endpoint=endpoint,
-        short_smoke=short_smoke,
-        physics_dt=float(world.get_physics_dt()),
-    )
-    runtime = ExecutionRuntime(
-        articulation=robot,
-        simulation_world=world,
-        articulation_action_type=articulation_action_type,
-        joint_controller=controller,
-        simulation_app=simulation_app,
-        render_enabled=render,
-        drive_logger=drive_logger,
-    )
-    step = 0
-    for execution_step in pinch_grasp_execution_steps(plan, short_smoke=short_smoke):
-        step = execution_step.run(runtime, step)
-    return {"steps": step, "ik": plan["ik"]}
 
 
 def parse_args() -> argparse.Namespace:
