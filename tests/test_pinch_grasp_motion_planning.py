@@ -9,7 +9,7 @@ SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from manipulation_project.planning.results import MotionResult
+from linkerbot_sim.planning.results import MotionResult
 from pinch_grasp import (
     build_planned_joint_motion_trajectory,
     build_specified_tcp_line_trajectory,
@@ -76,7 +76,7 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> N
         ]
     )
 
-    trajectory, result = build_planned_joint_motion_trajectory(
+    trajectory = build_planned_joint_motion_trajectory(
         motion_planner=planner,
         dof_names=["arm0", "hand", "arm1"],
         arm_indices=np.asarray([0, 2], dtype=int),
@@ -86,11 +86,9 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> N
         phase="move_to_approach",
     )
 
-    assert result.success
     assert len(planner.requests) == 1
     np.testing.assert_allclose(planner.requests[0].current_q, [0.0, 0.0])
     np.testing.assert_allclose(planner.requests[0].goal_q, [1.0, -1.0])
-    np.testing.assert_allclose(result.path, planner.path)
     np.testing.assert_allclose(
         trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
     )
@@ -129,7 +127,7 @@ def test_build_planned_joint_motion_trajectory_uses_cumotion_time_parameterizati
         trajectory=_FakeCumotionTrajectory(),
     )
 
-    trajectory, result = build_planned_joint_motion_trajectory(
+    trajectory = build_planned_joint_motion_trajectory(
         motion_planner=planner,
         dof_names=["arm0", "hand", "arm1"],
         arm_indices=np.asarray([0, 2], dtype=int),
@@ -139,9 +137,10 @@ def test_build_planned_joint_motion_trajectory_uses_cumotion_time_parameterizati
         phase="lift",
     )
 
-    assert result.trajectory is planner.trajectory
     np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 2.0])
-    np.testing.assert_allclose(trajectory.positions[[0, -1]][:, [0, 2]], [[0.0, 0.0], [1.0, -1.0]])
+    np.testing.assert_allclose(
+        trajectory.positions[[0, -1]][:, [0, 2]], [[0.0, 0.0], [1.0, -1.0]]
+    )
     midpoint = len(trajectory) // 2
     np.testing.assert_allclose(trajectory.positions[midpoint, [0, 2]], [0.5, -0.5])
     np.testing.assert_allclose(trajectory.positions[midpoint, 1], 3.0)
@@ -163,7 +162,7 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
     )
     context = _FakeContext(planner)
 
-    trajectory, result = build_specified_tcp_line_trajectory(
+    trajectory = build_specified_tcp_line_trajectory(
         context=context,
         tcp_frame_name="pinch_tcp",
         dof_names=["arm0", "hand", "arm1"],
@@ -174,7 +173,6 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
         phase="approach_box",
     )
 
-    assert result.success
     assert len(context.calls) == 1
     tcp_frame_name, config = context.calls[0]
     assert tcp_frame_name == "pinch_tcp"
@@ -187,7 +185,6 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
     np.testing.assert_allclose(
         request.path.segments[0].target_position, [0.1, 0.2, 0.3]
     )
-    np.testing.assert_allclose(result.path, planner.path)
     np.testing.assert_allclose(
         trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
     )

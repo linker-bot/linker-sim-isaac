@@ -4,16 +4,16 @@ import csv
 
 import numpy as np
 
-from manipulation_project.logging.config import (
+from linkerbot_sim.logging.config import (
     JointLoggingConfig,
     joint_logging_config_from_mapping,
 )
-from manipulation_project.logging.effort_logger import (
+from linkerbot_sim.logging.effort_logger import (
     EffortLogger,
     commanded_efforts_from_controller,
     read_joint_efforts,
 )
-from manipulation_project.logging.joint_logger import JointTrackingLogger
+from linkerbot_sim.logging.joint_logger import JointTrackingLogger
 
 
 class _RobotWithEfforts:

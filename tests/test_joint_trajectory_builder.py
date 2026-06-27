@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.trajectories.joint_trajectory_builder import (
+from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
 

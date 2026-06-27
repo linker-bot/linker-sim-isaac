@@ -1,6 +1,6 @@
 # cuMotion 后端接口说明
 
-本文整理本项目中 `source/manipulation_project/backends/cumotion/` 对 cuMotion 的封装接口、数据流、坐标/关节顺序约定，以及动作脚本层调用方式。
+本文整理本项目中 `src/linkerbot_sim/backends/cumotion/` 对 cuMotion 的封装接口、数据流、坐标/关节顺序约定，以及动作脚本层调用方式。
 
 ## 1. 总体边界
 
@@ -34,7 +34,7 @@ flowchart TD
 
 ### `CuMotionConfig`
 
-位置：`source/manipulation_project/backends/cumotion/context.py`
+位置：`src/linkerbot_sim/backends/cumotion/context.py`
 
 用途：保存 cuMotion 后端需要的机器人描述文件、默认 frame，以及按模块分组的 FK/IK/planner 参数。
 
@@ -92,7 +92,7 @@ cumotion:
 
 ### `CuMotionContext`
 
-位置：`source/manipulation_project/backends/cumotion/context.py`
+位置：`src/linkerbot_sim/backends/cumotion/context.py`
 
 用途：进入真实 cuMotion 后端的共享上下文。负责延迟导入 `cumotion`、加载 XRDF/URDF，缓存 `robot_description` / `kinematics`，并维护当前环境的 `CuMotionCollisionWorld`。
 
@@ -132,7 +132,7 @@ cumotion:
 
 ### `CuMotionForwardKinematics`
 
-位置：`source/manipulation_project/backends/cumotion/forward_kinematics.py`
+位置：`src/linkerbot_sim/backends/cumotion/forward_kinematics.py`
 
 用途：封装 cuMotion `kinematics.pose(...)`，把后端 pose 归一化成项目格式。
 
@@ -159,7 +159,7 @@ cumotion:
 
 ### `CuMotionInverseKinematics`
 
-位置：`source/manipulation_project/backends/cumotion/inverse_kinematics.py`
+位置：`src/linkerbot_sim/backends/cumotion/inverse_kinematics.py`
 
 用途：把项目 `IKRequest` 转换成 cuMotion 几何 IK 或 collision-free IK 调用，并返回 `IKResult`。
 
@@ -192,7 +192,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 ### `IKRequest`
 
-位置：`source/manipulation_project/planning/requests.py`
+位置：`src/linkerbot_sim/planning/requests.py`
 
 | 字段 | 含义 |
 |---|---|
@@ -206,7 +206,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 ### `IKResult`
 
-位置：`source/manipulation_project/planning/results.py`
+位置：`src/linkerbot_sim/planning/results.py`
 
 | 字段 | 含义 |
 |---|---|
@@ -227,7 +227,7 @@ ik = context.make_inverse_kinematics(tcp_frame_name="pinch_tcp")
 
 ### `CuMotionMotionPlanner`
 
-位置：`source/manipulation_project/backends/cumotion/motion_planner.py`
+位置：`src/linkerbot_sim/backends/cumotion/motion_planner.py`
 
 用途：统一封装三条 cuMotion 运动生成 pipeline：`trajectory_optimization`、`graph_search` 和
 `specified_path`。facade 根据 `MotionPlannerBackendConfig.planning_pipeline` 分发，并统一返回
@@ -301,7 +301,7 @@ Pipeline：
 
 ### `MotionRequest`
 
-位置：`source/manipulation_project/planning/requests.py`
+位置：`src/linkerbot_sim/planning/requests.py`
 
 | 字段 | 含义 |
 |---|---|
@@ -321,7 +321,7 @@ Pipeline：
 
 ### `SpecifiedPathRequest`
 
-位置：`source/manipulation_project/planning/requests.py`
+位置：`src/linkerbot_sim/planning/requests.py`
 
 支持的路径输入：
 
@@ -340,7 +340,7 @@ Pipeline：
 
 ### `MotionResult`
 
-位置：`source/manipulation_project/planning/results.py`
+位置：`src/linkerbot_sim/planning/results.py`
 
 | 字段 | 含义 |
 |---|---|
@@ -354,7 +354,7 @@ Pipeline：
 
 ### `CuMotionCollisionWorld`
 
-位置：`source/manipulation_project/backends/cumotion/collision_world.py`
+位置：`src/linkerbot_sim/backends/cumotion/collision_world.py`
 
 用途：把项目 `CollisionObject` 转换成 cuMotion `World` obstacle，并创建/维护 `world_view`。通常由 `CuMotionContext.sync_collision_world(...)` 持有和复用。
 
@@ -403,7 +403,7 @@ collision_world = context.sync_collision_world(collision_objects)
 
 ### `CuMotionWorldInspector` / `CuMotionRobotWorldInspector`
 
-位置：`source/manipulation_project/backends/cumotion/collision_world.py`
+位置：`src/linkerbot_sim/backends/cumotion/collision_world.py`
 
 用途：轻量封装官方 `WorldInspector` 和 `RobotWorldInspector`，用于调试障碍物状态、点/球距离、
 机器人自碰和机器人与 world 障碍物碰撞。
@@ -417,7 +417,7 @@ collision_world = context.sync_collision_world(collision_objects)
 
 ## 7. 姿态适配接口
 
-位置：`source/manipulation_project/backends/cumotion/pose_adapter.py`
+位置：`src/linkerbot_sim/backends/cumotion/pose_adapter.py`
 
 | 函数 | 输入 | 输出 | 含义 |
 |---|---|---|---|
@@ -432,7 +432,7 @@ collision_world = context.sync_collision_world(collision_objects)
 
 ### `joint_trajectory_from_cumotion(...)`
 
-位置：`source/manipulation_project/backends/cumotion/trajectory_sampler.py`
+位置：`src/linkerbot_sim/backends/cumotion/trajectory_sampler.py`
 
 用途：采样 cuMotion trajectory，并转换成项目 `JointTrajectory`。
 
@@ -499,7 +499,7 @@ planner.plan(
 
 ### `make_cumotion_context(...)`
 
-位置：`source/manipulation_project/backends/cumotion/tcp_context.py`
+位置：`src/linkerbot_sim/backends/cumotion/tcp_context.py`
 
 用途：根据可选 `TcpFrame` 创建 `CuMotionContext`。如果 TCP frame 不在基础 URDF 中，后端会写出带 fixed TCP link 的临时 URDF，并用它创建 context；临时目录由 context manager 持有，退出时清理。
 
@@ -531,7 +531,7 @@ with make_cumotion_context(config, tcp=pinch_tcp) as context:
 
 ### `write_tcp_urdf(...)`
 
-位置：`source/manipulation_project/backends/cumotion/tcp_urdf_builder.py`
+位置：`src/linkerbot_sim/backends/cumotion/tcp_urdf_builder.py`
 
 用途：复制基础 URDF，并在指定 parent frame 下追加一个 fixed TCP link/joint。它是底层 URDF 写入工具，通常由 `make_cumotion_context(...)` 调用；只有测试、诊断或离线生成 URDF 时才需要直接使用。
 

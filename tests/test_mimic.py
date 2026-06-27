@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.assets.asset_paths import DEFAULT_AR5_L6_MJCF
-from manipulation_project.robots.mimic import (
+from linkerbot_sim.assets.asset_paths import DEFAULT_AR5_L6_MJCF
+from linkerbot_sim.robots.mimic import (
     MimicFollowerControl,
     MimicFollowerTargetMapper,
     MjcfJointEquality,

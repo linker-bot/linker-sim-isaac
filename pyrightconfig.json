@@ -1,11 +1,11 @@
 {
   "include": [
-    "source",
+    "src",
     "scripts",
     "tests"
   ],
   "extraPaths": [
-    "source"
+    "src"
   ],
   "venvPath": ".",
   "venv": "env_isaaclab"

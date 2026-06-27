@@ -27,20 +27,20 @@
 
 本规格撰写时的首版实现已经存在：
 
-- `source/manipulation_project/planning/requests.py`
+- `src/linkerbot_sim/planning/requests.py`
   - `SpecifiedPathRequest`
   - `CSpaceWaypointPath`
   - `TaskSpacePath`
   - `CompositePath`
   - `TcpLineSegment`
-- `source/manipulation_project/backends/cumotion/specified_path_planner.py`
+- `src/linkerbot_sim/backends/cumotion/specified_path_planner.py`
   - 只支持 `CSpaceWaypointPath`
   - `TaskSpacePath` 抛 `NotImplementedError`
   - `CompositePath` 抛 `NotImplementedError`
-- `source/manipulation_project/backends/cumotion/trajectory_generation.py`
+- `src/linkerbot_sim/backends/cumotion/trajectory_generation.py`
   - 已封装 `CSpaceTrajectoryGenerator`
   - 支持 `time_optimal` 和 `time_stamped`
-- `source/manipulation_project/backends/cumotion/pose_adapter.py`
+- `src/linkerbot_sim/backends/cumotion/pose_adapter.py`
   - 已封装 `rotation_from_quat_wxyz`
   - 已封装 `pose_from_position_quat_wxyz`
   - 已封装 `pose_from_matrix`

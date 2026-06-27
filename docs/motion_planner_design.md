@@ -28,7 +28,7 @@
 
 ## 2. 当前实现概览
 
-当前 `source/manipulation_project/backends/cumotion/motion_planner.py` 主要实现的是
+当前 `src/linkerbot_sim/backends/cumotion/motion_planner.py` 主要实现的是
 `graph_search`：
 
 ```text
@@ -785,7 +785,7 @@ graph_search:
 把 facade、pipeline 实现、配置模型拆分清楚：
 
 ```text
-source/manipulation_project/backends/cumotion/
+src/linkerbot_sim/backends/cumotion/
     motion_planner.py                    # facade / 统一入口
     motion_planner_config.py             # cuMotion motion planner 分组配置 dataclass
     graph_motion_planner.py              # Graph-Based MotionPlanner pipeline
@@ -1307,7 +1307,7 @@ MotionResult
 
 修改内容：
 
-- 新增 `source/manipulation_project/backends/cumotion/motion_planner_config.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/motion_planner_config.py`。
 - 新增 dataclass：
   - `MotionPlannerBackendConfig`
   - `GraphSearchConfig`
@@ -1339,7 +1339,7 @@ MotionResult
 
 修改内容：
 
-- 新增 `source/manipulation_project/backends/cumotion/trajectory_generation.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/trajectory_generation.py`。
 - 提供函数或类：
 
 ```python
@@ -1372,7 +1372,7 @@ generate_cspace_trajectory(
 
 修改内容：
 
-- 新增 `source/manipulation_project/backends/cumotion/graph_motion_planner.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/graph_motion_planner.py`。
 - 实现：
 
 ```python
@@ -1406,7 +1406,7 @@ plan_graph_search(context, request: MotionRequest, config: MotionPlannerBackendC
 
 修改内容：
 
-- 新增 `source/manipulation_project/backends/cumotion/trajectory_optimizer_planner.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/trajectory_optimizer_planner.py`。
 - 实现：
 
 ```python
@@ -1458,8 +1458,8 @@ plan_trajectory_optimization(
   - `TcpArcSegment`
   - `TcpPoseSequenceSegment`
   - `CompositePathPart`
-- 新增 `source/manipulation_project/backends/cumotion/specified_path_planner.py`。
-- 新增 `source/manipulation_project/backends/cumotion/path_spec_adapter.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/specified_path_planner.py`。
+- 新增 `src/linkerbot_sim/backends/cumotion/path_spec_adapter.py`。
 - 支持的请求：
 
 ```python

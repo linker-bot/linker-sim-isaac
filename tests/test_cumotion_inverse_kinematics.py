@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.inverse_kinematics import (
+from linkerbot_sim.backends.cumotion.inverse_kinematics import (
     CuMotionInverseKinematics,
 )
-from manipulation_project.planning.requests import IKRequest
+from linkerbot_sim.planning.requests import IKRequest
 
 
 class _FakePose:

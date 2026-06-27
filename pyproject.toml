@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "linkerhand-simulation"
+name = "linkerbot-sim"
 version = "0.1.0"
 description = "Isaac Sim manipulation utilities for AR5 and LinkerHand L6 experiments"
 requires-python = ">=3.10"
@@ -28,10 +28,10 @@ simulation = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["source"]
+where = ["src"]
 
 [tool.pytest.ini_options]
-pythonpath = ["source"]
+pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff.lint.per-file-ignores]

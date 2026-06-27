@@ -6,7 +6,7 @@
 #
 # 如果想试用本文件中的参数，可以显式传入：
 #
-#   PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
+#   PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 #     --cumotion-config configs/cumotion/default.example.yaml
 #
 # 加载和覆盖顺序：
@@ -20,13 +20,13 @@
 # - 本文件的 `cumotion` 段提供机器人级后端默认值。
 # - robot YAML 的 `cumotion` 段会覆盖本文件，且仍必须提供 xrdf_path、urdf_path、flange_frame。
 # - 本文件的 `cumotion.motion_planner` 段提供 motion planner 默认值；运行 pinch grasp 时，
-#   脚本内置的 `PinchGraspActionConfig` 会读取它作为 planner 配置。
+#   脚本会直接把它解析成 MotionPlannerBackendConfig。
 # - 抓取目标、阶段时长和手型不再写在外部 trajectory YAML 中；需要调整时直接修改
 #   `scripts/pinch_grasp.py`。
 #
 # 注意：如果某个字段缺省，会使用代码里的 dataclass 默认值。详见：
-# - source/manipulation_project/backends/cumotion/context.py: CuMotionConfig / CuMotionKinematicsConfig / CuMotionIkConfig
-# - source/manipulation_project/backends/cumotion/motion_planner_config.py
+# - src/linkerbot_sim/backends/cumotion/context.py: CuMotionConfig / CuMotionKinematicsConfig / CuMotionIkConfig
+# - src/linkerbot_sim/backends/cumotion/motion_planner_config.py
 
 cumotion:
   # 必填字段通常不要写在 profile 中，而是写在具体 robot YAML 中。

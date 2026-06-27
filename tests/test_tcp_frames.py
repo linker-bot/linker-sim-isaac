@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.assets.asset_paths import (
+from linkerbot_sim.assets.asset_paths import (
     DEFAULT_AR5_L6_MJCF,
     DEFAULT_AR5_URDF,
 )
-from manipulation_project.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
-from manipulation_project.tcp.pinch_tcp import (
+from linkerbot_sim.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
+from linkerbot_sim.tcp.pinch_tcp import (
     infer_hand_body_names,
     fingertip_pinch_local_offset,
     make_pinch_tcp,
 )
-from manipulation_project.tcp.tcp_frame import TcpFrame
+from linkerbot_sim.tcp.tcp_frame import TcpFrame
 
 
 def test_pinch_center_is_between_thumb_and_index() -> None:

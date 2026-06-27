@@ -3,7 +3,7 @@
 ## 1. 背景
 
 当前项目已经把 `TcpFrame` 抽象成通用 TCP 描述，把 `write_tcp_urdf(...)` 放在
-`source/manipulation_project/backends/cumotion/tcp_urdf_builder.py` 中，用临时 URDF
+`src/linkerbot_sim/backends/cumotion/tcp_urdf_builder.py` 中，用临时 URDF
 向 cuMotion 暴露自定义 TCP frame。
 
 cuMotion 的核心约束是：
@@ -205,7 +205,7 @@ with CuMotionContext.with_tcp(self.cumotion_config, tcp) as context:
 推荐新增或调整：
 
 ```text
-source/manipulation_project/backends/cumotion/
+src/linkerbot_sim/backends/cumotion/
 ├── context.py
 ├── tcp_context.py          # 可选：自定义 TCP context 装配
 ├── tcp_urdf_builder.py     # 保留：纯 URDF 写入工具
@@ -220,7 +220,7 @@ source/manipulation_project/backends/cumotion/
 
 采用第二种时，需要同步更新：
 
-- `source/manipulation_project/backends/cumotion/__init__.py`，重新导出新的 context manager。
+- `src/linkerbot_sim/backends/cumotion/__init__.py`，重新导出新的 context manager。
 - 动作脚本层 import，例如 `scripts/pinch_grasp.py` 应从 cuMotion 后端入口导入 context manager。
 - 动作脚本层不应再直接 import `write_tcp_urdf`，除非该入口本身就是 URDF 生成工具或测试。
 

@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field, replace
 import os
 import sys
 from pathlib import Path
@@ -29,79 +28,78 @@ from pathlib import Path
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = REPO_ROOT / "source"
+SOURCE_ROOT = REPO_ROOT / "src"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from manipulation_project.app.launch import launch_simulation_app
-from manipulation_project.assets.robot_loader import (
+from linkerbot_sim.app.launch import launch_simulation_app
+from linkerbot_sim.assets.robot_loader import (
     RobotAssetConfig,
     import_robot_asset,
 )
-from manipulation_project.assets.solver_overrides import (
+from linkerbot_sim.assets.solver_overrides import (
     SolverIterationConfig,
     apply_solver_iteration_overrides,
 )
-from manipulation_project.assets.usd_overrides import (
+from linkerbot_sim.assets.usd_overrides import (
     apply_robot_usd_overrides,
     disable_robot_gravity,
 )
-from manipulation_project.backends.cumotion.context import (
+from linkerbot_sim.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
-from manipulation_project.backends.cumotion.motion_planner_config import (
+from linkerbot_sim.backends.cumotion.motion_planner_config import (
     MotionPlannerBackendConfig,
     SpecifiedPathConfig,
 )
-from manipulation_project.backends.cumotion.tcp_context import make_cumotion_context
-from manipulation_project.backends.cumotion.trajectory_sampler import (
+from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
+from linkerbot_sim.backends.cumotion.trajectory_sampler import (
     joint_trajectory_from_cumotion,
 )
-from manipulation_project.controllers.config import (
+from linkerbot_sim.controllers.config import (
     joint_control_settings,
     load_controller_profiles,
     physx_override_configs,
 )
-from manipulation_project.controllers.joint_controller import JointController
-from manipulation_project.envs.scene_builder import build_world, configure_visuals
-from manipulation_project.execution.runtime import ExecutionRuntime, ExecutionStep
-from manipulation_project.execution.steps import (
+from linkerbot_sim.controllers.joint_controller import JointController
+from linkerbot_sim.envs.scene_builder import build_world, configure_visuals
+from linkerbot_sim.execution.runtime import ExecutionRuntime, ExecutionStep
+from linkerbot_sim.execution.steps import (
     FullJointTrajectoryStep,
     HoldJointTargetStep,
     SmoothJointTargetStep,
 )
-from manipulation_project.logging.config import (
+from linkerbot_sim.logging.config import (
     joint_logging_config_from_mapping,
     override_logging_config,
 )
-from manipulation_project.logging.joint_logger import JointTrackingLogger
-from manipulation_project.objects.capsule_rope import (
+from linkerbot_sim.logging.joint_logger import JointTrackingLogger
+from linkerbot_sim.objects.capsule_rope import (
     CapsuleRopeConfig,
     add_capsule_rope_reference,
     endpoint_center,
 )
-from manipulation_project.planning.requests import (
+from linkerbot_sim.planning.requests import (
     IKRequest,
     MotionRequest,
     SpecifiedPathRequest,
     TaskSpacePath,
     TcpLineSegment,
 )
-from manipulation_project.planning.results import MotionResult
-from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.robots.mimic import (
+from linkerbot_sim.robots.joint_groups import target_vector_from_mapping
+from linkerbot_sim.robots.mimic import (
     expand_targets_with_mjcf_equalities,
     mjcf_equality_follower_joint_names,
 )
-from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
-from manipulation_project.trajectories.joint_trajectory_builder import (
+from linkerbot_sim.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
+from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
-from manipulation_project.trajectories.types import JointTrajectory
-from manipulation_project.utils.config import deep_merge, load_yaml
-from manipulation_project.utils.paths import repo_path
-from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
+from linkerbot_sim.trajectories.types import JointTrajectory
+from linkerbot_sim.utils.config import deep_merge, load_yaml
+from linkerbot_sim.utils.paths import repo_path
+from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 _CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE = 1
@@ -127,123 +125,28 @@ DEFAULT_CLOSED_PINCH_HAND_TARGETS = {
 }
 
 
-@dataclass(frozen=True)
-class PinchMotionPlanningConfig:
-    """夹捏动作中关节角到关节角阶段的 cuMotion 规划参数。"""
+DEFAULT_ENDPOINT = "left"
+TARGET_WORLD_OFFSET = (0.02, 0.0, 0.03)
+TARGET_RPY = (0.0, 2.007128639793479, -1.5707963267948966)
+USE_ORIENTATION = True
+APPROACH_DISTANCE = 0.10
+LIFT_HEIGHT = 0.4
+PREP_DURATION = 1.0
+MOVE_DURATION = 3.0
+APPROACH_DURATION = 1.2
+CLOSE_DURATION = 1.0
+LIFT_DURATION = 2.0
+WIGGLE_CYCLES = 2
+WIGGLE_AMPLITUDE = 0.2
+WIGGLE_DURATION = 2.0
+WIGGLE_AXIS = (1.0, 0.0, 0.0)
+FINAL_HOLD_DURATION = 5.0
+POST_JOINT_SWEEP_DURATION = 2.0
+POST_JOINT_SWEEP_TARGETS = (2.1, -2.1)
+TCP_FRAME_NAME = DEFAULT_PINCH_TCP_FRAME
 
-    backend: MotionPlannerBackendConfig = field(
-        default_factory=MotionPlannerBackendConfig
-    )
-
-    def validate(self) -> None:
-        """检查 cuMotion 规划参数是否在项目支持的取值范围内。"""
-
-        self.backend.validate()
-
-
-@dataclass(frozen=True)
-class PinchGraspActionConfig:
-    """夹捏抓取动作的内置参数集合。
-
-    这些值原来由外部 trajectory YAML 提供；现在随动作脚本一起维护，
-    让 pinch grasp 成为一个独立可运行 script，而不是外部 task 配置。
-    """
-
-    endpoint: str = "left"
-    target_world_offset: tuple[float, float, float] = (0.02, 0.0, 0.03)
-    target_rpy: tuple[float, float, float] = (
-        0.0,
-        2.007128639793479,
-        -1.5707963267948966,
-    )
-    use_orientation: bool = True
-    approach_distance: float = 0.10
-    lift_height: float = 0.4
-    prep_duration: float = 1.0
-    move_duration: float = 3.0
-    approach_duration: float = 1.2
-    close_duration: float = 1.0
-    lift_duration: float = 2.0
-    wiggle_cycles: int = 2
-    wiggle_amplitude: float = 0.2
-    wiggle_duration: float = 2.0
-    wiggle_axis: tuple[float, float, float] = (1.0, 0.0, 0.0)
-    final_hold_duration: float = 5.0
-    post_joint_sweep_duration: float = 2.0
-    post_joint_sweep_targets: tuple[float, ...] = (2.1, -2.1)
-    tcp_frame_name: str = DEFAULT_PINCH_TCP_FRAME
-    motion_planning: PinchMotionPlanningConfig = field(
-        default_factory=PinchMotionPlanningConfig
-    )
-    pre_pinch_hand_targets: dict[str, float] = field(
-        default_factory=lambda: dict(DEFAULT_PRE_PINCH_HAND_TARGETS)
-    )
-    closed_pinch_hand_targets: dict[str, float] = field(
-        default_factory=lambda: dict(DEFAULT_CLOSED_PINCH_HAND_TARGETS)
-    )
-
-    @property
-    def pre_targets(self) -> dict[str, float]:
-        """返回预夹捏手型目标副本，调用方可以安全修改。"""
-
-        return dict(self.pre_pinch_hand_targets)
-
-    @property
-    def closed_targets(self) -> dict[str, float]:
-        """返回闭合夹捏手型目标副本，调用方可以安全修改。"""
-
-        return dict(self.closed_pinch_hand_targets)
-
-    def validate(self) -> None:
-        """检查内置动作参数是否满足执行要求。"""
-
-        if self.endpoint not in {"left", "right"}:
-            raise ValueError("endpoint must be left or right")
-        nonnegative = {
-            "approach_distance": self.approach_distance,
-            "lift_height": self.lift_height,
-            "prep_duration": self.prep_duration,
-            "move_duration": self.move_duration,
-            "approach_duration": self.approach_duration,
-            "close_duration": self.close_duration,
-            "lift_duration": self.lift_duration,
-            "wiggle_amplitude": self.wiggle_amplitude,
-            "wiggle_duration": self.wiggle_duration,
-            "final_hold_duration": self.final_hold_duration,
-            "post_joint_sweep_duration": self.post_joint_sweep_duration,
-        }
-        for name, value in nonnegative.items():
-            if value < 0:
-                raise ValueError(f"{name} cannot be negative")
-        if self.wiggle_cycles < 0:
-            raise ValueError("wiggle_cycles cannot be negative")
-        if not self.tcp_frame_name:
-            raise ValueError("tcp_frame_name cannot be empty")
-        self.motion_planning.validate()
-        if not self.pre_pinch_hand_targets:
-            raise ValueError("pre_pinch_hand_targets cannot be empty")
-        if not self.closed_pinch_hand_targets:
-            raise ValueError("closed_pinch_hand_targets cannot be empty")
-        if np.linalg.norm(np.asarray(self.wiggle_axis, dtype=float)) <= 0.0:
-            raise ValueError("wiggle_axis must be non-zero")
-
-
-
-def set_joint_targets_by_indices(
-    target: np.ndarray, indices: np.ndarray, values: np.ndarray
-) -> None:
-    """按索引原地写入一组关节目标。
-
-    参数:
-        target: 完整 DOF 目标数组，会被原地修改。
-        indices: 要写入的 DOF 索引数组。
-        values: 与 ``indices`` 等长的位置值数组，单位 rad。
-    返回:
-        无返回值；结果写回 ``target``。
-    """
-
-    for index, value in zip(indices, values, strict=True):
-        target[int(index)] = float(value)
+SHORT_SMOKE_DURATION = 0.02
+SHORT_SMOKE_LIFT_HEIGHT = 0.05
 
 
 def build_planned_joint_motion_trajectory(
@@ -256,7 +159,7 @@ def build_planned_joint_motion_trajectory(
     duration_s: float,
     phase: str,
     physics_dt: float | None = None,
-) -> tuple[JointTrajectory, MotionResult]:
+) -> JointTrajectory:
     """用 cuMotion 规划一段完整 DOF 的关节角到关节角运动。
 
     ``motion_planner`` 只处理 cuMotion C-space 关节；本函数负责把完整 articulation
@@ -265,34 +168,11 @@ def build_planned_joint_motion_trajectory(
     机械臂同时变化的阶段。
     """
 
-    if duration_s < 0:
-        raise ValueError("duration_s cannot be negative")
     start = np.asarray(start_all, dtype=float).reshape(-1)
     target = np.asarray(target_all, dtype=float).reshape(-1)
-    if start.shape != target.shape:
-        raise ValueError(f"start/target shape mismatch: {start.shape} vs {target.shape}")
-    if start.size != len(dof_names):
-        raise ValueError(f"dof_names expected {start.size} names, got {len(dof_names)}")
     arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
     start_q = start[arm_indices]
     target_q = target[arm_indices]
-
-    # 配置时长为 0 时沿用其它执行步骤的语义：只下发最终目标一帧，不要求 planner
-    # 生成一条有时间跨度的路径。
-    if duration_s == 0:
-        trajectory = joint_trajectory_from_positions(
-            times=np.asarray([0.0], dtype=float),
-            positions=target.reshape(1, -1),
-            joint_names=tuple(dof_names),
-            phase=phase,
-        )
-        return trajectory, MotionResult(
-            path=target_q.reshape(1, -1),
-            trajectory=None,
-            success=True,
-            status="SKIPPED_ZERO_DURATION",
-        )
-
     result = motion_planner.plan(
         MotionRequest(
             current_q=start_q,
@@ -310,19 +190,16 @@ def build_planned_joint_motion_trajectory(
             f"cuMotion joint motion planning returned no trajectory for {phase}: "
             f"status={result.status}"
         )
-    return (
-        _full_trajectory_from_cumotion_trajectory(
-            result.trajectory,
-            motion_planner=motion_planner,
-            dof_names=dof_names,
-            arm_indices=arm_indices,
-            start_all=start,
-            target_all=target,
-            requested_duration_s=duration_s,
-            phase=phase,
-            physics_dt=physics_dt,
-        ),
-        result,
+    return _full_trajectory_from_cumotion_trajectory(
+        result.trajectory,
+        motion_planner=motion_planner,
+        dof_names=dof_names,
+        arm_indices=arm_indices,
+        start_all=start,
+        target_all=target,
+        requested_duration_s=duration_s,
+        phase=phase,
+        physics_dt=physics_dt,
     )
 
 
@@ -338,7 +215,7 @@ def build_specified_tcp_line_trajectory(
     phase: str,
     physics_dt: float | None = None,
     base_config: MotionPlannerBackendConfig | None = None,
-) -> tuple[JointTrajectory, MotionResult]:
+) -> JointTrajectory:
     """用 specified_path 的 ``TcpLineSegment`` 构建完整 DOF TCP 直线轨迹。
 
     该函数是动作脚本到新 specified-path 接口的直接调用点：不再经过旧的 ``tcp_line.py`` 逐点 IK
@@ -346,28 +223,10 @@ def build_specified_tcp_line_trajectory(
     机械臂 C-space 列写回完整 articulation DOF。
     """
 
-    if duration_s < 0:
-        raise ValueError("duration_s cannot be negative")
     start = np.asarray(start_all, dtype=float).reshape(-1)
-    if start.size != len(dof_names):
-        raise ValueError(f"dof_names expected {start.size} names, got {len(dof_names)}")
     arm_indices = np.asarray(arm_indices, dtype=int).reshape(-1)
     current_q = start[arm_indices]
     target_position = np.asarray(target_position, dtype=float).reshape(3)
-
-    if duration_s == 0:
-        trajectory = joint_trajectory_from_positions(
-            times=np.asarray([0.0], dtype=float),
-            positions=start.reshape(1, -1),
-            joint_names=tuple(dof_names),
-            phase=phase,
-        )
-        return trajectory, MotionResult(
-            path=current_q.reshape(1, -1),
-            trajectory=None,
-            success=True,
-            status="SKIPPED_ZERO_DURATION",
-        )
 
     specified_planner = context.make_motion_planner(
         tcp_frame_name=tcp_frame_name,
@@ -406,19 +265,16 @@ def build_specified_tcp_line_trajectory(
         )
     target_all = start.copy()
     target_all[arm_indices] = np.asarray(result.path, dtype=float)[-1]
-    return (
-        _full_trajectory_from_cumotion_trajectory(
-            result.trajectory,
-            motion_planner=specified_planner,
-            dof_names=dof_names,
-            arm_indices=arm_indices,
-            start_all=start,
-            target_all=target_all,
-            requested_duration_s=duration_s,
-            phase=phase,
-            physics_dt=physics_dt,
-        ),
-        result,
+    return _full_trajectory_from_cumotion_trajectory(
+        result.trajectory,
+        motion_planner=specified_planner,
+        dof_names=dof_names,
+        arm_indices=arm_indices,
+        start_all=start,
+        target_all=target_all,
+        requested_duration_s=duration_s,
+        phase=phase,
+        physics_dt=physics_dt,
     )
 
 
@@ -573,8 +429,6 @@ def _cumotion_trajectory_sample_dt(
     span = max(0.0, upper - lower)
     if physics_dt is not None:
         step_dt = float(physics_dt)
-        if step_dt <= 0.0:
-            raise ValueError("physics_dt must be positive")
         base_dt = step_dt * float(_CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE)
     else:
         # 测试或离线构建没有 Isaac world 时退回 100 Hz，但运行路径应优先从
@@ -627,16 +481,13 @@ def _full_positions_from_cspace_path(
 
 
 def grasp_target_position(
-    config: PinchGraspActionConfig,
-    rope_config: CapsuleRopeConfig,
-    *,
-    lift_height: float = 0.0,
+    rope_config: CapsuleRopeConfig, *, endpoint: str, lift_height: float = 0.0
 ) -> np.ndarray:
     """计算夹捏 TCP 的世界坐标目标位置。
 
     参数:
-        config: 抓取配置，提供端点选择和目标偏移。
         rope_config: rope 对象配置，提供端点 cuboid 的几何位置。
+        endpoint: 抓取左端或右端。
         lift_height: 额外 z 方向抬升高度，单位 m。
     返回:
         shape 为 ``(3,)`` 的世界坐标位置数组，单位 m。
@@ -645,456 +496,379 @@ def grasp_target_position(
     # endpoint_center 给出端块几何中心，target_world_offset 用于把 TCP 对准更适合夹捏的点，
     # lift_height 只在 z 方向叠加，保持抓取水平位置不变。
     return (
-        np.asarray(endpoint_center(rope_config, config.endpoint), dtype=float)
-        + np.asarray(config.target_world_offset, dtype=float)
+        np.asarray(endpoint_center(rope_config, endpoint), dtype=float)
+        + np.asarray(TARGET_WORLD_OFFSET, dtype=float)
         + np.asarray([0.0, 0.0, lift_height], dtype=float)
     )
 
 
-class PinchGraspAction:
-    """机械臂+灵巧手对 rope 端点 cuboid 的脚本化夹捏动作。
+def plan_pinch_grasp(
+    robot,
+    *,
+    rope_config: CapsuleRopeConfig,
+    mjcf_path: str | Path,
+    cumotion_config: CuMotionConfig,
+    motion_planner_config: MotionPlannerBackendConfig,
+    endpoint: str,
+    short_smoke: bool,
+    physics_dt: float | None = None,
+) -> dict[str, object]:
+    """规划夹捏抓取各阶段的 IK 解和完整 DOF 目标。"""
 
-    输入:
-        初始化时传入抓取配置、rope 场景配置、MJCF 路径和 cuMotion 后端配置。
-    输出:
-        ``plan`` 返回可执行的目标数组和 IK 诊断信息；``run`` 会实际推进仿真并返回同一份
-        plan 字典，额外带 ``steps``。
-    """
+    mjcf_path = Path(mjcf_path)
+    tcp_frame_name = TCP_FRAME_NAME
+    lift_height = SHORT_SMOKE_LIFT_HEIGHT if short_smoke else LIFT_HEIGHT
+    move_duration = SHORT_SMOKE_DURATION if short_smoke else MOVE_DURATION
+    approach_duration = SHORT_SMOKE_DURATION if short_smoke else APPROACH_DURATION
+    lift_duration = SHORT_SMOKE_DURATION if short_smoke else LIFT_DURATION
+    wiggle_cycles = 0 if short_smoke else WIGGLE_CYCLES
+    wiggle_duration = SHORT_SMOKE_DURATION if short_smoke else WIGGLE_DURATION
+    post_joint_sweep_duration = (
+        SHORT_SMOKE_DURATION if short_smoke else POST_JOINT_SWEEP_DURATION
+    )
+    post_joint_sweep_target_values = () if short_smoke else POST_JOINT_SWEEP_TARGETS
 
-    def __init__(
-        self,
-        *,
-        config: PinchGraspActionConfig,
-        rope_config: CapsuleRopeConfig,
-        mjcf_path: str | Path,
-        cumotion_config: CuMotionConfig,
-        tcp_frame_name: str | None = None,
-    ) -> None:
-        """保存动作配置和 IK/TCP 资源路径。
+    # 先用闭合手型计算 thumb/index 的几何夹捏中心。这里需要展开 mimic follower，
+    # 否则 MJCF 运动链里从动关节会停在 0，TCP 会偏离实际闭合指尖中心。
+    closed_geometry_targets = expand_targets_with_mjcf_equalities(
+        DEFAULT_CLOSED_PINCH_HAND_TARGETS, mjcf_path
+    )
+    tcp = make_pinch_tcp(
+        mjcf_path,
+        closed_geometry_targets,
+        parent_frame=cumotion_config.flange_frame,
+        frame_name=tcp_frame_name,
+    )
 
-        参数:
-            config: 夹捏抓取配置。
-            rope_config: rope 对象配置，用于定位端点。
-            mjcf_path: 组合 MJCF 文件路径，用于计算 pinch TCP 和 mimic 关系。
-            cumotion_config: cuMotion 后端配置，通常来自 robot config 的 ``cumotion`` 段。
-            tcp_frame_name: 写入临时 URDF 的 TCP frame 名称。
-        返回:
-            无返回值。
-        """
+    # 三个核心笛卡尔目标：接近点、真正抓取点、抬升点。wiggle 目标在抬升点附近
+    # 沿配置轴线来回偏移，用来验证抓取是否稳定。
+    pinch_world = grasp_target_position(rope_config, endpoint=endpoint)
+    approach_world = pinch_world + np.asarray(
+        [0.0, 0.0, APPROACH_DISTANCE], dtype=float
+    )
+    lifted_world = grasp_target_position(
+        rope_config, endpoint=endpoint, lift_height=lift_height
+    )
+    wiggle_axis = np.asarray(WIGGLE_AXIS, dtype=float)
+    wiggle_axis = wiggle_axis / np.linalg.norm(wiggle_axis)
+    wiggle_worlds: list[np.ndarray] = []
+    for _cycle_index in range(wiggle_cycles):
+        wiggle_worlds.append(lifted_world - wiggle_axis * WIGGLE_AMPLITUDE)
+        wiggle_worlds.append(lifted_world + wiggle_axis * WIGGLE_AMPLITUDE)
 
-        self.config = config
-        self.rope_config = rope_config
-        self.mjcf_path = Path(mjcf_path)
-        self.cumotion_config = cumotion_config
-        self.cumotion_config.validate()
-        self.parent_frame = cumotion_config.flange_frame
-        self.tcp_frame_name = tcp_frame_name or config.tcp_frame_name
-
-    def plan(self, robot, *, physics_dt: float | None = None) -> dict[str, object]:
-        """规划抓取各阶段的 IK 解和完整 DOF 目标。
-
-        参数:
-            robot: Isaac articulation，需提供 ``dof_names`` 和当前关节位置。
-            physics_dt: 可选 Isaac 物理步长，单位 s；用于让 cuMotion 轨迹采样点对齐
-                physics step。为空时保留离线默认采样周期。
-        返回:
-            字典，包含:
-            ``arm_indices``: cuMotion C-space 关节在完整 DOF 中的索引；
-            ``*_all``: 各阶段完整 DOF 位置目标；
-            ``wiggle_all_targets``/``post_joint_sweep_targets``: 后续阶段目标列表；
-            ``ik``: TCP 位置、求解后端、各阶段误差和成功标志。
-        """
-
-        self.config.validate()
-        # 先用闭合手型计算 thumb/index 的几何夹捏中心。这里需要展开 mimic follower，
-        # 否则 MJCF 运动链里从动关节会停在 0，TCP 会偏离实际闭合指尖中心。
-        closed_geometry_targets = expand_targets_with_mjcf_equalities(
-            self.config.closed_targets, self.mjcf_path
+    target_orientation = rpy_xyz_to_quat_wxyz(TARGET_RPY)
+    ik_orientation = target_orientation if USE_ORIENTATION else None
+    # IK 后端只认识机器人描述里的 frame。cuMotion backend 负责把 pinch TCP 装配进
+    # 临时 URDF/context，动作脚本只保留 TCP 几何和完整 DOF 映射逻辑。
+    with make_cumotion_context(cumotion_config, tcp=tcp) as context:
+        ik_defaults = context.config.kinematics.ik
+        ik_joint_names = context.joint_names()
+        dof_names = list(robot.dof_names)
+        dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
+        # cuMotion 模型和 Isaac articulation 可能来自不同资产文件。这里按名称检查能尽早
+        # 发现 URDF/MJCF 关节名不一致，而不是在写目标数组时静默错位。
+        missing_ik_joints = [
+            name for name in ik_joint_names if name not in dof_index_by_name
+        ]
+        if missing_ik_joints:
+            raise ValueError(
+                f"cuMotion joints not found in articulation: {missing_ik_joints}"
+            )
+        arm_indices = np.asarray(
+            [dof_index_by_name[name] for name in ik_joint_names], dtype=int
         )
-        tcp = make_pinch_tcp(
-            self.mjcf_path,
-            closed_geometry_targets,
-            parent_frame=self.parent_frame,
-            frame_name=self.tcp_frame_name,
+        current_cspace = np.asarray(robot.get_joint_positions(), dtype=float).reshape(
+            -1
+        )[arm_indices]
+        solver = context.make_inverse_kinematics(tcp_frame_name=tcp_frame_name)
+        motion_planner = context.make_motion_planner(
+            tcp_frame_name=tcp_frame_name,
+            config=motion_planner_config,
         )
-
-        # 三个核心笛卡尔目标：接近点、真正抓取点、抬升点。wiggle 目标在抬升点附近
-        # 沿配置轴线来回偏移，用来验证抓取是否稳定。
-        pinch_world = grasp_target_position(self.config, self.rope_config)
-        approach_world = pinch_world + np.asarray(
-            [0.0, 0.0, self.config.approach_distance], dtype=float
+        # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
+        # 保持关节轨迹连续，也减少求解器跳解概率。
+        approach = solver.solve(
+            IKRequest(
+                target_position=approach_world,
+                target_orientation=ik_orientation,
+                warm_start_ik_cspace_seed=current_cspace,
+                position_tolerance=ik_defaults.position_tolerance,
+                orientation_tolerance=ik_defaults.orientation_tolerance,
+            )
         )
-        lifted_world = grasp_target_position(
-            self.config, self.rope_config, lift_height=self.config.lift_height
+        initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
+        pre_pinch_all = target_vector_from_mapping(
+            dof_names, DEFAULT_PRE_PINCH_HAND_TARGETS, base=initial_all
         )
-        wiggle_axis = np.asarray(self.config.wiggle_axis, dtype=float)
-        wiggle_axis = wiggle_axis / np.linalg.norm(wiggle_axis)
-        wiggle_worlds: list[np.ndarray] = []
-        for _cycle_index in range(self.config.wiggle_cycles):
-            wiggle_worlds.append(
-                lifted_world - wiggle_axis * self.config.wiggle_amplitude
+        approach_all = pre_pinch_all.copy()
+        approach_all[arm_indices] = np.asarray(approach.joint_positions, dtype=float)
+        # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
+        # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的动作意图。TCP 直线现在
+        # 直接使用 specified_path 的 TaskSpacePath/TcpLineSegment，不再经过旧逐点 IK helper。
+        grasp_line_trajectory = build_specified_tcp_line_trajectory(
+            context=context,
+            tcp_frame_name=tcp_frame_name,
+            dof_names=dof_names,
+            arm_indices=arm_indices,
+            start_all=approach_all,
+            target_position=pinch_world,
+            duration_s=approach_duration,
+            phase="approach_box",
+            physics_dt=physics_dt,
+            base_config=motion_planner_config,
+        )
+        grasp_joint_positions = np.asarray(
+            grasp_line_trajectory.positions[-1], dtype=float
+        )[arm_indices]
+        lift = solver.solve(
+            IKRequest(
+                target_position=lifted_world,
+                target_orientation=ik_orientation,
+                warm_start_ik_cspace_seed=grasp_joint_positions,
+                position_tolerance=ik_defaults.position_tolerance,
+                orientation_tolerance=ik_defaults.orientation_tolerance,
             )
-            wiggle_worlds.append(
-                lifted_world + wiggle_axis * self.config.wiggle_amplitude
-            )
-
-        target_orientation = rpy_xyz_to_quat_wxyz(self.config.target_rpy)
-        ik_orientation = target_orientation if self.config.use_orientation else None
-        # IK 后端只认识机器人描述里的 frame。cuMotion backend 负责把 pinch TCP 装配进
-        # 临时 URDF/context，动作脚本只保留 TCP 几何和完整 DOF 映射逻辑。
-        with make_cumotion_context(self.cumotion_config, tcp=tcp) as context:
-            ik_defaults = context.config.kinematics.ik
-            ik_joint_names = context.joint_names()
-            dof_names = list(robot.dof_names)
-            dof_index_by_name = {name: index for index, name in enumerate(dof_names)}
-            # cuMotion 模型和 Isaac articulation 可能来自不同资产文件。这里按名称检查能尽早
-            # 发现 URDF/MJCF 关节名不一致，而不是在写目标数组时静默错位。
-            missing_ik_joints = [
-                name for name in ik_joint_names if name not in dof_index_by_name
-            ]
-            if missing_ik_joints:
-                raise ValueError(
-                    f"cuMotion joints not found in articulation: {missing_ik_joints}"
-                )
-            arm_indices = np.asarray(
-                [dof_index_by_name[name] for name in ik_joint_names], dtype=int
-            )
-            current_cspace = np.asarray(
-                robot.get_joint_positions(), dtype=float
-            ).reshape(-1)[arm_indices]
-            solver = context.make_inverse_kinematics(
-                tcp_frame_name=self.tcp_frame_name,
-            )
-            motion_planner = context.make_motion_planner(
-                tcp_frame_name=self.tcp_frame_name,
-                config=self.config.motion_planning.backend,
-            )
-            # 第一次 IK 用当前 articulation C-space 热启动，后续阶段用上一阶段解热启动，
-            # 保持关节轨迹连续，也减少求解器跳解概率。
-            approach = solver.solve(
+        )
+        # wiggle 阶段每个目标都用上一目标热启动，减少在冗余机械臂上突然换解的概率。
+        wiggles = []
+        warm = lift.joint_positions
+        for target in wiggle_worlds:
+            result = solver.solve(
                 IKRequest(
-                    target_position=approach_world,
+                    target_position=target,
                     target_orientation=ik_orientation,
-                    warm_start_ik_cspace_seed=current_cspace,
+                    warm_start_ik_cspace_seed=warm,
                     position_tolerance=ik_defaults.position_tolerance,
                     orientation_tolerance=ik_defaults.orientation_tolerance,
                 )
             )
-            initial_all = np.asarray(robot.get_joint_positions(), dtype=float)
-            pre_pinch_all = target_vector_from_mapping(
-                dof_names, self.config.pre_targets, base=initial_all
-            )
-            approach_all = pre_pinch_all.copy()
-            set_joint_targets_by_indices(
-                approach_all, arm_indices, approach.joint_positions
-            )
-            # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
-            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的动作意图。TCP 直线现在
-            # 直接使用 specified_path 的 TaskSpacePath/TcpLineSegment，不再经过旧逐点 IK helper。
-            grasp_line_trajectory, grasp_line_motion = (
-                build_specified_tcp_line_trajectory(
-                    context=context,
-                    tcp_frame_name=self.tcp_frame_name,
-                    dof_names=dof_names,
-                    arm_indices=arm_indices,
-                    start_all=approach_all,
-                    target_position=pinch_world,
-                    duration_s=self.config.approach_duration,
-                    phase="approach_box",
-                    physics_dt=physics_dt,
-                    base_config=self.config.motion_planning.backend,
-                )
-            )
-            grasp_joint_positions = np.asarray(
-                grasp_line_trajectory.positions[-1], dtype=float
-            )[arm_indices]
-            lift = solver.solve(
-                IKRequest(
-                    target_position=lifted_world,
-                    target_orientation=ik_orientation,
-                    warm_start_ik_cspace_seed=grasp_joint_positions,
-                    position_tolerance=ik_defaults.position_tolerance,
-                    orientation_tolerance=ik_defaults.orientation_tolerance,
-                )
-            )
-            # wiggle 阶段每个目标都用上一目标热启动，减少在冗余机械臂上突然换解的概率。
-            wiggles = []
-            warm = lift.joint_positions
-            for target in wiggle_worlds:
-                result = solver.solve(
-                    IKRequest(
-                        target_position=target,
-                        target_orientation=ik_orientation,
-                        warm_start_ik_cspace_seed=warm,
-                        position_tolerance=ik_defaults.position_tolerance,
-                        orientation_tolerance=ik_defaults.orientation_tolerance,
-                    )
-                )
-                wiggles.append((target, result))
-                warm = result.joint_positions
+            wiggles.append((target, result))
+            warm = result.joint_positions
 
-            # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
-            # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
-            grasp_open_all = np.asarray(
-                grasp_line_trajectory.positions[-1], dtype=float
-            ).copy()
-            grasp_closed_all = target_vector_from_mapping(
-                dof_names, self.config.closed_targets, base=grasp_open_all
-            )
-            lifted_all = grasp_closed_all.copy()
-            set_joint_targets_by_indices(
-                lifted_all, arm_indices, lift.joint_positions
-            )
+        # 把 cuMotion IK 解写回完整 articulation 目标。手部关节用稀疏映射覆盖，其它 DOF
+        # 沿用上一阶段目标，保证未参与阶段切换的关节不被意外归零。
+        grasp_open_all = np.asarray(
+            grasp_line_trajectory.positions[-1], dtype=float
+        ).copy()
+        grasp_closed_all = target_vector_from_mapping(
+            dof_names, DEFAULT_CLOSED_PINCH_HAND_TARGETS, base=grasp_open_all
+        )
+        lifted_all = grasp_closed_all.copy()
+        lifted_all[arm_indices] = np.asarray(lift.joint_positions, dtype=float)
 
-            wiggle_all_targets = []
-            for _world, result in wiggles:
-                wiggle_all = grasp_closed_all.copy()
-                set_joint_targets_by_indices(
-                    wiggle_all, arm_indices, result.joint_positions
-                )
-                wiggle_all_targets.append(wiggle_all)
+        wiggle_all_targets = []
+        for _world, result in wiggles:
+            wiggle_all = grasp_closed_all.copy()
+            wiggle_all[arm_indices] = np.asarray(result.joint_positions, dtype=float)
+            wiggle_all_targets.append(wiggle_all)
 
-            # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
-            post_joint_sweep_targets = []
-            for joint_1_target in self.config.post_joint_sweep_targets:
-                sweep_all = lifted_all.copy()
-                sweep_all[arm_indices[0]] = float(joint_1_target)
-                post_joint_sweep_targets.append(sweep_all)
+        # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
+        post_joint_sweep_targets = []
+        for joint_1_target in post_joint_sweep_target_values:
+            sweep_all = lifted_all.copy()
+            sweep_all[arm_indices[0]] = float(joint_1_target)
+            post_joint_sweep_targets.append(sweep_all)
 
-            # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动：cuMotion MotionPlanner
-            # 在 C-space 中生成路径，再把路径嵌回完整 DOF 轨迹播放。手指开合阶段使用
-            # smoothstep，因为手部 DOF 不属于 cuMotion 机器人描述的 C-space。
-            move_to_approach_trajectory, move_to_approach_motion = (
-                build_planned_joint_motion_trajectory(
-                    motion_planner=motion_planner,
-                    dof_names=dof_names,
-                    arm_indices=arm_indices,
-                    start_all=pre_pinch_all,
-                    target_all=approach_all,
-                    duration_s=self.config.move_duration,
-                    phase="move_to_approach",
-                    physics_dt=physics_dt,
-                )
-            )
-            lift_trajectory, lift_motion = build_planned_joint_motion_trajectory(
+        # 下面这些阶段都是“机械臂关节角 -> 机械臂关节角”的运动：cuMotion MotionPlanner
+        # 在 C-space 中生成路径，再把路径嵌回完整 DOF 轨迹播放。手指开合阶段使用
+        # smoothstep，因为手部 DOF 不属于 cuMotion 机器人描述的 C-space。
+        move_to_approach_trajectory = build_planned_joint_motion_trajectory(
+            motion_planner=motion_planner,
+            dof_names=dof_names,
+            arm_indices=arm_indices,
+            start_all=pre_pinch_all,
+            target_all=approach_all,
+            duration_s=move_duration,
+            phase="move_to_approach",
+            physics_dt=physics_dt,
+        )
+        lift_trajectory = build_planned_joint_motion_trajectory(
+            motion_planner=motion_planner,
+            dof_names=dof_names,
+            arm_indices=arm_indices,
+            start_all=grasp_closed_all,
+            target_all=lifted_all,
+            duration_s=lift_duration,
+            phase="lift",
+            physics_dt=physics_dt,
+        )
+        wiggle_trajectories = []
+        previous_target = lifted_all
+        for index, wiggle_all in enumerate(wiggle_all_targets, start=1):
+            trajectory = build_planned_joint_motion_trajectory(
                 motion_planner=motion_planner,
                 dof_names=dof_names,
                 arm_indices=arm_indices,
-                start_all=grasp_closed_all,
-                target_all=lifted_all,
-                duration_s=self.config.lift_duration,
-                phase="lift",
+                start_all=previous_target,
+                target_all=wiggle_all,
+                duration_s=wiggle_duration,
+                phase=f"wiggle_{index}",
                 physics_dt=physics_dt,
             )
-            wiggle_trajectories = []
-            wiggle_motions = []
-            previous_target = lifted_all
-            for index, wiggle_all in enumerate(wiggle_all_targets, start=1):
-                trajectory, motion = build_planned_joint_motion_trajectory(
-                    motion_planner=motion_planner,
-                    dof_names=dof_names,
-                    arm_indices=arm_indices,
-                    start_all=previous_target,
-                    target_all=wiggle_all,
-                    duration_s=self.config.wiggle_duration,
-                    phase=f"wiggle_{index}",
-                    physics_dt=physics_dt,
-                )
-                wiggle_trajectories.append(trajectory)
-                wiggle_motions.append(motion)
-                previous_target = wiggle_all
-            wiggle_return_trajectory = None
-            wiggle_return_motion = None
-            if wiggle_all_targets:
-                wiggle_return_trajectory, wiggle_return_motion = (
-                    build_planned_joint_motion_trajectory(
-                        motion_planner=motion_planner,
-                        dof_names=dof_names,
-                        arm_indices=arm_indices,
-                        start_all=previous_target,
-                        target_all=lifted_all,
-                        duration_s=self.config.wiggle_duration,
-                        phase="wiggle_return_center",
-                        physics_dt=physics_dt,
-                    )
-                )
-            post_joint_sweep_trajectories = []
-            post_joint_sweep_motions = []
-            previous_target = lifted_all
-            for index, sweep_all in enumerate(post_joint_sweep_targets, start=1):
-                trajectory, motion = build_planned_joint_motion_trajectory(
-                    motion_planner=motion_planner,
-                    dof_names=dof_names,
-                    arm_indices=arm_indices,
-                    start_all=previous_target,
-                    target_all=sweep_all,
-                    duration_s=self.config.post_joint_sweep_duration,
-                    phase=f"post_joint_1_sweep_{index}",
-                    physics_dt=physics_dt,
-                )
-                post_joint_sweep_trajectories.append(trajectory)
-                post_joint_sweep_motions.append(motion)
-                previous_target = sweep_all
-
-        return {
-            "arm_indices": arm_indices,
-            "initial_all": initial_all,
-            "pre_pinch_all": pre_pinch_all,
-            "approach_all": approach_all,
-            "move_to_approach_trajectory": move_to_approach_trajectory,
-            "approach_line_trajectory": grasp_line_trajectory,
-            "grasp_open_all": grasp_open_all,
-            "grasp_closed_all": grasp_closed_all,
-            "lifted_all": lifted_all,
-            "lift_trajectory": lift_trajectory,
-            "wiggle_all_targets": wiggle_all_targets,
-            "wiggle_trajectories": wiggle_trajectories,
-            "wiggle_return_trajectory": wiggle_return_trajectory,
-            "post_joint_sweep_targets": post_joint_sweep_targets,
-            "post_joint_sweep_trajectories": post_joint_sweep_trajectories,
-            "ik": {
-                "pinch_world": pinch_world,
-                "approach_world": approach_world,
-                "lifted_world": lifted_world,
-                "tcp_xyz": tcp.xyz,
-                "approach_success": approach.success,
-                "approach_error": approach.position_error,
-                "grasp_success": grasp_line_motion.success,
-                "grasp_error": 0.0,
-                "approach_line_start": approach_world,
-                "approach_line_target": pinch_world,
-                "approach_line_waypoints": grasp_line_motion.diagnostics.metrics.get(
-                    "num_waypoints", 0.0
-                ),
-                "approach_line_path_length": grasp_line_motion.diagnostics.metrics.get(
-                    "path_length", 0.0
-                ),
-                "lift_success": lift.success,
-                "lift_error": lift.position_error,
-                "wiggles": [
-                    (world_target, result.success, result.position_error)
-                    for world_target, result in wiggles
-                ],
-            },
-            "motion": {
-                "move_to_approach": move_to_approach_motion,
-                "approach_box": grasp_line_motion,
-                "lift": lift_motion,
-                "wiggles": wiggle_motions,
-                "wiggle_return_center": wiggle_return_motion,
-                "post_joint_sweeps": post_joint_sweep_motions,
-            },
-        }
-
-    def execution_steps(self, plan: dict[str, object]) -> list[ExecutionStep]:
-        """把抓取 plan 拆成可顺序执行的执行步骤列表。
-
-        ``plan`` 来自 ``plan`` 方法，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
-        返回的步骤列表只负责执行，IK 和运动规划都已经提前完成。
-        """
-
-        # plan 阶段只生成目标数组；这里把它们转换成可执行步骤，确保 run 的主循环只需要
-        # 顺序调用 ``execution_step.run``，便于之后插入/删除阶段。
-        steps: list[ExecutionStep] = [
-            SmoothJointTargetStep(
-                start_all=plan["initial_all"],
-                target_all=plan["pre_pinch_all"],
-                duration=self.config.prep_duration,
-                phase="pre_pinch",
-            ),
-            FullJointTrajectoryStep(
-                trajectory=plan["move_to_approach_trajectory"],
-                phase="move_to_approach",
-            ),
-            FullJointTrajectoryStep(
-                trajectory=plan["approach_line_trajectory"],
-                phase="approach_box",
-            ),
-            SmoothJointTargetStep(
-                start_all=plan["grasp_open_all"],
-                target_all=plan["grasp_closed_all"],
-                duration=self.config.close_duration,
-                phase="close_fingers",
-            ),
-            FullJointTrajectoryStep(
-                trajectory=plan["lift_trajectory"],
-                phase="lift",
-            ),
-        ]
-        for index, trajectory in enumerate(plan["wiggle_trajectories"], start=1):
-            steps.append(
-                FullJointTrajectoryStep(
-                    trajectory=trajectory,
-                    phase=f"wiggle_{index}",
-                )
+            wiggle_trajectories.append(trajectory)
+            previous_target = wiggle_all
+        wiggle_return_trajectory = None
+        if wiggle_all_targets:
+            wiggle_return_trajectory = build_planned_joint_motion_trajectory(
+                motion_planner=motion_planner,
+                dof_names=dof_names,
+                arm_indices=arm_indices,
+                start_all=previous_target,
+                target_all=lifted_all,
+                duration_s=wiggle_duration,
+                phase="wiggle_return_center",
+                physics_dt=physics_dt,
             )
-        if plan["wiggle_return_trajectory"] is not None:
-            steps.append(
-                FullJointTrajectoryStep(
-                    trajectory=plan["wiggle_return_trajectory"],
-                    phase="wiggle_return_center",
-                )
+        post_joint_sweep_trajectories = []
+        previous_target = lifted_all
+        for index, sweep_all in enumerate(post_joint_sweep_targets, start=1):
+            trajectory = build_planned_joint_motion_trajectory(
+                motion_planner=motion_planner,
+                dof_names=dof_names,
+                arm_indices=arm_indices,
+                start_all=previous_target,
+                target_all=sweep_all,
+                duration_s=post_joint_sweep_duration,
+                phase=f"post_joint_1_sweep_{index}",
+                physics_dt=physics_dt,
             )
+            post_joint_sweep_trajectories.append(trajectory)
+            previous_target = sweep_all
+
+    return {
+        "initial_all": initial_all,
+        "pre_pinch_all": pre_pinch_all,
+        "move_to_approach_trajectory": move_to_approach_trajectory,
+        "approach_line_trajectory": grasp_line_trajectory,
+        "grasp_open_all": grasp_open_all,
+        "grasp_closed_all": grasp_closed_all,
+        "lifted_all": lifted_all,
+        "lift_trajectory": lift_trajectory,
+        "wiggle_trajectories": wiggle_trajectories,
+        "wiggle_return_trajectory": wiggle_return_trajectory,
+        "post_joint_sweep_trajectories": post_joint_sweep_trajectories,
+        "ik": {
+            "pinch_world": pinch_world,
+            "approach_world": approach_world,
+            "lifted_world": lifted_world,
+            "tcp_xyz": tcp.xyz,
+            "approach_success": approach.success,
+            "approach_error": approach.position_error,
+            "lift_success": lift.success,
+            "lift_error": lift.position_error,
+            "wiggles": [
+                (world_target, result.success, result.position_error)
+                for world_target, result in wiggles
+            ],
+        },
+    }
+
+
+def pinch_grasp_execution_steps(
+    plan: dict[str, object], *, short_smoke: bool
+) -> list[ExecutionStep]:
+    """把抓取 plan 拆成可顺序执行的执行步骤列表。"""
+
+    prep_duration = SHORT_SMOKE_DURATION if short_smoke else PREP_DURATION
+    close_duration = SHORT_SMOKE_DURATION if short_smoke else CLOSE_DURATION
+    final_hold_duration = SHORT_SMOKE_DURATION if short_smoke else FINAL_HOLD_DURATION
+    steps: list[ExecutionStep] = [
+        SmoothJointTargetStep(
+            start_all=plan["initial_all"],
+            target_all=plan["pre_pinch_all"],
+            duration=prep_duration,
+            phase="pre_pinch",
+        ),
+        FullJointTrajectoryStep(
+            trajectory=plan["move_to_approach_trajectory"],
+            phase="move_to_approach",
+        ),
+        FullJointTrajectoryStep(
+            trajectory=plan["approach_line_trajectory"],
+            phase="approach_box",
+        ),
+        SmoothJointTargetStep(
+            start_all=plan["grasp_open_all"],
+            target_all=plan["grasp_closed_all"],
+            duration=close_duration,
+            phase="close_fingers",
+        ),
+        FullJointTrajectoryStep(
+            trajectory=plan["lift_trajectory"],
+            phase="lift",
+        ),
+    ]
+    for index, trajectory in enumerate(plan["wiggle_trajectories"], start=1):
         steps.append(
-            HoldJointTargetStep(
-                target_all=plan["lifted_all"],
-                duration=self.config.final_hold_duration,
-                phase="final",
+            FullJointTrajectoryStep(trajectory=trajectory, phase=f"wiggle_{index}")
+        )
+    if plan["wiggle_return_trajectory"] is not None:
+        steps.append(
+            FullJointTrajectoryStep(
+                trajectory=plan["wiggle_return_trajectory"],
+                phase="wiggle_return_center",
             )
         )
-        for index, trajectory in enumerate(
-            plan["post_joint_sweep_trajectories"], start=1
-        ):
-            steps.append(
-                FullJointTrajectoryStep(
-                    trajectory=trajectory,
-                    phase=f"post_joint_1_sweep_{index}",
-                )
+    steps.append(
+        HoldJointTargetStep(
+            target_all=plan["lifted_all"],
+            duration=final_hold_duration,
+            phase="final",
+        )
+    )
+    for index, trajectory in enumerate(plan["post_joint_sweep_trajectories"], start=1):
+        steps.append(
+            FullJointTrajectoryStep(
+                trajectory=trajectory,
+                phase=f"post_joint_1_sweep_{index}",
             )
-        return steps
+        )
+    return steps
 
-    def run(
-        self,
-        *,
+
+def run_pinch_grasp_action(
+    *,
+    robot,
+    world,
+    articulation_action_type,
+    controller,
+    simulation_app,
+    render: bool,
+    rope_config: CapsuleRopeConfig,
+    mjcf_path: str | Path,
+    cumotion_config: CuMotionConfig,
+    motion_planner_config: MotionPlannerBackendConfig,
+    endpoint: str,
+    short_smoke: bool,
+    drive_logger=None,
+) -> dict[str, object]:
+    """规划并执行完整夹捏抓取脚本。"""
+
+    # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
+    # cuMotion 连续轨迹采样使用 physics_dt 对齐物理步长，避免固定 0.01s 与仿真频率错位。
+    plan = plan_pinch_grasp(
         robot,
-        world,
-        articulation_action_type,
-        controller,
-        simulation_app,
-        render: bool,
-        drive_logger=None,
-    ) -> dict[str, object]:
-        """规划并执行完整夹捏抓取脚本。
-
-        参数:
-            robot: Isaac articulation。
-            world: Isaac world。
-            articulation_action_type: Isaac action 类型构造器。
-            controller: runtime 关节控制器，负责主动关节 action 和 mimic follower 下发。
-            simulation_app: Isaac app，用于检测仿真窗口是否仍运行。
-            render: 是否渲染每个仿真步。
-            drive_logger: 可选关节跟踪日志器。
-        返回:
-            ``plan`` 字典，额外写入 ``steps`` 表示实际执行的 physics step 数。
-        """
-
-        # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
-        # cuMotion 连续轨迹采样使用 physics_dt 对齐物理步长，避免固定 0.01s 与仿真频率错位。
-        plan = self.plan(robot, physics_dt=float(world.get_physics_dt()))
-        runtime = ExecutionRuntime(
-            articulation=robot,
-            simulation_world=world,
-            articulation_action_type=articulation_action_type,
-            joint_controller=controller,
-            simulation_app=simulation_app,
-            render_enabled=render,
-            drive_logger=drive_logger,
-        )
-        step = 0
-        for execution_step in self.execution_steps(plan):
-            step = execution_step.run(runtime, step)
-        plan["steps"] = step
-        return plan
+        rope_config=rope_config,
+        mjcf_path=mjcf_path,
+        cumotion_config=cumotion_config,
+        motion_planner_config=motion_planner_config,
+        endpoint=endpoint,
+        short_smoke=short_smoke,
+        physics_dt=float(world.get_physics_dt()),
+    )
+    runtime = ExecutionRuntime(
+        articulation=robot,
+        simulation_world=world,
+        articulation_action_type=articulation_action_type,
+        joint_controller=controller,
+        simulation_app=simulation_app,
+        render_enabled=render,
+        drive_logger=drive_logger,
+    )
+    step = 0
+    for execution_step in pinch_grasp_execution_steps(plan, short_smoke=short_smoke):
+        step = execution_step.run(runtime, step)
+    return {"steps": step, "ik": plan["ik"]}
 
 
 def parse_args() -> argparse.Namespace:
@@ -1229,51 +1003,24 @@ def robot_cumotion_config(robot_config: dict) -> CuMotionConfig:
     return CuMotionConfig.from_mapping(robot_config)
 
 
-def default_pinch_grasp_action_config(cumotion_profile: dict) -> PinchGraspActionConfig:
-    """根据 cuMotion profile 创建脚本内置 pinch grasp 动作参数。
+def motion_planner_config_from_profile(
+    cumotion_profile: dict,
+) -> MotionPlannerBackendConfig:
+    """从 cuMotion profile 里取出 motion planner 配置。"""
 
-    profile 仍可提供 ``cumotion.motion_planner`` 作为规划后端默认值；抓取目标、阶段时长和手型
-    都固定在本脚本内，不再从外部 trajectory YAML 读取。
-    """
-
-    backend = MotionPlannerBackendConfig.from_mapping(None)
     profile_cumotion = cumotion_profile.get("cumotion")
-    if profile_cumotion is not None:
-        if not isinstance(profile_cumotion, dict):
-            raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
-        profile_motion_planner = profile_cumotion.get("motion_planner")
-        if profile_motion_planner is not None:
-            if not isinstance(profile_motion_planner, dict):
-                raise ValueError(
-                    "cuMotion profile key 'cumotion.motion_planner' must be a mapping"
-                )
-            backend = MotionPlannerBackendConfig.from_mapping(profile_motion_planner)
-    return PinchGraspActionConfig(
-        motion_planning=PinchMotionPlanningConfig(backend=backend)
-    )
-
-
-def short_smoke_config(config: PinchGraspActionConfig) -> PinchGraspActionConfig:
-    """把抓取配置压缩成快速 headless smoke 配置。
-
-    该模式用于 CI 或快速导入测试：每个阶段只执行极短时间，禁用 wiggle 和后处理关节扫描，
-    目的是尽快验证资产导入、IK 初始化、控制器配置和主循环是否能跑通。
-    """
-
-    return replace(
-        config,
-        lift_height=0.05,
-        prep_duration=0.02,
-        move_duration=0.02,
-        approach_duration=0.02,
-        close_duration=0.02,
-        lift_duration=0.02,
-        wiggle_cycles=0,
-        wiggle_duration=0.02,
-        final_hold_duration=0.02,
-        post_joint_sweep_duration=0.02,
-        post_joint_sweep_targets=(),
-    )
+    if profile_cumotion is None:
+        return MotionPlannerBackendConfig.from_mapping(None)
+    if not isinstance(profile_cumotion, dict):
+        raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
+    profile_motion_planner = profile_cumotion.get("motion_planner")
+    if profile_motion_planner is not None and not isinstance(
+        profile_motion_planner, dict
+    ):
+        raise ValueError(
+            "cuMotion profile key 'cumotion.motion_planner' must be a mapping"
+        )
+    return MotionPlannerBackendConfig.from_mapping(profile_motion_planner)
 
 
 def hold_initial_pose(
@@ -1352,14 +1099,9 @@ def main() -> None:
     controlled_joints = list(robot_config.get("controlled_joints", ["all"]))
     robot_cumotion = robot_cumotion_config(robot_config)
 
-    # 把原始 YAML dict 转成动作使用的 dataclass。命令行参数只覆盖少量常用字段，
-    # 复杂动作参数直接修改本脚本中的 PinchGraspActionConfig 默认值，保证动作入口自包含。
     rope_config = CapsuleRopeConfig.from_mapping(rope_config_data)
-    action_config = default_pinch_grasp_action_config(cumotion_profile)
-    if args.endpoint is not None:
-        action_config = replace(action_config, endpoint=args.endpoint)
-    if args.short_smoke:
-        action_config = short_smoke_config(action_config)
+    motion_planner_config = motion_planner_config_from_profile(cumotion_profile)
+    endpoint = args.endpoint or DEFAULT_ENDPOINT
 
     # 物理步频决定接触稳定性和控制刷新上限；渲染步频只影响 GUI/相机刷新。
     # headless 模式下 rendering_dt 之后会直接跟 physics_dt 对齐，避免无意义的渲染节拍。
@@ -1520,24 +1262,19 @@ def main() -> None:
                 )
                 print("RUN_PINCH_GRASP_HOLD_OK", flush=True)
             else:
-                # PinchGraspAction 会：
-                # - 根据闭合手型计算 pinch TCP 相对法兰的 offset；
-                # - 生成临时 URDF，把 pinch TCP 作为 fixed frame 挂到 robot cumotion.flange_frame；
-                # - 使用 cuMotion 求解 approach/grasp/lift/wiggle 关键帧；
-                # - 按阶段播放轨迹并通过 controller 下发到 Isaac。
-                action = PinchGraspAction(
-                    config=action_config,
-                    rope_config=rope_config,
-                    mjcf_path=asset_path,
-                    cumotion_config=robot_cumotion,
-                )
-                result = action.run(
+                result = run_pinch_grasp_action(
                     robot=robot,
                     world=world,
                     articulation_action_type=ArticulationAction,
                     controller=controller,
                     simulation_app=simulation_app,
                     render=args.gui,
+                    rope_config=rope_config,
+                    mjcf_path=asset_path,
+                    cumotion_config=robot_cumotion,
+                    motion_planner_config=motion_planner_config,
+                    endpoint=endpoint,
+                    short_smoke=args.short_smoke,
                     drive_logger=logger,
                 )
                 print(

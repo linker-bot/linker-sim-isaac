@@ -10,20 +10,20 @@ SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_ROOT) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_ROOT))
 
-from manipulation_project.assets.asset_paths import (
+from linkerbot_sim.assets.asset_paths import (
     DEFAULT_AR5_RIGHT_URDF,
     DEFAULT_L6_RIGHT_URDF,
 )
-from manipulation_project.assets.robot_loader import RobotAssetConfig
-from manipulation_project.assets.solver_overrides import SolverIterationConfig
-from manipulation_project.backends.cumotion.context import CuMotionConfig
-from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
+from linkerbot_sim.assets.robot_loader import RobotAssetConfig
+from linkerbot_sim.assets.solver_overrides import SolverIterationConfig
+from linkerbot_sim.backends.cumotion.context import CuMotionConfig
+from linkerbot_sim.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from pinch_grasp import (
-    PinchGraspActionConfig,
-    default_pinch_grasp_action_config,
+    DEFAULT_ENDPOINT,
+    motion_planner_config_from_profile,
     grasp_target_position,
 )
-from manipulation_project.utils.config import load_yaml
+from linkerbot_sim.utils.config import load_yaml
 
 
 def test_default_robot_config_paths_exist() -> None:
@@ -72,8 +72,7 @@ def test_cumotion_profiles_and_examples_are_valid_defaults() -> None:
         assert ik_config["ccd_max_iterations"] > 0
         assert ik_config["bfgs_max_iterations"] > 0
         assert "motion_planner" in cumotion
-        action_config = default_pinch_grasp_action_config(config)
-        action_config.motion_planning.validate()
+        motion_planner_config_from_profile(config).validate()
 
 
 def test_cumotion_config_parses_grouped_kinematics() -> None:
@@ -175,8 +174,7 @@ def test_cumotion_profile_merge_order() -> None:
     assert merged_ik["orientation_weight"] == 0.1
     assert merged_robot["cumotion"]["flange_frame"] == "flange"
 
-    action_config = module.default_pinch_grasp_action_config(profile)
-    backend = action_config.motion_planning.backend
+    backend = module.motion_planner_config_from_profile(profile)
     assert backend.planning_pipeline == "graph_search"
     assert backend.graph_search.generate_interpolated_path is True
 
@@ -207,7 +205,7 @@ def test_robot_asset_mesh_references_exist() -> None:
     assert missing == []
 
 
-def test_default_rope_and_pinch_grasp_action_config() -> None:
+def test_default_rope_and_pinch_grasp_action_constants() -> None:
     rope = CapsuleRopeConfig.from_mapping(
         load_yaml("configs/objects/capsule_rope.yaml")
     )
@@ -217,10 +215,8 @@ def test_default_rope_and_pinch_grasp_action_config() -> None:
     assert rope.root_path == "/CapsuleRope"
     assert rope.radius is not None and rope.radius > 0.0
     assert rope.twist_limit is not None and rope.twist_limit > 0.0
-    grasp = PinchGraspActionConfig()
-    grasp.validate()
     left_center = endpoint_center(rope, "left")
-    target = grasp_target_position(grasp, rope)
+    target = grasp_target_position(rope, endpoint=DEFAULT_ENDPOINT)
     assert target[1] == left_center[1]
     assert target[2] > left_center[2]
 
@@ -243,14 +239,6 @@ def test_system_configs_reject_obsolete_shapes() -> None:
         raise AssertionError(
             "CapsuleRopeConfig accepted config without object/rope sections"
         )
-
-    invalid_action = PinchGraspActionConfig(endpoint="middle")
-    try:
-        invalid_action.validate()
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("PinchGraspActionConfig accepted invalid endpoint")
 
 
 def test_env_configs_provide_solver_settings() -> None:

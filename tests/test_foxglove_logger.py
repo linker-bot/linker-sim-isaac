@@ -4,7 +4,7 @@ import sys
 
 import numpy as np
 
-from manipulation_project.telemetry import foxglove
+from linkerbot_sim.telemetry import foxglove
 
 
 def test_foxglove_time_helpers() -> None:

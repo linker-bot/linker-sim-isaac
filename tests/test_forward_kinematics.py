@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.forward_kinematics import (
+from linkerbot_sim.backends.cumotion.forward_kinematics import (
     CuMotionForwardKinematics,
 )
 

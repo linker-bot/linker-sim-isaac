@@ -5,16 +5,16 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.motion_planner import CuMotionMotionPlanner
-from manipulation_project.backends.cumotion.motion_planner_config import (
+from linkerbot_sim.backends.cumotion.motion_planner import CuMotionMotionPlanner
+from linkerbot_sim.backends.cumotion.motion_planner_config import (
     GraphSearchConfig,
     MotionPlannerBackendConfig,
     SpecifiedPathConfig,
     TrajectoryGenerationConfig,
     TrajectoryOptimizationConfig,
 )
-from manipulation_project.planning.collision_objects import CollisionObject
-from manipulation_project.planning.requests import (
+from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.requests import (
     CompositePath,
     CompositePathPart,
     CSpaceWaypointPath,

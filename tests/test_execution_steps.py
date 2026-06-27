@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.controllers.types import ComponentControlSettings, JointControlSettings
-from manipulation_project.execution.runtime import ExecutionRuntime
-from manipulation_project.execution.steps import (
+from linkerbot_sim.controllers.types import ComponentControlSettings, JointControlSettings
+from linkerbot_sim.execution.runtime import ExecutionRuntime
+from linkerbot_sim.execution.steps import (
     SwitchControlModeStep,
     execute_command_joint_trajectory,
 )
-from manipulation_project.trajectories.types import JointTrajectory
+from linkerbot_sim.trajectories.types import JointTrajectory
 
 
 class _FakeWorld:

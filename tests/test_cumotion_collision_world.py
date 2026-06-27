@@ -4,10 +4,10 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.collision_world import (
+from linkerbot_sim.backends.cumotion.collision_world import (
     CuMotionCollisionWorld,
 )
-from manipulation_project.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.collision_objects import CollisionObject
 
 
 class _FakeRotation3:

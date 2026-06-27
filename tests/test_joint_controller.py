@@ -3,13 +3,13 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from manipulation_project.controllers.joint_controller import JointController
-from manipulation_project.controllers.types import (
+from linkerbot_sim.controllers.joint_controller import JointController
+from linkerbot_sim.controllers.types import (
     ComponentControlSettings,
     ControlTargets,
     JointControlSettings,
 )
-from manipulation_project.robots.mimic import MimicFollowerControl
+from linkerbot_sim.robots.mimic import MimicFollowerControl
 
 
 class _Action:

@@ -46,7 +46,7 @@ grasp 流程。
 │   └── robots/               # 机器人资产、关节组、cuMotion XRDF/URDF
 ├── docs/                     # cuMotion 接口、规划设计和历史方案文档
 ├── scripts/                  # Isaac Sim 运行入口和资产生成入口
-├── source/manipulation_project/
+├── src/linkerbot_sim/
 │   ├── app/                  # SimulationApp 启动
 │   ├── assets/               # 资产导入、USD/PhysX 覆盖、solver 设置
 │   ├── backends/cumotion/    # cuMotion context、FK/IK、planner、path/trajectory adapter
@@ -73,7 +73,7 @@ grasp 流程。
 示例命令默认使用仓库内 `env_isaaclab/` Python 环境，并从仓库根目录运行：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python <command>
+PYTHONPATH=src env_isaaclab/bin/python <command>
 ```
 
 完整依赖通过 `pyproject.toml` 管理；Isaac Sim、cuMotion、torch 版本应与当前 Isaac Python
@@ -97,25 +97,25 @@ env_isaaclab/bin/python -m pip install -e ".[dev,visualization,simulation]"
 生成或更新 capsule rope USD：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
+PYTHONPATH=src env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 ```
 
 只导入绳体和 AR5+L6，并快速保持初始姿态：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp --short-smoke
+PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp --short-smoke
 ```
 
 运行 GUI pinch grasp demo：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py --gui
+PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --gui
 ```
 
 常用覆盖参数：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
   --endpoint right \
   --control-mode position \
   --physics-frequency 240 \
@@ -166,7 +166,7 @@ configs/cumotion/default.yaml
 实际合并分两条线：
 
 - `cumotion` profile 先作为 robot config 的默认值；robot YAML 继续提供或覆盖 `xrdf_path`、`urdf_path`、`flange_frame`、`kinematics` 等机器人级字段。
-- `cumotion.motion_planner` profile 作为 `PinchGraspActionConfig.motion_planning` 的默认值；抓取目标、阶段时长和手型固定在 `scripts/pinch_grasp.py` 中。
+- `cumotion.motion_planner` profile 直接解析成动作脚本使用的 `MotionPlannerBackendConfig`；抓取目标、阶段时长和手型固定在 `scripts/pinch_grasp.py` 中。
 
 配置合并是递归 mapping merge。列表和标量按覆盖值整体替换，不做逐项合并，这对关节列表、
 轨迹点和手型目标更安全。
@@ -234,7 +234,7 @@ cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，
 
 ## cuMotion 后端
 
-`source/manipulation_project/backends/cumotion/` 是 cuMotion 的适配层。主要文件职责如下：
+`src/linkerbot_sim/backends/cumotion/` 是 cuMotion 的适配层。主要文件职责如下：
 
 - `context.py`：加载 XRDF/URDF，创建 robot description、kinematics、collision world，并暴露 `joint_names()` / `frame_names()`。
 - `forward_kinematics.py`：封装 FK 和 frame 查询。
@@ -277,7 +277,7 @@ MotionResult(
 
 ## Trajectory 和执行频率
 
-项目内部 `JointTrajectory` 位于 `source/manipulation_project/trajectories/types.py`。它保存：
+项目内部 `JointTrajectory` 位于 `src/linkerbot_sim/trajectories/types.py`。它保存：
 
 - `times`: shape `(N,)`
 - `positions`: shape `(N, dof)`
@@ -304,7 +304,7 @@ effort。换句话说，轨迹不是按原采样点逐点硬播放，而是按�
 ## Pinch Grasp
 
 `scripts/pinch_grasp.py` 是当前主要动作入口。它的输入是机器人 articulation、rope 配置、MJCF
-路径、cuMotion config 和脚本内置的 `PinchGraspActionConfig`。主要步骤：
+路径、cuMotion config 和脚本内置动作常量。主要步骤：
 
 1. 展开闭合手型中的 MJCF mimic follower 目标。
 2. 沿 thumb/index body 链计算闭合手型下两指尖位置。
@@ -316,8 +316,8 @@ effort。换句话说，轨迹不是按原采样点逐点硬播放，而是按�
 8. 把机械臂 C-space 结果映射回完整 DOF，手部目标用脚本内置稀疏关节目标覆盖。
 9. 生成 `SmoothJointTargetStep`、`FullJointTrajectoryStep`、`HoldJointTargetStep` 组成的执行序列。
 
-动作参数集中在 `PinchGraspActionConfig`、`DEFAULT_PRE_PINCH_HAND_TARGETS` 和
-`DEFAULT_CLOSED_PINCH_HAND_TARGETS`。`target_rpy` 使用固定轴 XYZ 顺序，单位 rad；脚本内部会
+动作参数集中在 `TARGET_RPY`、`DEFAULT_PRE_PINCH_HAND_TARGETS` 和
+`DEFAULT_CLOSED_PINCH_HAND_TARGETS` 等模块常量里。`TARGET_RPY` 使用固定轴 XYZ 顺序，单位 rad；脚本内部会
 转换成项目统一的 wxyz 四元数。
 
 ## 控制器和 Mimic
@@ -370,7 +370,7 @@ rope:
 修改绳体几何、质量、材质或 joint 参数后，需要重新生成 USD：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
+PYTHONPATH=src env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 ```
 
 生成脚本会启动 headless SimulationApp，因为 USD/PhysX schema 写入依赖 Isaac/Omni 扩展注册。
@@ -403,13 +403,13 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 默认不记录读取成本较高的 effort 字段。可以通过命令行打开：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
   --log-measured-effort \
   --log-applied-effort \
   --log-action-effort
 ```
 
-Foxglove 输出位于 `source/manipulation_project/telemetry/foxglove.py`，支持离线 MCAP、本地
+Foxglove 输出位于 `src/linkerbot_sim/telemetry/foxglove.py`，支持离线 MCAP、本地
 WebSocket live server、`JointStates` 曲线和 `SceneUpdate` marker。
 
 ## 验证
@@ -417,19 +417,19 @@ WebSocket live server、`JointStates` 曲线和 `SceneUpdate` marker。
 语法检查：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python -m compileall -q source scripts tests
+PYTHONPATH=src env_isaaclab/bin/python -m compileall -q src scripts tests
 ```
 
 运行轻量测试：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python -m pytest -q tests
+PYTHONPATH=src env_isaaclab/bin/python -m pytest -q tests
 ```
 
 检查 YAML 是否可解析：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python - <<'PY'
+PYTHONPATH=src env_isaaclab/bin/python - <<'PY'
 from pathlib import Path
 import yaml
 

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from manipulation_project.controllers.config import (
+from linkerbot_sim.controllers.config import (
     joint_control_settings,
     load_controller_profiles,
     physx_override_configs,
 )
-from manipulation_project.robots.classification import component_for_name
+from linkerbot_sim.robots.classification import component_for_name
 
 
 def test_controller_profiles_split_arm_and_hand() -> None:

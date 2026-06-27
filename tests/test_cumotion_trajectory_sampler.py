@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.backends.cumotion.trajectory_sampler import (
+from linkerbot_sim.backends.cumotion.trajectory_sampler import (
     joint_trajectory_from_cumotion,
 )
 

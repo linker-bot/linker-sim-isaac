@@ -8,13 +8,13 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from manipulation_project.backends.cumotion.context import (
+from linkerbot_sim.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
-from manipulation_project.backends.cumotion.tcp_context import make_cumotion_context
-from manipulation_project.planning.collision_objects import CollisionObject
-from manipulation_project.tcp.tcp_frame import TcpFrame
+from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
+from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.tcp.tcp_frame import TcpFrame
 
 
 class _FakeKinematics:

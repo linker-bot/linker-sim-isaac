@@ -14,17 +14,17 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SOURCE_ROOT = REPO_ROOT / "source"
+SOURCE_ROOT = REPO_ROOT / "src"
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from manipulation_project.app.launch import launch_simulation_app
-from manipulation_project.objects.capsule_rope import (
+from linkerbot_sim.app.launch import launch_simulation_app
+from linkerbot_sim.objects.capsule_rope import (
     CapsuleRopeConfig,
     write_capsule_rope_asset,
 )
-from manipulation_project.utils.config import load_yaml
-from manipulation_project.utils.paths import repo_path
+from linkerbot_sim.utils.config import load_yaml
+from linkerbot_sim.utils.paths import repo_path
 
 
 def parse_args() -> argparse.Namespace:

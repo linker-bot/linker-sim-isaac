@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
+from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 def test_rpy_to_quaternion_is_unit_length() -> None:
