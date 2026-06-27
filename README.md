@@ -355,11 +355,12 @@ cumotion:
 
 ### 关节目标
 
-`source/manipulation_project/tasks/move_joint_targets.py` 提供关节目标任务原语：
+`source/manipulation_project/execution/steps.py` 提供唯一的执行步骤层：
 
-1. 读取稀疏关节目标、时长、采样率和插值方式。
-2. 将稀疏目标展开为命令关节 `JointTrajectory`。
-3. 作为更高层任务的一段执行，例如 `PinchGraspTask.execution_tasks()` 中的阶段任务。
+1. `SmoothJointTargetStep`：在两个完整 DOF 目标之间做 smoothstep 过渡，适合手部开合等简单阶段。
+2. `FullJointTrajectoryStep`：播放已经规划并映射到完整 DOF 顺序的 `JointTrajectory`。
+3. `execute_command_joint_trajectory(...)`：播放 controller command-space 轨迹，适合简单 demo 或外部已采样命令轨迹。
+4. `HoldJointTargetStep`：保持某个完整 DOF 目标一段时间。
 
 ### Pinch Grasp
 

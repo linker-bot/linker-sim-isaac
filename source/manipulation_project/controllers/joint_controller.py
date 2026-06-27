@@ -393,7 +393,7 @@ class JointController:
         """
 
         positions = self._full_vector(joint_positions, "joint_positions").copy()
-        # 完整 DOF 入口主要用于任务原语：上游已经生成了 articulation 顺序的目标。
+        # 完整 DOF 入口主要用于执行步骤：上游已经生成了 articulation 顺序的目标。
         # 速度/effort 缺省为 0，随后 follower 位置和速度会按 master 实际状态重算。
         velocities = (
             np.zeros(self.robot.num_dof, dtype=float)

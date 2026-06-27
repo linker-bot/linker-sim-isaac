@@ -214,8 +214,9 @@ def fingertip_pinch_local_offset(
     """
 
     path = Path(mjcf_path)
-    # 先展开 mimic follower，再做 FK；否则从动指节会按 0 rad 计算，得到的 pinch TCP 会偏向
-    # 未闭合手型，而不是实际夹捏时的两指尖中点。
+    # 先展开 mimic follower，再沿 MJCF body chain 累乘固定 body 位姿和关节旋转。
+    # 否则从动指节会按 0 rad 计算，得到的 pinch TCP 会偏向未闭合手型，
+    # 而不是实际夹捏时的两指尖中点。
     expanded_targets = expand_targets_with_mjcf_equalities(hand_targets, path)
     inferred_base, inferred_thumb, inferred_index = infer_hand_body_names(hand_targets)
     hand_base_body = hand_base_body or inferred_base

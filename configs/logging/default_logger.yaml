@@ -5,9 +5,9 @@ logging:
   # 关节跟踪 CSV 输出路径；相对路径以仓库根目录为基准。
   joint_tracking_path: logs/joint_tracking/run_pinch_grasp.csv
   # flush 周期，秒。脚本会换算成物理步数，避免每行都刷盘。
-  flush_interval_s: 0.05
+  flush_interval_s: 0.2
   # 采样降频。1 表示每个 physics step 都写一行；例如 10 表示每 10 步写一行。
-  interval_steps: 1
+  interval_steps: 5
   # 所有模式下都可以记录实际位置/速度。关闭这些列可以减少 get_joint_* 和 CSV 写入成本。
   actual_position: true
   actual_velocity: true

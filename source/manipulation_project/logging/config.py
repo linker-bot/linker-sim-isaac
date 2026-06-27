@@ -1,7 +1,7 @@
 """CSV 日志配置。
 
 日志采样会发生在 physics step 内部，读取状态和写 CSV 都有成本。本模块把“写哪些列”和
-“是否读取较重的 PhysX effort 数据”集中成一个 dataclass，供脚本、执行器和任务原语复用。
+“是否读取较重的 PhysX effort 数据”集中成一个 dataclass，供脚本、执行层和日志器复用。
 """
 
 from __future__ import annotations

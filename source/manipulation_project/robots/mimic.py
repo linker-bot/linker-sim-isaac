@@ -7,7 +7,7 @@
 职责边界:
     * 解析 MJCF equality 和 joint frictionloss，不修改 USD stage。
     * 根据完整 DOF 名称建立 master/follower 索引映射。
-    * 在控制目标数组上原地写 follower 位置/速度，供控制器或任务原语下发。
+    * 在控制目标数组上原地写 follower 位置/速度，供控制器或执行步骤下发。
 
 约定 ``joint1`` 是 dependent/follower，``joint2`` 是 master/active。所有关节角单位为 rad，
 速度单位为 rad/s；数组索引始终以 Isaac articulation ``dof_names`` 顺序为准。多项式按照

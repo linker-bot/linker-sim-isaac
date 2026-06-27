@@ -5,9 +5,9 @@
 approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目标并在 Isaac 中执行。
 
 职责边界:
-    * 作为高层 demo 编排，可以串联对象配置、TCP 生成、IK、轨迹原语和日志。
+    * 作为高层 demo 编排，可以串联对象配置、TCP 生成、IK、轨迹执行步骤和日志。
     * 不直接创建 ``World`` 或导入机器人资产；这些由脚本入口和 env/assets 层完成。
-    * 不在这里实现低层控制器；每个阶段最终委托 ``tasks.primitives`` 下发目标。
+    * 不在这里实现低层控制器；每个阶段最终委托 ``execution.steps`` 下发目标。
 
 数组/坐标约定:
     内部数组大多是完整 articulation DOF 顺序；只有调用 cuMotion 时才切到 C-space 关节顺序，
@@ -49,12 +49,11 @@ from manipulation_project.planning.results import MotionResult
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
 from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
-from manipulation_project.tasks.primitives import (
-    ExecutableTask,
-    HoldTask,
-    MoveFullJointTrajectoryTask,
-    MoveJointTargetTask,
-    TaskRuntime,
+from manipulation_project.execution.runtime import ExecutionRuntime, ExecutionStep
+from manipulation_project.execution.steps import (
+    FullJointTrajectoryStep,
+    HoldJointTargetStep,
+    SmoothJointTargetStep,
 )
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
 from manipulation_project.trajectories.joint_trajectory_builder import (
@@ -461,7 +460,7 @@ def build_planned_joint_motion_trajectory(
     start_q = start[arm_indices]
     target_q = target[arm_indices]
 
-    # 配置时长为 0 时沿用其它任务原语的语义：只下发最终目标一帧，不要求 planner
+    # 配置时长为 0 时沿用其它执行步骤的语义：只下发最终目标一帧，不要求 planner
     # 生成一条有时间跨度的路径。
     if duration_s == 0:
         trajectory = joint_trajectory_from_positions(
@@ -1253,57 +1252,57 @@ class PinchGraspTask:
             },
         }
 
-    def execution_tasks(self, plan: dict[str, object]) -> list[ExecutableTask]:
-        """把抓取 plan 拆成可顺序执行的任务原语列表。
+    def execution_steps(self, plan: dict[str, object]) -> list[ExecutionStep]:
+        """把抓取 plan 拆成可顺序执行的执行步骤列表。
 
         ``plan`` 来自 ``build_plan``，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
-        返回的任务列表只负责执行，IK 和运动规划都在 ``build_plan`` 中完成。
+        返回的步骤列表只负责执行，IK 和运动规划都在 ``build_plan`` 中完成。
         """
 
-        # plan 阶段只生成目标数组；这里把它们转换成可执行原语，确保 run 的主循环只需要
-        # 顺序调用 ``task.run``，便于之后插入/删除阶段。
-        tasks: list[ExecutableTask] = [
-            MoveJointTargetTask(
+        # plan 阶段只生成目标数组；这里把它们转换成可执行步骤，确保 run 的主循环只需要
+        # 顺序调用 ``execution_step.run``，便于之后插入/删除阶段。
+        steps: list[ExecutionStep] = [
+            SmoothJointTargetStep(
                 start_all=plan["initial_all"],
                 target_all=plan["pre_pinch_all"],
                 duration=self.config.prep_duration,
                 phase="pre_pinch",
             ),
-            MoveFullJointTrajectoryTask(
+            FullJointTrajectoryStep(
                 trajectory=plan["move_to_approach_trajectory"],
                 phase="move_to_approach",
             ),
-            MoveFullJointTrajectoryTask(
+            FullJointTrajectoryStep(
                 trajectory=plan["approach_line_trajectory"],
                 phase="approach_box",
             ),
-            MoveJointTargetTask(
+            SmoothJointTargetStep(
                 start_all=plan["grasp_open_all"],
                 target_all=plan["grasp_closed_all"],
                 duration=self.config.close_duration,
                 phase="close_fingers",
             ),
-            MoveFullJointTrajectoryTask(
+            FullJointTrajectoryStep(
                 trajectory=plan["lift_trajectory"],
                 phase="lift",
             ),
         ]
         for index, trajectory in enumerate(plan["wiggle_trajectories"], start=1):
-            tasks.append(
-                MoveFullJointTrajectoryTask(
+            steps.append(
+                FullJointTrajectoryStep(
                     trajectory=trajectory,
                     phase=f"wiggle_{index}",
                 )
             )
         if plan["wiggle_return_trajectory"] is not None:
-            tasks.append(
-                MoveFullJointTrajectoryTask(
+            steps.append(
+                FullJointTrajectoryStep(
                     trajectory=plan["wiggle_return_trajectory"],
                     phase="wiggle_return_center",
                 )
             )
-        tasks.append(
-            HoldTask(
+        steps.append(
+            HoldJointTargetStep(
                 target_all=plan["lifted_all"],
                 duration=self.config.final_hold_duration,
                 phase="final",
@@ -1312,13 +1311,13 @@ class PinchGraspTask:
         for index, trajectory in enumerate(
             plan["post_joint_sweep_trajectories"], start=1
         ):
-            tasks.append(
-                MoveFullJointTrajectoryTask(
+            steps.append(
+                FullJointTrajectoryStep(
                     trajectory=trajectory,
                     phase=f"post_joint_1_sweep_{index}",
                 )
             )
-        return tasks
+        return steps
 
     def run(
         self,
@@ -1348,18 +1347,18 @@ class PinchGraspTask:
         # 先规划再构造 runtime，确保 IK/目标生成失败时不会推进 world，也不会写入半段日志。
         # cuMotion 连续轨迹采样使用 physics_dt 对齐物理步长，避免固定 0.01s 与仿真频率错位。
         plan = self.plan(robot, physics_dt=float(world.get_physics_dt()))
-        runtime = TaskRuntime(
-            robot=robot,
-            world=world,
+        runtime = ExecutionRuntime(
+            articulation=robot,
+            simulation_world=world,
             articulation_action_type=articulation_action_type,
-            controller=controller,
+            joint_controller=controller,
             simulation_app=simulation_app,
-            render=render,
+            render_enabled=render,
             drive_logger=drive_logger,
         )
         step = 0
-        for task in self.execution_tasks(plan):
-            step = task.run(runtime, step)
+        for execution_step in self.execution_steps(plan):
+            step = execution_step.run(runtime, step)
         plan["steps"] = step
         return plan
 
