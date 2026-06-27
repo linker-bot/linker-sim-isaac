@@ -6,7 +6,7 @@
 
 职责边界:
     * 只封装单点 IK 求解，不把结果映射到 Isaac 完整 DOF。
-    * 不推进仿真、不创建控制器；任务层负责把多个 IK 解串成轨迹。
+    * 不推进仿真、不创建控制器；动作脚本层负责把多个 IK 解串成轨迹。
     * collision-free 模式使用 ``CuMotionContext`` 当前管理的环境 world；环境更新由 context
       的 ``sync_collision_world`` 入口完成。
 
@@ -78,7 +78,7 @@ class CuMotionInverseKinematics:
         """返回 IK 输入 seed 和输出解使用的 C-space 关节名顺序。
 
         ``warm_start_ik_cspace_seed``、内部 seed 和 ``IKResult.joint_positions`` 都按该顺序
-        排列；任务层需要再按名称映射到 Isaac 完整 DOF。
+        排列；动作脚本层需要再按名称映射到 Isaac 完整 DOF。
         """
 
         return self.context.joint_names()
@@ -191,7 +191,7 @@ class CuMotionInverseKinematics:
 
         frame_name = request.tcp_frame_name or self.tcp_frame_name
         # Request 只表达“是否避障”，不携带障碍物数据；当前环境由 CuMotionContext 统一维护。
-        # 任务层在环境变化时调用 context.sync_collision_world(...)，这里直接读取最新 world view。
+        # 动作脚本层在环境变化时调用 context.sync_collision_world(...)，这里直接读取最新 world view。
         collision_world = self.context.collision_world()
         config = self.cumotion.create_default_collision_free_ik_solver_config(
             self.context.robot_description,

@@ -2,7 +2,7 @@
 
 该模块实现 motion planner facade 的默认 pipeline。与 graph search 不同，optimizer 直接输出
 cuMotion ``Trajectory``，因此成功结果默认不构造离散 ``path``。调用方如果需要完整 DOF
-轨迹，应通过 ``trajectory_adapter`` 采样 optimizer 返回的 trajectory，再由任务层按关节名
+轨迹，应通过 ``trajectory_sampler`` 采样 optimizer 返回的 trajectory，再由动作脚本层按关节名
 回填到完整 articulation。
 
 当前接入范围：

@@ -11,7 +11,7 @@ MJCF/URDF importer 写出的默认 drive、摩擦和阻尼未必适合抓取实�
 调用顺序约定:
     调用方应在资产导入完成后、创建或 reset articulation runtime 前应用这些覆盖；runtime
     controller 仍会在后续写入每步目标和最终 drive gain。这样 USD 层提供稳定默认值，运行时
-    层再按任务需要细化控制参数。
+    层再按动作需要细化控制参数。
 """
 
 from __future__ import annotations

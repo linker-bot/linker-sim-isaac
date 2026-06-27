@@ -1,7 +1,7 @@
 """可复用的仿真执行步骤。
 
 这些步骤只负责把已经规划好的目标或轨迹下发到 Isaac world。它们不做 IK、不读取配置，
-也不生成新的任务目标；上层任务可以把它们串起来形成更复杂的流程。
+也不生成新的动作目标；上层动作脚本可以把它们串起来形成更复杂的流程。
 
 本模块同时支持两种轨迹语义：
 
@@ -102,7 +102,7 @@ class HoldJointTargetStep:
 
 @dataclass(frozen=True)
 class SwitchControlModeStep:
-    """在任务序列中切换 runtime 关节控制配置。"""
+    """在动作序列中切换 runtime 关节控制配置。"""
 
     settings: JointControlSettings
     phase: str = "switch_control_mode"

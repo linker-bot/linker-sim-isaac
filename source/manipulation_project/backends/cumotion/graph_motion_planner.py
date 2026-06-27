@@ -163,7 +163,7 @@ def _motion_result(
     if success:
         # 项目侧现在把 trajectory generation 作为 graph_search 成功结果的强约束：
         # 只返回 path 但没有时间轴/速度/加速度的结果不能进入 execution 层。这样可以避免
-        # 任务层各自用简单插值兜底，导致同一个后端结果在不同任务里有不同执行语义。
+        # 动作脚本层各自用简单插值兜底，导致同一个后端结果在不同动作里有不同执行语义。
         trajectory = generate_cspace_trajectory(
             context,
             joint_path,

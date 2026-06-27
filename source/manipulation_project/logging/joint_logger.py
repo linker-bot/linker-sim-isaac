@@ -177,7 +177,7 @@ class JointTrackingLogger:
         参数:
             step: 全局仿真/控制步号。
             time_s: 当前日志时间，单位 s。
-            phase: 当前任务阶段名。
+            phase: 当前动作阶段名。
             drive_update: 当前帧是否刷新了驱动目标。
             desired_position: 目标关节位置数组，单位 rad；对应列关闭时可为 ``None``。
             actual_position: 实际关节位置数组，单位 rad；对应列关闭时可为 ``None``。
@@ -249,7 +249,7 @@ class JointTrackingLogger:
     def close(self) -> None:
         """关闭内部 CSV writer；可重复调用。
 
-        ``CsvWriter`` 会处理禁用日志和已关闭状态，因此任务执行器可以在 ``finally`` 中无条件
+        ``CsvWriter`` 会处理禁用日志和已关闭状态，因此动作执行器可以在 ``finally`` 中无条件
         调用本方法。
         """
 

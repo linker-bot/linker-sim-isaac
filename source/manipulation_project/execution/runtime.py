@@ -1,6 +1,6 @@
 """执行层 runtime 数据结构。
 
-runtime 对象只保存执行任务所需的 Isaac 引用，例如 articulation、simulation world、关节
+runtime 对象只保存执行动作所需的 Isaac 引用，例如 articulation、simulation world、关节
 控制器和可选日志器。它不负责资源生命周期，也不生成目标或轨迹。
 """
 
@@ -15,7 +15,7 @@ class ExecutionRuntime:
     """执行步骤所需的 Isaac runtime 对象。
 
     Isaac runtime 即执行仿真步骤时需要的一组 Isaac Sim 运行时对象。它只保存对象引用，
-    不拥有这些对象的生命周期；创建/销毁 world、robot、controller 仍由脚本或上层任务负责。
+    不拥有这些对象的生命周期；创建/销毁 world、robot、controller 仍由动作脚本负责。
     """
 
     # Isaac articulation 对象，用于读取 DOF 数量、设置关节速度和采集实际关节状态。

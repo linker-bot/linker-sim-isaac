@@ -1,8 +1,8 @@
 """运动解算请求数据结构。
 
-请求对象是任务层与后端层之间的公共输入格式。它们不包含求解器实例，也不持有 Isaac
+请求对象是动作脚本层与后端层之间的公共输入格式。它们不包含求解器实例，也不持有 Isaac
 runtime 对象，只携带目标、初值、容差或路径几何。环境障碍由具体后端 context 和所选
-planning pipeline 解释，这样任务层可以用同一种数据结构调用 cuMotion 或测试替身。
+planning pipeline 解释，这样动作脚本层可以用同一种数据结构调用 cuMotion 或测试替身。
 
 单位/坐标约定:
     * 位置单位为 m；姿态使用 wxyz 四元数；角度容差使用 rad。
@@ -26,7 +26,7 @@ OrientationMode = Literal["current", "target", "none"]
 # Task-space specified path 只在请求层表达几何意图；具体如何调用 cuMotion
 # TaskSpacePathSpec 由后端 adapter 决定。
 TaskSpaceArcMode = Literal["tangent", "three_point"]
-# Composite transition mode 暴露稳定字符串，避免把 cuMotion pybind enum 泄漏到任务层。
+# Composite transition mode 暴露稳定字符串，避免把 cuMotion pybind enum 泄漏到动作脚本层。
 CompositeTransitionMode = Literal["skip", "free", "linear_task_space"]
 
 

@@ -4,7 +4,7 @@
 这里把迭代次数按 arm/hand 分组配置，便于在不同实验中快速调整稳定性。
 
 这些覆盖发生在 USD/PhysX 属性层面，只影响求解稳定性和接触收敛，不改变关节目标、
-控制器命令空间或任务 API。arm/hand 分类依赖资产命名约定，未知 prim 会跳过或使用默认值。
+控制器命令空间或动作脚本 API。arm/hand 分类依赖资产命名约定，未知 prim 会跳过或使用默认值。
 """
 
 from __future__ import annotations

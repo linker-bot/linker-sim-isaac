@@ -6,22 +6,23 @@
 #
 # 如果想试用本文件中的参数，可以显式传入：
 #
-#   PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
+#   PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
 #     --cumotion-config configs/cumotion/default.example.yaml
 #
 # 加载和覆盖顺序：
 #
 #   configs/cumotion/*.yaml
 #     < configs/robots/*.yaml
-#     < configs/trajectories/*.yaml
+#     < scripts/pinch_grasp.py 内置动作参数
 #
 # 也就是说：
 #
 # - 本文件的 `cumotion` 段提供机器人级后端默认值。
 # - robot YAML 的 `cumotion` 段会覆盖本文件，且仍必须提供 xrdf_path、urdf_path、flange_frame。
-# - 本文件的 `cumotion.motion_planner` 段提供 motion planner 默认值。
-# - 运行 pinch grasp 时，`cumotion.motion_planner` 会作为 `grasp.motion_planning` 的默认值，
-#   trajectory YAML 的 `grasp.motion_planning` 仍拥有最高优先级。
+# - 本文件的 `cumotion.motion_planner` 段提供 motion planner 默认值；运行 pinch grasp 时，
+#   脚本内置的 `PinchGraspActionConfig` 会读取它作为 planner 配置。
+# - 抓取目标、阶段时长和手型不再写在外部 trajectory YAML 中；需要调整时直接修改
+#   `scripts/pinch_grasp.py`。
 #
 # 注意：如果某个字段缺省，会使用代码里的 dataclass 默认值。详见：
 # - source/manipulation_project/backends/cumotion/context.py: CuMotionConfig / CuMotionKinematicsConfig / CuMotionIkConfig
@@ -59,7 +60,7 @@ cumotion:
 
       # IK 姿态容差，单位 rad。
       # 缺省代码值：0.75。项目默认 profile 使用 0.01。
-      # 如果任务 use_orientation=false，单次请求会忽略姿态目标。
+      # 如果动作脚本的 use_orientation=false，单次请求会忽略姿态目标。
       orientation_tolerance: 0.01
 
       # cuMotion IK CCD 阶段最大迭代次数。
@@ -182,7 +183,7 @@ cumotion:
 
       # 是否记录/声明生成后碰撞校验。
       # 当前 specified_path pipeline 本身不做避障搜索；这个字段目前进入 diagnostics，
-      # 真正后验碰撞检查留给后续实现或任务层。
+      # 真正后验碰撞检查留给后续实现或动作脚本层。
       # 缺省代码值：false。
       validate_collision_after_generation: false
 

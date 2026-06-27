@@ -441,7 +441,7 @@ def _transition_mode(cumotion, value: str):
     """把项目字符串映射成 cuMotion ``CompositePathSpec.TransitionMode``。
 
     请求层和配置层只暴露稳定的小写字符串；adapter 在唯一边界处转换成 pybind enum，避免把
-    cuMotion 类型泄漏到任务层和测试请求模型里。
+    cuMotion 类型泄漏到动作脚本层和测试请求模型里。
     """
 
     enum = cumotion.CompositePathSpec.TransitionMode
@@ -504,7 +504,7 @@ def _validate_line_start_position(current_pose, segment: TcpLineSegment, label: 
     """如果调用方声明了线段起点，检查它和当前 tracked pose 一致。
 
     start_position 不参与 cuMotion PathSpec 的构造，只作为调用方的防错断言。若它与当前 FK/
-    tracked pose 不一致，说明任务层的路径几何和机器人实际状态已经错位，应在进入 conversion
+    tracked pose 不一致，说明动作脚本层的路径几何和机器人实际状态已经错位，应在进入 conversion
     前失败。
     """
 

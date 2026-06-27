@@ -57,6 +57,6 @@ cumotion:
     fk: {}
 
 tcp:
-  # 默认 TCP 类型；pinch grasp 会在任务里根据闭合手型生成自定义 pinch TCP。
+  # 默认 TCP 类型；pinch grasp 动作脚本会根据闭合手型生成自定义 pinch TCP。
   type: flange
   frame_name: AR5V2_L_arm_flan_link

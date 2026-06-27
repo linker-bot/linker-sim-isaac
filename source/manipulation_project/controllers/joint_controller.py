@@ -137,7 +137,7 @@ class JointController:
         self._assign_follower_runtime_parameters(stiffness, damping)
 
         # Isaac controller 接收完整 DOF gain/max_effort 数组。未由本控制器管理的 DOF 保持 0
-        # 或已有 runtime 值，避免把控制参数写到任务不负责的自由度上。
+        # 或已有 runtime 值，避免把控制参数写到当前动作不负责的自由度上。
         controller = self.robot.get_articulation_controller()
         controller.set_gains(kps=stiffness, kds=damping)
         controller.set_max_efforts(self._runtime_max_efforts())

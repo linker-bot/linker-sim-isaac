@@ -83,7 +83,7 @@ class TrajectoryOptimizationConfig:
     """cuMotion ``TrajectoryOptimizer`` 专属配置。
 
     optimizer pipeline 只执行 trajectory optimizer 本身。失败时返回 optimizer 的失败结果；
-    如果调用方需要其它路线，应在任务层显式发起第二次规划。
+    如果调用方需要其它路线，应在动作脚本层显式发起第二次规划。
     """
 
     config_path: Path | None = None

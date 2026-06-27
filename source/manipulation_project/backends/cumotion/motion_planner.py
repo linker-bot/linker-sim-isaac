@@ -1,6 +1,6 @@
 """cuMotion 运动规划 facade。
 
-本模块是任务层进入 cuMotion 运动规划能力的统一入口。它本身不直接调用某一个具体的
+本模块是动作脚本层进入 cuMotion 运动规划能力的统一入口。它本身不直接调用某一个具体的
 cuMotion planner，而是根据 ``MotionPlannerBackendConfig.planning_pipeline`` 把请求分发到
 对应 pipeline：
 
@@ -10,7 +10,7 @@ cuMotion planner，而是根据 ``MotionPlannerBackendConfig.planning_pipeline``
 * ``specified_path``：调用方明确给定路径几何的路线，支持 C-space waypoint、task-space segment
   和 composite path，并统一转成 C-space path 后做可选时间参数化。
 
-这样做的目的是把“任务层选择哪种运动生成策略”和“后端怎样调用 cuMotion API”分开，避免
+这样做的目的是把“动作脚本层选择哪种运动生成策略”和“后端怎样调用 cuMotion API”分开，避免
 不同 pipeline 的参数互相影响。
 """
 
@@ -36,7 +36,7 @@ class CuMotionMotionPlanner:
     """按配置把项目规划请求分发给具体 cuMotion pipeline。
 
     输入/输出关节向量均使用 ``context.joint_names()`` 对应的 cuMotion C-space 顺序。完整
-    Isaac articulation DOF 的裁剪、回填和非 C-space DOF 插值仍属于任务层职责。
+    Isaac articulation DOF 的裁剪、回填和非 C-space DOF 插值仍属于动作脚本层职责。
     """
 
     def __init__(

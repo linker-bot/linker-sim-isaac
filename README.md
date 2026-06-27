@@ -7,8 +7,8 @@ grasp 流程。
 
 项目的核心原则是分层清楚：
 
-- `configs/` 描述资产、控制器、环境、对象、cuMotion profile 和任务参数。
-- `tasks/` 描述任务意图和阶段编排，不直接实现底层控制器或 cuMotion API 细节。
+- `configs/` 描述资产、控制器、环境、对象、日志和 cuMotion profile。
+- `scripts/pinch_grasp.py` 是自包含动作入口，抓取目标、阶段时长和手型直接写在脚本中。
 - `planning/` 提供后端无关请求和结果数据结构。
 - `backends/cumotion/` 是唯一直接适配 cuMotion Python API 的层。
 - `trajectories/` 只保存项目内部关节轨迹容器和从位置矩阵构造导数的工具。
@@ -43,8 +43,7 @@ grasp 流程。
 │   ├── envs/                 # empty/table/rope 场景、物理步频、solver
 │   ├── logging/              # 关节跟踪日志配置
 │   ├── objects/              # 可生成对象配置，例如 capsule rope
-│   ├── robots/               # 机器人资产、关节组、cuMotion XRDF/URDF
-│   └── trajectories/         # 任务级轨迹/抓取配置，目前包含 pinch_grasp.yaml
+│   └── robots/               # 机器人资产、关节组、cuMotion XRDF/URDF
 ├── docs/                     # cuMotion 接口、规划设计和历史方案文档
 ├── scripts/                  # Isaac Sim 运行入口和资产生成入口
 ├── source/manipulation_project/
@@ -58,7 +57,6 @@ grasp 流程。
 │   ├── objects/              # 绳体对象资产生成和引用
 │   ├── planning/             # 后端无关请求、结果、碰撞对象
 │   ├── robots/               # 关节组、mimic/equality、状态工具
-│   ├── tasks/                # pinch grasp 任务流程
 │   ├── tcp/                  # TCP frame 和夹捏中心计算
 │   ├── telemetry/            # Foxglove、MCAP、WebSocket
 │   ├── trajectories/         # JointTrajectory 容器和 builder
@@ -105,19 +103,19 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 只导入绳体和 AR5+L6，并快速保持初始姿态：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --no-grasp --short-smoke
+PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp --short-smoke
 ```
 
 运行 GUI pinch grasp demo：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py --gui
+PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py --gui
 ```
 
 常用覆盖参数：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
+PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
   --endpoint right \
   --control-mode position \
   --physics-frequency 240 \
@@ -129,10 +127,10 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
 
 ## 主流程
 
-`scripts/run_pinch_grasp.py` 是当前最完整的运行入口。典型执行顺序如下：
+`scripts/pinch_grasp.py` 是当前最完整的运行入口。典型执行顺序如下：
 
-1. 加载 cuMotion profile、robot、controller、env、rope、grasp 和 logging YAML。
-2. 将 `configs/cumotion/default.yaml` 的默认值合入 robot/grasp 配置。
+1. 加载 cuMotion profile、robot、controller、env、rope 和 logging YAML。
+2. 将 `configs/cumotion/default.yaml` 的默认值合入 robot 配置，并把 `cumotion.motion_planner` 作为脚本内置动作的 planner 默认值。
 3. 启动 Isaac `SimulationApp`，创建 World、重力、physics/render dt。
 4. 引用已生成的 capsule rope USD。
 5. 导入 AR5+L6 组合 MJCF，并应用 drive、摩擦、solver iteration、重力等 runtime 覆盖。
@@ -142,7 +140,7 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
 9. 把 cuMotion C-space 结果按关节名映射回 Isaac 完整 DOF。
 10. `execution.steps` 按 physics dt 播放完整 DOF 轨迹或 smooth target，并写 CSV 日志。
 
-任务层不会在执行过程中实时做 task-space conversion。所有 IK、指定路径转换和 trajectory
+动作脚本不会在执行过程中实时做 task-space conversion。所有 IK、指定路径转换和 trajectory
 generation 都在规划阶段完成；执行阶段只按时间采样已经生成的 `JointTrajectory`。
 
 ## 配置系统
@@ -155,20 +153,20 @@ generation 都在规划阶段完成；执行阶段只按时间采样已经生成
 - `configs/objects/capsule_rope.yaml`：绳体几何、质量、材质、D6 joint、USD 输出路径。
 - `configs/cumotion/default.yaml`：项目默认 cuMotion profile。
 - `configs/cumotion/default.example.yaml`：详细字段说明，不作为默认运行配置。
-- `configs/trajectories/pinch_grasp.yaml`：抓取目标、阶段时长、手型、任务级 motion planning 覆盖。
+- `scripts/pinch_grasp.py`：自包含 pinch grasp 动作参数和执行流程。
 
 cuMotion 相关配置的优先级是：
 
 ```text
 configs/cumotion/default.yaml
   < configs/robots/*.yaml
-  < configs/trajectories/*.yaml
+  < scripts/pinch_grasp.py 内置动作参数
 ```
 
 实际合并分两条线：
 
 - `cumotion` profile 先作为 robot config 的默认值；robot YAML 继续提供或覆盖 `xrdf_path`、`urdf_path`、`flange_frame`、`kinematics` 等机器人级字段。
-- `cumotion.motion_planner` profile 作为 `grasp.motion_planning` 的默认值；trajectory YAML 中的 `grasp.motion_planning` 拥有最高优先级。
+- `cumotion.motion_planner` profile 作为 `PinchGraspActionConfig.motion_planning` 的默认值；抓取目标、阶段时长和手型固定在 `scripts/pinch_grasp.py` 中。
 
 配置合并是递归 mapping merge。列表和标量按覆盖值整体替换，不做逐项合并，这对关节列表、
 轨迹点和手型目标更安全。
@@ -247,9 +245,9 @@ cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，
 - `specified_path_planner.py`：消费调用方指定的 C-space/task-space/composite path，转换成 C-space path 后强制生成 trajectory。
 - `path_spec_adapter.py`：把项目 `TaskSpacePath`、`CSpaceWaypointPath`、`CompositePath` 转为 cuMotion 官方 PathSpec。
 - `trajectory_generation.py`：封装 `CSpaceTrajectoryGenerator`，对 joint path 做时间参数化。
-- `trajectory_adapter.py`：把 cuMotion `Trajectory.eval_all(t)` 采样成项目 `JointTrajectory`。
-- `tcp_context.py`：按需写临时 URDF，把任务生成的 TCP 作为 fixed link 装进 cuMotion context。
-- `tcp_urdf_builder.py`：纯 URDF 写入工具，任务层不直接管理临时文件。
+- `trajectory_sampler.py`：把 cuMotion `Trajectory.eval_all(t)` 采样成项目 `JointTrajectory`。
+- `tcp_context.py`：按需写临时 URDF，把调用方生成的 TCP 作为 fixed link 装进 cuMotion context。
+- `tcp_urdf_builder.py`：纯 URDF 写入工具，动作脚本不直接管理临时文件。
 
 ### MotionResult 语义
 
@@ -265,7 +263,7 @@ MotionResult(
 )
 ```
 
-`path` 是离散 C-space waypoint 矩阵，主要用于诊断、路径长度、末端构型和任务层回填末点。
+`path` 是离散 C-space waypoint 矩阵，主要用于诊断、路径长度、末端构型和动作脚本回填末点。
 `trajectory` 是带时间参数化的后端轨迹对象，才是执行前需要采样的主数据。
 
 不同 pipeline 的输出约定：
@@ -274,7 +272,7 @@ MotionResult(
 - `graph_search`：先得到离散 C-space path，再生成 trajectory；成功结果必须两者都有。
 - `specified_path`：先把调用方指定路径转换成 C-space path，再生成 trajectory；成功结果必须两者都有。
 
-这些数据都保持 cuMotion C-space 关节顺序，不会自动扩展成 Isaac 完整 DOF。任务层必须使用
+这些数据都保持 cuMotion C-space 关节顺序，不会自动扩展成 Isaac 完整 DOF。动作脚本必须使用
 `motion_planner.joint_names()` 和 Isaac `robot.dof_names` 做名称映射。
 
 ## Trajectory 和执行频率
@@ -293,8 +291,8 @@ MotionResult(
 cuMotion 轨迹进入项目执行层通常经历三步：
 
 1. cuMotion pipeline 返回后端 `Trajectory`。
-2. `trajectory_adapter.joint_trajectory_from_cumotion(...)` 按 `sample_dt` 或显式 `times` 采样。
-3. 任务层把 C-space 列回填到完整 Isaac articulation DOF，并构造完整 DOF `JointTrajectory`。
+2. `trajectory_sampler.joint_trajectory_from_cumotion(...)` 按 `sample_dt` 或显式 `times` 采样。
+3. 动作脚本把 C-space 列回填到完整 Isaac articulation DOF，并构造完整 DOF `JointTrajectory`。
 
 如果轨迹采样频率和 physics step 频率不同，执行层以 physics dt 为准。`execute_full_joint_trajectory(...)`
 会在每个物理步调用 `trajectory.eval_all(time_s)` 做线性插值，然后下发该时刻的位置、速度和
@@ -305,8 +303,8 @@ effort。换句话说，轨迹不是按原采样点逐点硬播放，而是按�
 
 ## Pinch Grasp
 
-`source/manipulation_project/tasks/pinch_grasp.py` 是当前主要任务层。它的输入是机器人 articulation、
-rope 配置、MJCF 路径、cuMotion config 和任务 YAML。主要步骤：
+`scripts/pinch_grasp.py` 是当前主要动作入口。它的输入是机器人 articulation、rope 配置、MJCF
+路径、cuMotion config 和脚本内置的 `PinchGraspActionConfig`。主要步骤：
 
 1. 展开闭合手型中的 MJCF mimic follower 目标。
 2. 沿 thumb/index body 链计算闭合手型下两指尖位置。
@@ -315,25 +313,12 @@ rope 配置、MJCF 路径、cuMotion config 和任务 YAML。主要步骤：
 5. 计算 approach、grasp、lift、wiggle 的 TCP 目标。
 6. 对 approach、lift、wiggle 等阶段求 IK 和关节空间规划。
 7. 对接近端块的短距离下沉使用 specified path `TcpLineSegment`，规划期先做 task-space conversion。
-8. 把机械臂 C-space 结果映射回完整 DOF，手部目标用 YAML 中的稀疏关节目标覆盖。
+8. 把机械臂 C-space 结果映射回完整 DOF，手部目标用脚本内置稀疏关节目标覆盖。
 9. 生成 `SmoothJointTargetStep`、`FullJointTrajectoryStep`、`HoldJointTargetStep` 组成的执行序列。
 
-手型配置在 `configs/trajectories/pinch_grasp.yaml`：
-
-```yaml
-grasp:
-  endpoint: left
-  target_world_offset: [0.02, 0.0, 0.03]
-  target_rpy: [0.0, 2.007128639793479, -1.5707963267948966]
-  use_orientation: true
-  approach_distance: 0.10
-  lift_height: 0.4
-  tcp_frame_name: pinch_tcp
-  pre_pinch_hand_targets: {...}
-  closed_pinch_hand_targets: {...}
-```
-
-`target_rpy` 使用固定轴 XYZ 顺序，单位 rad；任务内部会转换成项目统一的 wxyz 四元数。
+动作参数集中在 `PinchGraspActionConfig`、`DEFAULT_PRE_PINCH_HAND_TARGETS` 和
+`DEFAULT_CLOSED_PINCH_HAND_TARGETS`。`target_rpy` 使用固定轴 XYZ 顺序，单位 rad；脚本内部会
+转换成项目统一的 wxyz 四元数。
 
 ## 控制器和 Mimic
 
@@ -418,7 +403,7 @@ PYTHONPATH=source env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
 默认不记录读取成本较高的 effort 字段。可以通过命令行打开：
 
 ```bash
-PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
+PYTHONPATH=source env_isaaclab/bin/python scripts/pinch_grasp.py \
   --log-measured-effort \
   --log-applied-effort \
   --log-action-effort

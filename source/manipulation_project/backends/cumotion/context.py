@@ -159,7 +159,7 @@ class CuMotionConfig:
     # 这是没有自定义 TCP 时的默认末端 frame，也是临时 TCP 的父 frame
     flange_frame: str
     # 自定义 TCP frame 名
-    # 只有 URDF/XRDF 中已经包含额外工具坐标系，或任务临时写入 fixed TCP frame 时才设置
+    # 只有 URDF/XRDF 中已经包含额外工具坐标系，或动作脚本临时写入 fixed TCP frame 时才设置
     custom_tcp_frame: str | None = None
     # FK/IK 相关参数
     kinematics: CuMotionKinematicsConfig = field(default_factory=CuMotionKinematicsConfig)
@@ -171,7 +171,7 @@ class CuMotionConfig:
         """从 robot YAML 或 cumotion 子映射构造后端配置。
 
         配置文件中的路径按仓库根目录解析；求解器容差、迭代次数和可选 seed
-        都属于 ``cumotion``，任务配置只负责描述任务意图。支持传入完整 robot YAML，
+        都属于 ``cumotion``，动作配置只负责描述动作意图。支持传入完整 robot YAML，
         也支持只传 ``cumotion`` 子字典，便于测试复用。
         """
 
@@ -431,7 +431,7 @@ class CuMotionContext:
         """用最新环境对象同步 context 持有的 cuMotion collision world。
 
         ``collision_objects`` 是当前环境快照，按名称增量同步到同一个后端 ``World``：
-        新对象会添加，缺失对象会删除，已有对象会更新 pose/启停状态。任务层可以在环境变化后
+        新对象会添加，缺失对象会删除，已有对象会更新 pose/启停状态。动作脚本层可以在环境变化后
         调用本方法一次，后续 IK/planner 请求会复用同步后的 ``world_view``。
         """
 

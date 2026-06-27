@@ -22,9 +22,9 @@ controlled_joints:
 cumotion:
   # XRDF 描述 cuMotion C-space、默认关节和工具 frame。
   xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  # URDF 描述机器人 link/joint；任务会临时复制并追加 TCP link。
+  # URDF 描述机器人 link/joint；动作脚本可临时复制并追加 TCP link。
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
-  # 机械臂法兰 link；pinch TCP 会固定在这个 parent frame 下。
+  # 机械臂法兰 link；自定义 TCP 通常会固定在这个 parent frame 下。
   flange_frame: AR5V2_L_arm_flan_link
   kinematics:
     ik:

@@ -1,4 +1,4 @@
-"""cuMotion 轨迹到项目轨迹容器的适配。
+"""cuMotion 轨迹采样到项目轨迹容器。
 
 cuMotion 返回的 trajectory 对象由后端定义，本模块只读取公共的 ``domain`` 与 ``eval_all``
 风格接口，并转换成项目统一的 ``JointTrajectory``。输出矩阵列顺序由调用方传入的
@@ -6,7 +6,7 @@ cuMotion 返回的 trajectory 对象由后端定义，本模块只读取公共�
 
 职责边界:
     * 不运行 cuMotion 规划，只采样已有后端轨迹对象。
-    * 不把 C-space 轨迹扩展成 Isaac 完整 DOF；控制器/任务层负责名称映射。
+    * 不把 C-space 轨迹扩展成 Isaac 完整 DOF；控制器/动作脚本层负责名称映射。
     * 不改变单位；时间单位 s，关节位置 rad，速度 rad/s。
 """
 
@@ -44,8 +44,8 @@ def joint_trajectory_from_cumotion(
     jerks = []
     for time_s in sample_times:
         # cuMotion 1.1 的真实 pybind 接口返回 ``(position, velocity, acceleration, jerk)``
-        # 四元组；部分测试替身或旧封装会返回带同名属性/方法的对象。统一在这里拆解，避免任务
-        # 层关心后端对象的具体 Python 形态。
+        # 四元组；部分测试替身或旧封装会返回带同名属性/方法的对象。统一在这里拆解，避免
+        # 动作脚本层关心后端对象的具体 Python 形态。
         position, velocity, acceleration, jerk = _trajectory_state_values(
             trajectory.eval_all(float(time_s))
         )

@@ -1,6 +1,6 @@
 # cuMotion 后端接口说明
 
-本文整理本项目中 `source/manipulation_project/backends/cumotion/` 对 cuMotion 的封装接口、数据流、坐标/关节顺序约定，以及任务层调用方式。
+本文整理本项目中 `source/manipulation_project/backends/cumotion/` 对 cuMotion 的封装接口、数据流、坐标/关节顺序约定，以及动作脚本层调用方式。
 
 ## 1. 总体边界
 
@@ -13,7 +13,7 @@ cuMotion 后端只处理 **机器人描述中的 C-space 主动关节**，不直
 - 角度单位：弧度 `rad`。
 - 姿态格式：项目边界使用 `wxyz` 四元数；调用 cuMotion 前在局部转换为旋转矩阵或 `Rotation3`。
 - TCP/frame：必须存在于 cuMotion 加载的 URDF/XRDF 机器人描述中。自定义 TCP 需要先写入临时 URDF。
-- 碰撞世界：由 `CuMotionContext` 持有当前 cuMotion `WorldView`；任务层可把 `CollisionObject` 环境快照同步到 context，但后端不自动从 Isaac stage 抽取。
+- 碰撞世界：由 `CuMotionContext` 持有当前 cuMotion `WorldView`；动作脚本层可把 `CollisionObject` 环境快照同步到 context，但后端不自动从 Isaac stage 抽取。
 
 ```mermaid
 flowchart TD
@@ -282,7 +282,7 @@ Pipeline：
 - `trajectory_optimization`
   - 直接返回 cuMotion `Trajectory`。
   - 默认 `MotionResult.path=None`，`trajectory` 是主输出。
-  - 失败时直接返回 optimizer 的失败结果；需要其它路线时由任务层显式选择 `graph_search` 或重新发起请求。
+  - 失败时直接返回 optimizer 的失败结果；需要其它路线时由动作脚本层显式选择 `graph_search` 或重新发起请求。
 - `graph_search.generate_interpolated_path=True`
   - 优先消费 cuMotion `interpolated_path`。
   - 若后端未返回，则回退到 sparse `path`。
@@ -315,7 +315,7 @@ Pipeline：
 
 - `MotionRequest` 只描述目标，不携带碰撞模式字段。
 - `trajectory_optimization.use_environment_obstacles` 和 `graph_search.use_environment_obstacles` 控制是否使用当前环境。
-- `specified_path` 默认不把环境障碍作为规划约束；如需安全性，应做后验碰撞检查或任务层保证路径安全。
+- `specified_path` 默认不把环境障碍作为规划约束；如需安全性，应做后验碰撞检查或动作脚本层保证路径安全。
 
 注意：不使用环境障碍只是不读取 context 当前环境；机器人自身碰撞和关节限制仍由 cuMotion robot description / 后端 config 决定。该分支不会清空 `CuMotionContext.collision_world()` 中已经同步好的环境。
 
@@ -432,7 +432,7 @@ collision_world = context.sync_collision_world(collision_objects)
 
 ### `joint_trajectory_from_cumotion(...)`
 
-位置：`source/manipulation_project/backends/cumotion/trajectory_adapter.py`
+位置：`source/manipulation_project/backends/cumotion/trajectory_sampler.py`
 
 用途：采样 cuMotion trajectory，并转换成项目 `JointTrajectory`。
 
@@ -527,7 +527,7 @@ with make_cumotion_context(config, tcp=pinch_tcp) as context:
 - `tcp.frame_name` 不存在：写出追加 fixed TCP link 的 URDF，使用 `custom_tcp_frame=tcp.frame_name` 创建 context。
 - context 创建后校验 `tcp.frame_name` 已进入 cuMotion frame 集合。
 
-任务层通常应使用这个入口，而不是直接管理 `TemporaryDirectory`、`write_tcp_urdf(...)` 和 `replace(CuMotionConfig, ...)`。
+动作脚本层通常应使用这个入口，而不是直接管理 `TemporaryDirectory`、`write_tcp_urdf(...)` 和 `replace(CuMotionConfig, ...)`。
 
 ### `write_tcp_urdf(...)`
 
@@ -553,13 +553,13 @@ with make_cumotion_context(config, tcp=pinch_tcp) as context:
   - origin：`xyz` 单位 m，`rpy` 单位 rad
 - 返回输出 `Path`。
 
-## 11. 任务层典型数据流
+## 11. 动作脚本层典型数据流
 
 ### 关节目标到关节目标
 
 ```mermaid
 sequenceDiagram
-    participant Task as 任务层
+    participant Task as 动作脚本层
     participant Ctx as CuMotionContext
     participant Planner as CuMotionMotionPlanner facade
     participant Cu as cuMotion backend
@@ -583,7 +583,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Task as 任务层
+    participant Task as 动作脚本层
     participant Ctx as CuMotionContext
     participant IK as CuMotionInverseKinematics
     participant Cu as cuMotion IK
@@ -599,12 +599,12 @@ sequenceDiagram
 
 ### 完整 articulation DOF 映射
 
-cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + 灵巧手”的组合 articulation，任务层必须按名称映射：
+cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + 灵巧手”的组合 articulation，动作脚本层必须按名称映射：
 
 1. 从完整 DOF 名称中找到 cuMotion `joint_names()` 对应索引。
 2. 调用 cuMotion 前，从完整 DOF 裁剪出 C-space 子向量。
 3. cuMotion 返回 `trajectory` 后按时间采样，并把 C-space 列按名称写回完整 DOF 轨迹；`MotionResult.path` 只作为离散路径记录和端点参考。
-4. 手部、mimic follower 或其它非 cuMotion DOF 由任务层单独插值或控制。
+4. 手部、mimic follower 或其它非 cuMotion DOF 由动作脚本层单独插值或控制。
 
 ## 12. 常见注意事项
 
@@ -626,7 +626,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 
 状态说明：
 
-- **已接入**：本项目已有直接封装或任务层实际调用。
+- **已接入**：本项目已有直接封装或动作脚本层实际调用。
 - **部分接入**：本项目只使用该类/函数的一部分能力。
 - **未接入**：cuMotion Python API 存在，但本项目当前没有封装入口。
 - **辅助/底层**：主要作为其它接口的参数、返回值或枚举使用。
@@ -802,7 +802,7 @@ cuMotion 配置文件和官方约定为准。
 `generate_time_stamped_trajectory(...)` 实现
 `trajectory_generation.mode='time_stamped'`。轨迹生成器的 position/velocity/acceleration/jerk
 limit setter 和 `set_solver_param(...)` 已通过 `trajectory_generation.limits`、
-`trajectory_generation.solver_params` 暴露到 context 和 pinch_grasp 任务配置。
+`trajectory_generation.solver_params` 暴露到 context 和 pinch_grasp 动作配置。
 
 ### 13.10 Trajectory Optimizer
 
@@ -837,7 +837,7 @@ trajectory optimization。当前项目已把它作为目标式请求的默认 pi
 | `RmpFlow.TargetRmpConfig.OrientationConfig` | 未接入 | 姿态目标 RMP 参数。 | `accel_p_gain`/`accel_d_gain` 控制姿态吸引阻尼；`metric_scalar` 控制姿态项权重；`proximity_metric_boost_length_scale`/`proximity_metric_boost_scalar` 控制近目标 metric 增强。 |
 | `RmpFlow.TargetRmpConfig.DampingConfig` | 未接入 | 全局/目标阻尼参数。 | `accel_d_gain` 控制阻尼强度；`metric_scalar` 控制阻尼 metric；`inertia` 表示惯性项。 |
 
-RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；当前项目没有把它接入执行层或任务层。
+RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；当前项目没有把它接入执行层或动作脚本层。
 
 ### 13.12 Collision sphere generation
 
@@ -865,7 +865,7 @@ RMPflow 是 reactive motion policy，适合持续目标跟踪和避障控制；�
 | MotionPlannerConfig 参数调节 | 是 | 已接入 config file 和参数映射 |
 | `interpolated_path` | 是 | 已通过 `generate_interpolated_path` 接入 |
 | CSpaceTrajectoryGenerator | 是 | 已接入 time-optimal/time-stamped 两种生成 |
-| trajectory generator limits/solver params | 是 | 已接入 context 和任务配置 |
+| trajectory generator limits/solver params | 是 | 已接入 context 和动作配置 |
 | PathSpec / path conversion | 是 | specified_path 支持 C-space waypoints、task-space segments 和 composite path 的官方 conversion |
 | TrajectoryOptimizer | 是 | 已作为默认 `trajectory_optimization` pipeline 接入 |
 | RMPflow | 是 | 未接入 |
@@ -875,24 +875,24 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 
 ## 14. 当前 `backends/cumotion` 实现评估
 
-总体判断：当前实现的分层是合理的，尤其是“cuMotion 只处理 C-space 主动关节，任务层负责完整 articulation DOF 映射”这个边界很重要，不能轻易下沉到后端里。这个边界避免了机械臂 + 灵巧手 + mimic follower 混合 DOF 时的错位写入，也让测试可以用 fake context 覆盖多数数据流。
+总体判断：当前实现的分层是合理的，尤其是“cuMotion 只处理 C-space 主动关节，动作脚本层负责完整 articulation DOF 映射”这个边界很重要，不能轻易下沉到后端里。这个边界避免了机械臂 + 灵巧手 + mimic follower 混合 DOF 时的错位写入，也让测试可以用 fake context 覆盖多数数据流。
 
 ### 14.1 合理之处
 
 - `CuMotionContext` 负责延迟导入、加载 XRDF/URDF、缓存 `robot_description` 和 `kinematics`，没有在包导入阶段要求 Isaac/cuMotion 环境存在；这对单元测试和离线配置解析很友好。
 - FK、IK、MotionPlanner、CollisionWorld、TrajectoryAdapter 分模块实现，和 cuMotion 官方能力块基本对齐，维护边界清楚。
-- `joint_names()` 作为 C-space 顺序的唯一来源，任务层通过名称映射回 Isaac DOF，这比假设索引一致安全。
+- `joint_names()` 作为 C-space 顺序的唯一来源，动作脚本层通过名称映射回 Isaac DOF，这比假设索引一致安全。
 - `pose_adapter.py` 集中处理项目 `wxyz` 四元数到 cuMotion `Rotation3/Pose3` 的转换，减少姿态顺序错误。
 - `motion_planner.py` 作为 facade 接入三条 pipeline：默认 `trajectory_optimization`、显式 `graph_search`、以及 `specified_path` 的 C-space/task-space/composite 路径族。
-- graph planner config file、planner 参数映射、trajectory generation limits 和 trajectory solver params 都有分组配置入口，pinch grasp 也能从任务配置覆盖这些参数。
+- graph planner config file、planner 参数映射、trajectory generation limits 和 trajectory solver params 都有分组配置入口，pinch grasp 也能从动作配置覆盖这些参数。
 - `CuMotionCollisionWorld` 支持 obstacle 增量同步、启停、删除、pose 更新、几何变化重建，并提供 World/RobotWorld inspector wrapper。
-- `trajectory_adapter.py` 兼容真实 cuMotion `eval_all(t)` 四元组和测试替身对象，这对 pybind 版本变化有一定韧性。
+- `trajectory_sampler.py` 兼容真实 cuMotion `eval_all(t)` 四元组和测试替身对象，这对 pybind 版本变化有一定韧性。
 - `tcp_context.py` 把临时 URDF 生命周期和 `custom_tcp_frame` 配置收在后端；`tcp_urdf_builder.py` 保持为底层 URDF 写入工具。
 
 ### 14.2 主要风险和缺口
 
-- `CuMotionMotionPlanner.plan(...)` 每次请求仍会重新创建 planner config 和 planner。对当前离线任务简单可靠；如果之后做高频 replanning，可以按 world/config 缓存 planner。
-- `CuMotionContext` 持有并复用当前 `CuMotionCollisionWorld`，但环境需要任务层显式同步 `CollisionObject`；后端不会自动扫描 Isaac stage，也不支持 SDF obstacle。
+- `CuMotionMotionPlanner.plan(...)` 每次请求仍会重新创建 planner config 和 planner。对当前离线脚本简单可靠；如果之后做高频 replanning，可以按 world/config 缓存 planner。
+- `CuMotionContext` 持有并复用当前 `CuMotionCollisionWorld`，但环境需要动作脚本层显式同步 `CollisionObject`；后端不会自动扫描 Isaac stage，也不支持 SDF obstacle。
 - collision-free IK 会传入位置/姿态容差并复算误差，但只封装了单个 task-space target；array/goalset 和 `axis(...)` 姿态约束未接入。
 - `IKRequest.validate_structure()` 和 request/model-match 校验覆盖基础结构；`IkConfig` 的更多细粒度参数还没有 YAML 入口。
 - `RobotWorldInspector` 有 wrapper，但还没有自动接入 `MotionResult.diagnostics.metrics`；目前需要调用方显式创建 inspector 做诊断。
@@ -901,7 +901,7 @@ cuMotion Python 包暴露的 API 范围大于本项目封装范围。本后端�
 
 不建议把完整 DOF 映射、手部轨迹补齐、mimic 展开等逻辑移动到 `backends/cumotion/`。原因是
 cuMotion 的机器人描述通常只包含机械臂 C-space；完整 articulation 的命令空间、mimic follower
-和任务语义属于 Isaac/controller/任务层。当前把这些留在 `tasks.pinch_grasp` 等任务层是合理的。
+和动作语义属于 Isaac/controller/动作脚本层。当前把这些留在 `scripts.pinch_grasp` 等动作脚本层是合理的。
 
 更值得做的是在 cuMotion 后端内部继续补齐“更高阶后端能力”：
 
@@ -912,13 +912,13 @@ cuMotion 的机器人描述通常只包含机械臂 C-space；完整 articulatio
 
 ## 15. 能否更全局地替换使用 cuMotion
 
-可以，但应该按“后端能力替换”逐步推进，而不是一次性把所有轨迹/任务逻辑都交给 cuMotion。更全局使用 cuMotion 的方向主要有四类。
+可以，但应该按“后端能力替换”逐步推进，而不是一次性把所有轨迹/动作逻辑都交给 cuMotion。更全局使用 cuMotion 的方向主要有四类。
 
 ### 15.1 立即适合替换的部分
 
 - 关节角到关节角运动：优先走 `CuMotionMotionPlanner.plan(MotionRequest(goal_q=...))`；需要保守路线时显式选择 `graph_search` 或项目侧插值策略。
 - TCP 位姿目标：优先用 `MotionRequest(goal_pose=PoseTarget(...))` 做路径级规划，而不是“单点 IK + 关节插值”。
-- C-space 轨迹时间参数化：统一用 `CSpaceTrajectoryGenerator` 输出速度/加速度/jerk，再由 `trajectory_adapter` 转项目 `JointTrajectory`。
+- C-space 轨迹时间参数化：统一用 `CSpaceTrajectoryGenerator` 输出速度/加速度/jerk，再由 `trajectory_sampler` 转项目 `JointTrajectory`。
 - 碰撞诊断：接入 `RobotWorldInspector` 后，可以在执行前检查起点/终点/路径采样是否自碰或碰环境。
 
 ### 15.2 可以替换但需要新封装的部分
@@ -933,15 +933,15 @@ cuMotion 的机器人描述通常只包含机械臂 C-space；完整 articulatio
 
 ### 15.3 暂不建议替换的部分
 
-- 灵巧手开合、mimic follower 展开、手部 scripted target：这些 DOF 不在 cuMotion C-space 中，仍应由任务层或控制器层处理。
-- 完整 DOF command-space 裁剪：仍应保持在任务/controller 边界，通过关节名映射把 cuMotion C-space 嵌回完整 DOF。
-- 高层任务状态机：cuMotion 负责“怎么动”，不负责“什么时候闭合手、抓哪个端点、失败怎么回退”。
+- 灵巧手开合、mimic follower 展开、手部 scripted target：这些 DOF 不在 cuMotion C-space 中，仍应由动作脚本层或控制器层处理。
+- 完整 DOF command-space 裁剪：仍应保持在动作脚本/controller 边界，通过关节名映射把 cuMotion C-space 嵌回完整 DOF。
+- 高层动作状态机：cuMotion 负责“怎么动”，不负责“什么时候闭合手、抓哪个端点、失败怎么回退”。
 
 ### 15.4 建议的推进路线
 
 1. 先把 inspector 诊断接进 `MotionResult.diagnostics.metrics`，记录自碰、最小障碍距离、path waypoint 数等。
-2. 对多段 task-space 任务引入 `TrajectoryOptimizer` 试验入口，先只在 pinch grasp 的 lift/wiggle 或独立 demo 中启用。
+2. 对多段 task-space 动作引入 `TrajectoryOptimizer` 试验入口，先只在 pinch grasp 的 lift/wiggle 或独立 demo 中启用。
 3. 如果需要复杂环境避障，再补 SDF obstacle 和 SDF inspection。
 5. 若需要在线目标跟踪，再单独设计 RMPflow controller/adapter，不要把它塞进现有离线 `JointTrajectory` 接口里。
 
-结论：当前 `cumotion` 文件夹作为第一层封装是稳的；它覆盖了项目最需要的 FK、IK、规划、trajectory 生成和 primitive world。要“更全局地替换”，推荐沿着 config/diagnostics/path conversion/trajectory optimizer/RMPflow 的顺序渐进扩展，而不是拆掉现有任务层映射。
+结论：当前 `cumotion` 文件夹作为第一层封装是稳的；它覆盖了项目最需要的 FK、IK、规划、trajectory 生成和 primitive world。要“更全局地替换”，推荐沿着 config/diagnostics/path conversion/trajectory optimizer/RMPflow 的顺序渐进扩展，而不是拆掉现有动作脚本层映射。

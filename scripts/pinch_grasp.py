@@ -1,42 +1,85 @@
-"""夹捏抓取任务流程。
+#!/usr/bin/env python3
+"""运行 AR5 + LinkerHand L6 的绳端夹捏抓取动作脚本。
 
-该任务面向机械臂 + 灵巧手 + rope endpoint cuboid 的 scripted demo：先根据闭合手型从 MJCF
-运动链计算 thumb/index 夹捏中心 TCP，再由 cuMotion 后端装配带 TCP 的 context，最后把
-approach、grasp、lift、wiggle 等阶段合成为完整 articulation DOF 目标并在 Isaac 中执行。
+本文件是一个完整可运行动作入口：抓取动作参数直接写在脚本内，不再通过
+外部 trajectory YAML 或旧任务包间接提供。外部 YAML 只保留机器人、控制器、环境、绳体、
+日志和 cuMotion profile 这些可复用系统配置。
 
-职责边界:
-    * 作为高层 demo 编排，可以串联对象配置、TCP 生成、IK、轨迹执行步骤和日志。
-    * 不直接创建 ``World`` 或导入机器人资产；这些由脚本入口和 env/assets 层完成。
-    * 不在这里实现低层控制器；每个阶段最终委托 ``execution.steps`` 下发目标。
+执行流程：
+    1. 读取系统配置并启动 Isaac Sim。
+    2. 导入 capsule rope 和 AR5+L6 组合机器人。
+    3. 创建 JointController 和可选日志器。
+    4. 根据内置闭合手型计算 pinch TCP。
+    5. 规划 approach、grasp、lift、wiggle 等阶段并按 physics dt 播放。
 
-数组/坐标约定:
-    内部数组大多是完整 articulation DOF 顺序；只有调用 cuMotion 时才切到 C-space 关节顺序，
-    返回后再按关节名映射回完整目标。笛卡尔目标按当前示例的 world/base 对齐坐标表达，单位
-    为 m；手型关节目标单位为 rad。这样可以同时控制机械臂、主动手指关节和 MJCF mimic
-    follower，同时避免把 IK 结果误写到灵巧手 DOF。
+数组/坐标约定：
+    动作内部大多使用 Isaac articulation 完整 DOF 顺序；只有进入 cuMotion 时才切到
+    ``context.joint_names()`` 对应的 C-space 顺序。笛卡尔目标使用当前 demo 的 world/base 对齐
+    坐标，单位 m；关节角和 RPY 使用 rad。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+import argparse
+from dataclasses import dataclass, field, replace
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = REPO_ROOT / "source"
+if str(SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SOURCE_ROOT))
+
+from manipulation_project.app.launch import launch_simulation_app
+from manipulation_project.assets.robot_loader import (
+    RobotAssetConfig,
+    import_robot_asset,
+)
+from manipulation_project.assets.solver_overrides import (
+    SolverIterationConfig,
+    apply_solver_iteration_overrides,
+)
+from manipulation_project.assets.usd_overrides import (
+    apply_robot_usd_overrides,
+    disable_robot_gravity,
+)
 from manipulation_project.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
 from manipulation_project.backends.cumotion.motion_planner_config import (
-    GraphSearchConfig,
     MotionPlannerBackendConfig,
     SpecifiedPathConfig,
-    TrajectoryGenerationConfig,
 )
 from manipulation_project.backends.cumotion.tcp_context import make_cumotion_context
-from manipulation_project.backends.cumotion.trajectory_adapter import (
+from manipulation_project.backends.cumotion.trajectory_sampler import (
     joint_trajectory_from_cumotion,
+)
+from manipulation_project.controllers.config import (
+    joint_control_settings,
+    load_controller_profiles,
+    physx_override_configs,
+)
+from manipulation_project.controllers.joint_controller import JointController
+from manipulation_project.envs.scene_builder import build_world, configure_visuals
+from manipulation_project.execution.runtime import ExecutionRuntime, ExecutionStep
+from manipulation_project.execution.steps import (
+    FullJointTrajectoryStep,
+    HoldJointTargetStep,
+    SmoothJointTargetStep,
+)
+from manipulation_project.logging.config import (
+    joint_logging_config_from_mapping,
+    override_logging_config,
+)
+from manipulation_project.logging.joint_logger import JointTrackingLogger
+from manipulation_project.objects.capsule_rope import (
+    CapsuleRopeConfig,
+    add_capsule_rope_reference,
+    endpoint_center,
 )
 from manipulation_project.planning.requests import (
     IKRequest,
@@ -46,20 +89,18 @@ from manipulation_project.planning.requests import (
     TcpLineSegment,
 )
 from manipulation_project.planning.results import MotionResult
-from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
 from manipulation_project.robots.joint_groups import target_vector_from_mapping
-from manipulation_project.robots.mimic import expand_targets_with_mjcf_equalities
-from manipulation_project.execution.runtime import ExecutionRuntime, ExecutionStep
-from manipulation_project.execution.steps import (
-    FullJointTrajectoryStep,
-    HoldJointTargetStep,
-    SmoothJointTargetStep,
+from manipulation_project.robots.mimic import (
+    expand_targets_with_mjcf_equalities,
+    mjcf_equality_follower_joint_names,
 )
 from manipulation_project.tcp.pinch_tcp import DEFAULT_PINCH_TCP_FRAME, make_pinch_tcp
 from manipulation_project.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
 from manipulation_project.trajectories.types import JointTrajectory
+from manipulation_project.utils.config import deep_merge, load_yaml
+from manipulation_project.utils.paths import repo_path
 from manipulation_project.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
@@ -67,35 +108,32 @@ _CUMOTION_TRAJECTORY_SAMPLE_STEP_MULTIPLE = 1
 _CUMOTION_TRAJECTORY_MIN_SAMPLES = 50
 
 
+DEFAULT_PRE_PINCH_HAND_TARGETS = {
+    "L6V1_L_hand_thumb_cmc_roll": 0.95,
+    "L6V1_L_hand_thumb_cmc_pitch": 0.28,
+    "L6V1_L_hand_index_mcp_pitch": 0.25,
+    "L6V1_L_hand_middle_mcp_pitch": 0.15,
+    "L6V1_L_hand_ring_mcp_pitch": 0.15,
+    "L6V1_L_hand_pinky_mcp_pitch": 0.12,
+}
+
+DEFAULT_CLOSED_PINCH_HAND_TARGETS = {
+    "L6V1_L_hand_thumb_cmc_roll": 0.95,
+    "L6V1_L_hand_thumb_cmc_pitch": 0.7,
+    "L6V1_L_hand_index_mcp_pitch": 0.85,
+    "L6V1_L_hand_middle_mcp_pitch": 0.45,
+    "L6V1_L_hand_ring_mcp_pitch": 0.4,
+    "L6V1_L_hand_pinky_mcp_pitch": 0.35,
+}
+
+
 @dataclass(frozen=True)
 class PinchMotionPlanningConfig:
-    """pinch_grasp 中关节角到关节角阶段的 cuMotion 规划参数。
-
-    任务层使用 grouped ``MotionPlannerBackendConfig``，默认走 trajectory optimization；
-    graph-search 和 trajectory-generation 细节只在对应 pipeline 中生效。
-    """
+    """夹捏动作中关节角到关节角阶段的 cuMotion 规划参数。"""
 
     backend: MotionPlannerBackendConfig = field(
         default_factory=MotionPlannerBackendConfig
     )
-
-    @classmethod
-    def from_mapping(cls, data) -> "PinchMotionPlanningConfig":
-        """从 ``grasp.motion_planning`` 子字典构造规划配置。
-
-        ``data`` 为 ``None`` 时使用默认规划策略。配置可以直接使用 grouped
-        ``MotionPlannerBackendConfig`` schema，也可以使用 pinch grasp 的任务级简写字段。
-        """
-
-        if data is None:
-            config = cls()
-        elif not isinstance(data, Mapping):
-            raise ValueError("motion_planning must be a mapping")
-        else:
-            grouped = _pinch_motion_planner_backend_config(data)
-            config = cls(backend=grouped)
-        config.validate()
-        return config
 
     def validate(self) -> None:
         """检查 cuMotion 规划参数是否在项目支持的取值范围内。"""
@@ -103,145 +141,12 @@ class PinchMotionPlanningConfig:
         self.backend.validate()
 
 
-def _pinch_motion_planner_backend_config(
-    data: Mapping[str, object]
-) -> MotionPlannerBackendConfig:
-    """解析 pinch_grasp 的 motion planner 配置。
-
-    支持 grouped ``MotionPlannerBackendConfig`` schema，也接受 pinch grasp 的任务级简写字段：
-
-    * ``path_interpolation`` -> ``graph_search.generate_interpolated_path``
-    * ``planner_params`` / ``motion_planner_params`` -> ``graph_search.motion_planner_params``
-    * ``trajectory_mode`` / ``interpolation_mode`` -> ``trajectory_generation`` 分组
-    * ``trajectory_limits`` / ``trajectory_solver_params`` -> ``trajectory_generation`` 分组
-
-    合并原则是先解析 grouped 配置，再用任务级简写字段覆盖对应分组。
-    """
-
-    backend = MotionPlannerBackendConfig.from_mapping(data)
-    shorthand_fields = {
-        "path_interpolation",
-        "trajectory_mode",
-        "interpolation_mode",
-        "planner_params",
-        "motion_planner_params",
-        "trajectory_limits",
-        "trajectory_solver_params",
-    }
-    if not any(field_name in data for field_name in shorthand_fields):
-        return backend
-
-    graph = backend.graph_search
-    trajectory_generation = backend.trajectory_generation
-    graph_params = _optional_params(
-        data.get("planner_params") or data.get("motion_planner_params")
-    )
-    if graph_params:
-        graph_params = {**dict(graph.motion_planner_params), **graph_params}
-    else:
-        graph_params = dict(graph.motion_planner_params)
-    graph = GraphSearchConfig(
-        generate_interpolated_path=bool(
-            data.get("path_interpolation", graph.generate_interpolated_path)
-        ),
-        use_environment_obstacles=graph.use_environment_obstacles,
-        motion_planner_config_path=graph.motion_planner_config_path,
-        motion_planner_params=graph_params,
-    )
-    trajectory_generation = TrajectoryGenerationConfig(
-        mode=_normalize_pinch_trajectory_mode(
-            data.get("trajectory_mode", trajectory_generation.mode)
-        ),
-        interpolation_mode=_normalize_pinch_interpolation_mode(
-            data.get("interpolation_mode", trajectory_generation.interpolation_mode)
-        ),
-        limits=(
-            _optional_limit_mapping(data.get("trajectory_limits"))
-            or trajectory_generation.limits
-        ),
-        solver_params=(
-            _optional_params(data.get("trajectory_solver_params"))
-            or trajectory_generation.solver_params
-        ),
-    )
-    return MotionPlannerBackendConfig(
-        planning_pipeline=backend.planning_pipeline,
-        graph_search=graph,
-        trajectory_generation=trajectory_generation,
-        trajectory_optimization=backend.trajectory_optimization,
-        specified_path=backend.specified_path,
-    )
-
-
-def _normalize_pinch_trajectory_mode(value) -> str:
-    """规范化 pinch_grasp 暴露给 cuMotion trajectory generator 的模式名。"""
-
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized in {"time_optimal", "optimal", "default"}:
-        return "time_optimal"
-    if normalized in {"time_stamped", "timestamped", "time_stamp"}:
-        return "time_stamped"
-    raise ValueError("trajectory_mode must be one of: time_optimal, time_stamped")
-
-
-def _normalize_pinch_interpolation_mode(value) -> str:
-    """规范化 time-stamped trajectory 的 waypoint 插值模式名。"""
-
-    normalized = str(value).strip().lower().replace("-", "_")
-    if normalized == "linear":
-        return "linear"
-    if normalized in {"cubic", "cubic_spline", "spline"}:
-        return "cubic_spline"
-    raise ValueError("interpolation_mode must be one of: linear, cubic_spline")
-
-
-def _optional_params(value) -> dict[str, object]:
-    """解析可选 cuMotion 参数映射。"""
-
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping):
-        raise ValueError("cuMotion motion_planning params must be a mapping")
-    return {str(key): param_value for key, param_value in value.items()}
-
-
-def _optional_limit_mapping(value) -> dict[str, tuple[float, ...]]:
-    """解析可选 trajectory limit 映射。"""
-
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping):
-        raise ValueError("trajectory_limits must be a mapping")
-    limits = {}
-    for key, limit_value in value.items():
-        array = np.asarray(limit_value, dtype=float).reshape(-1)
-        if array.size == 0:
-            raise ValueError(f"trajectory limit {key!r} cannot be empty")
-        limits[str(key)] = tuple(float(item) for item in array)
-    return limits
-
-
 @dataclass(frozen=True)
-class PinchGraspConfig:
-    """夹捏抓取脚本的配置集合。
+class PinchGraspActionConfig:
+    """夹捏抓取动作的内置参数集合。
 
-    输入字段:
-        endpoint: 选择 rope 的 ``left`` 或 ``right`` 端点作为抓取目标。
-        target_world_offset: 在端点中心上叠加的世界坐标偏移，单位 m。
-        target_rpy: 目标 TCP 姿态，固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY，单位 rad。
-        use_orientation: IK 是否约束 TCP 姿态；为假时只约束位置。
-        approach_distance: 抓取前从目标正上方接近的高度差，单位 m。
-        lift_height: 抓住后抬升高度，单位 m。
-        prep/move/approach/close/lift/wiggle/final/post...: 各阶段持续时间，单位 s。
-        wiggle_axis: 抬升后摆动方向，世界坐标向量。
-        cuMotion 后端参数从 robot config 的 ``cumotion`` 段读取。
-        tcp_frame_name: 写入临时 URDF 的 pinch TCP frame 名。
-        motion_planning: 关节角到关节角阶段的 cuMotion 路径/轨迹生成参数。
-        pre_pinch_hand_targets: 预夹捏手型的稀疏关节目标，单位 rad。
-        closed_pinch_hand_targets: 闭合夹捏手型的稀疏关节目标，单位 rad。
-    输出:
-        该 dataclass 作为 ``PinchGraspTask`` 的输入；``pre_targets`` 和
-        ``closed_targets`` 属性会返回可修改的字典副本。
+    这些值原来由外部 trajectory YAML 提供；现在随动作脚本一起维护，
+    让 pinch grasp 成为一个独立可运行 script，而不是外部 task 配置。
     """
 
     endpoint: str = "left"
@@ -270,109 +175,27 @@ class PinchGraspConfig:
     motion_planning: PinchMotionPlanningConfig = field(
         default_factory=PinchMotionPlanningConfig
     )
-    pre_pinch_hand_targets: dict[str, float] | None = None
-    closed_pinch_hand_targets: dict[str, float] | None = None
-
-    @classmethod
-    def from_mapping(cls, data: dict) -> "PinchGraspConfig":
-        """从 YAML 字典构造配置。
-
-        参数:
-            data: 完整任务配置，必须包含 ``grasp`` 子字典。
-        返回:
-            ``PinchGraspConfig``，缺失字段会使用类默认值；手型目标必须由配置提供。
-        """
-
-        if "grasp" not in data:
-            raise ValueError("Pinch grasp config must contain top-level grasp section")
-        grasp = data["grasp"]
-        if "target_rpy_deg" in grasp:
-            raise ValueError("target_rpy_deg is removed; use target_rpy in radians")
-        return cls(
-            endpoint=str(grasp.get("endpoint", cls.endpoint)),
-            target_world_offset=tuple(
-                float(value)
-                for value in grasp.get("target_world_offset", cls.target_world_offset)
-            ),
-            target_rpy=tuple(float(value) for value in grasp.get("target_rpy", cls.target_rpy)),
-            use_orientation=bool(grasp.get("use_orientation", cls.use_orientation)),
-            approach_distance=float(
-                grasp.get("approach_distance", cls.approach_distance)
-            ),
-            lift_height=float(grasp.get("lift_height", cls.lift_height)),
-            prep_duration=float(grasp.get("prep_duration", cls.prep_duration)),
-            move_duration=float(grasp.get("move_duration", cls.move_duration)),
-            approach_duration=float(
-                grasp.get("approach_duration", cls.approach_duration)
-            ),
-            close_duration=float(grasp.get("close_duration", cls.close_duration)),
-            lift_duration=float(grasp.get("lift_duration", cls.lift_duration)),
-            wiggle_cycles=int(grasp.get("wiggle_cycles", cls.wiggle_cycles)),
-            wiggle_amplitude=float(grasp.get("wiggle_amplitude", cls.wiggle_amplitude)),
-            wiggle_duration=float(grasp.get("wiggle_duration", cls.wiggle_duration)),
-            wiggle_axis=tuple(
-                float(value) for value in grasp.get("wiggle_axis", cls.wiggle_axis)
-            ),
-            final_hold_duration=float(
-                grasp.get("final_hold_duration", cls.final_hold_duration)
-            ),
-            post_joint_sweep_duration=float(
-                grasp.get("post_joint_sweep_duration", cls.post_joint_sweep_duration)
-            ),
-            post_joint_sweep_targets=tuple(
-                float(value)
-                for value in grasp.get(
-                    "post_joint_sweep_targets", cls.post_joint_sweep_targets
-                )
-            ),
-            tcp_frame_name=str(grasp.get("tcp_frame_name", cls.tcp_frame_name)),
-            motion_planning=PinchMotionPlanningConfig.from_mapping(
-                grasp.get("motion_planning")
-            ),
-            pre_pinch_hand_targets=dict(grasp["pre_pinch_hand_targets"])
-            if "pre_pinch_hand_targets" in grasp
-            else None,
-            closed_pinch_hand_targets=dict(grasp["closed_pinch_hand_targets"])
-            if "closed_pinch_hand_targets" in grasp
-            else None,
-        )
+    pre_pinch_hand_targets: dict[str, float] = field(
+        default_factory=lambda: dict(DEFAULT_PRE_PINCH_HAND_TARGETS)
+    )
+    closed_pinch_hand_targets: dict[str, float] = field(
+        default_factory=lambda: dict(DEFAULT_CLOSED_PINCH_HAND_TARGETS)
+    )
 
     @property
     def pre_targets(self) -> dict[str, float]:
-        """返回预夹捏手型目标。
+        """返回预夹捏手型目标副本，调用方可以安全修改。"""
 
-        返回:
-            ``关节名 -> 目标位置(rad)`` 的新字典，调用方可安全修改。
-        """
-
-        if self.pre_pinch_hand_targets is None:
-            raise ValueError(
-                "pre_pinch_hand_targets must be provided for the selected hand"
-            )
         return dict(self.pre_pinch_hand_targets)
 
     @property
     def closed_targets(self) -> dict[str, float]:
-        """返回闭合夹捏手型目标。
+        """返回闭合夹捏手型目标副本，调用方可以安全修改。"""
 
-        返回:
-            ``关节名 -> 目标位置(rad)`` 的新字典，调用方可安全修改。
-        """
-
-        if self.closed_pinch_hand_targets is None:
-            raise ValueError(
-                "closed_pinch_hand_targets must be provided for the selected hand"
-            )
         return dict(self.closed_pinch_hand_targets)
 
     def validate(self) -> None:
-        """检查配置取值是否满足任务执行要求。
-
-        输入:
-            使用 dataclass 当前字段值。
-        返回:
-            无返回值；发现非法端点、负时长或无效手型/TCP 参数时抛出 ``ValueError``。
-        """
+        """检查内置动作参数是否满足执行要求。"""
 
         if self.endpoint not in {"left", "right"}:
             raise ValueError("endpoint must be left or right")
@@ -389,8 +212,6 @@ class PinchGraspConfig:
             "final_hold_duration": self.final_hold_duration,
             "post_joint_sweep_duration": self.post_joint_sweep_duration,
         }
-        # 时长和距离允许为 0，用于跳过某些阶段或立即下发目标；负数没有物理意义，
-        # 会导致 step 计数和 smoothstep 插值难以解释。
         for name, value in nonnegative.items():
             if value < 0:
                 raise ValueError(f"{name} cannot be negative")
@@ -400,15 +221,12 @@ class PinchGraspConfig:
             raise ValueError("tcp_frame_name cannot be empty")
         self.motion_planning.validate()
         if not self.pre_pinch_hand_targets:
-            raise ValueError(
-                "pre_pinch_hand_targets must be provided for the selected hand"
-            )
+            raise ValueError("pre_pinch_hand_targets cannot be empty")
         if not self.closed_pinch_hand_targets:
-            raise ValueError(
-                "closed_pinch_hand_targets must be provided for the selected hand"
-            )
+            raise ValueError("closed_pinch_hand_targets cannot be empty")
         if np.linalg.norm(np.asarray(self.wiggle_axis, dtype=float)) <= 0.0:
             raise ValueError("wiggle_axis must be non-zero")
+
 
 
 def set_joint_targets_by_indices(
@@ -523,7 +341,7 @@ def build_specified_tcp_line_trajectory(
 ) -> tuple[JointTrajectory, MotionResult]:
     """用 specified_path 的 ``TcpLineSegment`` 构建完整 DOF TCP 直线轨迹。
 
-    该函数是任务层到新 specified-path 接口的直接调用点：不再经过旧的 ``tcp_line.py`` 逐点 IK
+    该函数是动作脚本到新 specified-path 接口的直接调用点：不再经过旧的 ``tcp_line.py`` 逐点 IK
     helper，也不保留 ``TcpLineRequest`` 兼容层。cuMotion 只返回 C-space 路径/轨迹；这里负责把
     机械臂 C-space 列写回完整 articulation DOF。
     """
@@ -607,7 +425,7 @@ def build_specified_tcp_line_trajectory(
 def _specified_path_config_from_base(
     base_config: MotionPlannerBackendConfig | None,
 ) -> MotionPlannerBackendConfig:
-    """从任务主 planner 配置派生 task-space specified-path 配置。"""
+    """从动作主 planner 配置派生 task-space specified-path 配置。"""
 
     base = base_config or MotionPlannerBackendConfig()
     return MotionPlannerBackendConfig(
@@ -809,7 +627,7 @@ def _full_positions_from_cspace_path(
 
 
 def grasp_target_position(
-    config: PinchGraspConfig,
+    config: PinchGraspActionConfig,
     rope_config: CapsuleRopeConfig,
     *,
     lift_height: float = 0.0,
@@ -833,8 +651,8 @@ def grasp_target_position(
     )
 
 
-class PinchGraspTask:
-    """机械臂+灵巧手对 rope 端点 cuboid 的脚本化夹捏任务。
+class PinchGraspAction:
+    """机械臂+灵巧手对 rope 端点 cuboid 的脚本化夹捏动作。
 
     输入:
         初始化时传入抓取配置、rope 场景配置、MJCF 路径和 cuMotion 后端配置。
@@ -846,13 +664,13 @@ class PinchGraspTask:
     def __init__(
         self,
         *,
-        config: PinchGraspConfig,
+        config: PinchGraspActionConfig,
         rope_config: CapsuleRopeConfig,
         mjcf_path: str | Path,
         cumotion_config: CuMotionConfig,
         tcp_frame_name: str | None = None,
     ) -> None:
-        """保存任务配置和 IK/TCP 资源路径。
+        """保存动作配置和 IK/TCP 资源路径。
 
         参数:
             config: 夹捏抓取配置。
@@ -923,7 +741,7 @@ class PinchGraspTask:
         target_orientation = rpy_xyz_to_quat_wxyz(self.config.target_rpy)
         ik_orientation = target_orientation if self.config.use_orientation else None
         # IK 后端只认识机器人描述里的 frame。cuMotion backend 负责把 pinch TCP 装配进
-        # 临时 URDF/context，任务层只保留 TCP 几何和完整 DOF 映射逻辑。
+        # 临时 URDF/context，动作脚本只保留 TCP 几何和完整 DOF 映射逻辑。
         with make_cumotion_context(self.cumotion_config, tcp=tcp) as context:
             ik_defaults = context.config.kinematics.ik
             ik_joint_names = context.joint_names()
@@ -971,7 +789,7 @@ class PinchGraspTask:
                 approach_all, arm_indices, approach.joint_positions
             )
             # approach_all 是接近点的完整姿态；从这里开始构建一条短 TCP 直线下沉轨迹，
-            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的任务意图。TCP 直线现在
+            # 比直接 IK 到抓取点再关节插值更接近“沿竖直方向靠近端块”的动作意图。TCP 直线现在
             # 直接使用 specified_path 的 TaskSpacePath/TcpLineSegment，不再经过旧逐点 IK helper。
             grasp_line_trajectory, grasp_line_motion = (
                 build_specified_tcp_line_trajectory(
@@ -1171,8 +989,8 @@ class PinchGraspTask:
     def execution_steps(self, plan: dict[str, object]) -> list[ExecutionStep]:
         """把抓取 plan 拆成可顺序执行的执行步骤列表。
 
-        ``plan`` 来自 ``build_plan``，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
-        返回的步骤列表只负责执行，IK 和运动规划都在 ``build_plan`` 中完成。
+        ``plan`` 来自 ``plan`` 方法，其中既有完整 DOF 目标，也有已映射到完整 DOF 的轨迹。
+        返回的步骤列表只负责执行，IK 和运动规划都已经提前完成。
         """
 
         # plan 阶段只生成目标数组；这里把它们转换成可执行步骤，确保 run 的主循环只需要
@@ -1278,5 +1096,462 @@ class PinchGraspTask:
         plan["steps"] = step
         return plan
 
-    # 文件结束：本类只定义抓取任务配置、规划和执行编排，不在导入时产生仿真副作用。
-    pass
+
+def parse_args() -> argparse.Namespace:
+    """解析命令行参数。
+
+    各配置文件默认指向仓库内的标准抓绳 demo：
+    - robot config 选择 AR5V2_L + L6V1_L 组合机器人；
+    - controller config 目录提供按部件分组的位置、速度和 effort 控制参数；
+    - env config 提供物理步频、重力和 solver iteration；
+    - rope config 提供 capsule rope 资产路径和 prim 路径；
+    - pinch grasp 动作参数固定在本脚本内，命令行只覆盖少量常用开关。
+    """
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--robot-config", type=Path, default=Path("configs/robots/ar5v2_l6v1_l.yaml")
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, default=Path("configs/controllers")
+    )
+    parser.add_argument(
+        "--env-config", type=Path, default=Path("configs/envs/rope_scene.yaml")
+    )
+    parser.add_argument(
+        "--rope-config", type=Path, default=Path("configs/objects/capsule_rope.yaml")
+    )
+    parser.add_argument(
+        "--cumotion-config",
+        type=Path,
+        default=Path("configs/cumotion/default.yaml"),
+        help=(
+            "cuMotion profile YAML. Its cumotion section is used as robot-level "
+            "defaults, and cumotion.motion_planner is used as action planner defaults."
+        ),
+    )
+    parser.add_argument(
+        "--logging-config",
+        type=Path,
+        default=Path("configs/logging/default_logger.yaml"),
+    )
+    parser.add_argument(
+        "--log", type=Path, default=None, help="覆盖关节跟踪 CSV 输出路径"
+    )
+    parser.add_argument(
+        "--log-interval-steps", type=int, default=None, help="覆盖日志采样步长"
+    )
+    parser.add_argument(
+        "--log-measured-effort",
+        action="store_true",
+        help="记录 PhysX measured joint effort",
+    )
+    parser.add_argument(
+        "--log-applied-effort",
+        action="store_true",
+        help="记录 Isaac applied joint effort",
+    )
+    parser.add_argument(
+        "--log-action-effort",
+        action="store_true",
+        help="记录控制器实际下发的 effort action",
+    )
+    parser.add_argument(
+        "--no-log-effort-command",
+        action="store_true",
+        help="不记录语义 effort command 列",
+    )
+    parser.add_argument("--gui", action="store_true")
+    parser.add_argument("--hold", action="store_true", help="最终目标保持到窗口关闭")
+    parser.add_argument(
+        "--no-grasp", action="store_true", help="只导入机器人和绳体，并短暂保持初始姿态"
+    )
+    parser.add_argument(
+        "--short-smoke",
+        action="store_true",
+        help="覆盖阶段时长，用于快速 headless smoke",
+    )
+    parser.add_argument("--endpoint", choices=("left", "right"), default=None)
+    parser.add_argument(
+        "--control-mode", choices=("position", "velocity", "effort"), default="position"
+    )
+    parser.add_argument("--physics-frequency", type=float, default=None)
+    parser.add_argument("--render-frequency", type=float, default=None)
+    parser.add_argument("--gravity-z", type=float, default=None)
+    parser.add_argument("--enable-robot-gravity", action="store_true")
+    return parser.parse_args()
+
+
+def solver_settings(env_config: dict) -> SolverIterationConfig | None:
+    """从环境配置构造机器人 solver iteration 覆盖设置。
+
+    返回:
+        配置中存在 ``solver`` 时返回 ``SolverIterationConfig``；不存在时返回
+        ``None``，表示不主动覆盖 PhysX 默认 solver 设置。
+    """
+
+    solver = env_config.get("solver")
+    if solver is None:
+        return None
+    return SolverIterationConfig(
+        solver_type=str(solver.get("type", "TGS")),
+        arm_position_iterations=int(solver.get("arm_position_iterations", 32)),
+        arm_velocity_iterations=int(solver.get("arm_velocity_iterations", 4)),
+        hand_position_iterations=int(solver.get("hand_position_iterations", 32)),
+        hand_velocity_iterations=int(solver.get("hand_velocity_iterations", 4)),
+        apply_scope=str(solver.get("apply_scope", "arm_hand")),
+    )
+
+
+def merged_robot_config_with_cumotion_profile(
+    robot_config: dict, cumotion_profile: dict
+) -> dict:
+    """把 cuMotion profile 的后端默认值合入 robot config。
+
+    profile 只提供通用 ``cumotion`` 默认参数；具体机器人 YAML 仍负责覆盖
+    ``xrdf_path``、``urdf_path``、``flange_frame`` 等资产相关字段。
+    """
+
+    profile_cumotion = cumotion_profile.get("cumotion")
+    if profile_cumotion is None:
+        return dict(robot_config)
+    if not isinstance(profile_cumotion, dict):
+        raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
+    return deep_merge({"cumotion": profile_cumotion}, robot_config)
+
+
+def robot_cumotion_config(robot_config: dict) -> CuMotionConfig:
+    """读取 cuMotion 机器人模型配置。
+
+    机器人配置必须通过 ``cumotion`` 段显式描述 cuMotion 资源和默认求解器参数。
+    """
+
+    return CuMotionConfig.from_mapping(robot_config)
+
+
+def default_pinch_grasp_action_config(cumotion_profile: dict) -> PinchGraspActionConfig:
+    """根据 cuMotion profile 创建脚本内置 pinch grasp 动作参数。
+
+    profile 仍可提供 ``cumotion.motion_planner`` 作为规划后端默认值；抓取目标、阶段时长和手型
+    都固定在本脚本内，不再从外部 trajectory YAML 读取。
+    """
+
+    backend = MotionPlannerBackendConfig.from_mapping(None)
+    profile_cumotion = cumotion_profile.get("cumotion")
+    if profile_cumotion is not None:
+        if not isinstance(profile_cumotion, dict):
+            raise ValueError("cuMotion profile key 'cumotion' must be a mapping")
+        profile_motion_planner = profile_cumotion.get("motion_planner")
+        if profile_motion_planner is not None:
+            if not isinstance(profile_motion_planner, dict):
+                raise ValueError(
+                    "cuMotion profile key 'cumotion.motion_planner' must be a mapping"
+                )
+            backend = MotionPlannerBackendConfig.from_mapping(profile_motion_planner)
+    return PinchGraspActionConfig(
+        motion_planning=PinchMotionPlanningConfig(backend=backend)
+    )
+
+
+def short_smoke_config(config: PinchGraspActionConfig) -> PinchGraspActionConfig:
+    """把抓取配置压缩成快速 headless smoke 配置。
+
+    该模式用于 CI 或快速导入测试：每个阶段只执行极短时间，禁用 wiggle 和后处理关节扫描，
+    目的是尽快验证资产导入、IK 初始化、控制器配置和主循环是否能跑通。
+    """
+
+    return replace(
+        config,
+        lift_height=0.05,
+        prep_duration=0.02,
+        move_duration=0.02,
+        approach_duration=0.02,
+        close_duration=0.02,
+        lift_duration=0.02,
+        wiggle_cycles=0,
+        wiggle_duration=0.02,
+        final_hold_duration=0.02,
+        post_joint_sweep_duration=0.02,
+        post_joint_sweep_targets=(),
+    )
+
+
+def hold_initial_pose(
+    robot,
+    world,
+    articulation_action_type,
+    controller,
+    simulation_app,
+    render: bool,
+    logger,
+) -> None:
+    """保持当前姿态几步，用于 import smoke。
+
+    ``--no-grasp`` 会走这个分支。它不执行抓取动作，只把当前机器人关节位置作为目标反复下发，
+    用于确认机器人资产、驱动参数、mimic follower 和日志系统是否能正常初始化。
+    如果同时传入 ``--hold`` 和 ``--gui``，会持续保持到 Isaac 窗口关闭。
+    """
+
+    full_target = np.asarray(robot.get_joint_positions(), dtype=float)
+    full_velocity = np.zeros(robot.num_dof, dtype=float)
+    step = 0
+    while step < 3 or (simulation_app is not None and simulation_app.is_running()):
+        targets = controller.targets_from_full_state(full_target, full_velocity)
+        controller.apply_targets(articulation_action_type, targets)
+        world.step(render=render)
+        if logger is not None:
+            driven_indices = controller.driven_indices
+            if logger.should_write(step):
+                log_values = logger.collect_step_values(
+                    robot, controller, targets, driven_indices
+                )
+                logger.write(
+                    step=step,
+                    time_s=(step + 1) * float(world.get_physics_dt()),
+                    phase="initial_hold",
+                    drive_update=True,
+                    **log_values,
+                )
+        step += 1
+        if simulation_app is None and step >= 3:
+            break
+
+
+def main() -> None:
+    """脚本主入口。"""
+
+    # Isaac/Kit 日志很多，开启行缓冲可以保证 RUN_PINCH_GRASP_* 状态行尽快刷出，
+    # 方便 live log、调试脚本和外部监控程序读取。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    args = parse_args()
+
+    # 先加载所有 YAML 配置。这里还没有启动 Isaac Sim，尽量把纯 Python 的配置错误提前暴露，
+    # 避免启动 GUI 后才因为路径或字段缺失失败。
+    cumotion_profile = load_yaml(args.cumotion_config)
+    robot_config = merged_robot_config_with_cumotion_profile(
+        load_yaml(args.robot_config), cumotion_profile
+    )
+    controller_profiles = load_controller_profiles(args.controller_config)
+    env_config = load_yaml(args.env_config)
+    rope_config_data = load_yaml(args.rope_config)
+    logging_config = joint_logging_config_from_mapping(load_yaml(args.logging_config))
+    logging_config = override_logging_config(
+        logging_config,
+        joint_tracking_path=args.log,
+        interval_steps=args.log_interval_steps,
+        log_measured_effort=True if args.log_measured_effort else None,
+        log_applied_effort=True if args.log_applied_effort else None,
+        log_action_effort=True if args.log_action_effort else None,
+        log_command_effort=False if args.no_log_effort_command else None,
+    )
+
+    # RobotAssetConfig 只描述“如何把资产导入 stage”，例如 asset_type、asset_path、prim_path。
+    # controlled_joints 则描述控制器主动下发目标的关节集合，mimic follower 会在运行时自动补齐。
+    robot_asset = RobotAssetConfig.from_mapping(robot_config)
+    controlled_joints = list(robot_config.get("controlled_joints", ["all"]))
+    robot_cumotion = robot_cumotion_config(robot_config)
+
+    # 把原始 YAML dict 转成动作使用的 dataclass。命令行参数只覆盖少量常用字段，
+    # 复杂动作参数直接修改本脚本中的 PinchGraspActionConfig 默认值，保证动作入口自包含。
+    rope_config = CapsuleRopeConfig.from_mapping(rope_config_data)
+    action_config = default_pinch_grasp_action_config(cumotion_profile)
+    if args.endpoint is not None:
+        action_config = replace(action_config, endpoint=args.endpoint)
+    if args.short_smoke:
+        action_config = short_smoke_config(action_config)
+
+    # 物理步频决定接触稳定性和控制刷新上限；渲染步频只影响 GUI/相机刷新。
+    # headless 模式下 rendering_dt 之后会直接跟 physics_dt 对齐，避免无意义的渲染节拍。
+    if "env" not in env_config:
+        raise ValueError("Environment config must contain top-level env section")
+    env = env_config["env"]
+    physics_frequency = float(
+        args.physics_frequency
+        if args.physics_frequency is not None
+        else env.get("physics_frequency", 600.0)
+    )
+    render_frequency = float(
+        args.render_frequency
+        if args.render_frequency is not None
+        else env.get("render_frequency", 100.0)
+    )
+    gravity_z = float(
+        args.gravity_z if args.gravity_z is not None else env.get("gravity_z", -9.81)
+    )
+    if physics_frequency <= 0 or render_frequency <= 0:
+        raise ValueError("physics and render frequencies must be positive")
+
+    # Isaac Sim 首次启动时需要接受 EULA；这里设置默认值，避免 headless 运行卡在交互确认。
+    os.environ.setdefault("OMNI_KIT_ACCEPT_EULA", "Y")
+    simulation_app = launch_simulation_app(gui=args.gui)
+    try:
+        # Isaac 相关 import 必须放在 SimulationApp 启动之后，否则部分扩展和 USD context 尚未初始化。
+        from isaacsim.core.prims import SingleArticulation
+        from isaacsim.core.utils.types import ArticulationAction
+        import omni.usd
+
+        # 创建 World。physics_dt 控制 PhysX step，rendering_dt 控制 GUI 刷新间隔。
+        physics_dt = 1.0 / physics_frequency
+        rendering_dt = 1.0 / render_frequency if args.gui else physics_dt
+        world = build_world(
+            physics_dt=physics_dt, rendering_dt=rendering_dt, gravity_z=gravity_z
+        )
+        if args.gui:
+            configure_visuals()
+
+        # 绳体对象以 USD reference 的方式挂到 stage 中。这里返回的 rope_model 主要用于打印诊断，
+        # 真实碰撞体和关节由 USD/PhysX 在 stage 中维护。
+        stage = omni.usd.get_context().get_stage()
+        rope_model = add_capsule_rope_reference(stage, rope_config)
+        print(
+            "RUN_PINCH_GRASP_ROPE "
+            f"asset={rope_config.asset_file()} prim_path={rope_config.prim_path} "
+            f"segments={rope_config.segments} shape={rope_config.shape} "
+            f"bodies={len(rope_model['bodies'])} joints={len(rope_model['joints'])}",
+            flush=True,
+        )
+
+        # 导入机器人资产。MJCF/URDF 导入后会生成 stage prim；后续控制和 PhysX 覆盖都基于该 prim。
+        articulation_path, asset_path, imported_root_path = import_robot_asset(
+            robot_asset
+        )
+        mjcf_path = asset_path if robot_asset.asset_type == "mjcf" else None
+
+        # 对刚导入的 USD prim 做运行时覆盖：关节 drive 初值、摩擦、最大力、碰撞近似等。
+        # 这些覆盖不会修改原始资产文件，只影响当前 stage。
+        apply_robot_usd_overrides(
+            imported_root_path,
+            physx_override_configs(controller_profiles),
+            driven_joint_names=controlled_joints,
+            mjcf_path=mjcf_path,
+        )
+
+        # 根据 env.solver 覆盖 articulation/rigid body 的 PhysX solver iteration。
+        # 抓绳接触和灵巧手多关节链都对 solver iteration 较敏感。
+        solver_config = solver_settings(env_config)
+        solver_counts = (
+            apply_solver_iteration_overrides(stage, articulation_path, solver_config)
+            if solver_config is not None
+            else {"configured": 0}
+        )
+
+        # 默认关闭机器人刚体重力，让关节主要按控制器命令运动。
+        # 如果需要测试真实重力下的下垂、显式控制或力控行为，可以传 --enable-robot-gravity。
+        if not args.enable_robot_gravity:
+            disabled = disable_robot_gravity(imported_root_path)
+            print(
+                f"RUN_PINCH_GRASP_GRAVITY robot_gravity=false disabled_rigid_bodies={len(disabled)}",
+                flush=True,
+            )
+        else:
+            print("RUN_PINCH_GRASP_GRAVITY robot_gravity=true", flush=True)
+        print(f"RUN_PINCH_GRASP_SOLVER {solver_counts}", flush=True)
+
+        # 将导入后的 articulation 包装为 Isaac Sim SingleArticulation，并 reset world 以初始化 handles。
+        robot = world.scene.add(
+            SingleArticulation(prim_path=articulation_path, name=robot_asset.name)
+        )
+        world.reset()
+        world.get_physics_context().set_gravity(gravity_z)
+        if not args.enable_robot_gravity:
+            robot.disable_gravity()
+        robot.set_joint_velocities(np.zeros(robot.num_dof, dtype=float))
+
+        # JointController 负责：
+        # - 按 --control-mode 选择 position、velocity 或 effort 主动关节控制配置；
+        # - 为 implicit 控制写入 Isaac drive gain，为 explicit 控制计算 effort action；
+        # - 始终用 follower 独立 position drive 跟随 master 实际状态。
+        controller = JointController(
+            robot,
+            joint_names=controlled_joints,
+            settings=joint_control_settings(
+                controller_profiles, mode=args.control_mode
+            ),
+            mjcf_path=mjcf_path,
+        )
+        controller.configure_runtime()
+
+        # L6 手的 DIP 等 follower 关节由 MJCF equality 描述。运行时根据实际 master 关节状态
+        # 更新 follower 目标，避免 follower 跟随“命令目标”而不是“实际主动关节”导致超前。
+        mimic_names = mjcf_equality_follower_joint_names(mjcf_path)
+
+        # 日志只记录实际受驱动的 DOF，即主动关节 + mimic follower。flush_interval_steps 控制
+        # CSV 刷盘频率，避免每个 physics step 都 flush 造成 I/O 开销过大。
+        driven_joint_names = [
+            list(robot.dof_names)[int(index)] for index in controller.driven_indices
+        ]
+        flush_interval_steps = logging_config.flush_interval_steps(
+            float(world.get_physics_dt())
+        )
+        log_path = (
+            None
+            if not logging_config.enabled or logging_config.joint_tracking_path is None
+            else repo_path(logging_config.joint_tracking_path)
+        )
+        logger = JointTrackingLogger(
+            log_path,
+            driven_joint_names,
+            flush_interval_steps=flush_interval_steps,
+            config=logging_config,
+        )
+        print(
+            "RUN_PINCH_GRASP_IMPORTED "
+            f"asset={asset_path} prim_path={articulation_path} num_dof={robot.num_dof} "
+            f"control_mode={args.control_mode} mimic_joint_names={sorted(mimic_names)} "
+            f"follower_relations={controller.follower_mapper.relations}",
+            flush=True,
+        )
+        print(
+            "RUN_PINCH_GRASP_DOF_NAMES " + ", ".join(list(robot.dof_names)), flush=True
+        )
+
+        try:
+            if args.no_grasp:
+                # 仅做导入和控制器 smoke test，不构造 pinch TCP，也不调用 cuMotion。
+                hold_initial_pose(
+                    robot,
+                    world,
+                    ArticulationAction,
+                    controller,
+                    simulation_app if args.hold else None,
+                    args.gui,
+                    logger,
+                )
+                print("RUN_PINCH_GRASP_HOLD_OK", flush=True)
+            else:
+                # PinchGraspAction 会：
+                # - 根据闭合手型计算 pinch TCP 相对法兰的 offset；
+                # - 生成临时 URDF，把 pinch TCP 作为 fixed frame 挂到 robot cumotion.flange_frame；
+                # - 使用 cuMotion 求解 approach/grasp/lift/wiggle 关键帧；
+                # - 按阶段播放轨迹并通过 controller 下发到 Isaac。
+                action = PinchGraspAction(
+                    config=action_config,
+                    rope_config=rope_config,
+                    mjcf_path=asset_path,
+                    cumotion_config=robot_cumotion,
+                )
+                result = action.run(
+                    robot=robot,
+                    world=world,
+                    articulation_action_type=ArticulationAction,
+                    controller=controller,
+                    simulation_app=simulation_app,
+                    render=args.gui,
+                    drive_logger=logger,
+                )
+                print(
+                    "RUN_PINCH_GRASP_OK "
+                    f"steps={result['steps']} ik={result['ik']} log={log_path}",
+                    flush=True,
+                )
+        finally:
+            # 无论动作成功、失败还是用户 Ctrl+C，都尽量关闭 CSV 文件，避免最后几行日志丢失。
+            logger.close()
+    finally:
+        # 必须关闭 SimulationApp，否则 Kit/Isaac 进程和扩展资源可能残留。
+        simulation_app.close()
+
+
+if __name__ == "__main__":
+    main()

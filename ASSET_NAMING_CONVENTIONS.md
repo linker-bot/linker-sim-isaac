@@ -314,7 +314,7 @@ AR5_V2_L6_V1_L
 - URDF/MJCF/XML 可解析。
 - URDF/MJCF 中引用的 mesh 文件存在。
 - 关节组、轨迹目标、TCP frame、IK 描述里的名称同步更新。
-- `scripts/run_pinch_grasp.py --no-grasp --short-smoke` 能通过导入和 controller 初始化。
+- `scripts/pinch_grasp.py --no-grasp --short-smoke` 能通过导入和 controller 初始化。
 
 常用扫描命令：
 

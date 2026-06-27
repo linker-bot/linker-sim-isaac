@@ -3,7 +3,7 @@
 
 该脚本是离线资产生成入口，而不是仿真运行入口。它会启动一个 headless SimulationApp，
 原因是 USD/PhysX schema 写入依赖 Isaac/Omni 扩展已经加载；生成完成后只保存 USD 文件，
-不会导入机器人或执行抓取任务。
+不会导入机器人或执行抓取动作。
 """
 
 from __future__ import annotations

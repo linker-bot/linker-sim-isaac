@@ -44,7 +44,7 @@ def generate_cspace_trajectory(
     可执行轨迹兜底。
 
     该函数不再提供 ``enabled`` 开关。只要 pipeline 的中间产物是 joint path，成功返回就必须
-    带 trajectory；如果后端无法生成 trajectory，应显式失败，让任务层重新选择 pipeline 或
+    带 trajectory；如果后端无法生成 trajectory，应显式失败，让动作脚本层重新选择 pipeline 或
     调整配置，而不是默默退回项目侧线性插值。
     """
 
@@ -62,7 +62,7 @@ def generate_cspace_trajectory(
             f"joint_path expected {context.expected_cspace_width} columns, got {path.shape[1]}"
         )
 
-    # 用 kinematics 创建 generator 可以继承机器人 C-space 维度和默认限位；随后再应用任务/配置
+    # 用 kinematics 创建 generator 可以继承机器人 C-space 维度和默认限位；随后再应用动作/配置
     # 中的显式覆盖。
     generator = context.cumotion.create_cspace_trajectory_generator(
         context.kinematics

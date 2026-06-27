@@ -1,10 +1,10 @@
 """带可选临时 TCP URDF 的 cuMotion context 装配入口。
 
 cuMotion 的 FK/IK/planner 只能使用 robot description 中已经存在的 frame。也就是说，
-如果任务层计算出了 pinch center 这类临时 TCP，必须在 ``CuMotionContext`` 创建之前把
+如果动作脚本层计算出了 pinch center 这类临时 TCP，必须在 ``CuMotionContext`` 创建之前把
 该 TCP 作为 fixed link 写进待加载的 URDF。
 
-本模块把这个后端约束封装成 context manager：任务层只需要传入 ``TcpFrame``，即可获得已经
+本模块把这个后端约束封装成 context manager：动作脚本层只需要传入 ``TcpFrame``，即可获得已经
 识别该 TCP 的 ``CuMotionContext``，不用直接管理临时目录、临时 URDF 和
 ``CuMotionConfig`` 替换。
 """

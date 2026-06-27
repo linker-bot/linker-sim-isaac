@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from xml.etree import ElementTree as ET
 
 import numpy as np
+
+SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
 
 from manipulation_project.assets.asset_paths import (
     DEFAULT_AR5_RIGHT_URDF,
@@ -13,8 +18,9 @@ from manipulation_project.assets.robot_loader import RobotAssetConfig
 from manipulation_project.assets.solver_overrides import SolverIterationConfig
 from manipulation_project.backends.cumotion.context import CuMotionConfig
 from manipulation_project.objects.capsule_rope import CapsuleRopeConfig, endpoint_center
-from manipulation_project.tasks.pinch_grasp import (
-    PinchGraspConfig,
+from pinch_grasp import (
+    PinchGraspActionConfig,
+    default_pinch_grasp_action_config,
     grasp_target_position,
 )
 from manipulation_project.utils.config import load_yaml
@@ -66,10 +72,8 @@ def test_cumotion_profiles_and_examples_are_valid_defaults() -> None:
         assert ik_config["ccd_max_iterations"] > 0
         assert ik_config["bfgs_max_iterations"] > 0
         assert "motion_planner" in cumotion
-        grasp_config = PinchGraspConfig.from_mapping(
-            {"grasp": {"motion_planning": cumotion["motion_planner"]}}
-        )
-        grasp_config.motion_planning.validate()
+        action_config = default_pinch_grasp_action_config(config)
+        action_config.motion_planning.validate()
 
 
 def test_cumotion_config_parses_grouped_kinematics() -> None:
@@ -133,11 +137,11 @@ def test_cumotion_config_accepts_legacy_flat_ik_fields() -> None:
 
 
 def test_cumotion_profile_merge_order() -> None:
-    """profile 默认值应低于 robot YAML 和 trajectory YAML 的显式配置。"""
+    """profile 默认值应低于 robot YAML；动作参数直接来自脚本。"""
 
     import importlib.util
 
-    script_path = Path("scripts/run_pinch_grasp.py")
+    script_path = Path("scripts/pinch_grasp.py")
     spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -165,27 +169,16 @@ def test_cumotion_profile_merge_order() -> None:
             "kinematics": {"ik": {"position_tolerance": 0.002}},
         }
     }
-    grasp = {
-        "grasp": {
-            "endpoint": "left",
-            "motion_planning": {
-                "planning_pipeline": "trajectory_optimization",
-            },
-            "pre_pinch_hand_targets": {},
-            "closed_pinch_hand_targets": {},
-        }
-    }
-
     merged_robot = module.merged_robot_config_with_cumotion_profile(robot, profile)
     merged_ik = merged_robot["cumotion"]["kinematics"]["ik"]
     assert merged_ik["position_tolerance"] == 0.002
     assert merged_ik["orientation_weight"] == 0.1
     assert merged_robot["cumotion"]["flange_frame"] == "flange"
 
-    merged_grasp = module.merged_grasp_config_with_cumotion_profile(grasp, profile)
-    motion_planning = merged_grasp["grasp"]["motion_planning"]
-    assert motion_planning["planning_pipeline"] == "trajectory_optimization"
-    assert motion_planning["graph_search"]["generate_interpolated_path"] is True
+    action_config = module.default_pinch_grasp_action_config(profile)
+    backend = action_config.motion_planning.backend
+    assert backend.planning_pipeline == "graph_search"
+    assert backend.graph_search.generate_interpolated_path is True
 
 
 def test_right_side_urdf_assets_exist() -> None:
@@ -214,7 +207,7 @@ def test_robot_asset_mesh_references_exist() -> None:
     assert missing == []
 
 
-def test_default_rope_and_grasp_configs() -> None:
+def test_default_rope_and_pinch_grasp_action_config() -> None:
     rope = CapsuleRopeConfig.from_mapping(
         load_yaml("configs/objects/capsule_rope.yaml")
     )
@@ -224,9 +217,7 @@ def test_default_rope_and_grasp_configs() -> None:
     assert rope.root_path == "/CapsuleRope"
     assert rope.radius is not None and rope.radius > 0.0
     assert rope.twist_limit is not None and rope.twist_limit > 0.0
-    grasp = PinchGraspConfig.from_mapping(
-        load_yaml("configs/trajectories/pinch_grasp.yaml")
-    )
+    grasp = PinchGraspActionConfig()
     grasp.validate()
     left_center = endpoint_center(rope, "left")
     target = grasp_target_position(grasp, rope)
@@ -234,7 +225,7 @@ def test_default_rope_and_grasp_configs() -> None:
     assert target[2] > left_center[2]
 
 
-def test_task_configs_reject_obsolete_shapes() -> None:
+def test_system_configs_reject_obsolete_shapes() -> None:
     try:
         RobotAssetConfig.from_mapping({"asset_path": "assets/example.xml"})
     except ValueError:
@@ -253,14 +244,13 @@ def test_task_configs_reject_obsolete_shapes() -> None:
             "CapsuleRopeConfig accepted config without object/rope sections"
         )
 
+    invalid_action = PinchGraspActionConfig(endpoint="middle")
     try:
-        PinchGraspConfig.from_mapping({"endpoint": "left"})
+        invalid_action.validate()
     except ValueError:
         pass
     else:
-        raise AssertionError(
-            "PinchGraspConfig accepted config without top-level grasp section"
-        )
+        raise AssertionError("PinchGraspActionConfig accepted invalid endpoint")
 
 
 def test_env_configs_provide_solver_settings() -> None:
@@ -287,7 +277,7 @@ def test_solver_settings_are_optional_in_scripts() -> None:
 
     import importlib.util
 
-    for script_path in (Path("scripts/run_pinch_grasp.py"),):
+    for script_path in (Path("scripts/pinch_grasp.py"),):
         spec = importlib.util.spec_from_file_location(script_path.stem, script_path)
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)

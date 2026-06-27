@@ -123,7 +123,7 @@ def target_vector_from_mapping(
     """
 
     # base 表示“未指定关节沿用当前/上一阶段目标”。没有 base 时只能填 0，适合构造简单
-    # 全新目标；抓取任务通常会传 base 以避免未涉及关节突然归零。
+    # 全新目标；抓取动作通常会传 base 以避免未涉及关节突然归零。
     if base is None:
         vector = np.zeros(len(dof_names), dtype=float)
     else:

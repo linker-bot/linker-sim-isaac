@@ -2,9 +2,9 @@
 
 ## 1. 设计目标
 
-`motion_planner` 的目标是为任务层提供统一的运动规划入口，屏蔽 cuMotion 后端不同规划 API 的差异。
+`motion_planner` 的目标是为动作脚本层提供统一的运动规划入口，屏蔽 cuMotion 后端不同规划 API 的差异。
 
-任务层只需要描述：
+动作脚本层只需要描述：
 
 - 当前关节状态
 - 目标关节 / 目标 TCP 位置 / 目标 TCP 位姿
@@ -67,7 +67,7 @@ MotionResult
 也就是说，文档里的三 pipeline 设计是目标架构；当前代码还没有完整拆出
 `specified_path` 和 `trajectory_optimization` pipeline。后续大改时，目标默认路线应从当前
 已实现的 `graph_search` 切换到 `trajectory_optimization`；`graph_search` 保留为显式选择
-或由任务层显式发起第二次规划。
+或由动作脚本层显式发起第二次规划。
 
 ---
 
@@ -200,7 +200,7 @@ Attempt to find path to task space pose target using JtRRT.
 | `specified_path` | 不考虑环境障碍 | Path Generation 本身是 collision-unaware；如需安全性，应做后验碰撞检查 |
 | `trajectory_optimization` | 考虑环境障碍 | 使用当前 `collision_world.world_view` 创建 `TrajectoryOptimizerConfig` |
 
-这样任务层只需要选择 pipeline，就能决定主要碰撞语义：
+这样动作脚本层只需要选择 pipeline，就能决定主要碰撞语义：
 
 ```yaml
 planning_pipeline: graph_search
@@ -256,7 +256,7 @@ planning_pipeline: trajectory_optimization
 - 作为调试路径可达性、粗略避障路径和参数对比的工具。
 
 facade 不做自动回退。原因是 optimizer 失败和 graph search 成功代表两种不同质量和约束语义；
-需要保守路线时，任务层应显式选择 `graph_search` 或自行发起第二次规划。
+需要保守路线时，动作脚本层应显式选择 `graph_search` 或自行发起第二次规划。
 
 配置：
 
@@ -606,7 +606,7 @@ convert_task_space_path_spec_to_cspace(...)
 CSpaceTrajectoryGenerator.generate_trajectory(...)
 ```
 
-旧的 `TcpLineRequest` / `plan_tcp_line_joint_path(...)` 逐点 IK 辅助不再保留；任务层需要 TCP
+旧的 `TcpLineRequest` / `plan_tcp_line_joint_path(...)` 逐点 IK 辅助不再保留；动作脚本层需要 TCP
 直线时直接发 `SpecifiedPathRequest(TaskSpacePath(TcpLineSegment(...)))`。
 
 ### 9.8 `composite`
@@ -792,7 +792,7 @@ source/manipulation_project/backends/cumotion/
     trajectory_optimizer_planner.py      # TrajectoryOptimizer pipeline
     specified_path_planner.py            # Specified Path / PathGeneration pipeline
     trajectory_generation.py             # CSpaceTrajectoryGenerator 封装
-    trajectory_adapter.py                # cuMotion Trajectory -> 项目 JointTrajectory
+    trajectory_sampler.py                # cuMotion Trajectory -> 项目 JointTrajectory
     pose_adapter.py                      # pose / quaternion / matrix 适配
 ```
 
@@ -806,7 +806,7 @@ source/manipulation_project/backends/cumotion/
 | `trajectory_optimizer_planner.py` | TrajectoryOptimizer pipeline |
 | `specified_path_planner.py` | PathSpec / PathGeneration pipeline |
 | `trajectory_generation.py` | 统一封装 `CSpaceTrajectoryGenerator` 时间参数化 |
-| `trajectory_adapter.py` | cuMotion Trajectory 转项目 JointTrajectory |
+| `trajectory_sampler.py` | cuMotion Trajectory 转项目 JointTrajectory |
 | `pose_adapter.py` | pose / quaternion / matrix 适配 |
 
 ---
@@ -848,7 +848,7 @@ joint_path = None
 
 这是推荐默认语义：`trajectory` 是主输出，`joint_path` 不是必需产物。
 
-如果任务层需要离散采样或做日志诊断，可以：
+如果动作脚本层需要离散采样或做日志诊断，可以：
 
 ```text
 按 physics_dt 或诊断采样间隔从 trajectory eval 出 joint_path
@@ -949,7 +949,7 @@ trajectory_optimization:
 TrajectoryOptimizerConfig.set_param(...)
 ```
 
-optimizer 失败时直接返回失败结果。需要 graph-search 作为保守路线时，由任务层显式切换
+optimizer 失败时直接返回失败结果。需要 graph-search 作为保守路线时，由动作脚本层显式切换
 `planning_pipeline: graph_search` 后重新规划。
 
 ### 15.5 Specified Path 参数
@@ -1157,7 +1157,7 @@ class TcpLineSegment:
     target_orientation: np.ndarray | None = None
 ```
 
-这样 `specified_path` pipeline 可以统一处理 TCP 直线、圆弧、C-space waypoint 和 composite path。它默认不把环境障碍作为规划约束；若需要安全保证，应通过后验碰撞检查或任务层预先保证路径安全。
+这样 `specified_path` pipeline 可以统一处理 TCP 直线、圆弧、C-space waypoint 和 composite path。它默认不把环境障碍作为规划约束；若需要安全保证，应通过后验碰撞检查或动作脚本层预先保证路径安全。
 
 ### 16.3 请求与 pipeline 的对应关系
 
@@ -1482,25 +1482,25 @@ SpecifiedPathRequest(path=CompositePath(...))
 - 成功时强制生成 `trajectory`。
 - `TaskSpacePath` / `CompositePath` 能通过官方 path conversion 生成 C-space path。
 
-### 19.6 Phase 6：任务层调用
+### 19.6 Phase 6：动作脚本层调用
 
 目标：
 
-- 让任务层使用 facade 和分组配置模型。
+- 让动作脚本层使用 facade 和分组配置模型。
 
 修改内容：
 
 - `pinch_grasp.py`：
   - 用 `MotionPlannerBackendConfig` 构造 motion planner 配置。
   - 默认关节目标阶段走 `trajectory_optimization`。
-  - 如需要图搜索路线，在任务配置中显式设置 `planning_pipeline: graph_search`。
+  - 如需要图搜索路线，在动作配置中显式设置 `planning_pipeline: graph_search`。
   - 从 approach 点下沉到 grasp 点的 TCP 直线使用 `SpecifiedPathRequest(TaskSpacePath(TcpLineSegment(...)))`。
 
 验收标准：
 
 - 项目内的运动规划请求使用 `MotionRequest` / `SpecifiedPathRequest`。
 - 项目内的 motion planner 构造使用 `MotionPlannerBackendConfig`。
-- 任务配置中的 motion planning 配置使用分组结构。
+- 动作配置中的 motion planning 配置使用分组结构。
 
 ## 20. 测试计划
 
@@ -1546,7 +1546,7 @@ SpecifiedPathRequest(path=CompositePath(...))
 pytest tests/test_cumotion_motion_planner.py
 pytest tests/test_cumotion_context.py
 pytest tests/test_pinch_grasp_motion_planning.py
-pytest tests/test_task_configs.py
+pytest tests/test_system_configs.py
 ```
 
 如果真实 cuMotion 环境可用，再增加一个 smoke：

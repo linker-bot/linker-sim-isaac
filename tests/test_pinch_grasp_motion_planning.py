@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 import numpy as np
 
+SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_ROOT))
+
 from manipulation_project.planning.results import MotionResult
-from manipulation_project.tasks.pinch_grasp import (
+from pinch_grasp import (
     build_planned_joint_motion_trajectory,
     build_specified_tcp_line_trajectory,
 )

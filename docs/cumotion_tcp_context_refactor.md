@@ -13,13 +13,13 @@ cuMotion 的核心约束是：
 - `CuMotionContext` 初始化后会加载 URDF/XRDF，并缓存 `robot_description`、`kinematics`、
   `frame_names()` 和 collision world。
 
-因此，自定义 TCP 的 URDF 写入不是任务语义，而是 cuMotion 后端装配细节。
+因此，自定义 TCP 的 URDF 写入不是动作语义，而是 cuMotion 后端装配细节。
 
 ## 2. 当前问题
 
-以 `tasks/pinch_grasp.py` 为例，任务层现在同时承担了两类职责：
+以当前 `scripts/pinch_grasp.py` 动作入口为例，动作脚本层曾经容易同时承担两类职责：
 
-1. 任务语义：
+1. 动作语义：
    - 根据 MJCF 和闭合手型计算 pinch TCP。
    - 计算 approach、grasp、lift、wiggle 等目标。
    - 处理完整 articulation DOF 映射、手部动作和执行节奏。
@@ -29,18 +29,18 @@ cuMotion 的核心约束是：
    - `replace(CuMotionConfig, urdf_path=..., custom_tcp_frame=...)`。
    - 重新创建 `CuMotionContext`。
 
-第二组逻辑属于后端要求。它放在任务层会带来几个问题：
+第二组逻辑属于后端要求。它放在动作脚本层会带来几个问题：
 
-- 任务层需要知道 cuMotion 必须通过 URDF fixed link 暴露 TCP。
-- 后续其它任务如果也需要自定义 TCP，会重复 tempdir/URDF/context 装配代码。
+- 动作脚本层需要知道 cuMotion 必须通过 URDF fixed link 暴露 TCP。
+- 后续其它动作脚本如果也需要自定义 TCP，会重复 tempdir/URDF/context 装配代码。
 - 临时文件生命周期容易被写错；URDF 文件必须至少活到 `CuMotionContext` 和相关后端对象使用结束。
-- 文档边界和代码边界不完全一致：`tcp_urdf_builder` 属于 `backends/cumotion`，但调用流程外泄到任务层。
+- 文档边界和代码边界不完全一致：`tcp_urdf_builder` 属于 `backends/cumotion`，但调用流程外泄到动作脚本层。
 
 ## 3. 目标
 
-改造目标是让任务层只描述“需要哪个 TCP”，让 cuMotion 后端负责“怎样让 cuMotion 认识这个 TCP”。
+改造目标是让动作脚本层只描述“需要哪个 TCP”，让 cuMotion 后端负责“怎样让 cuMotion 认识这个 TCP”。
 
-任务层应该负责：
+动作脚本层应该负责：
 
 - 计算或读取 `TcpFrame`。
 - 指定本次 IK/planner 使用的 `tcp_frame_name`。
@@ -60,10 +60,10 @@ cuMotion 后端应该负责：
 
 本次改造不建议做以下事情：
 
-- 不把完整 articulation DOF 映射移入 `backends/cumotion`。cuMotion C-space 通常只覆盖机械臂主动关节，灵巧手、mimic follower 和 controller command space 仍属于任务/controller 层。
+- 不把完整 articulation DOF 映射移入 `backends/cumotion`。cuMotion C-space 通常只覆盖机械臂主动关节，灵巧手、mimic follower 和 controller command space 仍属于动作脚本/controller 边界。
 - 不在每次 `IK.solve(...)` 或 `MotionPlanner.plan(...)` 时动态写 URDF。TCP 必须在 context 创建前进入 robot description，按请求动态重建 context 会破坏缓存和 seed 连续性，也会增加大量开销。
 - 不修改原始仓库 URDF。仍使用临时 URDF 或显式输出目录，避免污染基础资产。
-- 不把 pinch TCP 的几何计算放进 cuMotion 后端。pinch TCP 来自灵巧手 MJCF 和闭合手型，是任务/机器人语义，不是 cuMotion 通用能力。
+- 不把 pinch TCP 的几何计算放进 cuMotion 后端。pinch TCP 来自灵巧手 MJCF 和闭合手型，是动作/机器人语义，不是 cuMotion 通用能力。
 
 ## 5. 推荐设计
 
@@ -97,7 +97,7 @@ with make_cumotion_context(config, tcp=tcp) as context:
 ```
 
 如果需要额外暴露临时 URDF 路径用于测试或诊断，可以让 context manager 内部使用一个轻量
-handle，但对任务层公开的主要入口仍应保持“传入 config/tcp，得到 context”的简单形态。
+handle，但对动作脚本层公开的主要入口仍应保持“传入 config/tcp，得到 context”的简单形态。
 
 ### 5.2 行为语义
 
@@ -161,7 +161,7 @@ with CuMotionContextHandle.from_config(config, tcp=tcp) as handle:
 
 核心点是：不要只返回裸 `CuMotionContext` 后立刻丢掉 tempdir owner。
 
-## 6. 任务层装配边界
+## 6. 动作脚本层装配边界
 
 ### 6.1 后端装配职责
 
@@ -179,7 +179,7 @@ with tempfile.TemporaryDirectory(prefix="pinch_ik_tcp_") as temp_dir:
     )
 ```
 
-### 6.2 任务层调用形态
+### 6.2 动作脚本层调用形态
 
 ```python
 with CuMotionContext.with_tcp(self.cumotion_config, tcp) as context:
@@ -187,7 +187,7 @@ with CuMotionContext.with_tcp(self.cumotion_config, tcp) as context:
     motion_planner = context.make_motion_planner(...)
 ```
 
-任务层仍然保留：
+动作脚本层仍然保留：
 
 - `make_pinch_tcp(...)`
 - `context.joint_names()` 到 articulation DOF 的名称映射
@@ -221,8 +221,8 @@ source/manipulation_project/backends/cumotion/
 采用第二种时，需要同步更新：
 
 - `source/manipulation_project/backends/cumotion/__init__.py`，重新导出新的 context manager。
-- 任务层 import，例如 `tasks/pinch_grasp.py` 应从 cuMotion 后端入口导入 context manager。
-- 任务层不应再直接 import `write_tcp_urdf`，除非该任务本身就是 URDF 生成工具或测试。
+- 动作脚本层 import，例如 `scripts/pinch_grasp.py` 应从 cuMotion 后端入口导入 context manager。
+- 动作脚本层不应再直接 import `write_tcp_urdf`，除非该入口本身就是 URDF 生成工具或测试。
 
 ## 8. 校验和错误处理
 
@@ -268,7 +268,7 @@ source/manipulation_project/backends/cumotion/
 
 1. 新增后端 context manager，并用单元测试覆盖临时 URDF 生命周期和配置替换。
 2. 修改 `pinch_grasp.py`，把 tempdir、`write_tcp_urdf(...)`、`replace(...)` 收敛到新入口。
-3. 更新 `docs/cumotion_interface.md` 中“自定义 TCP URDF 接口”和“任务层典型数据流”部分，说明任务层只传 `TcpFrame`，后端负责装配带 TCP 的 context。
+3. 更新 `docs/cumotion_interface.md` 中“自定义 TCP URDF 接口”和“动作脚本层典型数据流”部分，说明动作脚本层只传 `TcpFrame`，后端负责装配带 TCP 的 context。
 
 实现验收清单：
 
@@ -285,4 +285,4 @@ source/manipulation_project/backends/cumotion/
 
 `tcp_urdf_builder.py` 放在 `backends/cumotion` 中是合理的；需要调整的是调用边界。
 
-推荐把“临时 URDF + 新 `CuMotionContext`”封装成 cuMotion 后端内部的 context 装配入口。这样任务层只关心任务语义和 DOF 映射，cuMotion 后端统一处理 frame 必须存在于 robot description 的技术约束。
+推荐把“临时 URDF + 新 `CuMotionContext`”封装成 cuMotion 后端内部的 context 装配入口。这样动作脚本层只关心动作语义和 DOF 映射，cuMotion 后端统一处理 frame 必须存在于 robot description 的技术约束。

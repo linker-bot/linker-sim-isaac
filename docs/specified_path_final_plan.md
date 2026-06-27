@@ -13,7 +13,7 @@
 - 不把 `TaskSpacePath` / `CompositePath` 静默 fallback 到 `tcp_line.py` 的逐点 IK。
 - 姿态边界统一使用 `wxyz` 四元数；进入 cuMotion 前在 `pose_adapter.py` 转成 `Rotation3` / `Pose3`。
 - C-space 向量顺序始终按 `CuMotionContext.joint_names()` / `context.expected_cspace_width`。
-- 完整 Isaac articulation DOF、灵巧手、mimic 展开仍属于任务层和控制器层，不要下沉到 cuMotion 后端。
+- 完整 Isaac articulation DOF、灵巧手、mimic 展开仍属于动作脚本层和控制器层，不要下沉到 cuMotion 后端。
 - 新增实现要能被 `tests/test_cumotion_motion_planner.py` 的 fake cuMotion 覆盖，不要求真实 Isaac/cuMotion 环境才能跑单元测试。
 
 推荐工作方式：

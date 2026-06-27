@@ -31,7 +31,7 @@ class JointLoggingConfig:
     """
 
     enabled: bool = True
-    joint_tracking_path: Path | None = Path("logs/joint_tracking/run_pinch_grasp.csv")
+    joint_tracking_path: Path | None = Path("logs/joint_tracking/pinch_grasp.csv")
     flush_interval_s: float = 0.05
     interval_steps: int = 1
     log_actual_position: bool = True
@@ -112,7 +112,7 @@ def joint_logging_config_from_mapping(
     """从 YAML mapping 构造 ``JointLoggingConfig``。
 
     参数:
-        data: 完整任务配置；函数只读取其中的 ``logging`` 子 mapping。
+        data: 完整动作配置；函数只读取其中的 ``logging`` 子 mapping。
     返回:
         ``JointLoggingConfig``，所有缺失字段使用 dataclass 默认值。
     """

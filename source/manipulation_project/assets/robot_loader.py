@@ -7,7 +7,7 @@
 职责边界:
     * 解析机器人资产配置并调用 Isaac importer。
     * 在导入后的 USD 子树中寻找 articulation root。
-    * 不创建 ``World``，不配置控制器，不应用任务级初始姿态。
+    * 不创建 ``World``，不配置控制器，不应用动作级初始姿态。
 
 输入输出约定:
     路径字段可写仓库相对路径或绝对路径，最终通过 ``repo_path``/``resolve`` 规整；prim path
@@ -56,7 +56,7 @@ class RobotAssetConfig:
             ``RobotAssetConfig``；路径字段会通过 ``repo_path`` 解析。
         """
 
-        # YAML 顶层保留 ``robot`` 子节，可以和 env/task/controller 配置并列；这里不接受
+        # YAML 顶层保留 ``robot`` 子节，可以和 env/controller 等配置并列；这里不接受
         # 裸映射，避免误把其它配置字典当成机器人资产配置。
         if "robot" not in data:
             raise ValueError("Robot config must contain top-level robot section")
