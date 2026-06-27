@@ -82,12 +82,18 @@ def plan_specified_path(
     else:
         raise ValueError(f"Unsupported specified path type: {type(request.path).__name__}")
 
+    # Task-space conversion 和 C-space path 生成都发生在规划阶段。执行层不会每个 physics step
+    # 重新做 IK 或 path conversion，而是只播放这里已经生成好的 cuMotion trajectory。
     trajectory = generate_cspace_trajectory(
         context,
         joint_path,
         config.trajectory_generation,
         duration_s=request.duration_s,
     )
+    if trajectory is None:
+        raise RuntimeError(
+            "specified_path requires at least two waypoints to generate trajectory"
+        )
     metrics = {
         "num_waypoints": float(joint_path.shape[0]),
         # specified_path 本身是 collision-unaware path generation；当前实现不读取环境 world。
@@ -104,7 +110,7 @@ def plan_specified_path(
         metrics=metrics,
     )
     return MotionResult(
-        joint_path=joint_path,
+        path=joint_path,
         trajectory=trajectory,
         success=True,
         status=diagnostics.status,

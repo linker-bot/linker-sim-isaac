@@ -27,7 +27,6 @@ cumotion:
       use_environment_obstacles: true
       motion_planner_params: {}
     trajectory_generation:
-      enabled: true
       mode: time_optimal
       interpolation_mode: cubic_spline
       limits: {}

@@ -39,7 +39,6 @@ grasp:
       generate_interpolated_path: false
     trajectory_generation:
       # 仅 graph_search/specified_path 这类输出 C-space path 的 pipeline 生效。
-      enabled: true
       mode: time_optimal
       interpolation_mode: cubic_spline
   # 接近目标前的半开手型。

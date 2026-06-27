@@ -1,7 +1,7 @@
 """cuMotion ``TrajectoryOptimizer`` pipeline。
 
 该模块实现 motion planner facade 的默认 pipeline。与 graph search 不同，optimizer 直接输出
-cuMotion ``Trajectory``，因此成功结果默认不构造 ``joint_path``。调用方如果需要完整 DOF
+cuMotion ``Trajectory``，因此成功结果默认不构造离散 ``path``。调用方如果需要完整 DOF
 轨迹，应通过 ``trajectory_adapter`` 采样 optimizer 返回的 trajectory，再由任务层按关节名
 回填到完整 articulation。
 
@@ -146,7 +146,7 @@ def _construct_task_space_target(
 def _motion_result(results, *, num_collision_objects: int, frame_name: str):
     """把 optimizer results 转成 ``MotionResult``。
 
-    optimizer 成功时 ``trajectory`` 是主产物；``joint_path`` 保持为 ``None``，避免把采样后的
+    optimizer 成功时 ``trajectory`` 是主产物；``path`` 保持为 ``None``，避免把采样后的
     诊断路径误认为 optimizer 原生路径输出。
     """
 
@@ -165,7 +165,7 @@ def _motion_result(results, *, num_collision_objects: int, frame_name: str):
         },
     )
     return MotionResult(
-        joint_path=None,
+        path=None,
         trajectory=trajectory,
         success=success,
         status=diagnostics.status,

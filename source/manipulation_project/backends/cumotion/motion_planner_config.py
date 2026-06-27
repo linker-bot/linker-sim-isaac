@@ -72,7 +72,6 @@ class TrajectoryGenerationConfig:
     ``specified_path``。``trajectory_optimization`` 的主输出是 cuMotion ``Trajectory``。
     """
 
-    enabled: bool = True
     mode: TrajectoryGenerationMode = "time_optimal"
     interpolation_mode: TrajectoryInterpolationMode = "cubic_spline"
     limits: Mapping[str, Any] = field(default_factory=dict)
@@ -180,6 +179,15 @@ class MotionPlannerBackendConfig:
         trajectory_settings = _mapping(
             settings.get("trajectory_generation"), "trajectory_generation"
         )
+        if "enabled" in trajectory_settings:
+            # trajectory_generation 现在是 graph_search / specified_path 成功结果的强约束。
+            # 旧配置里保留 enabled 会制造“可以关闭 trajectory、只返回 path”的错觉，所以这里
+            # 主动报错，提示用户删除该字段。
+            raise ValueError(
+                "trajectory_generation.enabled is no longer supported; "
+                "trajectory generation is always enabled for graph_search and "
+                "specified_path"
+            )
         optimizer_settings = _mapping(
             settings.get("trajectory_optimization"), "trajectory_optimization"
         )
@@ -220,9 +228,6 @@ class MotionPlannerBackendConfig:
         )
 
         trajectory_generation = TrajectoryGenerationConfig(
-            enabled=bool(
-                trajectory_settings.get("enabled", TrajectoryGenerationConfig.enabled)
-            ),
             mode=_trajectory_generation_mode(
                 trajectory_settings.get("mode", TrajectoryGenerationConfig.mode)
             ),

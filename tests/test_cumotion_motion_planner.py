@@ -576,7 +576,7 @@ def test_facade_dispatches_to_trajectory_optimizer_by_default() -> None:
     )
 
     assert result.success
-    assert result.joint_path is None
+    assert result.path is None
     assert isinstance(result.trajectory, _FakeTrajectory)
     assert fake_cumotion.optimizer_config_calls == [
         ("robot_description", "tool", "context_world_view")
@@ -729,7 +729,7 @@ def test_graph_search_uses_graph_config_and_trajectory_generation() -> None:
 
     assert result.success
     np.testing.assert_allclose(
-        result.joint_path,
+        result.path,
         [[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]],
     )
     assert fake_cumotion.graph_config_file_calls
@@ -758,7 +758,6 @@ def test_graph_search_can_ignore_environment_obstacles() -> None:
     context = _FakeContext(fake_cumotion)
     config = _graph_config(
         graph_search=GraphSearchConfig(use_environment_obstacles=False),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
 
     planner = CuMotionMotionPlanner(context, config=config)
@@ -781,12 +780,7 @@ def test_graph_search_plans_to_translation_and_pose_targets() -> None:
         _FakeGraphResults(path=[[0.0, 0.0], [0.1, 0.2]])
     )
     context = _FakeContext(_FakeCumotion(graph_planner=fake_planner))
-    planner = CuMotionMotionPlanner(
-        context,
-        config=_graph_config(
-            trajectory_generation=TrajectoryGenerationConfig(enabled=False)
-        ),
-    )
+    planner = CuMotionMotionPlanner(context, config=_graph_config())
 
     result = planner.plan(
         MotionRequest(
@@ -834,8 +828,20 @@ def test_graph_search_failure_returns_failed_motion_result() -> None:
 
     assert not result.success
     assert result.status == "FAILED"
-    assert result.joint_path is None
+    assert result.path is None
     assert result.trajectory is None
+
+
+def test_trajectory_generation_enabled_field_is_rejected() -> None:
+    try:
+        MotionPlannerBackendConfig.from_mapping(
+            {"trajectory_generation": {"enabled": False}}
+        )
+    except ValueError as exc:
+        assert "trajectory_generation.enabled is no longer supported" in str(exc)
+        assert "always enabled" in str(exc)
+    else:
+        raise AssertionError("expected trajectory_generation.enabled to be rejected")
 
 
 def test_trajectory_generation_rejects_unknown_limit_keys() -> None:
@@ -980,13 +986,12 @@ def test_composite_path_part_validates_transition_mode() -> None:
         raise AssertionError("expected transition mode validation")
 
 
-def test_specified_path_cspace_waypoints_generates_joint_path() -> None:
+def test_specified_path_cspace_waypoints_generates_path() -> None:
     fake_cumotion = _FakeCumotion()
     context = _FakeContext(fake_cumotion)
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="cspace_waypoints"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=True),
     )
 
     planner = CuMotionMotionPlanner(context, config=config)
@@ -1007,7 +1012,7 @@ def test_specified_path_cspace_waypoints_generates_joint_path() -> None:
     assert len(fake_cumotion.cspace_path_specs) == 1
     assert len(fake_cumotion.linear_cspace_paths) == 1
     np.testing.assert_allclose(
-        result.joint_path,
+        result.path,
         [[0.0, 0.0], [0.5, 0.25], [1.0, 1.0]],
     )
     assert isinstance(result.trajectory, _FakeTrajectory)
@@ -1048,7 +1053,6 @@ def test_specified_path_tcp_line_none_orientation_uses_add_translation() -> None
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="task_space_segments"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 
@@ -1081,7 +1085,6 @@ def test_specified_path_tcp_line_target_orientation_uses_add_linear_path() -> No
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="task_space_segments"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 
@@ -1114,7 +1117,6 @@ def test_specified_path_tcp_rotation_uses_add_rotation() -> None:
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="task_space_segments"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 
@@ -1139,7 +1141,6 @@ def test_specified_path_three_point_arc_uses_official_arc_api() -> None:
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="task_space_segments"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 
@@ -1171,7 +1172,6 @@ def test_specified_path_pose_sequence_uses_linear_path_segments() -> None:
     config = MotionPlannerBackendConfig(
         planning_pipeline="specified_path",
         specified_path=SpecifiedPathConfig(family="task_space_segments"),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 
@@ -1211,7 +1211,6 @@ def test_specified_path_composite_converts_to_cspace() -> None:
             family="composite",
             composite={"default_transition_mode": "free"},
         ),
-        trajectory_generation=TrajectoryGenerationConfig(enabled=False),
     )
     planner = CuMotionMotionPlanner(context, config=config)
 

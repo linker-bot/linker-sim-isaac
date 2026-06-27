@@ -10,31 +10,37 @@ from manipulation_project.tasks.pinch_grasp import (
 
 
 class _FakeTrajectoryState:
-    def __init__(self, time_s: float) -> None:
-        self.position = np.asarray([time_s, -time_s], dtype=float)
-        self.velocity = np.asarray([1.0, -1.0], dtype=float)
-        self.acceleration = np.asarray([2.0, -2.0], dtype=float)
-        self.jerk = np.asarray([4.0, -4.0], dtype=float)
+    def __init__(self, time_s: float, target: np.ndarray) -> None:
+        target = np.asarray(target, dtype=float).reshape(-1)
+        self.position = float(time_s) * target
+        self.velocity = target.copy()
+        self.acceleration = 2.0 * target
+        self.jerk = 4.0 * target
 
 
 class _FakeCumotionTrajectory:
+    def __init__(self, target=(1.0, -1.0)) -> None:
+        self.target = np.asarray(target, dtype=float)
+
     def domain(self):
         return (0.0, 1.0)
 
     def eval_all(self, time_s: float):
-        return _FakeTrajectoryState(float(time_s))
+        return _FakeTrajectoryState(float(time_s), self.target)
 
 
 class _FakeMotionPlanner:
     def __init__(self, joint_path, trajectory=None) -> None:
-        self.joint_path = np.asarray(joint_path, dtype=float)
-        self.trajectory = trajectory
+        self.path = np.asarray(joint_path, dtype=float)
+        self.trajectory = (
+            _FakeCumotionTrajectory(self.path[-1]) if trajectory is None else trajectory
+        )
         self.requests = []
 
     def plan(self, request):
         self.requests.append(request)
         return MotionResult(
-            joint_path=self.joint_path,
+            path=self.path,
             trajectory=self.trajectory,
             success=True,
             status="SUCCESS",
@@ -54,7 +60,7 @@ class _FakeContext:
         return self.planner
 
 
-def test_build_planned_joint_motion_trajectory_embeds_cumotion_path() -> None:
+def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> None:
     planner = _FakeMotionPlanner(
         [
             [0.0, 0.0],
@@ -77,7 +83,10 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_path() -> None:
     assert len(planner.requests) == 1
     np.testing.assert_allclose(planner.requests[0].current_q, [0.0, 0.0])
     np.testing.assert_allclose(planner.requests[0].goal_q, [1.0, -1.0])
-    np.testing.assert_allclose(trajectory.positions[:, [0, 2]], planner.joint_path)
+    np.testing.assert_allclose(result.path, planner.path)
+    np.testing.assert_allclose(
+        trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
+    )
     np.testing.assert_allclose(trajectory.positions[[0, -1], 1], [2.0, 4.0])
     np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 2.0])
     expected_hand = 2.0 + (trajectory.times / 2.0) * 2.0
@@ -85,24 +94,24 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_path() -> None:
     assert trajectory.phases == ("move_to_approach",) * len(trajectory)
 
 
-def test_build_planned_joint_motion_trajectory_adds_missing_endpoints() -> None:
-    planner = _FakeMotionPlanner([[0.5, 0.5]])
+def test_build_planned_joint_motion_trajectory_requires_cumotion_trajectory() -> None:
+    planner = _FakeMotionPlanner([[0.5, 0.5]], trajectory=None)
+    planner.trajectory = None
 
-    trajectory, _result = build_planned_joint_motion_trajectory(
-        motion_planner=planner,
-        dof_names=["arm0", "arm1"],
-        arm_indices=np.asarray([0, 1], dtype=int),
-        start_all=np.asarray([0.0, 0.0], dtype=float),
-        target_all=np.asarray([1.0, 1.0], dtype=float),
-        duration_s=1.0,
-        phase="joint_motion",
-    )
-
-    np.testing.assert_allclose(
-        trajectory.positions,
-        [[0.0, 0.0], [0.5, 0.5], [1.0, 1.0]],
-    )
-    np.testing.assert_allclose(trajectory.times, [0.0, 0.5, 1.0])
+    try:
+        build_planned_joint_motion_trajectory(
+            motion_planner=planner,
+            dof_names=["arm0", "arm1"],
+            arm_indices=np.asarray([0, 1], dtype=int),
+            start_all=np.asarray([0.0, 0.0], dtype=float),
+            target_all=np.asarray([1.0, 1.0], dtype=float),
+            duration_s=1.0,
+            phase="joint_motion",
+        )
+    except RuntimeError as exc:
+        assert "returned no trajectory" in str(exc)
+    else:
+        raise AssertionError("expected missing cuMotion trajectory to fail")
 
 
 def test_build_planned_joint_motion_trajectory_uses_cumotion_time_parameterization() -> (
@@ -171,7 +180,10 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
     np.testing.assert_allclose(
         request.path.segments[0].target_position, [0.1, 0.2, 0.3]
     )
-    np.testing.assert_allclose(trajectory.positions[:, [0, 2]], planner.joint_path)
+    np.testing.assert_allclose(result.path, planner.path)
+    np.testing.assert_allclose(
+        trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
+    )
     np.testing.assert_allclose(trajectory.positions[:, 1], 9.0)
     np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 1.5])
     assert trajectory.phases == ("approach_box",) * len(trajectory)

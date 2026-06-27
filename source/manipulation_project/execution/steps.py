@@ -128,8 +128,12 @@ def _apply_control_targets_once(
     drive_logger=None,
     log_indices: np.ndarray | None = None,
 ) -> int:
-    """下发一帧完整 DOF 控制目标，并推进一个 physics step。
-    本函数属于最底层的物理步推进函数。
+    """下发一帧已经构造好的控制目标，并推进一个 physics step。
+
+    ``targets`` 已经是 controller 认可的完整控制目标，内部包含主动关节、mimic follower
+    以及 position/velocity/effort 三类 action 字段。本函数不再关心这些目标来自完整 DOF
+    轨迹还是 command-space 轨迹，只负责“apply action -> world.step -> 可选日志”这一帧
+    物理推进流程。
     """
 
     joint_controller.apply_targets(articulation_action_type, targets)
@@ -167,8 +171,11 @@ def _apply_full_joint_target_once(
     target_effort_all: np.ndarray | None = None,
     drive_logger=None,
 ) -> int:
-    """从完整 DOF 目标构造控制目标，调用 
-    _apply_control_targets_once 下发一帧并推进仿真。
+    """从完整 articulation DOF 目标构造控制目标，并下发一帧。
+
+    ``target_all`` 的长度必须等于 Isaac articulation ``num_dof``，列顺序就是
+    ``articulation.dof_names``。controller 会从完整目标中抽取主动关节命令，并根据 master
+    的实际状态补出 mimic follower 目标。
     """
 
     targets = joint_controller.targets_from_full_state(
@@ -204,8 +211,11 @@ def _apply_command_joint_target_once(
     phase: str,
     drive_logger=None,
 ) -> tuple[int, ControlTargets]:
-    """从命令子空间目标构造控制目标，调用 
-    _apply_control_targets_once 下发一帧并推进仿真。
+    """从 controller command-space 目标构造控制目标，并下发一帧。
+
+    command-space 只包含主动命令关节，不包含 mimic follower，也不一定覆盖完整 articulation。
+    因此需要传入 ``base_positions`` 作为其它 DOF 的参考姿态，再由 controller 统一展开成
+    完整 action。
     """
 
     targets = joint_controller.build_control_targets(
@@ -285,7 +295,12 @@ def execute_full_joint_trajectory(
     step: int,
     drive_logger=None,
 ) -> int:
-    """按 physics dt 播放完整 DOF 关节轨迹。"""
+    """按 physics dt 播放完整 DOF 关节轨迹。
+
+    轨迹采样频率可以和物理步频不同：执行层以 physics dt 为时钟，在每个物理步调用
+    ``trajectory.eval_all(time_s)`` 插值得到当前位置/速度/effort。这样 cuMotion 可以按自身
+    时间域输出轨迹，Isaac 仍按固定物理步稳定推进。
+    """
 
     if trajectory.positions.shape[1] != articulation.num_dof:
         raise ValueError(

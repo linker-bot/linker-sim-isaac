@@ -256,6 +256,27 @@ controlled_joints:
   - L6V1_L_hand_thumb_cmc_roll
 ```
 
+## 生成资产和临时资产
+
+脚本生成的正式运行资产仍按本规范命名，并写入 `assets/` 对应目录。例如 capsule rope 由
+`configs/objects/capsule_rope.yaml` 指定输出路径：
+
+```yaml
+object:
+  name: capsuleropeV1_default
+  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+```
+
+临时资产不作为仓库主资产命名的一部分。例如 pinch grasp 为 cuMotion 临时写出的带 TCP URDF
+只用于当前进程中的 `CuMotionContext`，目录通常由 `tempfile` 管理，不应提交到 `assets/`。
+如果为了调试显式指定输出目录，文件名也应带上用途后缀，例如：
+
+```text
+AR5V2_L_pinch_tcp.urdf
+```
+
+这类文件用于排查 TCP 装配，不应反向替换主 URDF 或默认 robot 配置。
+
 ## 版本和修订
 
 硬件版本写入组件名：

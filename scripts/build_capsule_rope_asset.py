@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""根据对象配置生成 capsule rope USD 资产。"""
+"""根据对象配置生成 capsule rope USD 资产。
+
+该脚本是离线资产生成入口，而不是仿真运行入口。它会启动一个 headless SimulationApp，
+原因是 USD/PhysX schema 写入依赖 Isaac/Omni 扩展已经加载；生成完成后只保存 USD 文件，
+不会导入机器人或执行抓取任务。
+"""
 
 from __future__ import annotations
 
@@ -38,6 +43,8 @@ def main() -> None:
 
     args = parse_args()
     config = CapsuleRopeConfig.from_mapping(load_yaml(args.config))
+    # USD/PhysX schema 由 Isaac/Omni 扩展提供；即使只是写 usda 文件，也需要先启动
+    # SimulationApp，确保 pxr/omni 侧 schema 和插件已经注册。
     simulation_app = launch_simulation_app(gui=False)
     try:
         output = write_capsule_rope_asset(

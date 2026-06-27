@@ -7,7 +7,7 @@
 # 如果想试用本文件中的参数，可以显式传入：
 #
 #   PYTHONPATH=source env_isaaclab/bin/python scripts/run_pinch_grasp.py \
-#     --cumotion-config configs/cumotion/example.yaml
+#     --cumotion-config configs/cumotion/default.example.yaml
 #
 # 加载和覆盖顺序：
 #
@@ -116,11 +116,9 @@ cumotion:
       motion_planner_params: {}
 
     trajectory_generation:
-      # 是否为 C-space path 生成连续时间 trajectory。
-      # 只服务于会先产生 joint_path 的 pipeline，例如 graph_search 和 specified_path。
+      # 只服务于会先产生离散 C-space path 的 pipeline，例如 graph_search 和 specified_path。
+      # 这两类 pipeline 成功时会强制生成连续时间 trajectory；这里配置的是生成方式。
       # trajectory_optimization 的主输出是 optimizer trajectory，不依赖这里。
-      # 缺省代码值：true。
-      enabled: true
 
       # 时间参数化模式。
       # - time_optimal：调用 generate_trajectory(waypoints)，由 cuMotion 计算时间。

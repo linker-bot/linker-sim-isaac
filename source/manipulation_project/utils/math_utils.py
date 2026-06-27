@@ -56,18 +56,6 @@ def expand_scalar_or_vector(values, length: int, label: str) -> np.ndarray:
     return array.astype(float)
 
 
-def clamp01(value: float) -> float:
-    """把标量截断到 ``[0, 1]``。
-
-    参数:
-        value: 任意可转换为 float 的数值。
-    返回:
-        截断后的 float。
-    """
-
-    return min(1.0, max(0.0, float(value)))
-
-
 def quat_wxyz_to_matrix(quat) -> np.ndarray:
     """把 wxyz 四元数转换为旋转矩阵。
 

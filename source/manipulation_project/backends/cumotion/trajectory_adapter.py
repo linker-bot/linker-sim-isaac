@@ -31,6 +31,9 @@ def joint_trajectory_from_cumotion(
 
     cuMotion 轨迹通过 ``domain()`` 暴露时间域，通过 ``eval_all(t)`` 返回 position、
     velocity、acceleration 和 jerk。这里把这些值保存成矩阵，供控制器和日志使用。
+
+    本模块和 ``source/manipulation_project/trajectories`` 的职责不同：这里只理解 cuMotion
+    对象如何采样；``trajectories`` 只定义项目内部矩阵轨迹容器和从位置矩阵构造导数的工具。
     """
 
     # 支持显式 times 和 sample_dt 两种入口：测试可传固定 times，运行时可按控制频率采样。

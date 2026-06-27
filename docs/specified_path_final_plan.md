@@ -692,8 +692,8 @@ The task is complete only when:
 - `SpecifiedPathRequest(path=CompositePath(...))` no longer raises `NotImplementedError`.
 - Task-space and composite paths use official cuMotion conversion APIs.
 - No specified-path branch calls `tcp_line.py`.
-- C-space waypoints still produce the same `joint_path` shape and values as the first version.
-- `trajectory_generation.enabled=True` still produces a trajectory for generated `joint_path`.
+- C-space waypoints still produce the same discrete C-space path shape and values as the first version.
+- Successful specified-path planning always produces a trajectory for the generated path.
 - `trajectory_generation.mode="time_stamped"` still requires and uses `duration_s`.
 - Diagnostics include `pipeline=specified_path`, `family=...`, and `path_conversion=official`.
 - Unit tests cover fake cuMotion API calls for all three path families.

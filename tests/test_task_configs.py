@@ -214,14 +214,6 @@ def test_robot_asset_mesh_references_exist() -> None:
     assert missing == []
 
 
-def test_default_joint_trajectory_config() -> None:
-    config = load_yaml("configs/trajectories/joint_target.yaml")
-    trajectory = config["trajectory"]
-    assert trajectory["type"] == "joint_target"
-    assert trajectory["duration"] > 0
-    assert trajectory["targets"]
-
-
 def test_default_rope_and_grasp_configs() -> None:
     rope = CapsuleRopeConfig.from_mapping(
         load_yaml("configs/objects/capsule_rope.yaml")

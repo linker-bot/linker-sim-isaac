@@ -39,21 +39,24 @@ def generate_cspace_trajectory(
 ):
     """用 cuMotion 对 C-space waypoint path 做时间参数化。
 
-    返回值是 cuMotion ``Trajectory`` 或 ``None``。当配置禁用、path 为空或 waypoint 少于两个时
-    返回 ``None``，让上层仍可消费原始 ``joint_path``。
+    返回值是 cuMotion ``Trajectory``。graph search 和 specified path 的成功结果必须能生成
+    时间参数化轨迹；path 为空或 waypoint 少于两个时立即报错，避免上层把离散 path 当成
+    可执行轨迹兜底。
+
+    该函数不再提供 ``enabled`` 开关。只要 pipeline 的中间产物是 joint path，成功返回就必须
+    带 trajectory；如果后端无法生成 trajectory，应显式失败，让任务层重新选择 pipeline 或
+    调整配置，而不是默默退回项目侧线性插值。
     """
 
-    if not config.enabled:
-        return None
     if joint_path is None:
-        return None
+        raise ValueError("joint_path is required to generate trajectory")
     path = np.asarray(joint_path, dtype=float)
     if path.ndim == 1:
         path = path.reshape(1, -1)
     if path.ndim != 2:
         raise ValueError("joint_path must have shape (N, dof)")
     if path.shape[0] < 2:
-        return None
+        raise ValueError("joint_path must contain at least two waypoints")
     if path.shape[1] != context.expected_cspace_width:
         raise ValueError(
             f"joint_path expected {context.expected_cspace_width} columns, got {path.shape[1]}"

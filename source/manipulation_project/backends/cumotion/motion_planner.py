@@ -64,7 +64,7 @@ class CuMotionMotionPlanner:
     def joint_names(self) -> list[str]:
         """返回 planner 使用的 C-space 关节名。
 
-        调用方构造 ``MotionRequest.current_q`` / ``goal_q``，以及消费 ``MotionResult.joint_path``
+        调用方构造 ``MotionRequest.current_q`` / ``goal_q``，以及消费 ``MotionResult.path``
         时都必须使用这个顺序。
         """
 

@@ -149,7 +149,6 @@ def _pinch_motion_planner_backend_config(
         motion_planner_params=graph_params,
     )
     trajectory_generation = TrajectoryGenerationConfig(
-        enabled=trajectory_generation.enabled,
         mode=_normalize_pinch_trajectory_mode(
             data.get("trajectory_mode", trajectory_generation.mode)
         ),
@@ -444,7 +443,7 @@ def build_planned_joint_motion_trajectory(
 
     ``motion_planner`` 只处理 cuMotion C-space 关节；本函数负责把完整 articulation
     DOF 中的机械臂关节切出来调用 ``MotionRequest(goal_q=...)``，再把返回的 C-space
-    path 嵌回完整 DOF 轨迹。非 C-space DOF 会按 start/target 线性插值，用于夹爪和
+    trajectory 嵌回完整 DOF 轨迹。非 C-space DOF 会按 start/target 线性插值，用于夹爪和
     机械臂同时变化的阶段。
     """
 
@@ -467,10 +466,10 @@ def build_planned_joint_motion_trajectory(
             times=np.asarray([0.0], dtype=float),
             positions=target.reshape(1, -1),
             joint_names=tuple(dof_names),
-            phases=(phase,),
+            phase=phase,
         )
         return trajectory, MotionResult(
-            joint_path=target_q.reshape(1, -1),
+            path=target_q.reshape(1, -1),
             trajectory=None,
             success=True,
             status="SKIPPED_ZERO_DURATION",
@@ -488,44 +487,25 @@ def build_planned_joint_motion_trajectory(
             f"cuMotion joint motion planning failed for {phase}: status={result.status}"
         )
 
-    if result.trajectory is not None:
-        return (
-            _full_trajectory_from_cumotion_trajectory(
-                result.trajectory,
-                motion_planner=motion_planner,
-                dof_names=dof_names,
-                arm_indices=arm_indices,
-                start_all=start,
-                target_all=target,
-                requested_duration_s=duration_s,
-                phase=phase,
-                physics_dt=physics_dt,
-            ),
-            result,
-        )
-
-    if result.joint_path is None:
+    if result.trajectory is None:
         raise RuntimeError(
-            f"cuMotion joint motion planning returned no path or trajectory for {phase}: "
+            f"cuMotion joint motion planning returned no trajectory for {phase}: "
             f"status={result.status}"
         )
-    cspace_path = _normalize_cspace_path(result.joint_path, start_q, target_q)
-    times = _times_for_cspace_path(cspace_path, duration_s)
-    full_positions = _full_positions_from_cspace_path(
-        cspace_path,
-        times=times,
-        duration_s=duration_s,
-        start_all=start,
-        target_all=target,
-        arm_indices=arm_indices,
+    return (
+        _full_trajectory_from_cumotion_trajectory(
+            result.trajectory,
+            motion_planner=motion_planner,
+            dof_names=dof_names,
+            arm_indices=arm_indices,
+            start_all=start,
+            target_all=target,
+            requested_duration_s=duration_s,
+            phase=phase,
+            physics_dt=physics_dt,
+        ),
+        result,
     )
-    trajectory = joint_trajectory_from_positions(
-        times=times,
-        positions=full_positions,
-        joint_names=tuple(dof_names),
-        phase=phase,
-    )
-    return trajectory, result
 
 
 def build_specified_tcp_line_trajectory(
@@ -562,10 +542,10 @@ def build_specified_tcp_line_trajectory(
             times=np.asarray([0.0], dtype=float),
             positions=start.reshape(1, -1),
             joint_names=tuple(dof_names),
-            phases=(phase,),
+            phase=phase,
         )
         return trajectory, MotionResult(
-            joint_path=current_q.reshape(1, -1),
+            path=current_q.reshape(1, -1),
             trajectory=None,
             success=True,
             status="SKIPPED_ZERO_DURATION",
@@ -596,52 +576,32 @@ def build_specified_tcp_line_trajectory(
             f"status={result.status}"
         )
 
-    if result.trajectory is not None:
-        if result.joint_path is None or np.asarray(result.joint_path).shape[0] == 0:
-            raise RuntimeError(
-                f"cuMotion specified TCP line returned trajectory without joint_path "
-                f"for {phase}: status={result.status}"
-            )
-        target_all = start.copy()
-        target_all[arm_indices] = np.asarray(result.joint_path, dtype=float)[-1]
-        return (
-            _full_trajectory_from_cumotion_trajectory(
-                result.trajectory,
-                motion_planner=specified_planner,
-                dof_names=dof_names,
-                arm_indices=arm_indices,
-                start_all=start,
-                target_all=target_all,
-                requested_duration_s=duration_s,
-                phase=phase,
-                physics_dt=physics_dt,
-            ),
-            result,
-        )
-
-    if result.joint_path is None:
+    if result.trajectory is None:
         raise RuntimeError(
-            f"cuMotion specified TCP line returned no path or trajectory for {phase}: "
+            f"cuMotion specified TCP line returned no trajectory for {phase}: "
             f"status={result.status}"
         )
-    cspace_path = np.asarray(result.joint_path, dtype=float)
-    if cspace_path.ndim != 2:
-        raise ValueError("specified TCP line joint_path must have shape (N, dof)")
-    if cspace_path.shape[1] != arm_indices.size:
-        raise ValueError(
-            "specified TCP line joint_path dof mismatch: "
-            f"path has {cspace_path.shape[1]} columns, arm_indices has {arm_indices.size}"
+    if result.path is None or np.asarray(result.path).shape[0] == 0:
+        raise RuntimeError(
+            f"cuMotion specified TCP line returned trajectory without path "
+            f"for {phase}: status={result.status}"
         )
-    times = _times_for_cspace_path(cspace_path, duration_s)
-    full_positions = np.repeat(start.reshape(1, -1), cspace_path.shape[0], axis=0)
-    full_positions[:, arm_indices] = cspace_path
-    trajectory = joint_trajectory_from_positions(
-        times=times,
-        positions=full_positions,
-        joint_names=tuple(dof_names),
-        phase=phase,
+    target_all = start.copy()
+    target_all[arm_indices] = np.asarray(result.path, dtype=float)[-1]
+    return (
+        _full_trajectory_from_cumotion_trajectory(
+            result.trajectory,
+            motion_planner=specified_planner,
+            dof_names=dof_names,
+            arm_indices=arm_indices,
+            start_all=start,
+            target_all=target_all,
+            requested_duration_s=duration_s,
+            phase=phase,
+            physics_dt=physics_dt,
+        ),
+        result,
     )
-    return trajectory, result
 
 
 def _specified_path_config_from_base(
@@ -821,50 +781,6 @@ def _trajectory_domain_bounds(trajectory) -> tuple[float, float]:
         getattr(domain, "upper", domain[1] if isinstance(domain, tuple) else lower)
     )
     return lower, upper
-
-
-def _normalize_cspace_path(
-    joint_path: np.ndarray, start_q: np.ndarray, target_q: np.ndarray
-) -> np.ndarray:
-    """确保 planner path 至少包含精确起点和终点，并去掉连续重复点。"""
-
-    path = np.asarray(joint_path, dtype=float)
-    if path.ndim == 1:
-        path = path.reshape(1, -1)
-    if path.ndim != 2:
-        raise ValueError("joint_path must have shape (N, dof)")
-    dof = np.asarray(start_q, dtype=float).reshape(-1).size
-    if path.shape[1] != dof:
-        raise ValueError(f"joint_path expected {dof} columns, got {path.shape[1]}")
-
-    rows = []
-    start = np.asarray(start_q, dtype=float).reshape(1, -1)
-    target = np.asarray(target_q, dtype=float).reshape(1, -1)
-    if path.shape[0] == 0 or not np.allclose(path[0], start[0]):
-        rows.append(start[0])
-    rows.extend(path)
-    if not np.allclose(rows[-1], target[0]):
-        rows.append(target[0])
-
-    deduped = [np.asarray(rows[0], dtype=float).reshape(-1)]
-    for row in rows[1:]:
-        row = np.asarray(row, dtype=float).reshape(-1)
-        if not np.allclose(row, deduped[-1]):
-            deduped.append(row)
-    return np.vstack(deduped)
-
-
-def _times_for_cspace_path(cspace_path: np.ndarray, duration_s: float) -> np.ndarray:
-    """按 C-space 路径长度把 planner waypoint 分配到指定阶段时长内。"""
-
-    if cspace_path.shape[0] == 1:
-        return np.asarray([0.0], dtype=float)
-    segment_lengths = np.linalg.norm(np.diff(cspace_path, axis=0), axis=1)
-    cumulative = np.concatenate(([0.0], np.cumsum(segment_lengths)))
-    total = float(cumulative[-1])
-    if total <= 1.0e-12:
-        return np.linspace(0.0, float(duration_s), cspace_path.shape[0])
-    return float(duration_s) * cumulative / total
 
 
 def _full_positions_from_cspace_path(

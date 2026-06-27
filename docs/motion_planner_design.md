@@ -823,7 +823,7 @@ MotionResult
 
 ```python
 MotionResult(
-    joint_path=...,
+    path=...,
     trajectory=...,
     success=...,
     status=...,
@@ -833,10 +833,10 @@ MotionResult(
 
 不同 pipeline 的字段含义可以是：
 
-| Pipeline | `joint_path` | `trajectory` |
+| Pipeline | `path` | `trajectory` |
 |---|---|---|
-| `graph_search` | planner path / interpolated_path | 可选，由 generator 生成 |
-| `specified_path` | path spec 转出的 C-space waypoints | 可选，由 generator 生成 |
+| `graph_search` | planner path / interpolated_path | 成功时必须由 generator 生成 |
+| `specified_path` | path spec 转出的 C-space waypoints | 成功时必须由 generator 生成 |
 | `trajectory_optimization` | 可选，从 trajectory 采样得到 | optimizer 直接返回 |
 
 对于 `trajectory_optimization`，因为它直接返回 `Trajectory`，可以：
@@ -918,7 +918,6 @@ C-space path 的 pipeline。
 
 ```yaml
 trajectory_generation:
-  enabled: true
   mode: time_optimal
   interpolation_mode: cubic_spline
   limits:
@@ -985,7 +984,6 @@ graph_search:
         step_size: 0.02
 
 trajectory_generation:
-    enabled: true
     mode: time_optimal
     interpolation_mode: cubic_spline
     limits:
@@ -1041,7 +1039,6 @@ class GraphSearchConfig:
 
 @dataclass(frozen=True)
 class TrajectoryGenerationConfig:
-    enabled: bool = True
     mode: Literal["time_optimal", "time_stamped"] = "time_optimal"
     interpolation_mode: Literal["linear", "cubic_spline"] = "cubic_spline"
     limits: Mapping[str, Any] = field(default_factory=dict)
@@ -1365,7 +1362,7 @@ generate_cspace_trajectory(
 
 - graph-search pipeline 通过共享 trajectory generation helper 生成时间参数化轨迹。
 - trajectory generation 对非法 limit key 给出清晰 `ValueError`。
-- `trajectory_generation.enabled=False` 时返回 `trajectory=None`，但保留 `joint_path`。
+- graph-search / specified-path 成功时强制返回 `trajectory`；不再提供禁用 trajectory generation 的参数。
 
 ### 19.3 Phase 3：graph_search pipeline
 
@@ -1436,7 +1433,7 @@ plan_trajectory_optimization(
 - facade 默认调用 trajectory optimizer。
 - optimizer 成功时：
   - `MotionResult.trajectory` 是 optimizer trajectory
-  - `MotionResult.joint_path` 默认为 `None`
+  - `MotionResult.path` 默认为 `None`
   - diagnostics 记录实际 pipeline 为 `trajectory_optimization`
 - optimizer 失败时：
   - `success=False`
@@ -1481,8 +1478,8 @@ SpecifiedPathRequest(path=CompositePath(...))
 
 - `CSpaceWaypointPath` 至少要求 2 个 waypoint。
 - 所有 waypoint 宽度必须等于 `context.expected_cspace_width`。
-- 输出 `joint_path` 等于请求指定的 C-space waypoints。
-- 若 `trajectory_generation.enabled=True`，生成 `trajectory`。
+- 输出 `path` 等于请求指定的 C-space waypoints。
+- 成功时强制生成 `trajectory`。
 - `TaskSpacePath` / `CompositePath` 能通过官方 path conversion 生成 C-space path。
 
 ### 19.6 Phase 6：任务层调用

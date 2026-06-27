@@ -85,7 +85,6 @@ cumotion:
       generate_interpolated_path: true
       motion_planner_params: {}
     trajectory_generation:
-      enabled: true
       mode: time_optimal
       limits:
         velocity: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
@@ -282,15 +281,15 @@ Pipeline：
 
 - `trajectory_optimization`
   - 直接返回 cuMotion `Trajectory`。
-  - 默认 `MotionResult.joint_path=None`，`trajectory` 是主输出。
+  - 默认 `MotionResult.path=None`，`trajectory` 是主输出。
   - 失败时直接返回 optimizer 的失败结果；需要其它路线时由任务层显式选择 `graph_search` 或重新发起请求。
 - `graph_search.generate_interpolated_path=True`
   - 优先消费 cuMotion `interpolated_path`。
   - 若后端未返回，则回退到 sparse `path`。
 - `graph_search.generate_interpolated_path=False`
   - 只消费 sparse `path`。
-- `trajectory_generation.enabled=True`
-  - 对 graph_search 或 specified_path 产生的 `joint_path` 做时间参数化。
+- `trajectory_generation`
+  - 对 graph_search 或 specified_path 产生的离散 C-space path 做时间参数化；这两类 pipeline 成功时必须返回 `trajectory`。
   - 若配置了 `trajectory_generation.limits`，会设置 position/velocity/acceleration/jerk 限制。
   - 若配置了 `trajectory_generation.solver_params`，会调用 `set_solver_param(...)`。
 - `trajectory_generation.mode="time_optimal"`
@@ -345,8 +344,8 @@ Pipeline：
 
 | 字段 | 含义 |
 |---|---|
-| `joint_path` | 离散 C-space 关节路径，shape `(N, dof)`；失败时为 `None` |
-| `trajectory` | cuMotion trajectory 对象；未生成或失败时为 `None` |
+| `path` | 离散 C-space 关节路径，shape `(N, dof)`；失败或 optimizer 主路线无离散路径时为 `None` |
+| `trajectory` | cuMotion trajectory 对象；失败时为 `None` |
 | `success` | 是否成功 |
 | `status` | `SUCCESS` 或 `FAILED` |
 | `diagnostics` | `PlanningDiagnostics`，包含 waypoint 数、碰撞对象数、路径长度等 |
@@ -575,9 +574,9 @@ sequenceDiagram
     else graph_search
         Planner->>Cu: MotionPlanner.plan_to_cspace_target(..., generate_interpolated_path)
         Cu-->>Planner: Results(path, interpolated_path, path_found)
-        Planner->>Cu: 可选 CSpaceTrajectoryGenerator
+        Planner->>Cu: CSpaceTrajectoryGenerator
     end
-    Planner-->>Task: MotionResult(joint_path, trajectory, diagnostics)
+    Planner-->>Task: MotionResult(path, trajectory, diagnostics)
 ```
 
 ### TCP 位姿目标 IK
@@ -604,7 +603,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 
 1. 从完整 DOF 名称中找到 cuMotion `joint_names()` 对应索引。
 2. 调用 cuMotion 前，从完整 DOF 裁剪出 C-space 子向量。
-3. cuMotion 返回 `joint_path` 或 `joint_positions` 后，再按名称写回完整 DOF 轨迹。
+3. cuMotion 返回 `trajectory` 后按时间采样，并把 C-space 列按名称写回完整 DOF 轨迹；`MotionResult.path` 只作为离散路径记录和端点参考。
 4. 手部、mimic follower 或其它非 cuMotion DOF 由任务层单独插值或控制。
 
 ## 12. 常见注意事项
@@ -617,7 +616,7 @@ cuMotion 输出只覆盖 C-space 主动关节。若机器人是“机械臂 + �
 - 是否使用环境障碍由 pipeline 分组配置决定；`MotionRequest` 只描述目标。
 - 自定义 TCP 必须先写入 URDF，否则 cuMotion 无法对该 frame 做 FK/IK/规划。
 - `CollisionObject.enabled=False` 的障碍物会被跳过。
-- 失败的 `MotionResult` 中 `joint_path` 会是 `None`，调用方应先检查 `success`。
+- 失败的 `MotionResult` 中 `path` 和 `trajectory` 通常会是 `None`，调用方应先检查 `success`。
 
 ## 13. cuMotion 官方 Python API 接口总览
 

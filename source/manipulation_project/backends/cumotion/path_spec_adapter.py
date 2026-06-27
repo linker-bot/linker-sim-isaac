@@ -73,6 +73,10 @@ def task_space_path_to_joint_path(
     Task-space 路径的输入是 TCP 几何段，而最终的轨迹生成器消费 C-space waypoint。
     cuMotion官方流程是先构造 ``TaskSpacePathSpec``，再通过
     ``convert_task_space_path_spec_to_cspace`` 做 IK/path conversion。
+
+    注意这里是“先计算后发送”：本函数在规划阶段一次性完成 task-space 到 C-space 的转换，
+    返回的 joint path 随后会被 trajectory generator 时间参数化；执行阶段只按时间采样关节
+    轨迹，不会实时调用 task-space conversion。
     """
 
     current = np.asarray(request.current_q, dtype=float).reshape(-1)
@@ -112,6 +116,9 @@ def composite_path_to_joint_path(
     只负责把每个子段转换成对应的 PathSpec 并指定段间 transition；最终的 C-space 化仍交给
     cuMotion ``convert_composite_path_spec_to_cspace``，这样 task-space 子段和过渡段都由同一套
     官方 path conversion 处理。
+
+    和 ``TaskSpacePath`` 一样，composite conversion 是规划期动作。执行层拿到的是已经
+    时间参数化的关节轨迹，而不是每帧混合解析 C-space/task-space 子段。
     """
 
     current = np.asarray(request.current_q, dtype=float).reshape(-1)

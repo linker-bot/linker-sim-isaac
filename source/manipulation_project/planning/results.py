@@ -6,7 +6,7 @@
 
 职责边界:
     * 不保存求解器对象或 GPU 资源，只保存可序列化/可打印的结果摘要。
-    * 不重新排列关节顺序；``joint_positions``/``joint_path`` 的列顺序必须由生成它的后端说明。
+    * 不重新排列关节顺序；``joint_positions``/``path`` 的列顺序必须由生成它的后端说明。
     * 不在失败时抛异常；失败是规划问题的常见输出，异常留给配置错误或运行时错误。
 
 单位约定:
@@ -56,12 +56,12 @@ class IKResult:
 class MotionResult:
     """路径级运动规划结果。
 
-    ``joint_path`` 通常是离散关节路径，``trajectory`` 可以保存后端生成的更丰富轨迹对象。
+    ``path`` 通常是离散 C-space 关节路径，``trajectory`` 保存后端生成的时间参数化轨迹对象。
     二者允许同时存在，也允许在失败时都为空；调用方应先检查 ``success``，再消费轨迹字段。
-    ``joint_path`` 和 ``trajectory`` 均保持后端关节顺序，不自动扩展成 Isaac 完整 DOF。
+    ``path`` 和 ``trajectory`` 均保持后端关节顺序，不自动扩展成 Isaac 完整 DOF。
     """
 
-    joint_path: np.ndarray | None
+    path: np.ndarray | None
     trajectory: object | None
     success: bool
     status: str
