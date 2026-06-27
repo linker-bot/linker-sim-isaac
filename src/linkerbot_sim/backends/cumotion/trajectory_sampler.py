@@ -8,6 +8,8 @@ cuMotion 返回的 trajectory 对象由后端定义，本模块只读取公共�
     * 不运行 cuMotion 规划，只采样已有后端轨迹对象。
     * 不把 C-space 轨迹扩展成 Isaac 完整 DOF；控制器/动作脚本层负责名称映射。
     * 不改变单位；时间单位 s，关节位置 rad，速度 rad/s。
+    * 输出给 execution 的采样矩阵不包含首样本。首样本通常就是当前状态，过滤动作放在
+      cuMotion 轨迹函数采样边界，避免 execution 或动作脚本重复切片。
 """
 
 from __future__ import annotations
@@ -67,16 +69,12 @@ def joint_trajectory_from_cumotion(
 def _sample_times(
     trajectory, *, sample_dt: float | None, times: Sequence[float] | None
 ) -> np.ndarray:
-    """根据显式时间序列或采样周期生成轨迹采样时刻。"""
+    """根据显式时间序列或采样周期生成轨迹采样时刻。
 
-    if times is not None:
-        array = np.asarray(times, dtype=float).reshape(-1)
-        if array.size == 0:
-            raise ValueError("times cannot be empty")
-        return array
-    if sample_dt is None or sample_dt <= 0:
-        raise ValueError("sample_dt must be positive when times is not provided")
-    # domain 兼容对象属性 lower/upper 和 tuple 两种表示；生成的最后一个采样点强制不超过 upper。
+    返回值会自动移除时间域下界对应的首样本。execution 语义是一行推进一个 physics
+    step，因此第 0 行应该是“下一帧目标”，而不是当前状态。
+    """
+
     domain = trajectory.domain()
     lower = float(
         getattr(domain, "lower", domain[0] if isinstance(domain, tuple) else 0.0)
@@ -84,11 +82,37 @@ def _sample_times(
     upper = float(
         getattr(domain, "upper", domain[1] if isinstance(domain, tuple) else lower)
     )
+    if times is not None:
+        array = np.asarray(times, dtype=float).reshape(-1)
+        if array.size == 0:
+            raise ValueError("times cannot be empty")
+        return _drop_initial_sample(array, lower=lower, upper=upper)
+    if sample_dt is None or sample_dt <= 0:
+        raise ValueError("sample_dt must be positive when times is not provided")
+    # domain 兼容对象属性 lower/upper 和 tuple 两种表示；采样从第一个 step 后开始，
+    # 最后一个采样点强制不超过 upper。这样输出矩阵天然是一行一个执行 physics step。
     steps = max(1, int(np.ceil((upper - lower) / float(sample_dt))))
     return np.asarray(
-        [min(upper, lower + index * float(sample_dt)) for index in range(steps + 1)],
+        [min(upper, lower + index * float(sample_dt)) for index in range(1, steps + 1)],
         dtype=float,
     )
+
+
+def _drop_initial_sample(
+    times: np.ndarray, *, lower: float, upper: float
+) -> np.ndarray:
+    """从显式采样时间里移除首样本，并保证退化轨迹仍至少有一个目标点。"""
+
+    array = np.asarray(times, dtype=float).reshape(-1)
+    if array.size == 1:
+        return array
+    # 显式 times 常来自测试或上层 helper。只删除等于 domain lower 的首个样本，不改动其它
+    # 时间点，避免意外改变调用方已经 materialize 好的 physics-step 网格。
+    if np.isclose(array[0], float(lower), rtol=0.0, atol=1.0e-12):
+        array = array[1:]
+    if array.size == 0:
+        return np.asarray([float(upper)], dtype=float)
+    return array
 
 
 def _attr(state, name: str):

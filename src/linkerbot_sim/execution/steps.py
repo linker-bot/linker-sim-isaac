@@ -5,10 +5,14 @@
 
 本模块同时支持两种轨迹语义：
 
-* 完整 DOF 轨迹：列数等于 articulation ``num_dof``，直接走 ``targets_from_full_state``。
-* 命令子空间轨迹：列数等于 controller command space，走 ``build_control_targets``。
+* 命令子空间位置轨迹：列数等于 controller command space，走 ``build_control_targets``。
 
-两者共享同一套私有单帧下发逻辑，避免执行层出现两套几乎相同但行为略有差异的循环。
+传入本模块的 ``JointTrajectory`` 必须已经是“一行对应一个 physics step”的离散执行矩阵，
+并且不包含首样本。cuMotion 连续轨迹函数到离散矩阵的采样、去首样本和对齐工作都应在
+后端 sampler 完成；execution 只逐行播放，不再调用 ``trajectory.eval_all(...)`` 二次插值。
+
+本模块当前只暴露主动关节位置目标执行步。力控/扭矩控制以后应新增显式命名的 step，
+不要复用这些 position step。
 """
 
 from __future__ import annotations
@@ -23,50 +27,55 @@ from linkerbot_sim.trajectories.types import JointTrajectory
 
 
 @dataclass(frozen=True)
-class SmoothJointTargetStep:
-    """用 smoothstep 在两个完整 DOF 目标之间移动。"""
+class SmoothCommandPositionTargetStep:
+    """用 smoothstep 在两个 command-space 位置目标之间移动。
 
-    start_all: np.ndarray
-    target_all: np.ndarray
+    command-space 只包含主动关节，不包含 mimic follower。每一帧都会交给
+    ``JointController.build_control_targets``，由 controller 根据实际 master 状态补出
+    follower 目标。
+    """
+
+    start_command: np.ndarray
+    target_command: np.ndarray
     duration: float
     phase: str
+    base_positions: np.ndarray | None = None
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
-        """执行 smoothstep 关节目标移动并返回累计 step。"""
+        """执行 command-space position smoothstep 并返回累计 step。"""
 
-        return execute_smooth_joint_target(
+        return execute_smooth_command_position_target(
             articulation=runtime.articulation,
             simulation_world=runtime.simulation_world,
             articulation_action_type=runtime.articulation_action_type,
             joint_controller=runtime.joint_controller,
-            start_all=self.start_all,
-            target_all=self.target_all,
+            start_command=self.start_command,
+            target_command=self.target_command,
             duration=self.duration,
             phase=self.phase,
             simulation_app=runtime.simulation_app,
             render_enabled=runtime.render_enabled,
             step=step,
+            base_positions=self.base_positions,
             drive_logger=runtime.drive_logger,
         )
 
 
 @dataclass(frozen=True)
-class FullJointTrajectoryStep:
-    """按仿真时钟播放完整 DOF 关节轨迹。"""
+class CommandPositionTrajectoryStep:
+    """按采样行播放 command-space 位置轨迹。"""
 
     trajectory: JointTrajectory
-    phase: str
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
-        """按轨迹采样时间播放完整 DOF 目标并返回累计 step。"""
+        """逐样本播放 command-space position 轨迹并返回累计 step。"""
 
-        return execute_full_joint_trajectory(
+        return execute_command_position_trajectory(
             articulation=runtime.articulation,
             simulation_world=runtime.simulation_world,
             articulation_action_type=runtime.articulation_action_type,
             joint_controller=runtime.joint_controller,
             trajectory=self.trajectory,
-            phase=self.phase,
             simulation_app=runtime.simulation_app,
             render_enabled=runtime.render_enabled,
             step=step,
@@ -75,27 +84,29 @@ class FullJointTrajectoryStep:
 
 
 @dataclass(frozen=True)
-class HoldJointTargetStep:
-    """持续下发同一个完整 DOF 目标，维持姿态。"""
+class HoldCommandPositionTargetStep:
+    """持续下发同一个 command-space 位置目标，维持主动关节姿态。"""
 
-    target_all: np.ndarray
+    target_command: np.ndarray
     duration: float
     phase: str
+    base_positions: np.ndarray | None = None
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
-        """保持固定目标指定时长并返回累计 step。"""
+        """保持 command-space position 目标指定时长并返回累计 step。"""
 
-        return execute_joint_hold(
+        return execute_command_position_hold(
             articulation=runtime.articulation,
             simulation_world=runtime.simulation_world,
             articulation_action_type=runtime.articulation_action_type,
             joint_controller=runtime.joint_controller,
-            target_all=self.target_all,
+            target_command=self.target_command,
             duration=self.duration,
             phase=self.phase,
             simulation_app=runtime.simulation_app,
             render_enabled=runtime.render_enabled,
             step=step,
+            base_positions=self.base_positions,
             drive_logger=runtime.drive_logger,
         )
 
@@ -157,45 +168,6 @@ def _apply_control_targets_once(
     return step + 1
 
 
-def _apply_full_joint_target_once(
-    *,
-    articulation,
-    simulation_world,
-    articulation_action_type,
-    joint_controller,
-    target_all: np.ndarray,
-    render_enabled: bool,
-    step: int,
-    phase: str,
-    target_velocity_all: np.ndarray | None = None,
-    target_effort_all: np.ndarray | None = None,
-    drive_logger=None,
-) -> int:
-    """从完整 articulation DOF 目标构造控制目标，并下发一帧。
-
-    ``target_all`` 的长度必须等于 Isaac articulation ``num_dof``，列顺序就是
-    ``articulation.dof_names``。controller 会从完整目标中抽取主动关节命令，并根据 master
-    的实际状态补出 mimic follower 目标。
-    """
-
-    targets = joint_controller.targets_from_full_state(
-        target_all,
-        joint_velocities=target_velocity_all,
-        joint_efforts=target_effort_all,
-    )
-    return _apply_control_targets_once(
-        articulation=articulation,
-        simulation_world=simulation_world,
-        articulation_action_type=articulation_action_type,
-        joint_controller=joint_controller,
-        targets=targets,
-        render_enabled=render_enabled,
-        step=step,
-        phase=phase,
-        drive_logger=drive_logger,
-    )
-
-
 def _apply_command_joint_target_once(
     *,
     articulation,
@@ -238,105 +210,66 @@ def _apply_command_joint_target_once(
     return next_step, targets
 
 
-def execute_smooth_joint_target(
+def execute_smooth_command_position_target(
     *,
     articulation,
     simulation_world,
     articulation_action_type,
     joint_controller,
-    start_all: np.ndarray,
-    target_all: np.ndarray,
+    start_command: np.ndarray,
+    target_command: np.ndarray,
     duration: float,
     phase: str,
     simulation_app,
     render_enabled: bool,
     step: int,
+    base_positions: np.ndarray | None = None,
     drive_logger=None,
 ) -> int:
-    """用 smoothstep 在两个完整 DOF 目标之间平滑移动。"""
+    """用 smoothstep 在两个 command-space 位置目标之间平滑移动。
+
+    本函数只处理主动命令关节。mimic follower 不作为入参暴露，而是在每一帧进入
+    ``JointController.build_control_targets`` 时根据实际 master 状态重算。
+    """
 
     physics_dt = float(simulation_world.get_physics_dt())
     steps = max(1, int(round(duration / physics_dt)))
-    delta = target_all - start_all
+    start = np.asarray(start_command, dtype=float).reshape(-1)
+    target = np.asarray(target_command, dtype=float).reshape(-1)
+    delta = target - start
+    full_position = (
+        np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
+        if base_positions is None
+        else np.asarray(base_positions, dtype=float).reshape(-1)
+    )
     for local_step in range(steps):
         if simulation_app is not None and not simulation_app.is_running():
             break
         alpha = (local_step + 1) / steps
         smooth = alpha * alpha * (3.0 - 2.0 * alpha)
         smooth_rate = (6.0 * alpha * (1.0 - alpha) / duration) if duration > 0 else 0.0
-        command = start_all + smooth * delta
+        command = start + smooth * delta
         velocity = smooth_rate * delta
-        step = _apply_full_joint_target_once(
+        step, targets = _apply_command_joint_target_once(
             articulation=articulation,
             simulation_world=simulation_world,
             articulation_action_type=articulation_action_type,
             joint_controller=joint_controller,
-            target_all=command,
-            target_velocity_all=velocity,
+            command_positions=command,
+            command_velocities=velocity,
+            command_efforts=np.zeros_like(command),
+            base_positions=full_position,
             render_enabled=render_enabled,
             step=step,
             phase=phase,
             drive_logger=drive_logger,
         )
+        full_position = targets.positions
     articulation.set_joint_velocities(np.zeros(articulation.num_dof, dtype=float))
     return step
 
 
-def execute_full_joint_trajectory(
-    *,
-    articulation,
-    simulation_world,
-    articulation_action_type,
-    joint_controller,
-    trajectory: JointTrajectory,
-    phase: str,
-    simulation_app,
-    render_enabled: bool,
-    step: int,
-    drive_logger=None,
-) -> int:
-    """按 physics dt 播放完整 DOF 关节轨迹。
-
-    轨迹采样频率可以和物理步频不同：执行层以 physics dt 为时钟，在每个物理步调用
-    ``trajectory.eval_all(time_s)`` 插值得到当前位置/速度/effort。这样 cuMotion 可以按自身
-    时间域输出轨迹，Isaac 仍按固定物理步稳定推进。
-    """
-
-    if trajectory.positions.shape[1] != articulation.num_dof:
-        raise ValueError(
-            "Full DOF trajectory expected "
-            f"{articulation.num_dof} joints, got {trajectory.positions.shape[1]}"
-        )
-    physics_dt = float(simulation_world.get_physics_dt())
-    if physics_dt <= 0:
-        raise ValueError("world physics dt must be positive")
-    start_time, end_time = trajectory.domain()
-    duration = max(0.0, float(end_time - start_time))
-    steps = max(1, int(round(duration / physics_dt))) if duration > 0.0 else 1
-    for local_step in range(steps):
-        if simulation_app is not None and not simulation_app.is_running():
-            break
-        alpha = (local_step + 1) / steps
-        time_s = start_time + alpha * duration
-        sample = trajectory.eval_all(time_s)
-        step = _apply_full_joint_target_once(
-            articulation=articulation,
-            simulation_world=simulation_world,
-            articulation_action_type=articulation_action_type,
-            joint_controller=joint_controller,
-            target_all=sample.position,
-            target_velocity_all=sample.velocity,
-            target_effort_all=sample.effort,
-            render_enabled=render_enabled,
-            step=step,
-            phase=phase,
-            drive_logger=drive_logger,
-        )
-    articulation.set_joint_velocities(np.zeros(articulation.num_dof, dtype=float))
-    return step
-
-
-def execute_command_joint_trajectory(
+def execute_command_position_trajectory(
     *,
     articulation,
     simulation_world,
@@ -349,7 +282,7 @@ def execute_command_joint_trajectory(
     drive_logger=None,
     hold: bool = False,
 ) -> int:
-    """按采样点播放命令子空间关节轨迹。
+    """按采样点播放命令子空间位置轨迹。
 
     轨迹列按 controller command space 排列，而不是完整 articulation DOF。每一帧都会通过
     ``build_control_targets`` 扩展成完整 DOF 控制目标，再复用私有单帧下发逻辑
@@ -385,39 +318,54 @@ def execute_command_joint_trajectory(
     return step
 
 
-def execute_joint_hold(
+def execute_command_position_hold(
     *,
     articulation,
     simulation_world,
     articulation_action_type,
     joint_controller,
-    target_all: np.ndarray,
+    target_command: np.ndarray,
     duration: float,
     phase: str,
     simulation_app,
     render_enabled: bool,
     step: int,
+    base_positions: np.ndarray | None = None,
     drive_logger=None,
 ) -> int:
-    """保持一个完整 DOF 目标一段时间。"""
+    """保持一个 command-space 位置目标一段时间。
+
+    只下发主动关节目标；follower 每帧由 controller 根据实际 master 状态覆盖。
+    """
 
     physics_dt = float(simulation_world.get_physics_dt())
     total_steps = max(1, int(round(duration / physics_dt))) if duration > 0 else None
+    full_position = (
+        np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
+        if base_positions is None
+        else np.asarray(base_positions, dtype=float).reshape(-1)
+    )
     local_step = 0
+    target = np.asarray(target_command, dtype=float).reshape(-1)
+    zero_velocity = np.zeros_like(target)
+    zero_effort = np.zeros_like(target)
     while total_steps is None or local_step < total_steps:
         if simulation_app is not None and not simulation_app.is_running():
             break
-        step = _apply_full_joint_target_once(
+        step, targets = _apply_command_joint_target_once(
             articulation=articulation,
             simulation_world=simulation_world,
             articulation_action_type=articulation_action_type,
             joint_controller=joint_controller,
-            target_all=target_all,
+            command_positions=target,
+            command_velocities=zero_velocity,
+            command_efforts=zero_effort,
+            base_positions=full_position,
             render_enabled=render_enabled,
             step=step,
             phase=phase,
-            target_velocity_all=np.zeros(articulation.num_dof, dtype=float),
             drive_logger=drive_logger,
         )
+        full_position = targets.positions
         local_step += 1
     return step

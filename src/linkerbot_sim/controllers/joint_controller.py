@@ -115,6 +115,17 @@ class JointController:
         self._active_specs: dict[int, tuple[ControlMode, ControlMethod]] = {}
         self.last_commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
 
+    @property
+    def command_joint_names(self) -> tuple[str, ...]:
+        """返回 controller 对外暴露的主动命令关节名。
+
+        该顺序严格跟 ``command_indices`` 一致，因此动作脚本可以直接用它作为
+        command-space 目标向量和 ``JointTrajectory`` 列顺序。mimic follower 已经在
+        初始化时从 ``command_indices`` 中剔除，不会出现在这个元组里。
+        """
+
+        return tuple(self.dof_names[int(index)] for index in self.command_indices)
+
     def configure_runtime(self) -> None:
         """写入 runtime 控制模式、增益、max effort 和摩擦设置。
 

@@ -112,14 +112,15 @@ def target_vector_from_mapping(
     *,
     base: np.ndarray | None = None,
 ) -> np.ndarray:
-    """把稀疏的 ``关节名 -> 位置`` 映射展开成完整 DOF 目标向量。
+    """把稀疏的 ``关节名 -> 位置`` 映射展开成有序目标向量。
 
     参数:
-        dof_names: 完整 DOF 名称序列，定义返回向量顺序。
+        dof_names: 有序关节名序列，定义返回向量顺序；可以是完整 DOF，也可以是
+            controller command space。
         targets: 稀疏目标映射，值单位通常为 rad。
-        base: 可选完整 DOF 基准向量；未在 ``targets`` 中出现的关节沿用它。
+        base: 可选基准向量；未在 ``targets`` 中出现的关节沿用它。
     返回:
-        shape ``(len(dof_names),)`` 的完整目标向量；没有 ``base`` 时未指定关节为 0。
+        shape ``(len(dof_names),)`` 的目标向量；没有 ``base`` 时未指定关节为 0。
     """
 
     # base 表示“未指定关节沿用当前/上一阶段目标”。没有 base 时只能填 0，适合构造简单

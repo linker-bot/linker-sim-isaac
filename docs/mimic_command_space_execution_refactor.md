@@ -57,8 +57,8 @@
 | 层级 | 应负责 | 不应负责 |
 |---|---|---|
 | `scripts/pinch_grasp.py` | 动作阶段、主动关节目标、TCP 目标、cuMotion 请求 | mimic follower 展开、完整 DOF action、每帧 follower target |
-| `execution` | 按 physics dt 播放 command-space 或 full-DOF 目标，调用 controller | 解析 MJCF、计算 mimic 关系、运行 IK |
-| `JointController` | 命令空间到完整 DOF control target、mimic follower 每帧跟随、Isaac action 分组下发 | 生成动作阶段、规划 cuMotion |
+| `execution` | 对 command-space position smooth/hold 阶段按 physics dt 生成每帧目标；对已采样 command-space position trajectory 按样本逐帧播放；调用 controller 并推进 world step | 解析 MJCF、计算 mimic 关系、运行 IK、直接拆 Isaac action、对 cuMotion 轨迹函数二次插值、暴露 full-DOF 动作入口 |
+| `JointController` | 命令空间到完整 DOF control target、mimic follower 每帧跟随、把 control target 拆成 Isaac action 并调用 articulation | 生成动作阶段、规划 cuMotion、决定每个阶段何时执行 |
 | `tcp/pinch_tcp.py` | 为闭合手型几何计算一次性展开 mimic，生成 pinch TCP | 每帧控制 follower |
 | `backends/cumotion` | 机械臂 C-space IK/path/trajectory 和 TCP context 装配 | Isaac full DOF、手部 mimic follower |
 
@@ -76,8 +76,9 @@
 
 - 不修改 mimic 数学模型。继续使用 `src/linkerbot_sim/robots/mimic.py` 中的 MJCF equality 解析和 `MimicFollowerTargetMapper`。
 - 不把完整 articulation DOF 映射移入 cuMotion 后端。
-- 不要求所有 execution API 立刻删除 full-DOF 入口。full-DOF 入口仍可用于测试、调试或未来其它动作。
-- 不改变 `JointTrajectory` 数据结构。它本来已经允许列表示完整 DOF 或 command space。
+- 删除 full-DOF execution step/function。`pinch_grasp.py` 和后续普通动作脚本只使用
+  command-space position step。
+- 不改变 `JointTrajectory` 数据结构。它本来已经允许列表示完整 DOF 或 command space；但执行层播放 trajectory 时应消费已采样矩阵行，而不是把 `JointTrajectory` 再当连续函数求值。
 - 不改变 cuMotion 输出语义。cuMotion trajectory 仍是机械臂 C-space trajectory，需要由调用方决定如何放入执行命令空间。
 - 不在真实 Isaac/cuMotion 环境中才能验证；新增逻辑必须有 fake 单元测试。
 
@@ -123,21 +124,12 @@ def target_vector_for_names(
 
 ### 4.3 Command-space execution step
 
-当前已有函数：
-
-- `execute_command_joint_trajectory(...)`
-
-但脚本现在主要使用 step dataclass：
-
-- `SmoothJointTargetStep`
-- `FullJointTrajectoryStep`
-- `HoldJointTargetStep`
-
-建议增加 command-space step dataclass，并导出到 `src/linkerbot_sim/execution/__init__.py`：
+建议只保留 command-space position step dataclass，并导出到
+`src/linkerbot_sim/execution/__init__.py`：
 
 ```python
 @dataclass(frozen=True)
-class SmoothCommandJointTargetStep:
+class SmoothCommandPositionTargetStep:
     start_command: np.ndarray
     target_command: np.ndarray
     duration: float
@@ -145,11 +137,11 @@ class SmoothCommandJointTargetStep:
     base_positions: np.ndarray | None = None
 
 @dataclass(frozen=True)
-class CommandJointTrajectoryStep:
+class CommandPositionTrajectoryStep:
     trajectory: JointTrajectory
 
 @dataclass(frozen=True)
-class HoldCommandJointTargetStep:
+class HoldCommandPositionTargetStep:
     target_command: np.ndarray
     duration: float
     phase: str
@@ -159,6 +151,14 @@ class HoldCommandJointTargetStep:
 命名可以微调，但要满足：
 
 - 名称明确带 `Command`，表示输入列顺序是 controller command space。
+- 名称明确带 `Position`，表示当前 execution step 面向位置目标。未来力控/扭矩控制应新增
+  `Effort`、`Wrench` 等显式命名的 step，不复用这些 position step。
+- `trajectory` 必须已经由 cuMotion 轨迹函数采样/转换层 materialize 成“一行对应一个
+  physics step”的采样矩阵。
+- `trajectory` 不包含首样本；首样本过滤必须在 cuMotion trajectory 函数生成离散轨迹点时
+  自动完成，execution 和动作脚本不再重复处理。
+- `trajectory` 的第 0 行就是执行时要下发的第 1 个 physics step 目标，而不是当前状态。
+- 执行阶段逐行播放，不调用 `trajectory.eval_all(...)` 做二次插值。
 - step 内部调用 `joint_controller.build_control_targets(...)`。
 - 不直接处理 follower。
 - 日志仍通过 `_apply_control_targets_once(...)` 记录 `joint_controller.driven_indices`。
@@ -168,10 +168,10 @@ class HoldCommandJointTargetStep:
 建议在 `src/linkerbot_sim/execution/steps.py` 增加：
 
 ```python
-def execute_smooth_command_joint_target(...):
+def execute_smooth_command_position_target(...):
     ...
 
-def execute_command_joint_hold(...):
+def execute_command_position_hold(...):
     ...
 ```
 
@@ -184,6 +184,29 @@ def execute_command_joint_hold(...):
 - `base_positions` 缺省时读取 articulation 当前完整位置；每步更新为上一帧 `targets.positions`，保持非 command DOF 连续。
 
 不要在 execution 里写 follower 公式。
+
+### 4.5 Command-space trajectory 播放语义
+
+cuMotion 输出的是连续的 C-space trajectory 函数；项目在 cuMotion 轨迹函数转换成
+`JointTrajectory` 时完成采样。
+传给 execution 的 `JointTrajectory` 是已经 materialize 的执行矩阵，必须满足两个硬约束：
+
+- 每一行对应一个 Isaac physics step；不允许用“一行表示多个 physics step”的压缩表示。
+- 不包含首样本；首样本通常等于当前状态，不应在 execution 中额外执行一帧。
+
+首样本过滤属于 cuMotion 轨迹函数采样/转换层的职责，具体应放在
+`src/linkerbot_sim/backends/cumotion/trajectory_sampler.py` 或其直接调用 helper 中完成。
+execution 只接受已经满足上述约束的 `JointTrajectory`，动作脚本也不应手工切片删除首样本。
+
+因此 `CommandPositionTrajectoryStep` 的执行语义是：
+
+- 按 `trajectory.positions[i]`、`trajectory.velocities[i]`、`trajectory.efforts[i]` 逐样本下发。
+- 每下发一个样本推进一次 `world.step(...)`，总执行步数等于 `len(trajectory)`。
+- 不在执行阶段调用 `trajectory.eval_all(time_s)`。
+- 不在执行阶段根据 physics dt 重新插值 sampled trajectory。
+
+execution 不再暴露 full-DOF trajectory step。完整 DOF 目标只应在 controller 内部作为
+`ControlTargets` 或 Isaac action 的实现细节出现，不作为动作脚本和 execution step 的公共入口。
 
 ## 5. Pinch grasp 改造规格
 
@@ -283,16 +306,20 @@ def _command_trajectory_from_cumotion_trajectory(
     arm_command_indices: np.ndarray,
     start_command: np.ndarray,
     target_command: np.ndarray,
-    requested_duration_s: float,
     phase: str,
     physics_dt: float | None,
 ) -> JointTrajectory:
     ...
 ```
 
-内部逻辑基本同现有实现：
+内部逻辑：
 
-- 采样/retime cuMotion C-space trajectory。
+- 轨迹时长由 cuMotion trajectory 自身决定；helper 签名不要包含 `requested_duration_s`。
+- 不要在脚本侧拉长、压短或 retime 项目 `JointTrajectory`；如果动作需要不同轨迹时长，
+  应在 cuMotion trajectory 生成阶段通过后端参数解决。
+- 调用 cuMotion trajectory sampler 按 physics step 采样 C-space trajectory；sampler 必须自动
+  去掉首样本，并 materialize 成“一行对应一个 physics step”的项目 `JointTrajectory`。
+- helper 本身不再手工删除首样本；它只消费 sampler 已经处理好的离散 C-space 轨迹。
 - 非 arm command columns 在 start/target 之间线性补齐。
 - arm command columns 用 cuMotion positions/velocities/accelerations/jerks 覆盖。
 - `joint_names=command_joint_names`。
@@ -333,10 +360,10 @@ def build_specified_tcp_line_trajectory(
 
 `pinch_grasp_execution_steps(...)` 应改成 command-space step：
 
-- `SmoothCommandJointTargetStep` 播放 pre-pinch。
-- `CommandJointTrajectoryStep` 播放 move_to_approach、approach_line、lift、wiggle、post sweep。
-- `SmoothCommandJointTargetStep` 播放 close_fingers。
-- `HoldCommandJointTargetStep` 播放 final hold。
+- `SmoothCommandPositionTargetStep` 播放 pre-pinch。
+- `CommandPositionTrajectoryStep` 播放 move_to_approach、approach_line、lift、wiggle、post sweep。
+- `SmoothCommandPositionTargetStep` 播放 close_fingers。
+- `HoldCommandPositionTargetStep` 播放 final hold。
 
 不要在脚本里调用 full-DOF step。
 
@@ -365,10 +392,21 @@ return {"steps": step, "ik": plan["ik"]}
 
 修改或新增 `tests/test_execution_steps.py`：
 
-- `SmoothCommandJointTargetStep` 每帧调用 fake controller 的 `build_control_targets(...)`，不是 `targets_from_full_state(...)`。
-- `CommandJointTrajectoryStep` 按 physics dt 插值播放 command-space trajectory，而不是按采样点硬播放。如果保留旧 `execute_command_joint_trajectory(...)` 采样点播放语义，也要明确测试两个入口差异。
-- `HoldCommandJointTargetStep` 持续下发同一个 command-space 目标，并让 fake controller 扩展成完整 targets。
+- `SmoothCommandPositionTargetStep` 每帧调用 fake controller 的 `build_control_targets(...)`，
+  不是 `targets_from_full_state(...)`。
+- `CommandPositionTrajectoryStep` 逐样本播放 command-space position trajectory；测试应确认它不调用
+  `trajectory.eval_all(...)`，因为采样已经在 cuMotion trajectory 转项目 `JointTrajectory` 时完成。
+- 不再导出或测试 full-DOF execution step/function。
+- `HoldCommandPositionTargetStep` 持续下发同一个 command-space position 目标，并让 fake controller 扩展成完整 targets。
 - logger 记录 indices 使用 `driven_indices`，即主动关节 + follower。
+
+### 6.2.1 cuMotion trajectory sampler 测试
+
+修改或新增 `tests/test_cumotion_trajectory_sampler.py`：
+
+- cuMotion trajectory 函数采样成项目 `JointTrajectory` 时自动去掉首样本。
+- 输出矩阵每一行对应一个 physics step；execution 不需要再根据 `times` 做插值或跳样本。
+- 动作脚本/helper 不再手工切片删除首样本，避免重复删除导致少执行一帧。
 
 ### 6.3 Pinch grasp motion planning 测试
 
@@ -376,7 +414,7 @@ return {"steps": step, "ik": plan["ik"]}
 
 - helper 输出 trajectory 的 `joint_names` 是 command-space 名称。
 - arm columns 使用 cuMotion trajectory。
-- hand/master columns 按 start/target 插值。
+- hand/master columns 在轨迹构造阶段按采样时间矩阵补齐；execution 只消费补齐后的样本。
 - 不再断言完整 DOF 中的 follower 列。
 - specified TCP line helper 只通过 C-space current_q 调 cuMotion，不要求完整 DOF 输入。
 
@@ -441,15 +479,17 @@ git diff --check
 
 任务：
 
-- 增加 `SmoothCommandJointTargetStep`。
-- 增加 `CommandJointTrajectoryStep`。
-- 增加 `HoldCommandJointTargetStep`。
+- 增加 `SmoothCommandPositionTargetStep`。
+- 增加 `CommandPositionTrajectoryStep`。
+- 增加 `HoldCommandPositionTargetStep`。
+- 删除 full-DOF execution step/function 及其导出。
 - 复用 `_apply_command_joint_target_once(...)` 和 `_apply_control_targets_once(...)`。
 - 不解析 MJCF。
 
 完成条件：
 
 - execution 单元测试证明 command-space step 通过 controller 生成完整 targets。
+- execution 单元测试证明 command-space position trajectory 不调用 `trajectory.eval_all(...)`。
 
 ### Phase 3: 简化 pinch TCP 调用
 
@@ -504,7 +544,7 @@ git diff --check
 
 完成条件：
 
-- `scripts/pinch_grasp.py` 中不再导入 `FullJointTrajectoryStep`、`SmoothJointTargetStep`、`HoldJointTargetStep`，除非仍有明确 full-DOF 分支。
+- `scripts/pinch_grasp.py` 中不再导入 full-DOF execution step。
 - `scripts/pinch_grasp.py` 中 full-DOF 目标只用于读取 robot 当前实际状态或给 cuMotion 当前 C-space seed，不用于执行动作阶段。
 
 ### Phase 6: 文档更新
@@ -519,7 +559,8 @@ git diff --check
 
 - 更新分层说明：script 表达主动命令空间，controller 负责 follower。
 - 明确 pinch TCP 几何计算仍会在 TCP helper 内部展开 mimic。
-- 明确执行层 command-space trajectory 和 full-DOF trajectory 都支持，但 pinch grasp 走 command-space。
+- 明确 execution 只暴露 command-space position step；以后力控/扭矩控制通过新增显式命名
+  step 扩展，而不是复用 position step。
 
 完成条件：
 
@@ -551,9 +592,23 @@ cuMotion C-space 通常只包含机械臂关节。controller command space 包�
 
 不要“修正”为根据 command target 生成 follower。当前根据 actual master 可以减少从动关节超前导致的接触抖动，这个语义要保留。
 
-### 8.5 不要删除 full-DOF execution 能力
+### 8.5 区分 execution 调度和 controller 下发
 
-本次目标是让 pinch grasp 不依赖 full-DOF 执行，不是删除 full-DOF 通用能力。保留 full-DOF step 方便其它脚本、测试和调试。
+execution 是每帧执行调度者：按 physics dt 求当前目标，调用 controller，并推进 `world.step(...)`。
+对 smooth/hold 阶段，“求当前目标”发生在 execution 内；对 cuMotion 生成的 `JointTrajectory`，
+“求值/采样”已经在后端 trajectory 函数转换成项目采样矩阵时完成，execution 只逐样本播放。
+controller 是 Isaac action 构造者：把 command-space position target 变成主动关节 action 和 follower action，
+并在 `apply_targets(...)` 中调用 articulation 的 `apply_action(...)`。计划书里提到“下发”时要明确是哪一层：
+
+- execution 下发阶段目标给 controller。
+- controller 下发 Isaac action 给 articulation。
+
+### 8.6 不要混淆 position step 和未来力控 step
+
+当前 execution step 明确是 command-space position 目标播放器。即使 ``JointController`` 可以
+根据配置把 position target 转成 implicit drive 或 explicit PD effort，execution API 名称仍应
+表达它接收的是 position target。未来如果需要直接下发 effort、wrench 或阻抗目标，应新增
+独立 step/function，并在名称中体现目标类型。
 
 ## 9. 最终验收标准
 

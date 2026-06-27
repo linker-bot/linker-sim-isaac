@@ -78,10 +78,10 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> N
 
     trajectory = build_planned_joint_motion_trajectory(
         motion_planner=planner,
-        dof_names=["arm0", "hand", "arm1"],
-        arm_indices=np.asarray([0, 2], dtype=int),
-        start_all=np.asarray([0.0, 2.0, 0.0], dtype=float),
-        target_all=np.asarray([1.0, 4.0, -1.0], dtype=float),
+        command_joint_names=("arm0", "hand", "arm1"),
+        arm_command_indices=np.asarray([0, 2], dtype=int),
+        start_command=np.asarray([0.0, 2.0, 0.0], dtype=float),
+        target_command=np.asarray([1.0, 4.0, -1.0], dtype=float),
         duration_s=2.0,
         phase="move_to_approach",
     )
@@ -89,12 +89,11 @@ def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> N
     assert len(planner.requests) == 1
     np.testing.assert_allclose(planner.requests[0].current_q, [0.0, 0.0])
     np.testing.assert_allclose(planner.requests[0].goal_q, [1.0, -1.0])
-    np.testing.assert_allclose(
-        trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
-    )
-    np.testing.assert_allclose(trajectory.positions[[0, -1], 1], [2.0, 4.0])
-    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 2.0])
-    expected_hand = 2.0 + (trajectory.times / 2.0) * 2.0
+    assert trajectory.joint_names == ("arm0", "hand", "arm1")
+    np.testing.assert_allclose(trajectory.positions[-1, [0, 2]], planner.path[-1])
+    np.testing.assert_allclose(trajectory.positions[-1, 1], 4.0)
+    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.01, 1.0])
+    expected_hand = 2.0 + (trajectory.times / trajectory.times[-1]) * 2.0
     np.testing.assert_allclose(trajectory.positions[:, 1], expected_hand)
     assert trajectory.phases == ("move_to_approach",) * len(trajectory)
 
@@ -106,10 +105,10 @@ def test_build_planned_joint_motion_trajectory_requires_cumotion_trajectory() ->
     try:
         build_planned_joint_motion_trajectory(
             motion_planner=planner,
-            dof_names=["arm0", "arm1"],
-            arm_indices=np.asarray([0, 1], dtype=int),
-            start_all=np.asarray([0.0, 0.0], dtype=float),
-            target_all=np.asarray([1.0, 1.0], dtype=float),
+            command_joint_names=("arm0", "arm1"),
+            arm_command_indices=np.asarray([0, 1], dtype=int),
+            start_command=np.asarray([0.0, 0.0], dtype=float),
+            target_command=np.asarray([1.0, 1.0], dtype=float),
             duration_s=1.0,
             phase="joint_motion",
         )
@@ -129,26 +128,26 @@ def test_build_planned_joint_motion_trajectory_uses_cumotion_time_parameterizati
 
     trajectory = build_planned_joint_motion_trajectory(
         motion_planner=planner,
-        dof_names=["arm0", "hand", "arm1"],
-        arm_indices=np.asarray([0, 2], dtype=int),
-        start_all=np.asarray([0.0, 2.0, 0.0], dtype=float),
-        target_all=np.asarray([1.0, 4.0, -1.0], dtype=float),
+        command_joint_names=("arm0", "hand", "arm1"),
+        arm_command_indices=np.asarray([0, 2], dtype=int),
+        start_command=np.asarray([0.0, 2.0, 0.0], dtype=float),
+        target_command=np.asarray([1.0, 4.0, -1.0], dtype=float),
         duration_s=2.0,
         phase="lift",
     )
 
-    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 2.0])
+    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.01, 1.0])
     np.testing.assert_allclose(
-        trajectory.positions[[0, -1]][:, [0, 2]], [[0.0, 0.0], [1.0, -1.0]]
+        trajectory.positions[[0, -1]][:, [0, 2]], [[0.01, -0.01], [1.0, -1.0]]
     )
     midpoint = len(trajectory) // 2
-    np.testing.assert_allclose(trajectory.positions[midpoint, [0, 2]], [0.5, -0.5])
-    np.testing.assert_allclose(trajectory.positions[midpoint, 1], 3.0)
-    # The fake cuMotion trajectory is generated over 1 second and requested_duration_s is
-    # 2 seconds, so derivatives should be scaled by 1/2, 1/4, and 1/8 respectively.
-    np.testing.assert_allclose(trajectory.velocities[midpoint, [0, 2]], [0.5, -0.5])
-    np.testing.assert_allclose(trajectory.accelerations[midpoint, [0, 2]], [0.5, -0.5])
-    np.testing.assert_allclose(trajectory.jerks[midpoint, [0, 2]], [0.5, -0.5])
+    time_s = trajectory.times[midpoint]
+    np.testing.assert_allclose(trajectory.positions[midpoint, [0, 2]], [time_s, -time_s])
+    np.testing.assert_allclose(trajectory.positions[midpoint, 1], 2.0 + 2.0 * time_s)
+    # 轨迹时长由 cuMotion 自身决定，项目侧不再按 requested duration 缩放导数。
+    np.testing.assert_allclose(trajectory.velocities[midpoint, [0, 2]], [1.0, -1.0])
+    np.testing.assert_allclose(trajectory.accelerations[midpoint, [0, 2]], [2.0, -2.0])
+    np.testing.assert_allclose(trajectory.jerks[midpoint, [0, 2]], [4.0, -4.0])
     assert trajectory.phases == ("lift",) * len(trajectory)
 
 
@@ -165,9 +164,9 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
     trajectory = build_specified_tcp_line_trajectory(
         context=context,
         tcp_frame_name="pinch_tcp",
-        dof_names=["arm0", "hand", "arm1"],
-        arm_indices=np.asarray([0, 2], dtype=int),
-        start_all=np.asarray([0.0, 9.0, 0.0], dtype=float),
+        command_joint_names=("arm0", "hand", "arm1"),
+        arm_command_indices=np.asarray([0, 2], dtype=int),
+        start_command=np.asarray([0.0, 9.0, 0.0], dtype=float),
         target_position=np.asarray([0.1, 0.2, 0.3], dtype=float),
         duration_s=1.5,
         phase="approach_box",
@@ -186,8 +185,8 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
         request.path.segments[0].target_position, [0.1, 0.2, 0.3]
     )
     np.testing.assert_allclose(
-        trajectory.positions[[0, -1]][:, [0, 2]], planner.path[[0, -1]]
+        trajectory.positions[-1, [0, 2]], planner.path[-1]
     )
     np.testing.assert_allclose(trajectory.positions[:, 1], 9.0)
-    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.0, 1.5])
+    np.testing.assert_allclose(trajectory.times[[0, -1]], [0.01, 1.0])
     assert trajectory.phases == ("approach_box",) * len(trajectory)

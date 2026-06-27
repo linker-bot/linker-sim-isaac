@@ -5,8 +5,11 @@ import numpy as np
 from linkerbot_sim.controllers.types import ComponentControlSettings, JointControlSettings
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.execution.steps import (
+    CommandPositionTrajectoryStep,
+    HoldCommandPositionTargetStep,
+    SmoothCommandPositionTargetStep,
     SwitchControlModeStep,
-    execute_command_joint_trajectory,
+    execute_command_position_trajectory,
 )
 from linkerbot_sim.trajectories.types import JointTrajectory
 
@@ -130,7 +133,7 @@ def test_switch_control_mode_step_reconfigures_controller_without_stepping() -> 
     assert controller.configure_runtime_calls == 1
 
 
-def test_execute_command_joint_trajectory_expands_command_space_targets() -> None:
+def test_execute_command_position_trajectory_expands_command_space_targets() -> None:
     articulation = _FakeArticulation()
     world = _FakeWorld()
     controller = _FakeCommandController()
@@ -144,7 +147,7 @@ def test_execute_command_joint_trajectory_expands_command_space_targets() -> Non
         phases=("a", "b"),
     )
 
-    step = execute_command_joint_trajectory(
+    step = execute_command_position_trajectory(
         articulation=articulation,
         simulation_world=world,
         articulation_action_type=object,
@@ -159,3 +162,42 @@ def test_execute_command_joint_trajectory_expands_command_space_targets() -> Non
     assert world.step_calls == [False, False]
     np.testing.assert_allclose(controller.applied_targets[-1].positions, [1.5, 0.2, 2.5])
     assert logger.rows[-1]["phase"] == "b"
+
+
+def test_command_position_steps_use_command_space_controller() -> None:
+    articulation = _FakeArticulation()
+    world = _FakeWorld()
+    controller = _FakeCommandController()
+    runtime = ExecutionRuntime(
+        articulation=articulation,
+        simulation_world=world,
+        articulation_action_type=object,
+        joint_controller=controller,
+        simulation_app=None,
+        render_enabled=False,
+    )
+
+    step = SmoothCommandPositionTargetStep(
+        start_command=np.asarray([0.0, 1.0]),
+        target_command=np.asarray([1.0, 2.0]),
+        duration=0.2,
+        phase="smooth_command",
+    ).run(runtime, 0)
+    step = HoldCommandPositionTargetStep(
+        target_command=np.asarray([1.0, 2.0]),
+        duration=0.1,
+        phase="hold_command",
+    ).run(runtime, step)
+    step = CommandPositionTrajectoryStep(
+        JointTrajectory.from_samples(
+            times=np.asarray([0.1]),
+            positions=np.asarray([[1.5, 2.5]]),
+            velocities=np.asarray([[0.0, 0.0]]),
+            joint_names=("j0", "j2"),
+            phases=("trajectory_command",),
+        )
+    ).run(runtime, step)
+
+    assert step == 4
+    assert len(controller.build_calls) == 4
+    np.testing.assert_allclose(controller.applied_targets[-1].positions, [1.5, 0.2, 2.5])

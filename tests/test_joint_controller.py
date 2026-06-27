@@ -251,3 +251,12 @@ def test_controller_requires_per_dof_control_mode_switching() -> None:
 
     with pytest.raises(RuntimeError, match="switch_dof_control_mode"):
         controller.configure_runtime()
+
+
+def test_command_joint_names_follow_command_indices_and_exclude_followers() -> None:
+    controller, _robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+
+    assert controller.command_joint_names == ("arm_joint", "hand_joint")
+    assert "follower_joint" not in controller.command_joint_names

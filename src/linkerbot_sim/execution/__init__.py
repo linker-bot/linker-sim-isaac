@@ -8,25 +8,23 @@ execution 层只负责把已经规划或采样好的目标下发到 Isaac world�
 
 from linkerbot_sim.execution.runtime import ExecutionRuntime, ExecutionStep
 from linkerbot_sim.execution.steps import (
-    FullJointTrajectoryStep,
-    HoldJointTargetStep,
-    SmoothJointTargetStep,
+    CommandPositionTrajectoryStep,
+    HoldCommandPositionTargetStep,
+    SmoothCommandPositionTargetStep,
     SwitchControlModeStep,
-    execute_command_joint_trajectory,
-    execute_full_joint_trajectory,
-    execute_joint_hold,
-    execute_smooth_joint_target,
+    execute_command_position_hold,
+    execute_command_position_trajectory,
+    execute_smooth_command_position_target,
 )
 
 __all__ = [
+    "CommandPositionTrajectoryStep",
     "ExecutionRuntime",
     "ExecutionStep",
-    "FullJointTrajectoryStep",
-    "HoldJointTargetStep",
-    "SmoothJointTargetStep",
+    "HoldCommandPositionTargetStep",
+    "SmoothCommandPositionTargetStep",
     "SwitchControlModeStep",
-    "execute_command_joint_trajectory",
-    "execute_full_joint_trajectory",
-    "execute_joint_hold",
-    "execute_smooth_joint_target",
+    "execute_command_position_hold",
+    "execute_command_position_trajectory",
+    "execute_smooth_command_position_target",
 ]

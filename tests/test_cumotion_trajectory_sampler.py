@@ -37,10 +37,10 @@ def test_joint_trajectory_from_cumotion_samples_eval_all() -> None:
         phase="planned",
     )
 
-    assert len(trajectory) == 3
-    np.testing.assert_allclose(trajectory.times, [0.0, 0.5, 1.0])
+    assert len(trajectory) == 2
+    np.testing.assert_allclose(trajectory.times, [0.5, 1.0])
     np.testing.assert_allclose(trajectory.positions[-1], [1.0, 2.0])
-    np.testing.assert_allclose(trajectory.velocities[1], [1.0, 1.0])
+    np.testing.assert_allclose(trajectory.velocities[0], [1.0, 1.0])
     assert trajectory.phases[0] == "planned"
 
 
@@ -51,6 +51,17 @@ def test_joint_trajectory_from_cumotion_accepts_real_tuple_eval_all() -> None:
         times=[0.0, 1.0],
     )
 
-    np.testing.assert_allclose(trajectory.positions, [[0.0, 1.0], [1.0, 2.0]])
-    np.testing.assert_allclose(trajectory.velocities, [[0.0, 0.0], [2.0, 2.0]])
+    np.testing.assert_allclose(trajectory.positions, [[1.0, 2.0]])
+    np.testing.assert_allclose(trajectory.velocities, [[2.0, 2.0]])
     np.testing.assert_allclose(trajectory.accelerations[-1], [0.5, 0.5])
+
+
+def test_joint_trajectory_from_cumotion_keeps_single_degenerate_sample() -> None:
+    trajectory = joint_trajectory_from_cumotion(
+        _Trajectory(),
+        joint_names=("j1", "j2"),
+        times=[0.0],
+    )
+
+    assert len(trajectory) == 1
+    np.testing.assert_allclose(trajectory.times, [0.0])
