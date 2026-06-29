@@ -1,8 +1,9 @@
 """把后端关节轨迹组合成 controller command-space 轨迹。
 
-本模块位于 planning 层，而不是 cuMotion backend 层。cuMotion backend 只应该知道机械臂
-C-space；controller command-space 可能同时包含机械臂主动关节、手部主动关节或其它由动作
-脚本控制的主动 DOF。把二者合成是动作规划边界的事，不应让后端了解灵巧手或 mimic。
+本模块位于 trajectories 层，而不是 cuMotion backend 或 execution 层。cuMotion backend
+只应该知道机械臂 C-space；controller command-space 可能同时包含机械臂主动关节、手部
+主动关节或其它由动作脚本控制的主动 DOF。把二者合成是轨迹构造的事，不应让后端了解
+灵巧手或 mimic，也不应让 execution 层负责拼装轨迹矩阵。
 
 重要边界：
     * 输入的 ``arm_trajectory`` 必须已经是离散采样后的项目 ``JointTrajectory``。

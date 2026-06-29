@@ -31,6 +31,15 @@ DEFAULT_L6_MJCF = ASSETS_ROOT / "single_system" / "hand" / "L6V1_L" / "L6V1_L.xm
 DEFAULT_AR5_RIGHT_URDF = (
     ASSETS_ROOT / "single_system" / "arm" / "AR5V2_R" / "AR5V2_R.urdf"
 )
+DEFAULT_AR5_RIGHT_CUMOTION_XRDF = (
+    ASSETS_ROOT / "single_system" / "arm" / "AR5V2_R" / "AR5V2_R.xrdf"
+)
+DEFAULT_AR5_DUAL_CUMOTION_URDF = (
+    ASSETS_ROOT / "combined_system" / "AR5V2_DUAL" / "AR5V2_DUAL.urdf"
+)
+DEFAULT_AR5_DUAL_CUMOTION_XRDF = (
+    ASSETS_ROOT / "combined_system" / "AR5V2_DUAL" / "AR5V2_DUAL.xrdf"
+)
 DEFAULT_L6_RIGHT_URDF = (
     ASSETS_ROOT / "single_system" / "hand" / "L6V1_R" / "L6V1_R.urdf"
 )
@@ -39,6 +48,18 @@ DEFAULT_CAPSULE_ROPE_USD = (
     / "dynamic_env_objects"
     / "capsuleropeV1_default"
     / "capsuleropeV1_default.usda"
+)
+DEFAULT_WORKSTATION_V1_ARMBASE_URDF = (
+    ASSETS_ROOT
+    / "static_env_objects"
+    / "workstationV1_armbase"
+    / "workstationV1_armbase.urdf"
+)
+DEFAULT_WORKSTATION_V1_TABLEBASE_URDF = (
+    ASSETS_ROOT
+    / "static_env_objects"
+    / "workstationV1_tablebase"
+    / "workstationV1_tablebase.urdf"
 )
 
 

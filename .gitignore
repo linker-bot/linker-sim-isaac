@@ -35,6 +35,7 @@ env_isaaclab/
 
 # Tool and test caches
 .pytest_cache/
+.cache/
 .mypy_cache/
 .ruff_cache/
 .tox/

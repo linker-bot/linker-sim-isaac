@@ -244,6 +244,34 @@ def test_make_cumotion_context_with_tcp_uses_output_dir(
     assert output_dir.exists()
 
 
+def test_make_cumotion_context_with_multiple_tcps(
+    monkeypatch, tmp_path
+) -> None:
+    fake_cumotion = _FakeCumotion()
+    monkeypatch.setitem(sys.modules, "cumotion", fake_cumotion)
+    base_urdf = _write_urdf(tmp_path / "robot.urdf", link_names=("left_flange", "right_flange"))
+    output_dir = tmp_path / "tcp_urdfs"
+    config = CuMotionConfig(
+        xrdf_path=tmp_path / "robot.xrdf",
+        urdf_path=base_urdf,
+        flange_frame="left_flange",
+    )
+    left_tcp = TcpFrame.from_xyz_rpy("left_pinch_tcp", "left_flange")
+    right_tcp = TcpFrame.from_xyz_rpy("right_pinch_tcp", "right_flange")
+
+    with make_cumotion_context(
+        config, tcp=(left_tcp, right_tcp), output_dir=output_dir
+    ) as context:
+        loaded_urdf = Path(fake_cumotion.loaded_paths[-1][1])
+        assert loaded_urdf.exists()
+        assert context.config.custom_tcp_frame == "left_pinch_tcp"
+        assert context.has_frame("left_pinch_tcp")
+        assert context.has_frame("right_pinch_tcp")
+        root = ET.parse(loaded_urdf).getroot()
+        link_names = {link.get("name") for link in root.findall("link")}
+        assert {"left_pinch_tcp", "right_pinch_tcp"} <= link_names
+
+
 def test_make_cumotion_context_with_flange_tcp_does_not_write_urdf(
     monkeypatch, tmp_path
 ) -> None:

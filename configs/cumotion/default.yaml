@@ -3,9 +3,10 @@
 # 加载顺序：
 #   configs/cumotion/default.yaml < configs/robots/*.yaml < scripts/pinch_grasp.py 内置动作参数
 #
-# 本文件只提供项目通用 cuMotion 默认值。具体机器人资产字段（xrdf_path、urdf_path、
-# flange_frame）仍由 configs/robots/*.yaml 提供；pinch grasp 的动作参数直接写在脚本里，
-# 并可读取本文件的 cumotion.motion_planner 作为 planner 默认值。
+# 本文件提供项目通用 cuMotion 算法默认值。具体机器人资产字段仍由 configs/robots/*.yaml
+# 提供：单臂配置写 xrdf_path/urdf_path/flange_frame，双臂配置写 left/right 单臂式描述。
+# pinch grasp 的动作参数直接写在脚本里，并可读取本文件的 cumotion.motion_planner 作为
+# planner 默认值。
 
 cumotion:
   kinematics:
@@ -18,7 +19,7 @@ cumotion:
     fk: {}
 
   motion_planner:
-    planning_pipeline: trajectory_optimization
+    planning_pipeline: graph_search # trajectory_optimization
     trajectory_optimization:
       use_environment_obstacles: true
       params: {}
@@ -27,7 +28,7 @@ cumotion:
       use_environment_obstacles: true
       motion_planner_params: {}
     trajectory_generation:
-      mode: time_optimal
+      mode: time_stamped
       interpolation_mode: cubic_spline
       limits: {}
       solver_params: {}

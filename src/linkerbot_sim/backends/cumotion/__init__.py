@@ -48,6 +48,10 @@ from linkerbot_sim.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
+# dual_urdf.py: 从双臂 robot YAML 生成运行时 cuMotion URDF/XRDF，并返回最终后端配置。
+from linkerbot_sim.backends.cumotion.dual_urdf import (
+    prepare_cumotion_config_from_robot_config,
+)
 
 # forward_kinematics.py: 封装 cuMotion FK，把后端 Pose3 转成项目统一的
 # position、wxyz quaternion 和 rotation matrix。
@@ -100,4 +104,5 @@ __all__ = [
     "joint_trajectory_from_cumotion",
     "make_collision_world",
     "make_cumotion_context",
+    "prepare_cumotion_config_from_robot_config",
 ]

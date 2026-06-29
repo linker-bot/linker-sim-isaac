@@ -58,9 +58,13 @@ def configure_visuals() -> None:
 
 
 def build_world(
-    *, physics_dt: float | None, rendering_dt: float | None, gravity_z: float
+    *,
+    physics_dt: float | None,
+    rendering_dt: float | None,
+    gravity_z: float,
+    add_ground: bool = True,
 ):
-    """创建带默认地面和重力的 Isaac ``World``。
+    """创建带可选默认地面和重力的 Isaac ``World``。
 
     ``World`` 是 Isaac Sim 高层仿真入口，内部持有 stage、physics context、scene
     对象管理器等运行时状态。这里集中创建 ``World``，可以让不同脚本共享一致的
@@ -70,8 +74,9 @@ def build_world(
         physics_dt: 物理步长，单位 s；为 ``None`` 时使用 Isaac 默认值。
         rendering_dt: 渲染步长，单位 s；为 ``None`` 时使用 Isaac 默认值。
         gravity_z: z 方向重力加速度，单位 m/s^2。
+        add_ground: 是否添加 Isaac 默认地面。
     返回:
-        已创建默认地面并设置重力的 ``World`` 实例。
+        已设置重力并按需创建默认地面的 ``World`` 实例。
     """
 
     # 延迟导入 Isaac API，原因同 configure_visuals：让非 Isaac 环境也能 import 项目模块。
@@ -86,7 +91,7 @@ def build_world(
     # 当前项目约定 z 轴向上，因此重力通常是负值，例如 -9.81。
     world.get_physics_context().set_gravity(float(gravity_z))
 
-    # 添加 Isaac 默认地面，给机器人、绳体等对象提供基础接触面。
-    # 如果未来需要无地面场景，可以在此函数参数中扩展 add_ground 开关。
-    world.scene.add_default_ground_plane()
+    # 添加 Isaac 默认地面，给机器人、绳体等对象提供基础接触面；桌面/工装场景可关闭。
+    if add_ground:
+        world.scene.add_default_ground_plane()
     return world

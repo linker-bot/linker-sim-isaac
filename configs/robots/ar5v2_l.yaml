@@ -8,30 +8,17 @@ robot:
   asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
   # 导入到 USD stage 的根 prim 路径。
   prim_path: /World/AR5V2_L
-
-# 控制器实际下发目标的关节。
-controlled_joints:
-  - AR5V2_L_arm_joint_1
-  - AR5V2_L_arm_joint_2
-  - AR5V2_L_arm_joint_3
-  - AR5V2_L_arm_joint_4
-  - AR5V2_L_arm_joint_5
-  - AR5V2_L_arm_joint_6
-  - AR5V2_L_arm_joint_7
+  import:
+    # 导入碰撞 mesh 时使用的近似方式：convex_decomposition 或 convex_hull。
+    collision_approximation: convex_decomposition
+  physics:
+    gravity:
+      default: false
+      arm: false
+      hand: false
 
 cumotion:
-  # XRDF 描述 cuMotion C-space、默认关节和工具 frame。
+  # 机器人模型资源字段；IK/planner 等算法参数由 configs/cumotion/*.yaml 提供。
   xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
-  # URDF 描述机器人 link/joint；动作脚本可临时复制并追加 TCP link。
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
-  # 机械臂法兰 link；自定义 TCP 通常会固定在这个 parent frame 下。
   flange_frame: AR5V2_L_arm_flan_link
-  kinematics:
-    ik:
-      # cuMotion IK 默认求解参数。
-      position_tolerance: 0.001
-      orientation_tolerance: 0.1
-      ccd_max_iterations: 180
-      bfgs_max_iterations: 80
-      orientation_weight: 0.25
-    fk: {}

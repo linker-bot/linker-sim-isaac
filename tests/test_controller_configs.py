@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from linkerbot_sim.controllers.config import (
+    ControllerProfile,
     joint_control_settings,
     load_controller_profiles,
     physx_override_configs,
@@ -58,6 +59,40 @@ def test_controller_profiles_require_directory_entrypoint() -> None:
         pass
     else:
         raise AssertionError("load_controller_profiles accepted mapping entrypoint")
+
+
+def test_controller_profiles_reject_removed_method_aliases() -> None:
+    profile = ControllerProfile(
+        name="arm",
+        position_control={"type": "implicit"},
+        velocity_control={},
+        effort_control={},
+        physx={},
+    )
+    profiles = load_controller_profiles("configs/controllers")
+    patched_profiles = profiles.__class__(arm=profile, hand=profiles.hand)
+
+    try:
+        joint_control_settings(patched_profiles, mode="position")
+    except ValueError as exc:
+        assert "removed field 'type'" in str(exc)
+    else:
+        raise AssertionError("controller accepted removed type field")
+
+    profile = ControllerProfile(
+        name="arm",
+        position_control={"method": "implicit_drive"},
+        velocity_control={},
+        effort_control={},
+        physx={},
+    )
+    patched_profiles = profiles.__class__(arm=profile, hand=profiles.hand)
+    try:
+        joint_control_settings(patched_profiles, mode="position")
+    except ValueError as exc:
+        assert "method must be one of" in str(exc)
+    else:
+        raise AssertionError("controller accepted removed implicit_drive alias")
 
 
 def test_robot_name_classification_supports_left_and_right() -> None:

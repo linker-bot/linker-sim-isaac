@@ -143,17 +143,10 @@ class MotionPlannerBackendConfig:
     def from_mapping(
         cls,
         data: Mapping[str, Any] | None,
-        *,
-        base_defaults: Mapping[str, Any] | None = None,
     ) -> "MotionPlannerBackendConfig":
-        """从 YAML 风格 mapping 解析 planner 配置。
+        """从 YAML 风格 mapping 解析 planner 配置。"""
 
-        ``base_defaults`` 是外部传入的默认值来源，例如 robot YAML 顶层的
-        ``motion_planner_params`` 和 ``trajectory_limits``。显式分组配置优先级更高。
-        """
-
-        base = dict(base_defaults or {})
-        # data=None 表示调用方使用默认 planner 配置；base_defaults 仍会作为各分组的默认值来源。
+        # data=None 表示调用方使用默认 planner 配置。
         if data is None:
             settings: Mapping[str, Any] = {}
         elif not isinstance(data, Mapping):
@@ -181,8 +174,7 @@ class MotionPlannerBackendConfig:
         )
         if "enabled" in trajectory_settings:
             # trajectory_generation 现在是 graph_search / specified_path 成功结果的强约束。
-            # 旧配置里保留 enabled 会制造“可以关闭 trajectory、只返回 path”的错觉，所以这里
-            # 主动报错，提示用户删除该字段。
+            # 写入 enabled 会制造“可以关闭 trajectory、只返回 path”的错觉，所以这里主动报错。
             raise ValueError(
                 "trajectory_generation.enabled is no longer supported; "
                 "trajectory generation is always enabled for graph_search and "
@@ -192,23 +184,6 @@ class MotionPlannerBackendConfig:
             settings.get("trajectory_optimization"), "trajectory_optimization"
         )
         specified_settings = _mapping(settings.get("specified_path"), "specified_path")
-
-        # 显式分组配置优先于 base_defaults，便于调用方只覆盖需要调整的 planner 分组。
-        graph_config_path = graph_settings.get(
-            "motion_planner_config_path",
-            base.get("motion_planner_config_path"),
-        )
-        graph_params = _merged_mapping(
-            base.get("motion_planner_params"),
-            graph_settings.get("motion_planner_params"),
-        )
-        trajectory_limits = _merged_mapping(
-            base.get("trajectory_limits"), trajectory_settings.get("limits")
-        )
-        trajectory_solver_params = _merged_mapping(
-            base.get("trajectory_solver_params"),
-            trajectory_settings.get("solver_params"),
-        )
 
         graph_search = GraphSearchConfig(
             generate_interpolated_path=bool(
@@ -223,8 +198,12 @@ class MotionPlannerBackendConfig:
                     GraphSearchConfig.use_environment_obstacles,
                 )
             ),
-            motion_planner_config_path=_optional_repo_path(graph_config_path),
-            motion_planner_params=graph_params,
+            motion_planner_config_path=_optional_repo_path(
+                graph_settings.get("motion_planner_config_path")
+            ),
+            motion_planner_params=_params_mapping(
+                graph_settings.get("motion_planner_params")
+            ),
         )
 
         trajectory_generation = TrajectoryGenerationConfig(
@@ -237,8 +216,8 @@ class MotionPlannerBackendConfig:
                     TrajectoryGenerationConfig.interpolation_mode,
                 )
             ),
-            limits=trajectory_limits,
-            solver_params=trajectory_solver_params,
+            limits=_limit_mapping(trajectory_settings.get("limits")),
+            solver_params=_params_mapping(trajectory_settings.get("solver_params")),
         )
 
         if "fallback_pipeline" in optimizer_settings:
@@ -478,19 +457,6 @@ def _validate_conversion_numeric_ranges(conversion: Mapping[str, Any]) -> None:
                 "specified_path.task_space_segments.conversion requires "
                 "0 < min_position_deviation < max_position_deviation"
             )
-
-
-def _merged_mapping(*mappings) -> dict[str, Any]:
-    """按顺序合并多个 mapping，后者覆盖前者。"""
-
-    merged: dict[str, Any] = {}
-    for mapping in mappings:
-        if mapping is None:
-            continue
-        if not isinstance(mapping, Mapping):
-            raise ValueError("cuMotion planner params must be mappings")
-        merged.update({str(key): value for key, value in mapping.items()})
-    return merged
 
 
 def _optional_repo_path(value) -> Path | None:

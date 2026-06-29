@@ -1,0 +1,78 @@
+# 控制器 profile 示例。
+#
+# 用途：
+# - 说明 arm_controller.yaml / hand_controller.yaml 的字段含义。
+# - 实际运行脚本通过 --controller-config 指向目录，并固定读取：
+#   - arm_controller.yaml
+#   - hand_controller.yaml
+#
+# 使用方式：
+#   复制本文件内容到 arm_controller.yaml 或 hand_controller.yaml，再把 target 改成 arm/hand。
+
+# 必填：当前 profile 面向哪个部件。文件名和 target 应一致，用于防止手臂/手配置互换。
+target: arm
+
+position_control:
+  # 位置控制模式：
+  # - implicit：使用 Isaac/PhysX drive。
+  # - explicit：Python 侧计算 PD effort。
+  method: implicit
+
+  active_joints:
+    # stiffness/damping 用于 implicit drive 或显式 PD。
+    stiffness: 1000.0
+    damping: 50.0
+    # max_force 用作 drive/effort 限幅。
+    max_force: 100.0
+    # joint_friction 是默认关节摩擦；MJCF frictionloss 会覆盖同名关节。
+    joint_friction: 0.5
+
+  follower_joints:
+    # mimic/equality follower 不作为独立命令关节，但仍用 position drive 跟随 master。
+    # 灵巧手 follower 通常需要比主动关节更高 stiffness。
+    stiffness: 1000.0
+    damping: 50.0
+    max_force: 100.0
+    joint_friction: 0.5
+
+velocity_control:
+  # 速度控制模式：
+  # - implicit：使用 Isaac velocity drive。
+  # - explicit：Python 侧计算 damping * 速度残差。
+  method: explicit
+
+  active_joints:
+    # 速度控制主动关节不使用 stiffness。
+    damping: 20.0
+    max_force: 100.0
+
+  follower_joints:
+    # follower 仍然是 position drive，因此需要 stiffness/damping/max_force。
+    stiffness: 1000.0
+    damping: 20.0
+    max_force: 100.0
+    joint_friction: 0.5
+
+effort_control:
+  # effort 控制当前只支持 direct，表示直接下发 effort command。
+  method: direct
+
+  active_joints:
+    # direct effort 只需要 effort_limit；命令会按该值做对称限幅。
+    effort_limit: 100.0
+
+  follower_joints:
+    # follower 不接收 direct effort，仍由 position drive 维护 mimic 关系。
+    stiffness: 1000.0
+    damping: 20.0
+    max_force: 100.0
+    joint_friction: 0.5
+
+physx:
+  material:
+    contact_static_friction: 0.8
+    contact_dynamic_friction: 0.6
+    contact_restitution: 0.0
+  rigid_body:
+    linear_damping: 0.0
+    angular_damping: 0.1

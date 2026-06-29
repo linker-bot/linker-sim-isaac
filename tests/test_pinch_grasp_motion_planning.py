@@ -13,6 +13,8 @@ from linkerbot_sim.planning.results import MotionResult
 from pinch_grasp import (
     build_planned_joint_motion_trajectory,
     build_specified_tcp_line_trajectory,
+    default_closed_pinch_hand_targets,
+    default_pre_pinch_hand_targets,
 )
 
 
@@ -65,6 +67,16 @@ class _FakeContext:
     def make_motion_planner(self, *, tcp_frame_name=None, config=None):
         self.calls.append((tcp_frame_name, config))
         return self.planner
+
+
+def test_default_pinch_hand_targets_are_task_level_and_side_aware() -> None:
+    left_pre = default_pre_pinch_hand_targets("left")
+    right_closed = default_closed_pinch_hand_targets("right")
+
+    assert left_pre["L6V1_L_hand_thumb_cmc_roll"] == 0.95
+    assert "L6V1_R_hand_thumb_cmc_roll" not in left_pre
+    assert right_closed["L6V1_R_hand_index_mcp_pitch"] == 0.85
+    assert "L6V1_L_hand_index_mcp_pitch" not in right_closed
 
 
 def test_build_planned_joint_motion_trajectory_embeds_cumotion_trajectory() -> None:

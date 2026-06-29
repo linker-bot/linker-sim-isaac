@@ -1,0 +1,44 @@
+# CSV 关节跟踪日志配置示例。
+#
+# 用途：
+# - 控制 scripts/pinch_grasp.py 运行时是否写 CSV。
+# - 控制输出路径、flush 周期、采样降频和记录哪些关节列。
+#
+# 使用方式：
+#   复制本文件为 configs/logging/<your_logger>.yaml，然后运行脚本时传入：
+#
+#     --logging-config configs/logging/<your_logger>.yaml
+#
+# 注意：
+# - 相对路径以仓库根目录为基准。
+# - 如果命令行传了 --log，会覆盖 joint_tracking_path。
+# - 读取 measured_effort/applied_effort 相对更贵，默认只在分析力矩时打开。
+
+logging:
+  # 是否启用 CSV 写入。false 时不会打开输出文件。
+  enabled: true
+
+  # 输出 CSV 路径；可写 null 表示不写 joint tracking CSV。
+  joint_tracking_path: logs/joint_tracking/example.csv
+
+  # flush 周期，单位 s；脚本会根据 physics_dt 换算成步数。
+  flush_interval_s: 0.2
+
+  # 采样降频。1 表示每个 physics step 都记录；10 表示每 10 步记录一次。
+  interval_steps: 5
+
+  # 实际关节状态列。
+  actual_position: true
+  actual_velocity: true
+
+  # 控制命令列。position 模式主要看 command_position，velocity 模式主要看 command_velocity。
+  command_position: true
+  command_velocity: true
+  command_effort: true
+
+  # 控制器最终下发到 Isaac 的 effort action；显式控制或 direct effort 时更有用。
+  action_effort: false
+
+  # PhysX 侧读取的 effort 信息，开销更高，需要分析力矩时再打开。
+  measured_effort: false
+  applied_effort: false

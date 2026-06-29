@@ -334,7 +334,7 @@ Pipeline：
 | `tcp_frame_name` | task-space/composite path 使用的 TCP frame；C-space waypoints 不读取该字段 |
 | `duration_s` | `trajectory_generation.mode='time_stamped'` 时的阶段时长 |
 
-`specified_path` 不调用旧式逐点 IK fallback；TCP 直线应表达为
+`specified_path` 不调用逐点 IK fallback；TCP 直线应表达为
 `SpecifiedPathRequest(path=TaskSpacePath(segments=(TcpLineSegment(...),)))`，并统一走 cuMotion
 官方 PathSpec conversion。
 

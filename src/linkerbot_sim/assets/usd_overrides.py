@@ -250,33 +250,36 @@ def _component_material_path(base_path: str, group: str) -> str:
     return f"{base_path}_{group}"
 
 
-def disable_robot_gravity(root_path: str) -> list[str]:
-    """关闭指定 USD 子树下所有刚体的重力。
+def apply_robot_gravity_policy(root_path: str, policy) -> dict[str, int]:
+    """按 robot 重力策略写入指定 USD 子树下的刚体 ``disableGravity``。
 
-    参数:
-        root_path: 机器人或其它 USD 子树根路径。
-    返回:
-        被写入 ``disableGravity`` 的刚体 prim 路径列表。
+    ``policy`` 只要求暴露 ``enabled_for_name(name)``，不直接依赖
+    ``RobotGravityPolicy`` 类型。这样 USD 覆盖层保持为低层工具，后续测试或其它配置对象也
+    可以复用同一写入逻辑。返回值统计开启/关闭重力的刚体数量，供脚本输出诊断。
     """
 
     from isaacsim.core.utils.prims import get_prim_at_path
     from pxr import PhysxSchema, Usd, UsdPhysics
 
-    # 关闭机器人重力常用于固定基座或外部控制的 articulation，避免 drive 还没稳定前
-    # 由重力引入额外下坠误差。
     root = get_prim_at_path(root_path)
-    disabled_paths: list[str] = []
+    counts = {"enabled": 0, "disabled": 0}
     for prim in Usd.PrimRange(root):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
+        gravity_enabled = bool(policy.enabled_for_name(prim.GetName()))
+        # PhysXSchema.PhysxRigidBodyAPI 可能还没由 importer 写入；这里按需 Apply，确保
+        # disableGravity 属性有稳定落点。
         rigid_body_api = (
             PhysxSchema.PhysxRigidBodyAPI(prim)
             if prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI)
             else PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
         )
-        rigid_body_api.GetDisableGravityAttr().Set(True)
-        disabled_paths.append(str(prim.GetPath()))
-    return disabled_paths
+        rigid_body_api.GetDisableGravityAttr().Set(not gravity_enabled)
+        if gravity_enabled:
+            counts["enabled"] += 1
+        else:
+            counts["disabled"] += 1
+    return counts
 
 
 def set_runtime_gravity(world, gravity_z: float) -> tuple[np.ndarray, float]:

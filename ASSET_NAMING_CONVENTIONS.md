@@ -68,6 +68,8 @@ mobilebaseV1_AR5V2_L6V1_L
 
 ```text
 capsuleropeV1_default
+workstationV1_armbase
+workstationV1_tablebase
 tableV1_lab
 boxendpointV1_left
 ```
@@ -79,6 +81,9 @@ object:
   name: capsuleropeV1_default
   asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
+
+对象变体优先使用能直接表达语义的名词字段。如果变体本身已经说明坐标基准或安装基准，
+例如 `armbase`、`tablebase`，不要再追加冗余的 `_frame` 后缀。
 
 ## 目录结构
 
@@ -109,6 +114,8 @@ assets/single_system/arm/AR5V2_L/
 assets/single_system/hand/L6V1_L/
 assets/combined_system/AR5V2_L6V1_L/
 assets/dynamic_env_objects/capsuleropeV1_default/
+assets/static_env_objects/workstationV1_armbase/
+assets/static_env_objects/workstationV1_tablebase/
 ```
 
 ## 文件命名

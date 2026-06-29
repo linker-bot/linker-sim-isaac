@@ -1,0 +1,33 @@
+# AR5V2 + L6V1 双臂语义配置。
+#
+# 这里不描述 Isaac 导入，也不描述 cuMotion 后端资源；这些分别在 configs/robots 和
+# configs/cumotion/robot 配置中维护。本文件只保存双臂动作/规划层需要的语义：
+# - arm_joints：融合 C-space 中左右机械臂的关节顺序。
+# - flange_frame/tcp_frame：按阶段选择或生成 TCP 时使用的 frame。
+# - combined_mjcf_path：从“机械臂+手”的组合资产里推导 pinch TCP。
+
+dual_arm:
+  left:
+    arm_joints:
+      - AR5V2_L_arm_joint_1
+      - AR5V2_L_arm_joint_2
+      - AR5V2_L_arm_joint_3
+      - AR5V2_L_arm_joint_4
+      - AR5V2_L_arm_joint_5
+      - AR5V2_L_arm_joint_6
+      - AR5V2_L_arm_joint_7
+    flange_frame: AR5V2_L_arm_flan_link
+    tcp_frame: left_pinch_tcp
+    combined_mjcf_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
+  right:
+    arm_joints:
+      - AR5V2_R_arm_joint_1
+      - AR5V2_R_arm_joint_2
+      - AR5V2_R_arm_joint_3
+      - AR5V2_R_arm_joint_4
+      - AR5V2_R_arm_joint_5
+      - AR5V2_R_arm_joint_6
+      - AR5V2_R_arm_joint_7
+    flange_frame: AR5V2_R_arm_flan_link
+    tcp_frame: right_pinch_tcp
+    combined_mjcf_path: assets/combined_system/AR5V2_L6V1_R/AR5V2_L6V1_R.xml

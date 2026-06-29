@@ -12,6 +12,7 @@ cuMotion 的 FK/IK/planner 只能使用 robot description 中已经存在的 fra
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 import tempfile
@@ -24,7 +25,7 @@ from linkerbot_sim.backends.cumotion.context import (
     CuMotionConfig,
     CuMotionContext,
 )
-from linkerbot_sim.backends.cumotion.tcp_urdf_builder import write_tcp_urdf
+from linkerbot_sim.backends.cumotion.tcp_urdf_builder import write_tcp_urdf_with_frames
 from linkerbot_sim.tcp.tcp_frame import TcpFrame
 
 
@@ -32,7 +33,7 @@ from linkerbot_sim.tcp.tcp_frame import TcpFrame
 def make_cumotion_context(
     config: CuMotionConfig,
     *,
-    tcp: TcpFrame | None = None,
+    tcp: TcpFrame | Sequence[TcpFrame] | None = None,
     output_dir: str | Path | None = None,
 ) -> Iterator[CuMotionContext]:
     """按需创建普通或带自定义 TCP 的 ``CuMotionContext``。
@@ -53,7 +54,8 @@ def make_cumotion_context(
           的原因。
     """
 
-    if tcp is None:
+    tcp_frames = _normalize_tcp_frames(tcp)
+    if not tcp_frames:
         # 没有自定义 TCP 时完全走原始路径，确保现有调用方不因新入口改变行为。
         yield CuMotionContext(config)
         return
@@ -62,24 +64,35 @@ def make_cumotion_context(
     # 先解析基础 URDF 的 link 列表做前置判断。这里不用 cuMotion 加载模型，因为最终如果要
     # 追加 TCP 仍然需要再创建一次带临时 URDF 的 context；提前加载会多一次昂贵初始化。
     link_names = _urdf_link_names(base_urdf_path)
-    if tcp.parent_frame not in link_names:
-        # parent frame 不存在时，即使写出 URDF 也会得到断开的或非法的运动树，直接给出清晰错误。
-        raise ValueError(
-            f"Parent frame {tcp.parent_frame!r} not found in {base_urdf_path}"
-        )
+    for frame in tcp_frames:
+        if frame.parent_frame not in link_names:
+            # parent frame 不存在时，即使写出 URDF 也会得到断开的或非法的运动树，直接给出清晰错误。
+            raise ValueError(
+                f"Parent frame {frame.parent_frame!r} not found in {base_urdf_path}"
+            )
 
-    if tcp.frame_name in link_names:
-        if _is_zero_offset_flange_tcp(config, tcp):
+    _validate_unique_tcp_frame_names(tcp_frames)
+    existing_passthrough_frames = [
+        frame for frame in tcp_frames if frame.frame_name in link_names
+    ]
+    if existing_passthrough_frames:
+        if (
+            len(tcp_frames) == 1
+            and _is_zero_offset_flange_tcp(config, existing_passthrough_frames[0])
+        ):
             # “TCP 就是法兰本身”是唯一允许复用已有 link 的特殊情况。这里显式清空
             # custom_tcp_frame，避免基础 config 中残留的工具 frame 继续成为 IK/planner 默认值。
             context = CuMotionContext(replace(config, custom_tcp_frame=None))
-            _validate_context_tcp(context, tcp, expect_custom_tcp=False)
+            _validate_context_tcp(
+                context, existing_passthrough_frames[0], expect_custom_tcp=False
+            )
             yield context
             return
         # 已有工具 link 应通过基础 URDF/XRDF + custom_tcp_frame 或单次 tcp_frame_name 表达。
         # 如果这里接受 TcpFrame，调用方很容易误以为 xyz/rpy 会覆盖已有 link 位姿。
         raise ValueError(
-            f"TCP frame {tcp.frame_name!r} already exists in {base_urdf_path}; "
+            f"TCP frame(s) {[frame.frame_name for frame in existing_passthrough_frames]!r} "
+            f"already exists in {base_urdf_path}; "
             "use CuMotionConfig.custom_tcp_frame or an explicit tcp_frame_name for "
             "existing tool frames"
         )
@@ -87,35 +100,41 @@ def make_cumotion_context(
     if output_dir is None:
         # 临时目录由 context manager 持有，保证 URDF 文件在 context 及其派生 IK/planner 使用期内存在。
         with tempfile.TemporaryDirectory(prefix="cumotion_tcp_") as temp_dir:
-            context = _make_context_with_written_tcp(config, tcp, Path(temp_dir))
+            context = _make_context_with_written_tcp(config, tcp_frames, Path(temp_dir))
             yield context
     else:
         # 显式 output_dir 主要用于测试、诊断或离线查看生成 URDF。该目录不是本函数创建的
         # TemporaryDirectory，因此退出 context 后不清理。
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        context = _make_context_with_written_tcp(config, tcp, output_path)
+        context = _make_context_with_written_tcp(config, tcp_frames, output_path)
         yield context
 
 
 def _make_context_with_written_tcp(
-    config: CuMotionConfig, tcp: TcpFrame, output_dir: Path
+    config: CuMotionConfig, tcp_frames: Sequence[TcpFrame], output_dir: Path
 ) -> CuMotionContext:
     """写出附加 TCP link 的 URDF，并用它创建 ``CuMotionContext``。"""
 
     base_urdf_path = Path(config.urdf_path)
-    tcp_urdf_path = output_dir / f"{base_urdf_path.stem}_{tcp.frame_name}.urdf"
-    write_tcp_urdf(base_urdf_path, tcp_urdf_path, tcp)
+    suffix = "_".join(frame.frame_name for frame in tcp_frames)
+    tcp_urdf_path = output_dir / f"{base_urdf_path.stem}_{suffix}.urdf"
+    write_tcp_urdf_with_frames(base_urdf_path, tcp_urdf_path, tcp_frames)
     # ``custom_tcp_frame`` 写进 config 后，context.make_inverse_kinematics() 和
     # context.make_motion_planner() 在调用方未显式传 tcp_frame_name 时会默认使用该 TCP。
     context = CuMotionContext(
         replace(
             config,
             urdf_path=tcp_urdf_path,
-            custom_tcp_frame=tcp.frame_name,
+            custom_tcp_frame=tcp_frames[0].frame_name,
         )
     )
-    _validate_context_tcp(context, tcp, expect_custom_tcp=True)
+    for frame in tcp_frames:
+        _validate_context_tcp(
+            context,
+            frame,
+            expect_custom_tcp=(frame.frame_name == tcp_frames[0].frame_name),
+        )
     return context
 
 
@@ -146,7 +165,8 @@ def _is_zero_offset_flange_tcp(config: CuMotionConfig, tcp: TcpFrame) -> bool:
     """
 
     return (
-        tcp.frame_name == config.flange_frame
+        config.flange_frame is not None
+        and tcp.frame_name == config.flange_frame
         and tcp.parent_frame == config.flange_frame
         and np.allclose(tcp.xyz, 0.0)
         and np.allclose(tcp.rpy, 0.0)
@@ -158,3 +178,23 @@ def _urdf_link_names(urdf_path: str | Path) -> set[str]:
 
     root = ET.parse(Path(urdf_path)).getroot()
     return {str(link.get("name")) for link in root.findall("link") if link.get("name")}
+
+
+def _normalize_tcp_frames(
+    tcp: TcpFrame | Sequence[TcpFrame] | None,
+) -> tuple[TcpFrame, ...]:
+    if tcp is None:
+        return ()
+    if isinstance(tcp, TcpFrame):
+        return (tcp,)
+    frames = tuple(tcp)
+    if not all(isinstance(frame, TcpFrame) for frame in frames):
+        raise TypeError("tcp must be a TcpFrame, a sequence of TcpFrame, or None")
+    return frames
+
+
+def _validate_unique_tcp_frame_names(tcp_frames: Sequence[TcpFrame]) -> None:
+    names = [frame.frame_name for frame in tcp_frames]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"Duplicate TCP frame names: {duplicates}")

@@ -160,7 +160,11 @@ def _control_section(profile: ControllerProfile, mode: ControlMode) -> dict[str,
 def _normalize_method(config: Mapping[str, Any], mode: ControlMode) -> ControlMethod:
     """读取并规范化控制方法名称。"""
 
-    raw_method = config.get("method", config.get("type"))
+    if "type" in config:
+        raise ValueError(
+            f"{mode}_control uses removed field 'type'; use 'method' instead"
+        )
+    raw_method = config.get("method")
     if raw_method is None and mode == "position":
         raw_method = "implicit"
     if raw_method is None and mode == "velocity":
@@ -168,8 +172,6 @@ def _normalize_method(config: Mapping[str, Any], mode: ControlMode) -> ControlMe
     if raw_method is None and mode == "effort":
         raw_method = "direct"
     method = str(raw_method)
-    if method == "implicit_drive":
-        method = "implicit"
     allowed = {
         "position": {"implicit", "explicit"},
         "velocity": {"implicit", "explicit"},

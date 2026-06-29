@@ -1,0 +1,63 @@
+# 机器人资产配置示例。
+#
+# 用途：
+# - 描述 Isaac stage 中要导入的真实机器人 articulation。
+# - 描述 cuMotion 规划层要加载的机器人模型资源。
+#
+# 使用方式：
+#   复制本文件为 configs/robots/<your_robot>.yaml，再替换 name/path/prim_path/root_pose。
+#
+# 注意：
+# - robot.import.collision_approximation 只影响 Isaac importer 生成碰撞几何的方式。
+# - cumotion 段只放模型资源，不放 IK/planner 算法参数；算法参数放 configs/cumotion/*.yaml。
+
+robot:
+  # 机器人逻辑名称，也会作为 SingleArticulation 的 name 使用。
+  name: example_ar5v2_l
+
+  # 支持 mjcf 和 urdf。MJCF 常用于带 mimic/equality 的组合手臂资产。
+  asset_type: mjcf
+
+  # 机器人资产路径，可写仓库相对路径或绝对路径。
+  asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
+
+  # 导入到 USD stage 的根 prim path，必须是绝对 USD path。
+  prim_path: /World/ExampleAR5V2_L
+
+  # 仅 asset_type: urdf 时使用；position 会让 importer 给关节写 position drive，none 表示不预设 drive。
+  # MJCF 资产可以省略该字段。
+  urdf_drive_type: position
+
+  import:
+    # 当前项目暴露的 importer 层碰撞近似方式。
+    # convex_decomposition：非凸 mesh 分解为多个凸碰撞体，接触更贴合，成本更高。
+    # convex_hull：每个 mesh 一个凸包，更快但会填平凹陷。
+    collision_approximation: convex_decomposition
+
+  physics:
+    gravity:
+      # 机器人刚体重力策略。false 表示关闭对应刚体重力，true 表示保留重力。
+      # default 用于未能按名称分到 arm/hand 的刚体；arm/hand 可分别覆盖。
+      default: false
+      arm: false
+      hand: false
+
+# 机器人导入根在世界坐标中的位姿；xyz 单位 m，rpy 单位 rad，XYZ 固定轴顺序。
+root_pose:
+  xyz: [0.0, 0.0, 0.0]
+  rpy: [0.0, 0.0, 0.0]
+
+# 可选：控制关节选择。缺省 ["all"]，控制器会自动剔除 MJCF equality/mimic follower。
+# controlled_joints:
+#   - all
+
+cumotion:
+  # cuMotion 规划后端使用 XRDF/URDF，而不是 Isaac stage 中的 MJCF articulation。
+  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+
+  # 规划/IK 默认工具坐标系，必须存在于 cuMotion 加载的 URDF/XRDF 模型中。
+  flange_frame: AR5V2_L_arm_flan_link
+
+  # 可选：基础 URDF 中已有的 TCP frame；pinch TCP 通常由脚本临时写入，不在这里手写。
+  # custom_tcp_frame: tool_tcp

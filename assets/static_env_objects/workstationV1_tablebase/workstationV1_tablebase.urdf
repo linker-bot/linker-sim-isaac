@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="workstationV1_tablebase_frame">
+  <!-- Workstation mesh expressed in the table base frame. -->
+  <link name="workstationV1_tablebase_frame">
+    <visual>
+      <origin xyz="-0.0937 -0.6255 -0.767" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="../../mesh/static_env_objects/workstationV1_default/workstationV1_default_link.stl"/>
+      </geometry>
+      <material name="workstationV1_default_gray">
+        <color rgba="0.6 0.6 0.6 1.0"/>
+      </material>
+    </visual>
+
+    <!-- Simplified collision model in workstationV1_tablebase_frame. -->
+    <collision name="table_body">
+      <origin xyz="0.3122 -0.0003 -0.3848" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.625 1.25 0.77"/>
+      </geometry>
+    </collision>
+
+    <collision name="armbase_column">
+      <origin xyz="-0.0303 -0.0003 -0.0900" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.06 0.12 1.1"/>
+      </geometry>
+    </collision>
+
+    <collision name="armbase_top_flange">
+      <origin xyz="-0.0303 -0.0003 0.5002" rpy="1.5708 0 0"/>
+      <geometry>
+        <cylinder radius="0.065" length="0.178"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0.27 0 -0.25" rpy="0 0 0"/>
+      <mass value="100.0"/>
+      <inertia ixx="2.0" ixy="0.0" ixz="0.0" iyy="2.0" iyz="0.0" izz="2.0"/>
+    </inertial>
+  </link>
+</robot>

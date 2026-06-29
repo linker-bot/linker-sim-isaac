@@ -4,18 +4,31 @@
 env:
   name: rope_scene
   gravity_z: -9.81
-  add_ground: true
+  add_ground: false
   # 绳体接触和抓取对物理步频敏感，因此默认高于 empty_scene。
-  physics_frequency: 200.0
+  physics_frequency: 300.0
   # 渲染/画面更新频率
   render_frequency: 60.0
 
 solver:
   # PhysX solver 类型，TGS 对关节链和接触通常更稳定。
   type: TGS
-  # 对 arm、hand 或两者覆盖迭代次数。
-  apply_scope: arm_hand
-  arm_position_iterations: 24
+  # 写了哪个 iteration 字段，就只覆盖对应部件的对应 PhysX 属性。
+  arm_position_iterations: 32
   arm_velocity_iterations: 4
-  hand_position_iterations: 24
+  hand_position_iterations: 32
   hand_velocity_iterations: 4
+
+objects:
+  # workstation 是环境中的固定物体；不写 physics.material 时不覆盖资产材质。
+  - name: workstation_armbase
+    asset_type: urdf
+    asset_path: assets/static_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
+    prim_path: /World/WorkstationArmBase
+    root_pose:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+    import:
+      collision_approximation: convex_decomposition
+    physics:
+      static: true

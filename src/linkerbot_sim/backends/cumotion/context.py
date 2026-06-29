@@ -60,16 +60,16 @@ class CuMotionIkConfig:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionIkConfig":
-        """从 ``cumotion.kinematics.ik`` 或旧式 flat mapping 解析 IK 配置。"""
+        """从 ``cumotion.kinematics.ik`` 解析 IK 配置。"""
 
         settings = _mapping_or_empty(data, "cumotion.kinematics.ik")
-        seeds = settings.get("cspace_seeds", settings.get("ik_cspace_seeds"))
-        collision_free_params = settings.get(
-            "collision_free_params",
-            settings.get("collision_free_ik_params"),
+        _reject_removed_keys(
+            settings,
+            {"ik_cspace_seeds", "collision_free_ik_params"},
+            label="cumotion.kinematics.ik",
         )
         config = cls(
-            cspace_seeds=_parse_optional_cspace_seeds(seeds),
+            cspace_seeds=_parse_optional_cspace_seeds(settings.get("cspace_seeds")),
             position_tolerance=float(
                 settings.get("position_tolerance", cls.position_tolerance)
             ),
@@ -85,7 +85,9 @@ class CuMotionIkConfig:
             orientation_weight=float(
                 settings.get("orientation_weight", cls.orientation_weight)
             ),
-            collision_free_params=_parse_optional_params_mapping(collision_free_params),
+            collision_free_params=_parse_optional_params_mapping(
+                settings.get("collision_free_params")
+            ),
         )
         config.validate()
         return config
@@ -155,9 +157,9 @@ class CuMotionConfig:
     # cuMotion/URDF 机器人模型路径
     # 提供 link/frame 树、关节结构和 FK/IK 运动学描述
     urdf_path: str | Path
-    # 机械臂法兰 frame 名
-    # 这是没有自定义 TCP 时的默认末端 frame，也是临时 TCP 的父 frame
-    flange_frame: str
+    # 默认末端 frame 名
+    # 单臂配置通常填机械臂法兰；双臂融合模型不设置默认 frame，调用方必须显式选择 TCP。
+    flange_frame: str | None
     # 自定义 TCP frame 名
     # 只有 URDF/XRDF 中已经包含额外工具坐标系，或动作脚本临时写入 fixed TCP frame 时才设置
     custom_tcp_frame: str | None = None
@@ -167,7 +169,9 @@ class CuMotionConfig:
     motion_planner: MotionPlannerBackendConfig | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "CuMotionConfig":
+    def from_mapping(
+        cls, data: Mapping[str, Any], *, require_flange_frame: bool = True
+    ) -> "CuMotionConfig":
         """从 robot YAML 或 cumotion 子映射构造后端配置。
 
         配置文件中的路径按仓库根目录解析；求解器容差、迭代次数和可选 seed
@@ -181,45 +185,38 @@ class CuMotionConfig:
         if not isinstance(settings, Mapping):
             raise ValueError("cuMotion config must be a mapping")
 
-        # xrdf_path, urdf_path, flange_frame 是必须的
+        # xrdf_path, urdf_path 是必须的；单臂入口默认还要求 flange_frame。
         missing = [
             key
-            for key in ("xrdf_path", "urdf_path", "flange_frame")
+            for key in ("xrdf_path", "urdf_path")
             if not settings.get(key)
         ]
+        if require_flange_frame and not settings.get("flange_frame"):
+            missing.append("flange_frame")
         if missing:
             raise ValueError(f"cuMotion config is missing required key(s): {missing}")
 
         # 路径立即按仓库根目录解析，避免后续后端对象依赖调用脚本当前工作目录。
-        # seed、trajectory limit 和 frame 名先保持配置形式；它们是否匹配机器人 C-space
-        # 只有 cuMotion 加载模型后才能可靠判断。
+        # seed 和 frame 名先保持配置形式；它们是否匹配机器人 C-space/URDF link 树，只有
+        # cuMotion 加载模型后才能可靠判断。
         custom_tcp_frame = settings.get("custom_tcp_frame")
-        if custom_tcp_frame == settings["flange_frame"]:
+        flange_frame = settings.get("flange_frame")
+        if flange_frame is not None and custom_tcp_frame == flange_frame:
             custom_tcp_frame = None
 
-        # 新结构推荐把 IK/FK 参数放在 cumotion.kinematics 下；这里保留旧式 flat 字段兼容，
-        # 让已有 robot YAML 可以逐步迁移。
+        _reject_removed_cumotion_fields(settings)
         kinematics = _kinematics_config_from_settings(settings)
 
-        # 顶层 planner 字段作为分组配置的默认值来源；motion_planner 分组中的显式字段优先。
-        # 这些旧式字段仍兼容，但新配置推荐直接写 cumotion.motion_planner。
-        motion_planner_base_defaults = {
-            "motion_planner_config_path": settings.get("motion_planner_config_path"),
-            "motion_planner_params": settings.get("motion_planner_params"),
-            "trajectory_limits": settings.get("trajectory_limits"),
-            "trajectory_solver_params": settings.get("trajectory_solver_params"),
-        }
         config = cls(
             xrdf_path=repo_path(settings["xrdf_path"]),
             urdf_path=repo_path(settings["urdf_path"]),
-            flange_frame=str(settings["flange_frame"]),
+            flange_frame=None if flange_frame is None else str(flange_frame),
             custom_tcp_frame=None
             if custom_tcp_frame is None
             else str(custom_tcp_frame),
             kinematics=kinematics,
             motion_planner=MotionPlannerBackendConfig.from_mapping(
                 settings.get("motion_planner"),
-                base_defaults=motion_planner_base_defaults,
             ),
         )
         config.validate()
@@ -237,7 +234,7 @@ class CuMotionConfig:
             raise ValueError("xrdf_path cannot be empty")
         if not str(self.urdf_path):
             raise ValueError("urdf_path cannot be empty")
-        if not self.flange_frame:
+        if self.flange_frame is not None and not self.flange_frame:
             raise ValueError("flange_frame cannot be empty")
         if self.custom_tcp_frame is not None and not self.custom_tcp_frame:
             raise ValueError("custom_tcp_frame cannot be empty")
@@ -246,37 +243,6 @@ class CuMotionConfig:
         self.kinematics.validate()
         if self.motion_planner is not None:
             self.motion_planner.validate()
-
-    @property
-    def ik_cspace_seeds(self) -> np.ndarray | None:
-        """兼容旧属性；新代码优先使用 ``config.kinematics.ik.cspace_seeds``。"""
-
-        return self.kinematics.ik.cspace_seeds
-
-    @property
-    def position_tolerance(self) -> float:
-        return self.kinematics.ik.position_tolerance
-
-    @property
-    def orientation_tolerance(self) -> float:
-        return self.kinematics.ik.orientation_tolerance
-
-    @property
-    def ccd_max_iterations(self) -> int:
-        return self.kinematics.ik.ccd_max_iterations
-
-    @property
-    def bfgs_max_iterations(self) -> int:
-        return self.kinematics.ik.bfgs_max_iterations
-
-    @property
-    def orientation_weight(self) -> float:
-        return self.kinematics.ik.orientation_weight
-
-    @property
-    def collision_free_ik_params(self) -> dict[str, Any]:
-        return self.kinematics.ik.collision_free_params
-
 
 def _parse_optional_cspace_seeds(value) -> np.ndarray | None:
     """解析可选 C-space 种子数组。
@@ -289,7 +255,7 @@ def _parse_optional_cspace_seeds(value) -> np.ndarray | None:
         return None
     seeds = np.asarray(value, dtype=float)
     if seeds.ndim not in {1, 2} or seeds.size == 0:
-        raise ValueError("ik_cspace_seeds must be a non-empty 1D or 2D array")
+        raise ValueError("cspace_seeds must be a non-empty 1D or 2D array")
     return seeds
 
 
@@ -306,12 +272,19 @@ def _mapping_or_empty(value, label: str) -> Mapping[str, Any]:
 def _kinematics_config_from_settings(
     settings: Mapping[str, Any]
 ) -> CuMotionKinematicsConfig:
-    """解析新式 ``kinematics`` 分组，并兼容旧式 flat IK 字段。"""
+    """解析 ``kinematics`` 分组。"""
 
     kinematics_settings = dict(_mapping_or_empty(settings.get("kinematics"), "kinematics"))
     ik_settings = dict(_mapping_or_empty(kinematics_settings.get("ik"), "kinematics.ik"))
     fk_settings = _mapping_or_empty(kinematics_settings.get("fk"), "kinematics.fk")
-    legacy_ik_keys = {
+    return CuMotionKinematicsConfig(
+        ik=CuMotionIkConfig.from_mapping(ik_settings),
+        fk=CuMotionFkConfig.from_mapping(fk_settings),
+    )
+
+
+def _reject_removed_cumotion_fields(settings: Mapping[str, Any]) -> None:
+    removed_keys = {
         "ik_cspace_seeds",
         "cspace_seeds",
         "position_tolerance",
@@ -321,14 +294,23 @@ def _kinematics_config_from_settings(
         "orientation_weight",
         "collision_free_ik_params",
         "collision_free_params",
+        "motion_planner_config_path",
+        "motion_planner_params",
+        "trajectory_limits",
+        "trajectory_solver_params",
     }
-    for key in legacy_ik_keys:
-        if key in settings and key not in ik_settings:
-            ik_settings[key] = settings[key]
-    return CuMotionKinematicsConfig(
-        ik=CuMotionIkConfig.from_mapping(ik_settings),
-        fk=CuMotionFkConfig.from_mapping(fk_settings),
-    )
+    _reject_removed_keys(settings, removed_keys, label="cumotion")
+
+
+def _reject_removed_keys(
+    settings: Mapping[str, Any], removed_keys: set[str], *, label: str
+) -> None:
+    present = sorted(set(settings) & removed_keys)
+    if present:
+        raise ValueError(
+            f"{label} contains removed field(s): {present}. "
+            "Use the current grouped configuration schema instead."
+        )
 
 
 def _parse_optional_params_mapping(value) -> dict[str, Any]:
@@ -478,12 +460,12 @@ class CuMotionContext:
         这样配置错误会在创建 context 时暴露，而不是等到某次 IK 或规划调用才由 pybind 抛错。
         """
 
-        if self.config.ik_cspace_seeds is not None:
-            seeds = np.asarray(self.config.ik_cspace_seeds, dtype=float)
+        if self.config.kinematics.ik.cspace_seeds is not None:
+            seeds = np.asarray(self.config.kinematics.ik.cspace_seeds, dtype=float)
             seed_width = seeds.size if seeds.ndim == 1 else seeds.shape[1]
             if seed_width != self.expected_cspace_width:
                 raise ValueError(
-                    "ik_cspace_seeds width mismatch: "
+                    "kinematics.ik.cspace_seeds width mismatch: "
                     f"expected_cspace_width {self.expected_cspace_width}, got {seed_width}"
                 )
         if self.config.motion_planner is not None:
@@ -521,13 +503,18 @@ class CuMotionContext:
         )
 
         # tcp_frame_name, custom_tcp_frame, flange_frame, 从左到右取第一个有效值
+        frame_name = (
+            tcp_frame_name
+            or self.config.custom_tcp_frame
+            or self.config.flange_frame
+        )
+        if frame_name is None:
+            raise ValueError(
+                "tcp_frame_name is required because this cuMotion config has no default frame"
+            )
         return CuMotionInverseKinematics(
             self,
-            tcp_frame_name=(
-                tcp_frame_name
-                or self.config.custom_tcp_frame
-                or self.config.flange_frame
-            ),
+            tcp_frame_name=frame_name,
         )
 
     def make_forward_kinematics(self):
@@ -561,12 +548,17 @@ class CuMotionContext:
 
         # tcp_frame_name, custom_tcp_frame, flange_frame 从左到右取第一个有效值。这里不动态
         # 写自定义 TCP URDF；frame 必须已经存在于创建 context 时加载的 robot description。
+        frame_name = (
+            tcp_frame_name
+            or self.config.custom_tcp_frame
+            or self.config.flange_frame
+        )
+        if frame_name is None:
+            raise ValueError(
+                "tcp_frame_name is required because this cuMotion config has no default frame"
+            )
         return CuMotionMotionPlanner(
             self,
-            tcp_frame_name=(
-                tcp_frame_name
-                or self.config.custom_tcp_frame
-                or self.config.flange_frame
-            ),
+            tcp_frame_name=frame_name,
             config=config,
         )
