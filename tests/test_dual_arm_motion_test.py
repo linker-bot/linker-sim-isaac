@@ -22,9 +22,10 @@ from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
     dual_cspace_goal_to_command,
     dual_cspace_linear_trajectory,
     dual_cspace_vector_from_side_commands,
-    dual_arm_cumotion_summary,
-    load_dual_arm_semantic_config,
     side_joint_delta_goal,
+)
+from linkerbot_sim.app.motion.dual_arm_semantics import (  # noqa: E402
+    dual_arm_semantics_from_robot_configs,
 )
 from linkerbot_sim.backends.cumotion.motion_planner_config import (  # noqa: E402
     MotionPlannerBackendConfig,
@@ -37,6 +38,7 @@ from linkerbot_sim.planning.requests import (  # noqa: E402
     TaskSpacePath,
     TcpLineSegment,
 )
+from linkerbot_sim.utils.config import load_yaml
 
 
 def test_cartesian_tcp_frame_spec_converts_to_tcp_transform() -> None:
@@ -288,24 +290,19 @@ def test_side_joint_delta_goal_updates_only_selected_partition() -> None:
     np.testing.assert_allclose(goal, [1.0, 2.0, 10.5, 19.75, 30.0])
 
 
-def test_load_dual_arm_semantic_config_reads_default_profile() -> None:
-    dual_arm = load_dual_arm_semantic_config("ar5v2_l6v1_dual")
-
-    assert dual_arm["left"]["tcp_frame"] == "left_pinch_tcp"
-    assert dual_arm["right"]["tcp_frame"] == "right_pinch_tcp"
-
-
-def test_dual_arm_cumotion_summary_can_report_script_tcp_names() -> None:
-    tcp = DualArmTcpSpec(
-        left=CartesianTcpFrameSpec("left_demo_tcp"),
-        right=CartesianTcpFrameSpec("right_demo_tcp"),
+def test_dual_arm_semantics_from_robot_configs_reads_xrdf_and_flange() -> None:
+    semantics = dual_arm_semantics_from_robot_configs(
+        {
+            "left": load_yaml("configs/robots/ar5v2_l6v1_l.yaml"),
+            "right": load_yaml("configs/robots/ar5v2_l6v1_r.yaml"),
+        }
     )
 
-    summary = dual_arm_cumotion_summary(
-        cumotion_profile="default",
-        dual_arm_profile="ar5v2_l6v1_dual",
-        tcp=tcp,
+    assert semantics.left_arm_joints == tuple(
+        f"AR5V2_L_arm_joint_{index}" for index in range(1, 8)
     )
-
-    assert summary.left_tcp == "left_demo_tcp"
-    assert summary.right_tcp == "right_demo_tcp"
+    assert semantics.right_arm_joints == tuple(
+        f"AR5V2_R_arm_joint_{index}" for index in range(1, 8)
+    )
+    assert semantics.left_flange_frame == "AR5V2_L_arm_flan_link"
+    assert semantics.right_flange_frame == "AR5V2_R_arm_flan_link"

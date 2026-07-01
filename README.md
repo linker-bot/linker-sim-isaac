@@ -54,7 +54,6 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 ├── configs/
 │   ├── controllers/          # arm/hand 控制模式、增益、限幅和 follower drive
 │   ├── cumotion/             # cuMotion IK/planner profile
-│   ├── dual_arm/             # 双臂动作/规划语义，例如左右 C-space 分区和 TCP frame 名
 │   ├── envs/                 # scene、physics/render frequency、solver、机器人/对象实例摆放
 │   ├── logging/              # 关节跟踪 CSV 日志配置
 │   ├── objects/              # 运行时对象 profile，引用已有 USD/URDF
@@ -132,7 +131,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp
 PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --gui
 ```
 
-只校验双臂 scene runtime、cuMotion profile 和 dual-arm profile 引用，不启动 Isaac：
+只校验双臂 scene runtime、cuMotion profile 和左右 robot profile 推导出的 cuMotion 语义，不启动 Isaac：
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --dry-run
@@ -164,7 +163,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 | 生成绳体 USD | `scripts/build_capsule_rope_asset.py` | 是，headless | 否 | 根据 `tools/assets/configs/capsule_rope.yaml` 写 USD/PhysX schema |
 | 单臂导入保持 | `scripts/pinch_grasp.py --no-grasp` | 是 | 否 | 验证 env、objects、AR5+L6、controller 和 logging 基础链路 |
 | 单臂 pinch grasp | `scripts/pinch_grasp.py` | 是 | 是 | 完整 TCP、IK、motion planner、trajectory、execution 流程 |
-| 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验 scene runtime、cuMotion 和 dual-arm profile 引用 |
+| 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验 scene runtime、cuMotion 和左右 robot profile 的规划语义 |
 | 双臂 scripted motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 执行脚本内 Python 参数定义的 IK、TCP line、TCP arc 和 C-space planner 动作 |
 | 双臂交互 motion | `scripts/dual_arm_motion_test.py --interactive` | 是 | 是 | 长生命周期 runtime，按 JSON 命令串行执行 motion |
 
@@ -186,7 +185,6 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
   --env scene2 \
   --cumotion-profile default \
-  --dual-arm-profile ar5v2_l6v1_dual \
   --control-mode position \
   --gui --hold
 ```
@@ -246,8 +244,6 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
   阻尼、关节限制、碰撞过滤和可视颜色。
 - `configs/cumotion/*.yaml`：描述 cuMotion 算法参数，包括 `kinematics.ik` 和
   `motion_planner`。robot 模型资源仍放在 robot profile。
-- `configs/dual_arm/*.yaml`：描述双臂动作/规划语义，例如左右 arm C-space 关节顺序、flange/TCP
-  frame 名和用于推导 pinch TCP 的组合 MJCF 路径。这里不导入 Isaac，也不配置 cuMotion 算法。
 - `configs/controllers/*.yaml`：描述 position/velocity/effort 模式、implicit/explicit 方法、
   stiffness、damping、max force/effort limit 和 follower drive 参数。
 - `configs/logging/*.yaml`：描述 CSV 是否启用、输出路径、flush 周期、采样降频和记录列。
@@ -404,12 +400,15 @@ configs/envs/scene2.yaml
   robots.dual.left/right.robot_profile + root_pose
 configs/robots/ar5v2_l6v1_l.yaml
 configs/robots/ar5v2_l6v1_r.yaml
-  cuMotion single-arm URDF/XRDF/flange resource
-configs/dual_arm/ar5v2_l6v1_dual.yaml
-  arm_joints + flange_frame + tcp_frame + combined_mjcf_path
+  Isaac asset + cuMotion single-arm URDF/XRDF/flange resource
 configs/cumotion/default.yaml
   IK/planner algorithm defaults
 ```
+
+双臂 selected-side 规划需要的左右 arm C-space 分区来自左右 robot profile 的
+`cumotion.xrdf_path` 中的 `cspace.joint_names`；临时 TCP 的 parent frame 来自同一 robot
+profile 的 `cumotion.flange_frame`。动作脚本默认 TCP 名由入口层构造的 `DualArmTcpSpec`
+提供，不再有单独的 dual-arm profile。
 
 `scripts/dual_arm_motion_test.py` 内置了一个测试用 `DualArmTcpSpec` 和一组 motion：
 

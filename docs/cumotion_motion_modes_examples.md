@@ -34,7 +34,7 @@ tcp = DualArmTcpSpec(
 )
 ```
 
-具体 parent/flange frame 由 robot 或 dual-arm profile 绑定。`src` 不计算 pinch、吸盘、相机等具体工具点；这些几何语义留在客户脚本侧。
+具体 parent/flange frame 由 scene 选中的左右 robot profile 的 `cumotion.flange_frame` 绑定。`src` 不计算 pinch、吸盘、相机等具体工具点；这些几何语义留在客户脚本侧。
 
 ## Hand Motion And Overlay
 
@@ -516,6 +516,5 @@ steps = run_dual_arm_cumotion_motion(
         ),
     ),
     cumotion_profile="default",
-    dual_arm_profile="ar5v2_l6v1_dual",
 )
 ```

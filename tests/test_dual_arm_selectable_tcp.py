@@ -8,7 +8,6 @@ from linkerbot_sim.planning.dual_arm_cspace_partition import (
     split_dual_arm_trajectory_to_commands,
 )
 from linkerbot_sim.trajectories.types import JointTrajectory
-from linkerbot_sim.utils.config import load_yaml
 
 
 def test_selected_side_goal_writes_only_selected_side() -> None:
@@ -47,24 +46,6 @@ def test_selected_side_goal_can_update_right_after_left() -> None:
     )
 
     np.testing.assert_allclose(right_goal, [1.0, 2.0, 30.0, 40.0])
-
-
-def test_partitions_from_dual_arm_joint_names() -> None:
-    config = load_yaml("configs/dual_arm/ar5v2_l6v1_dual.yaml")
-    dual_arm = config["dual_arm"]
-    joint_names = (
-        *dual_arm["left"]["arm_joints"],
-        *dual_arm["right"]["arm_joints"],
-    )
-
-    partitions = DualArmJointPartitions.from_joint_names(
-        joint_names,
-        left_joint_names=dual_arm["left"]["arm_joints"],
-        right_joint_names=dual_arm["right"]["arm_joints"],
-    )
-
-    np.testing.assert_array_equal(partitions.left_indices, np.arange(0, 7))
-    np.testing.assert_array_equal(partitions.right_indices, np.arange(7, 14))
 
 
 def test_split_dual_arm_trajectory_to_left_and_right_commands() -> None:

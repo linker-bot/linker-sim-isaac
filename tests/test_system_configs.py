@@ -166,19 +166,22 @@ def _assert_robot_cumotion_section_contains_only_model_resources(config: dict) -
     }
 
 
-def test_dual_arm_semantic_configs_are_separate_from_robot_configs() -> None:
-    for path in sorted(Path("configs/dual_arm").glob("*.yaml")):
-        config = load_yaml(path)
-        assert set(config) == {"dual_arm"}
-        dual_arm = config["dual_arm"]
-        for side in ("left", "right"):
-            side_config = dual_arm[side]
-            assert side_config["arm_joints"]
-            assert side_config["flange_frame"]
-            assert side_config["tcp_frame"]
-            assert Path(side_config["combined_mjcf_path"]).is_file()
-            assert "pre_pinch_hand_targets" not in side_config
-            assert "closed_pinch_hand_targets" not in side_config
+def test_dual_scene_robot_profiles_provide_cumotion_semantics() -> None:
+    for env_path in sorted(Path("configs/envs").glob("*.yaml")):
+        env_config = load_yaml(env_path)
+        robots = env_config.get("robots")
+        if not isinstance(robots, dict) or "dual" not in robots:
+            continue
+        instances = dual_robot_scene_instances_from_env_config(env_config)
+        for side, instance in instances.items():
+            config = load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
+            cumotion = config.get("cumotion")
+            assert isinstance(cumotion, dict), f"{env_path}:{side} missing cumotion"
+            assert Path(cumotion["xrdf_path"]).is_file()
+            assert Path(cumotion["urdf_path"]).is_file()
+            assert cumotion["flange_frame"]
+            xrdf = load_yaml(cumotion["xrdf_path"])
+            assert xrdf["cspace"]["joint_names"]
 
 
 def test_cumotion_profiles_and_examples_are_valid_defaults() -> None:

@@ -13,6 +13,9 @@ from linkerbot_sim.backends.cumotion.dual_urdf import (
     dual_urdf_generation_config_from_robot_config,
     prepare_cumotion_config_from_robot_config,
 )
+from linkerbot_sim.app.motion.dual_arm_semantics import (
+    dual_arm_semantics_from_robot_configs,
+)
 from linkerbot_sim.utils.config import load_yaml
 
 
@@ -73,8 +76,12 @@ def test_dual_urdf_generation_uses_robot_root_poses(tmp_path) -> None:
 
 
 def test_dual_xrdf_generation_merges_left_and_right_cspace(tmp_path) -> None:
-    robot_config = _dual_robot_config()
-    dual_arm_config = load_yaml("configs/dual_arm/ar5v2_l6v1_dual.yaml")
+    left_config = load_yaml("configs/robots/ar5v2_l6v1_l.yaml")
+    right_config = load_yaml("configs/robots/ar5v2_l6v1_r.yaml")
+    robot_config = dual_cumotion_config_from_sides(left=left_config, right=right_config)
+    semantics = dual_arm_semantics_from_robot_configs(
+        {"left": left_config, "right": right_config}
+    )
     generation_config = dual_urdf_generation_config_from_robot_config(robot_config)
     assert generation_config is not None
     generation_config = generation_config.__class__(
@@ -97,8 +104,8 @@ def test_dual_xrdf_generation_merges_left_and_right_cspace(tmp_path) -> None:
 
     data = yaml.safe_load(output.read_text(encoding="utf-8"))
     assert data["cspace"]["joint_names"] == [
-        *dual_arm_config["dual_arm"]["left"]["arm_joints"],
-        *dual_arm_config["dual_arm"]["right"]["arm_joints"],
+        *semantics.left_arm_joints,
+        *semantics.right_arm_joints,
     ]
     assert data["tool_frames"] == [
         robot_config["cumotion"]["left"]["flange_frame"],

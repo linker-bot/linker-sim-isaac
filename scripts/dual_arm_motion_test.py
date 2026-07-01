@@ -72,7 +72,6 @@ def parse_args() -> argparse.Namespace:
     # env 是 scene profile 名称，不是直接文件路径。scene 决定机器人实例、对象和世界设置。
     parser.add_argument("--env", default="scene2")
     parser.add_argument("--cumotion-profile", default="default")
-    parser.add_argument("--dual-arm-profile", default="ar5v2_l6v1_dual")
     # 目前 motion test 默认只验证 position 控制；保留 control-mode 参数是为了快速对比
     # controller runtime profile 是否也能支持其它模式。
     parser.add_argument("--control-mode", default="position")
@@ -119,8 +118,8 @@ def main() -> None:
     if args.dry_run:
         load_dual_robot_runtime_config(env=args.env)
         dual_arm_cumotion_summary(
+            env=args.env,
             cumotion_profile=args.cumotion_profile,
-            dual_arm_profile=args.dual_arm_profile,
             tcp=tcp,
         )
         print("DUAL_ARM_MOTION_DRY_RUN_OK", flush=True)
@@ -143,7 +142,6 @@ def main() -> None:
                 runtime,
                 tcp=tcp,
                 cumotion_profile=args.cumotion_profile,
-                dual_arm_profile=args.dual_arm_profile,
                 stdin_enabled=True,
                 tcp_jsonl_host=args.tcp_jsonl_host,
                 tcp_jsonl_port=args.tcp_jsonl_port,
@@ -209,7 +207,6 @@ def main() -> None:
                     ),
                 ),
                 cumotion_profile=args.cumotion_profile,
-                dual_arm_profile=args.dual_arm_profile,
             )
         if args.hold and args.gui:
             steps = hold_dual_current_pose(

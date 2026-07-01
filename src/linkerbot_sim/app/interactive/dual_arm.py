@@ -22,7 +22,6 @@ def run_interactive_dual_arm_motion(
     *,
     tcp: DualArmTcpSpec,
     cumotion_profile: str = "default",
-    dual_arm_profile: str = "ar5v2_l6v1_dual",
     stdin_enabled: bool = True,
     tcp_jsonl_host: str | None = None,
     tcp_jsonl_port: int | None = None,
@@ -53,7 +52,6 @@ def run_interactive_dual_arm_motion(
             runtime,
             tcp=tcp,
             cumotion_profile=cumotion_profile,
-            dual_arm_profile=dual_arm_profile,
         ) as session:
             session.step = step
             while not queue.quit_requested():
