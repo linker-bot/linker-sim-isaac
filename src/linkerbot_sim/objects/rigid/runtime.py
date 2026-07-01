@@ -175,6 +175,8 @@ def add_rigid_objects(
 
 
 def _add_rigid_object(stage, config: RigidObjectConfig) -> AddedRigidObject:
+    """按 asset_type 导入单个 rigid object，并应用运行时物理覆盖。"""
+
     asset_path = config.asset_path.resolve()
     if not asset_path.is_file():
         raise FileNotFoundError(f"Rigid object asset not found: {asset_path}")
@@ -205,6 +207,8 @@ def _add_rigid_object(stage, config: RigidObjectConfig) -> AddedRigidObject:
 
 
 def _add_usd_reference(stage, config: RigidObjectConfig, asset_path: Path) -> str:
+    """把 USD 资产以 reference 形式挂到目标 prim_path，并应用 root_pose。"""
+
     from pxr import Sdf, UsdGeom
 
     prim_path = Sdf.Path(config.prim_path)
@@ -215,6 +219,8 @@ def _add_usd_reference(stage, config: RigidObjectConfig, asset_path: Path) -> st
 
 
 def _import_urdf_rigid_object(stage, config: RigidObjectConfig, asset_path: Path) -> str:
+    """通过 Isaac URDF importer 导入 rigid object，并移动到目标 prim_path。"""
+
     imported_path = configure_urdf_import(
         asset_path,
         create_physics_scene=False,
@@ -232,6 +238,8 @@ def _import_urdf_rigid_object(stage, config: RigidObjectConfig, asset_path: Path
 
 
 def _rename_prim(stage, source_path: str, target_path: str) -> None:
+    """把 importer 生成的 prim 移到 profile 指定的目标路径。"""
+
     from pxr import Sdf
     import omni.kit.commands
 
@@ -266,6 +274,8 @@ def _apply_rigid_object_physics(
     *,
     freeze_rigid_bodies: bool = True,
 ) -> None:
+    """应用 rigid object 的 static/material 运行时覆盖。"""
+
     if physics.static and freeze_rigid_bodies:
         _make_rigid_object_static(stage, root_path)
     if physics.material is not None:
@@ -273,6 +283,8 @@ def _apply_rigid_object_physics(
 
 
 def _make_rigid_object_static(stage, root_path: str) -> None:
+    """把 root_path 子树中的刚体设为 kinematic 并关闭重力。"""
+
     from pxr import PhysxSchema, Sdf, Usd, UsdPhysics
 
     root = stage.GetPrimAtPath(Sdf.Path(root_path))
@@ -296,6 +308,8 @@ def _make_rigid_object_static(stage, root_path: str) -> None:
 def _apply_rigid_object_material(
     stage, root_path: str, material_config: RigidObjectMaterialConfig
 ) -> None:
+    """创建物理材质并绑定到 rigid object 子树中的 collision prim。"""
+
     from pxr import PhysxSchema, Sdf, Usd, UsdPhysics, UsdShade
 
     root = stage.GetPrimAtPath(Sdf.Path(root_path))

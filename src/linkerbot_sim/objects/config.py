@@ -23,6 +23,8 @@ class ObjectSceneInstanceConfig:
     def from_mapping(
         cls, data: object, *, index: int
     ) -> "ObjectSceneInstanceConfig":
+        """解析 env.objects[index]，只允许 scene 层字段。"""
+
         if not isinstance(data, Mapping):
             raise ValueError(f"objects[{index}] must be a mapping")
         allowed = {"name", "object_profile", "runtime_handle", "root_pose"}
@@ -78,12 +80,16 @@ class ObjectProfileConfig:
 
     @classmethod
     def from_profile(cls, name: str) -> "ObjectProfileConfig":
+        """按 profile 名称加载 configs/objects/<name>.yaml。"""
+
         return cls.from_mapping(load_profile_yaml("object", name), profile_name=name)
 
     @classmethod
     def from_mapping(
         cls, data: Mapping[str, Any], *, profile_name: str
     ) -> "ObjectProfileConfig":
+        """解析 object profile，并拒绝 scene-only 字段进入 profile。"""
+
         unsupported_top_level = set(data) - {"object"}
         if unsupported_top_level:
             names = ", ".join(sorted(unsupported_top_level))
@@ -206,6 +212,8 @@ def expanded_object_mapping(
 def _required_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object]:
+    """读取必填 mapping 字段，并生成带父路径的错误信息。"""
+
     value = data.get(key)
     if value is None:
         raise ValueError(f"{parent_label}.{key} is required")
@@ -217,6 +225,8 @@ def _required_mapping(
 def _optional_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object] | None:
+    """读取可选 mapping 字段；缺省时返回 None。"""
+
     value = data.get(key)
     if value is None:
         return None

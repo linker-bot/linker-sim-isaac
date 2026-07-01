@@ -248,6 +248,8 @@ def command_values_by_name(
 
 
 def trajectory_sample_times(*, duration_s: float, sample_dt: float) -> np.ndarray:
+    """按仿真采样周期生成轨迹采样时间，并保证至少有一个样本。"""
+
     duration = max(float(duration_s), float(sample_dt))
     dt = max(float(sample_dt), 1.0e-6)
     steps = max(1, int(np.ceil(duration / dt)))

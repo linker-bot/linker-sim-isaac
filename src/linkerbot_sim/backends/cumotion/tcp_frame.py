@@ -27,6 +27,8 @@ class TcpTransform:
         xyz=(0.0, 0.0, 0.0),
         rpy=(0.0, 0.0, 0.0),
     ) -> "TcpTransform":
+        """从普通 Python 序列构造末端相对 TCP transform。"""
+
         return cls(
             frame_name=str(frame_name),
             xyz=np.asarray(xyz, dtype=float).reshape(3),
@@ -51,6 +53,8 @@ class TcpFrame:
         xyz=(0.0, 0.0, 0.0),
         rpy=(0.0, 0.0, 0.0),
     ) -> "TcpFrame":
+        """从普通 Python 序列构造已绑定 URDF parent link 的 TCP frame。"""
+
         return cls(
             frame_name=str(frame_name),
             parent_frame=str(parent_frame),

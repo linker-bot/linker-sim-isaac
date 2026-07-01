@@ -10,32 +10,66 @@
 # 并可读取本文件的 cumotion.motion_planner 作为 planner 默认值。
 
 cumotion:
+  # cuMotion 运动学求解相关默认值。
   kinematics:
+    # IK 求解默认参数；单次请求仍可在调用层覆盖部分选项。
     ik:
+      # 位置容差，单位 m；目标位置误差小于该值时视为满足。
       position_tolerance: 0.002
+      # 姿态容差，单位 rad；若请求关闭姿态约束，则该值不会约束求解。
       orientation_tolerance: 0.01
+      # CCD 阶段最大迭代次数；增大可提高收敛机会，但会增加单次 IK 成本。
       ccd_max_iterations: 180
+      # BFGS 阶段最大迭代次数；用于更精细的连续优化。
       bfgs_max_iterations: 80
+      # 姿态误差权重；增大后更重视末端姿态，可能牺牲位置收敛余量。
       orientation_weight: 0.25
+
+    # FK 当前没有项目侧可调参数，保留空分组用于表达配置边界。
     fk: {}
 
+  # cuMotion 轨迹规划和轨迹生成默认值。
   motion_planner:
+    # 默认规划流水线。
+    # 可选值包括 graph_search、trajectory_optimization、specified_path。
     planning_pipeline: graph_search # trajectory_optimization
+
+    # 轨迹优化规划器参数。
     trajectory_optimization:
+      # 是否让规划器使用 context 中同步的环境障碍物。
       use_environment_obstacles: true
+      # 传给 cuMotion trajectory optimization 的额外参数；具体键取决于 cuMotion 版本。
       params: {}
+
+    # 图搜索规划器参数。
     graph_search:
+      # 是否使用 graph planner 返回的 interpolated_path；false 时后续由 trajectory_generation 生成连续轨迹。
       generate_interpolated_path: false
+      # 是否让规划器使用 context 中同步的环境障碍物。
       use_environment_obstacles: true
+      # 传给 cuMotion graph planner 的额外参数；具体键取决于 cuMotion 版本。
       motion_planner_params: {}
+
+    # 规划成功后的连续轨迹生成参数。
     trajectory_generation:
+      # time_stamped 生成带时间戳轨迹；time_optimal 会尝试时间最优化。
       mode: time_stamped
+      # 插值模式；cubic_spline 更平滑，linear 更直接。
       interpolation_mode: cubic_spline
+      # 可选关节限制覆盖；数组长度必须匹配 cuMotion C-space 维度。
       limits: {}
+      # 传给 CSpaceTrajectoryGenerator.set_param(...) 的参数覆盖。
       solver_params: {}
+
+    # 指定路径规划参数；路径几何由调用方请求提供。
     specified_path:
+      # 默认指定路径族。
       family: task_space_segments
+      # 是否在轨迹生成后再做碰撞校验。
       validate_collision_after_generation: false
+      # C-space waypoint 路径族参数。
       cspace_waypoints: {}
+      # task-space segment 路径族参数。
       task_space_segments: {}
+      # 多段组合路径族参数。
       composite: {}

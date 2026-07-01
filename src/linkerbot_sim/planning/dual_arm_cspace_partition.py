@@ -121,6 +121,8 @@ def split_dual_arm_trajectory_to_commands(
 def _arm_subtrajectory(
     trajectory: JointTrajectory, indices: np.ndarray, side: str
 ) -> JointTrajectory:
+    """从融合双臂 C-space 轨迹中截取某一侧机械臂子轨迹。"""
+
     index_array = np.asarray(indices, dtype=int).reshape(-1)
     return JointTrajectory.from_samples(
         times=trajectory.times,
@@ -139,6 +141,8 @@ def _command_indices_for_arm_joints(
     arm_joint_names: Sequence[str],
     side: str,
 ) -> np.ndarray:
+    """把某侧 arm joint names 映射到该侧 command-space 列索引。"""
+
     command_index_by_name = {
         str(name): index for index, name in enumerate(command_joint_names)
     }
@@ -157,6 +161,8 @@ def _command_indices_for_arm_joints(
 def _indices_for_names(
     index_by_name: Mapping[str, int], names: Sequence[str], label: str
 ) -> np.ndarray:
+    """按名称列表从 index_by_name 中取索引，并报告缺失关节。"""
+
     missing = [str(name) for name in names if str(name) not in index_by_name]
     if missing:
         raise ValueError(f"{label} joint names not found in C-space: {missing}")
@@ -164,6 +170,8 @@ def _indices_for_names(
 
 
 def _normalize_side(side: str) -> str:
+    """把 active side 规范化为 left/right。"""
+
     normalized = str(side).lower()
     if normalized not in {"left", "right"}:
         raise ValueError(f"active_side must be 'left' or 'right', got {side!r}")
@@ -171,6 +179,8 @@ def _normalize_side(side: str) -> str:
 
 
 def _as_cspace_vector(values: np.ndarray, expected_size: int, label: str) -> np.ndarray:
+    """把输入规范化为一维 C-space 向量，并校验维度。"""
+
     vector = np.asarray(values, dtype=float).reshape(-1)
     if vector.size != expected_size:
         raise ValueError(f"{label} expected {expected_size} values, got {vector.size}")

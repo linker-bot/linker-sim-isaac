@@ -50,6 +50,8 @@ DEFAULT_HOLD_REFRESH_DURATION_S = 0.25
 
 @dataclass(frozen=True)
 class _SingleMoveExecutionResult:
+    """单个 move 执行后的滚动状态，用于串联后续 move。"""
+
     step: int
     cspace_q: np.ndarray
     command: np.ndarray
@@ -205,6 +207,8 @@ def _run_single_move(
     motion_planner_config,
     default_tcp_frame_name: str,
 ) -> _SingleMoveExecutionResult:
+    """执行一个单臂 move，并返回更新后的 step、C-space 和 command-space 状态。"""
+
     tcp_frame_name = _move_tcp_frame_name(move, default_tcp_frame_name)
     duration_s = duration_for_move(move)
     phase = phase_for_move(move)
@@ -407,6 +411,8 @@ def _plan_cspace_trajectory(
     phase: str,
     move_index: int,
 ) -> JointTrajectory:
+    """调用 cuMotion planner，并把 MotionResult 归一化为项目 JointTrajectory。"""
+
     planner = context.make_motion_planner(
         tcp_frame_name=tcp_frame_name,
         config=config,
@@ -453,6 +459,8 @@ def _execute_cspace_trajectory(
     step: int,
     phase: str,
 ) -> _SingleMoveExecutionResult:
+    """把单臂 C-space 轨迹投影到 controller command-space 并执行。"""
+
     if len(trajectory) == 0:
         raise ValueError(f"trajectory for {phase!r} cannot be empty")
     goal_q = np.asarray(trajectory.positions[-1], dtype=float).reshape(-1)
@@ -483,4 +491,6 @@ def _execute_cspace_trajectory(
 
 
 def _move_tcp_frame_name(move: MoveSpec, default_tcp_frame_name: str) -> str:
+    """返回 move 指定的 TCP；未指定时使用运行入口传入的默认 TCP。"""
+
     return explicit_tcp_frame_name(move) or str(default_tcp_frame_name)

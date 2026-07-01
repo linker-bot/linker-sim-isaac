@@ -126,6 +126,8 @@ def _parse_move(
     message: Mapping[str, object],
     default_tcp_by_side: Mapping[str, str],
 ) -> MoveSpec:
+    """解析单条 motion payload，并立即调用 spec.validate 做结构校验。"""
+
     move_type = _required_str(message, "type")
     if move_type == "hand":
         side = _required_side(message)
@@ -253,6 +255,8 @@ def _parse_move(
 def _parse_raw_joint_sequence_move(
     message: Mapping[str, object],
 ) -> RawJointSequenceMoveSpec:
+    """解析原始关节序列命令，支持左右子对象或单侧扁平写法。"""
+
     left = _parse_raw_joint_sequence_side(message.get("left"), "left")
     right = _parse_raw_joint_sequence_side(message.get("right"), "right")
     if "side" in message or "joint_positions" in message:
@@ -276,6 +280,8 @@ def _parse_raw_joint_sequence_side(
     value: object,
     label: str,
 ) -> RawJointSequenceSideSpec | None:
+    """解析 raw_joint_sequence 的单侧矩阵或关节名到采样序列映射。"""
+
     if value is None:
         return None
     data = _expect_mapping(value, label)
@@ -285,6 +291,8 @@ def _parse_raw_joint_sequence_side(
 
 
 def _parse_tcp_line_segment(message: Mapping[str, object]) -> TcpLineSegment:
+    """解析 task_space_line 的线段终点、偏移和姿态策略。"""
+
     return TcpLineSegment(
         target_position=_optional_vector3(message, "target_position"),
         target_offset=_optional_vector3(message, "target_offset"),
@@ -299,6 +307,8 @@ def _parse_tcp_line_segment(message: Mapping[str, object]) -> TcpLineSegment:
 
 
 def _parse_tcp_arc_segment(message: Mapping[str, object]) -> TcpArcSegment:
+    """解析 task_space_arc 的三点圆弧/偏移圆弧参数。"""
+
     return TcpArcSegment(
         target_position=_optional_vector3(message, "target_position"),
         target_offset=_optional_vector3(message, "target_offset"),
@@ -316,6 +326,8 @@ def _parse_tcp_arc_segment(message: Mapping[str, object]) -> TcpArcSegment:
 
 
 def _parse_overlays(value: object, *, duration_s: float) -> tuple[CommandOverlaySpec, ...]:
+    """解析与主臂运动同步或收尾执行的手部 overlay 命令。"""
+
     if value is None:
         return ()
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
@@ -343,6 +355,8 @@ def _parse_hand_child(
     *,
     duration_s: float | None,
 ) -> HandMoveSpec | None:
+    """解析嵌套的单手动作；缺省 duration 继承父级动作时长。"""
+
     if value is None:
         return None
     data = _expect_mapping(value, f"{side}_hand")
@@ -361,6 +375,8 @@ def _tcp_frame_name(
     default_tcp_by_side: Mapping[str, str],
     side: str,
 ) -> str:
+    """读取显式 tcp_frame_name，缺省时回退到该侧 runtime 默认 TCP。"""
+
     value = _optional_str(message.get("tcp_frame_name"))
     if value:
         return value
@@ -371,6 +387,8 @@ def _tcp_frame_name(
 
 
 def _required_side(message: Mapping[str, object]) -> str:
+    """读取 side 字段并规范化为 left/right。"""
+
     side = _required_str(message, "side").lower()
     if side not in {"left", "right"}:
         raise ValueError(f"side must be 'left' or 'right', got {side!r}")
@@ -378,6 +396,8 @@ def _required_side(message: Mapping[str, object]) -> str:
 
 
 def _required_str(message: Mapping[str, object], key: str) -> str:
+    """读取必填字符串字段，空字符串按缺失处理。"""
+
     value = message.get(key)
     if value is None or not str(value):
         raise ValueError(f"{key} is required")
@@ -385,6 +405,8 @@ def _required_str(message: Mapping[str, object], key: str) -> str:
 
 
 def _optional_str(value: object) -> str | None:
+    """把可选值转成字符串；None 或空字符串统一视为未提供。"""
+
     if value is None:
         return None
     text = str(value)
@@ -392,16 +414,22 @@ def _optional_str(value: object) -> str | None:
 
 
 def _required_float(message: Mapping[str, object], key: str) -> float:
+    """读取必填浮点字段，让 float(...) 负责兼容 int/str 数字。"""
+
     if key not in message:
         raise ValueError(f"{key} is required")
     return float(message[key])
 
 
 def _optional_float(value: object, *, default: float | None) -> float | None:
+    """读取可选浮点字段；未提供时返回调用方指定默认值。"""
+
     return default if value is None else float(value)
 
 
 def _optional_int(value: object, *, default: int) -> int:
+    """读取可选整数字段，拒绝 bool 和非整数浮点数。"""
+
     if value is None:
         return int(default)
     if isinstance(value, bool):
@@ -413,16 +441,22 @@ def _optional_int(value: object, *, default: int) -> int:
 
 
 def _vector3(message: Mapping[str, object], key: str) -> np.ndarray:
+    """读取必填三维向量，并 reshape 成 shape=(3,) 的 numpy 数组。"""
+
     if key not in message:
         raise ValueError(f"{key} is required")
     return np.asarray(message[key], dtype=float).reshape(3)
 
 
 def _optional_vector3(message: Mapping[str, object], key: str) -> np.ndarray | None:
+    """读取可选三维向量；缺失时返回 None。"""
+
     return None if key not in message else np.asarray(message[key], dtype=float).reshape(3)
 
 
 def _optional_vector4(message: Mapping[str, object], key: str) -> np.ndarray | None:
+    """读取可选四维向量，通常用于四元数姿态。"""
+
     return None if key not in message else np.asarray(message[key], dtype=float).reshape(4)
 
 
@@ -430,6 +464,8 @@ def _optional_tuple4(
     message: Mapping[str, object],
     key: str,
 ) -> tuple[float, float, float, float] | None:
+    """读取可选四维向量，并转成不可变 tuple 供 spec 保存。"""
+
     value = _optional_vector4(message, key)
     if value is None:
         return None
@@ -440,6 +476,8 @@ def _required_float_sequence(
     message: Mapping[str, object],
     key: str,
 ) -> tuple[float, ...]:
+    """读取必填浮点序列，常用于 C-space goal/delta。"""
+
     if key not in message:
         raise ValueError(f"{key} is required")
     value = message[key]
@@ -451,6 +489,8 @@ def _required_float_sequence(
 def _required_joint_positions(
     message: Mapping[str, object],
 ) -> Mapping[str, float] | tuple[float, ...]:
+    """读取单帧关节目标，支持按关节名映射或按命令顺序排列的列表。"""
+
     if "joint_positions" not in message:
         raise ValueError("joint_positions is required")
     value = message["joint_positions"]
@@ -464,6 +504,8 @@ def _required_joint_positions(
 def _required_raw_joint_sequence_positions(
     message: Mapping[str, object],
 ) -> Mapping[str, tuple[float, ...]] | tuple[tuple[float, ...], ...]:
+    """读取多帧原始关节序列，支持列映射或二维矩阵。"""
+
     if "joint_positions" not in message:
         raise ValueError("joint_positions is required")
     value = message["joint_positions"]
@@ -481,12 +523,16 @@ def _required_raw_joint_sequence_positions(
 
 
 def _float_tuple(value: object, *, label: str) -> tuple[float, ...]:
+    """把 JSON list 转成 float tuple，并在报错中保留字段标签。"""
+
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"{label} must be a list")
     return tuple(float(item) for item in value)
 
 
 def _expect_mapping(value: object, label: str) -> Mapping[str, object]:
+    """断言某个 JSON 子节点是 object/mapping。"""
+
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
     return value

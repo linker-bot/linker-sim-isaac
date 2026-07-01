@@ -30,6 +30,8 @@ class CameraViewSettings:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object] | None) -> "CameraViewSettings":
+        """解析 visuals.camera；缺省时使用项目默认视角。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -62,6 +64,8 @@ class DistantLightSettings:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object] | None) -> "DistantLightSettings":
+        """解析 visuals.lights.key；缺省时使用项目默认主光。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -97,6 +101,8 @@ class DomeLightSettings:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object] | None) -> "DomeLightSettings":
+        """解析 visuals.lights.fill；缺省时使用项目默认补光。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -128,6 +134,8 @@ class SceneVisualSettings:
 
     @classmethod
     def from_env_config(cls, config: Mapping[str, object]) -> "SceneVisualSettings":
+        """从完整 env profile 解析 visuals 顶层分组。"""
+
         visuals = config.get("visuals")
         if visuals is None:
             return cls()
@@ -152,6 +160,8 @@ def _optional_vec3(
     *,
     label: str,
 ) -> Vec3:
+    """读取可选三维向量；字段缺失时返回调用方默认值。"""
+
     return _vec3(data.get(key, default), label=f"{label}.{key}")
 
 
@@ -161,6 +171,8 @@ def _optional_vec3_or_none(
     *,
     label: str,
 ) -> Vec3 | None:
+    """读取可选三维向量；字段缺失或 null 时返回 None。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -168,6 +180,8 @@ def _optional_vec3_or_none(
 
 
 def _vec3(value: object, *, label: str) -> Vec3:
+    """把配置值解析为长度为 3 的 float tuple。"""
+
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"{label} must be a length-3 sequence")
     values = tuple(float(item) for item in value)
@@ -183,6 +197,8 @@ def _optional_path(
     *,
     label: str,
 ) -> str:
+    """读取 USD prim path 字符串，并要求使用绝对路径。"""
+
     value = data.get(key, default)
     if not isinstance(value, str) or not value.startswith("/"):
         raise ValueError(f"{label}.{key} must be an absolute USD prim path string")
@@ -196,6 +212,8 @@ def _optional_bool(
     default: bool,
     label: str,
 ) -> bool:
+    """读取布尔字段，拒绝字符串形式的 true/false。"""
+
     value = data.get(key, default)
     if not isinstance(value, bool):
         raise ValueError(f"{label}.{key} must be a boolean")
@@ -203,6 +221,8 @@ def _optional_bool(
 
 
 def _non_negative_float(value: object, *, label: str) -> float:
+    """解析非负浮点值，用于灯光强度和角度等字段。"""
+
     number = float(value)
     if number < 0.0:
         raise ValueError(f"{label} must be non-negative")

@@ -64,6 +64,8 @@ class EnvRuntimeSettings:
         return 1.0 / self.render_frequency if gui else self.physics_dt
 
     def validate(self) -> None:
+        """校验 World 频率为正数，避免 Isaac 创建零步长或负步长。"""
+
         if self.physics_frequency <= 0 or self.render_frequency <= 0:
             raise ValueError("physics and render frequencies must be positive")
 

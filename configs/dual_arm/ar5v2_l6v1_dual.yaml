@@ -8,6 +8,8 @@
 
 dual_arm:
   left:
+    # 左臂在双臂融合 C-space 中的关节名顺序。
+    # 顺序必须与生成的双臂 cuMotion URDF/XRDF C-space 顺序一致。
     arm_joints:
       - AR5V2_L_arm_joint_1
       - AR5V2_L_arm_joint_2
@@ -16,10 +18,19 @@ dual_arm:
       - AR5V2_L_arm_joint_5
       - AR5V2_L_arm_joint_6
       - AR5V2_L_arm_joint_7
+
+    # 左机械臂法兰 frame，必须存在于左臂 cuMotion URDF 中。
     flange_frame: AR5V2_L_arm_flan_link
+
+    # 动作层使用的左侧 TCP frame 名；pinch TCP 可由脚本临时写入 cuMotion URDF。
     tcp_frame: left_pinch_tcp
+
+    # 左侧“机械臂+灵巧手”组合 MJCF，用于推导 pinch TCP 和手部几何关系。
     combined_mjcf_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
+
   right:
+    # 右臂在双臂融合 C-space 中的关节名顺序。
+    # 顺序必须与生成的双臂 cuMotion URDF/XRDF C-space 顺序一致。
     arm_joints:
       - AR5V2_R_arm_joint_1
       - AR5V2_R_arm_joint_2
@@ -28,6 +39,12 @@ dual_arm:
       - AR5V2_R_arm_joint_5
       - AR5V2_R_arm_joint_6
       - AR5V2_R_arm_joint_7
+
+    # 右机械臂法兰 frame，必须存在于右臂 cuMotion URDF 中。
     flange_frame: AR5V2_R_arm_flan_link
+
+    # 动作层使用的右侧 TCP frame 名；pinch TCP 可由脚本临时写入 cuMotion URDF。
     tcp_frame: right_pinch_tcp
+
+    # 右侧“机械臂+灵巧手”组合 MJCF，用于推导 pinch TCP 和手部几何关系。
     combined_mjcf_path: assets/combined_system/AR5V2_L6V1_R/AR5V2_L6V1_R.xml

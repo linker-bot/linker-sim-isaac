@@ -3,17 +3,37 @@
 # env scene 负责 root_pose；本文件负责对象类别、资产路径、导入参数和运行时物理属性。
 
 object:
+  # 对象 profile 名称；env 中通过 object_profile: workstation_armbase 引用本文件。
   name: workstation_armbase
+
+  # 对象类型。rigid 表示导入后作为刚体/固定物体处理。
   kind: rigid
+
+  # 资产来源类型。这里通过 Isaac URDF importer 导入工装基座。
   source: urdf
+
+  # 工装基座 URDF 路径，相对仓库根目录。
   asset_path: assets/static_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
+
+  # 导入或引用到当前 USD stage 的根 prim path。
   prim_path: /World/WorkstationArmBase
+
   import:
+    # Isaac importer 生成碰撞几何时使用的近似方式。
+    # convex_decomposition 更贴合非凸模型；convex_hull 更快但会填平凹陷。
     collision_approximation: convex_decomposition
+
   physics:
+    # true 表示运行时把该对象作为静态环境，不参与动力学运动。
     static: true
+
+    # 工装接触材质覆盖；用于和机器人/绳体接触时计算摩擦与反弹。
     material:
+      # 静摩擦系数：影响接触面开始滑动前的摩擦。
       static_friction: 0.8
+      # 动摩擦系数：影响已经发生相对滑动后的摩擦。
       dynamic_friction: 0.6
+      # 恢复系数：0 表示接触基本不反弹。
       restitution: 0.0
+      # 摩擦合成模式；average 表示与接触另一方材质取平均。
       friction_combine_mode: average

@@ -93,6 +93,8 @@ class CuMotionIkConfig:
         return config
 
     def validate(self) -> None:
+        """校验 IK 容差、迭代次数和可选 seeds/参数结构。"""
+
         if self.position_tolerance < 0 or self.orientation_tolerance < 0:
             raise ValueError("cuMotion kinematics.ik tolerances cannot be negative")
         if self.ccd_max_iterations <= 0 or self.bfgs_max_iterations <= 0:
@@ -114,10 +116,14 @@ class CuMotionFkConfig:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionFkConfig":
+        """解析 FK 分组；当前只允许空 mapping。"""
+
         _mapping_or_empty(data, "cumotion.kinematics.fk")
         return cls()
 
     def validate(self) -> None:
+        """当前 FK 无可调字段，因此始终通过。"""
+
         return None
 
 
@@ -130,6 +136,8 @@ class CuMotionKinematicsConfig:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuMotionKinematicsConfig":
+        """解析 kinematics.ik/fk 两个子分组。"""
+
         settings = _mapping_or_empty(data, "cumotion.kinematics")
         config = cls(
             ik=CuMotionIkConfig.from_mapping(settings.get("ik")),
@@ -139,6 +147,8 @@ class CuMotionKinematicsConfig:
         return config
 
     def validate(self) -> None:
+        """级联校验 IK 和 FK 配置。"""
+
         self.ik.validate()
         self.fk.validate()
 
@@ -284,6 +294,8 @@ def _kinematics_config_from_settings(
 
 
 def _reject_removed_cumotion_fields(settings: Mapping[str, Any]) -> None:
+    """拒绝旧版扁平 cuMotion 字段，提示用户使用当前分组 schema。"""
+
     removed_keys = {
         "ik_cspace_seeds",
         "cspace_seeds",
@@ -305,6 +317,8 @@ def _reject_removed_cumotion_fields(settings: Mapping[str, Any]) -> None:
 def _reject_removed_keys(
     settings: Mapping[str, Any], removed_keys: set[str], *, label: str
 ) -> None:
+    """通用旧字段拒绝 helper。"""
+
     present = sorted(set(settings) & removed_keys)
     if present:
         raise ValueError(

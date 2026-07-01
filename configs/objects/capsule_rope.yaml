@@ -7,21 +7,39 @@
 #   放在 tools/assets/configs/capsule_rope.yaml。
 
 object:
+  # 对象 profile 名称；env 中通过 object_profile: capsule_rope 引用本文件。
   name: capsuleropeV1_default
+
+  # 对象类型。dynamic_chain 表示由多个刚体和关节组成的链式动态对象。
   kind: dynamic_chain
+
+  # 资产来源类型。capsule rope 已由工具生成 USD/USDA，因此这里直接引用 usd。
   source: usd
+
+  # 绳体 USD 资产路径，相对仓库根目录。
   asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+
   # 默认引用 prim 路径；env scene 只负责 root_pose，不覆盖 prim_path。
   prim_path: /World/CapsuleRope
+
   # USD 资产文件内部的默认 prim 路径。
+  # dynamic_chain runtime 会从该根节点下收集绳体刚体和 joint。
   root_path: /CapsuleRope
+
   physics:
     # 接触材质属于运行时仿真属性，可按对象 profile 调整。
     material:
+      # 静摩擦系数：影响接触面开始滑动前的摩擦。
       static_friction: 0.7
+      # 动摩擦系数：影响已经发生相对滑动后的摩擦。
       dynamic_friction: 0.5
+      # 恢复系数：0 表示接触基本不反弹。
       restitution: 0.0
+      # 摩擦合成模式；average 表示与接触另一方材质取平均。
       friction_combine_mode: average
+
     # 绳体刚体 solver 迭代次数是运行时 PhysX 覆盖，不参与资产生成。
+    # position iterations 影响关节/接触位置约束收敛，绳体抓取不稳定时可提高。
     solver_position_iterations: 48
+    # velocity iterations 影响摩擦、碰撞后速度等速度约束收敛。
     solver_velocity_iterations: 4

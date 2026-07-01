@@ -27,6 +27,8 @@ class InteractiveTransportHandles:
     tcp_server: socketserver.ThreadingTCPServer | None = None
 
     def stop(self) -> None:
+        """停止所有后台传输；TCP server 需要额外 shutdown 才能跳出 serve_forever。"""
+
         self.stop_event.set()
         if self.tcp_server is not None:
             self.tcp_server.shutdown()
@@ -118,6 +120,8 @@ def _apply_command(
     command: InteractiveMotionCommand,
     queue: InteractiveMotionQueue,
 ) -> dict[str, object]:
+    """把已解析命令应用到队列，并返回可直接发给客户端的响应。"""
+
     if command.kind == "moves":
         queued = queue.submit(command)
         return {
@@ -159,6 +163,8 @@ def _stdin_jsonl_reader(
     stop_event: Event,
     quit_on_eof: bool,
 ) -> None:
+    """从 stdin 按 JSONL 读取命令；常用于管道或本地调试。"""
+
     while not stop_event.is_set():
         line = sys.stdin.readline()
         if line == "":
@@ -180,8 +186,14 @@ def _start_tcp_jsonl_server(
     host: str,
     port: int,
 ) -> socketserver.ThreadingTCPServer:
+    """启动一条 TCP JSONL 服务；每行一个 JSON 请求，每行一个 JSON 响应。"""
+
     class _Handler(socketserver.StreamRequestHandler):
+        """TCP 连接处理器；一个连接内可连续发送多行 JSON。"""
+
         def handle(self) -> None:
+            """循环读取客户端 JSONL，并把每条响应写回同一连接。"""
+
             while True:
                 line = self.rfile.readline()
                 if line == b"":
@@ -194,6 +206,8 @@ def _start_tcp_jsonl_server(
                 self.wfile.write((json.dumps(response) + "\n").encode("utf-8"))
 
     class _Server(socketserver.ThreadingTCPServer):
+        """允许端口快速复用、连接线程后台化的 JSONL server。"""
+
         allow_reuse_address = True
         daemon_threads = True
 
@@ -206,6 +220,8 @@ def _handle_json_line(
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
 ) -> dict[str, object]:
+    """解析一行 JSONL 并执行；所有异常都会转成 rejected 响应。"""
+
     try:
         message = json.loads(line)
         if not isinstance(message, Mapping):
@@ -227,6 +243,8 @@ def _run_websocket_server(
     port: int,
     stop_event: Event,
 ) -> None:
+    """运行 WebSocket 传输，支持请求响应和队列事件异步推送。"""
+
     try:
         import websockets
     except ImportError as exc:
@@ -238,14 +256,20 @@ def _run_websocket_server(
         raise RuntimeError("websockets package is required for WebSocket transport") from exc
 
     async def handler(websocket) -> None:
+        """服务单个 WebSocket 客户端，并把队列事件转发给该连接。"""
+
         event_queue: Queue[dict[str, object]] = Queue()
 
         def listener(event: dict[str, object]) -> None:
+            """把同步队列事件转存到线程安全队列，供 async sender 消费。"""
+
             event_queue.put(event)
 
         queue.add_listener(listener)
 
         async def sender() -> None:
+            """后台发送队列事件，避免阻塞主消息接收循环。"""
+
             while not stop_event.is_set():
                 event = await asyncio.to_thread(event_queue.get)
                 await websocket.send(json.dumps(event))
@@ -270,6 +294,8 @@ def _run_websocket_server(
             queue.remove_listener(listener)
 
     async def main() -> None:
+        """创建 WebSocket server，并轮询 stop_event 决定退出。"""
+
         async with websockets.serve(handler, host, port):
             while not stop_event.is_set():
                 await asyncio.sleep(0.1)

@@ -209,6 +209,8 @@ def _normalize_tcp_frames(
     config: CuMotionConfig,
     tcp_parent_frames: Mapping[str, str] | None,
 ) -> tuple[TcpFrame, ...]:
+    """把入口传入的 TcpTransform 列表规范化为已绑定 parent link 的 TcpFrame。"""
+
     if tcp is None:
         return ()
     if isinstance(tcp, TcpTransform):
@@ -238,6 +240,8 @@ def _bind_endpoint_transform(
     config: CuMotionConfig,
     tcp_parent_frames: Mapping[str, str] | None,
 ) -> TcpFrame:
+    """给末端相对 TCP transform 选择 parent frame，并生成 URDF 可写的 TcpFrame。"""
+
     parent_frame = None
     if tcp_parent_frames is not None:
         parent_frame = tcp_parent_frames.get(transform.frame_name)
@@ -252,6 +256,8 @@ def _bind_endpoint_transform(
 
 
 def _validate_unique_tcp_frame_names(tcp_frames: Sequence[TcpFrame]) -> None:
+    """校验临时写入 URDF 的 TCP link 名称不会互相冲突。"""
+
     names = [frame.frame_name for frame in tcp_frames]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:

@@ -64,17 +64,25 @@ class DualRobotAppRuntime:
 
     @property
     def world(self):
+        """返回当前 Isaac World。"""
+
         return self.execution.simulation_world
 
     @property
     def left(self) -> RobotSideRuntime:
+        """返回左侧机器人运行时。"""
+
         return self.execution.left
 
     @property
     def right(self) -> RobotSideRuntime:
+        """返回右侧机器人运行时。"""
+
         return self.execution.right
 
     def close(self) -> None:
+        """关闭 SimulationApp；多次调用是安全的。"""
+
         if self._closed:
             return
         self._closed = True
@@ -220,6 +228,8 @@ def create_dual_robot_runtime(
 
 
 def _print_status(status_prefix: str | None, message: str) -> None:
+    """按可选前缀输出机器可 grep 的 runtime 状态行。"""
+
     if status_prefix is None:
         return
     print(f"{status_prefix}_{message}", flush=True)

@@ -224,6 +224,8 @@ class CuMotionWorldInspector:
     world_view: object
 
     def __post_init__(self) -> None:
+        """从 context 中创建 cuMotion WorldInspector 实例。"""
+
         self.cumotion = self.context.cumotion
         self.inspector = self.cumotion.create_world_inspector(self.world_view)
 
@@ -329,6 +331,8 @@ class CuMotionRobotWorldInspector:
     world_view: object | None = None
 
     def __post_init__(self) -> None:
+        """从 context 中创建机器人碰撞 inspector，并绑定可选 world view。"""
+
         self.cumotion = self.context.cumotion
         self.inspector = self.cumotion.create_robot_world_inspector(
             self.context.robot_description, self.world_view

@@ -110,6 +110,8 @@ def add_runtime_object(
 
 
 def _runtime_object_from_scene_instance(instance) -> RuntimeObjectConfig:
+    """把 env objects[] 实例和 object profile 合并成运行时对象配置。"""
+
     profile = ObjectProfileConfig.from_profile(instance.object_profile)
     return RuntimeObjectConfig(
         name=instance.name,
@@ -125,6 +127,8 @@ def _runtime_object_from_scene_instance(instance) -> RuntimeObjectConfig:
 def _add_rigid_object(
     stage, config: RuntimeObjectConfig, *, status_prefix: str | None
 ) -> RuntimeObjectHandle:
+    """导入 rigid object，并返回统一 RuntimeObjectHandle。"""
+
     rigid_config = _rigid_object_config_from_runtime_object(config)
     added = add_rigid_objects(stage, (rigid_config,))[0]
     _print_object_status(
@@ -150,6 +154,8 @@ def _add_rigid_object(
 def _add_capsule_rope_object(
     stage, config: RuntimeObjectConfig, *, status_prefix: str | None
 ) -> RuntimeObjectHandle:
+    """引用 capsule rope USD、摆放 root pose，并应用运行时物理覆盖。"""
+
     rope_config = _placed_capsule_rope_config(
         CapsuleRopeConfig.from_mapping(config.profile.raw or {}),
         config,
@@ -184,6 +190,8 @@ def _add_capsule_rope_object(
 def _placed_capsule_rope_config(
     object_config: CapsuleRopeConfig, runtime_config: RuntimeObjectConfig
 ) -> CapsuleRopeConfig:
+    """把 object profile 中的资产路径和 stage prim 写入 rope runtime 配置。"""
+
     return replace(
         object_config,
         asset_path=runtime_config.profile.asset_path,
@@ -195,6 +203,8 @@ def _placed_capsule_rope_config(
 def _rigid_object_config_from_runtime_object(
     config: RuntimeObjectConfig,
 ) -> RigidObjectConfig:
+    """把通用 RuntimeObjectConfig 展开为 rigid runtime 模块需要的配置结构。"""
+
     data = expanded_object_mapping(
         ObjectSceneInstanceConfig(
             name=config.name,
@@ -218,6 +228,8 @@ def _print_object_status(
     prim_path: str,
     extra: str,
 ) -> None:
+    """按可选前缀输出对象导入状态，便于 smoke test 和日志排查。"""
+
     if status_prefix is None:
         return
     print(

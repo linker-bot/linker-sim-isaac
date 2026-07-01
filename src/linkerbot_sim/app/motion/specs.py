@@ -42,6 +42,8 @@ class CartesianTcpFrameSpec:
     rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     def validate(self) -> None:
+        """校验 TCP 名称非空，并确保 xyz/rpy 都能解释为三维向量。"""
+
         if not str(self.frame_name):
             raise ValueError("TCP frame_name cannot be empty")
         np.asarray(self.xyz, dtype=float).reshape(3)
@@ -56,6 +58,8 @@ class DualArmTcpSpec:
     right: CartesianTcpFrameSpec
 
     def validate(self) -> None:
+        """校验左右 TCP spec，并要求 frame_name 唯一以避免 URDF frame 冲突。"""
+
         self.left.validate()
         self.right.validate()
         if self.left.frame_name == self.right.frame_name:
@@ -72,6 +76,8 @@ class HandMoveSpec:
     phase: str | None = None
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验单手 command-space 目标；require_side 保留给统一接口。"""
+
         _normalize_side_required(self.side)
         _validate_hand_joint_positions(self.joint_positions)
         _validate_duration(self.duration_s)
@@ -87,6 +93,8 @@ class DualHandMoveSpec:
     phase: str | None = None
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验双手动作至少包含一侧，并确保左右子动作 side 没写反。"""
+
         if self.left is None and self.right is None:
             raise ValueError("DualHandMoveSpec requires at least one hand target")
         if self.left is not None:
@@ -112,6 +120,8 @@ class RawJointSequenceSideSpec:
     joint_positions: Mapping[str, Sequence[float]] | Sequence[Sequence[float]]
 
     def validate(self) -> None:
+        """校验单侧 raw 序列的矩阵形状或按关节名映射的采样数一致性。"""
+
         _validate_raw_joint_sequence_side(self.joint_positions)
 
 
@@ -125,6 +135,8 @@ class RawJointSequenceMoveSpec:
     phase: str | None = None
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验 raw 序列至少包含一侧，并要求 step_interval 是正整数。"""
+
         if self.left is None and self.right is None:
             raise ValueError("RawJointSequenceMoveSpec requires at least one side")
         if isinstance(self.step_interval, bool):
@@ -146,6 +158,8 @@ class CommandOverlaySpec:
     right_hand: HandMoveSpec | None = None
 
     def validate(self) -> None:
+        """校验 overlay 时序和手部目标，避免左右手嵌套写反。"""
+
         if self.timing not in {"sync", "before", "after"}:
             raise ValueError("overlay timing must be one of: sync, before, after")
         if self.left_hand is None and self.right_hand is None:
@@ -173,6 +187,8 @@ class CumotionMoveSpec:
     overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验通用 cuMotion 动作包装，不在这里执行 IK 或规划。"""
+
         if require_side and self.execution != "dual_cspace":
             _normalize_side_required(self.side)
         if self.execution not in {"single", "selected_side", "dual_cspace"}:
@@ -200,6 +216,8 @@ class IkOffsetMoveSpec:
     overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验相对 TCP 位移请求和姿态模式。"""
+
         if require_side:
             _normalize_side_required(self.side)
         if not str(self.tcp_frame_name):
@@ -229,6 +247,8 @@ class CSpaceGoalPlanMoveSpec:
     overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验绝对 C-space 目标非空；维度匹配留给具体 planner/context 检查。"""
+
         if require_side:
             _normalize_side_required(self.side)
         joints = np.asarray(self.joint_positions, dtype=float).reshape(-1)
@@ -252,6 +272,8 @@ class CSpaceDeltaPlanMoveSpec:
     overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验 C-space 增量目标非空；实际维度由执行层按当前机器人检查。"""
+
         if require_side:
             _normalize_side_required(self.side)
         deltas = np.asarray(self.joint_deltas, dtype=float).reshape(-1)
@@ -275,6 +297,8 @@ class SpecifiedPathMoveSpec:
     overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
+        """校验指定路径动作的 TCP、时长和 overlay；路径内部由 request 层校验。"""
+
         if require_side:
             _normalize_side_required(self.side)
         if not str(self.tcp_frame_name):
@@ -414,11 +438,15 @@ def normalize_move_sequence(moves: Sequence[MoveSpec]) -> tuple[MoveSpec, ...]:
 
 
 def _validate_duration(duration_s: float | None) -> None:
+    """校验可选时长，允许 None 表示由调用方或默认值补齐。"""
+
     if duration_s is not None and float(duration_s) < 0.0:
         raise ValueError("duration_s cannot be negative")
 
 
 def _validate_overlays(overlays: Sequence[CommandOverlaySpec]) -> None:
+    """校验 overlay 序列中的每个元素都是 CommandOverlaySpec。"""
+
     for overlay in tuple(overlays):
         if not isinstance(overlay, CommandOverlaySpec):
             raise TypeError("overlays must contain CommandOverlaySpec values")
@@ -428,6 +456,8 @@ def _validate_overlays(overlays: Sequence[CommandOverlaySpec]) -> None:
 def _validate_hand_joint_positions(
     joint_positions: Mapping[str, float] | Sequence[float],
 ) -> None:
+    """校验手部单帧目标，支持命名关节映射或按命令空间顺序的数组。"""
+
     if isinstance(joint_positions, Mapping):
         if not joint_positions:
             raise ValueError("hand joint_positions cannot be empty")
@@ -444,6 +474,8 @@ def _validate_hand_joint_positions(
 def _validate_raw_joint_sequence_side(
     joint_positions: Mapping[str, Sequence[float]] | Sequence[Sequence[float]],
 ) -> None:
+    """校验 raw 序列的单侧输入，保证每个采样维度和数量可执行。"""
+
     if isinstance(joint_positions, Mapping):
         if not joint_positions:
             raise ValueError("raw joint sequence mapping cannot be empty")
@@ -471,6 +503,8 @@ def _validate_raw_joint_sequence_side(
 
 
 def _normalize_side_required(side: str | None) -> str:
+    """把 side 规范化为 left/right；None 或未知值直接报错。"""
+
     if side is None:
         raise ValueError("side is required")
     normalized = str(side).lower()

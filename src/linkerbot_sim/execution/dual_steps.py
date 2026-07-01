@@ -20,6 +20,8 @@ class DualCommandExecutionInterrupted(RuntimeError):
     """Raised when a dual command step is stopped by an external request."""
 
     def __init__(self, message: str, *, step: int | None = None) -> None:
+        """保存中断发生时的累计 physics step，便于交互循环续接。"""
+
         super().__init__(message)
         self.step = step
 
@@ -112,6 +114,8 @@ class DualRawCommandTargetSequenceStep:
 
 @dataclass
 class _SmoothSidePlan:
+    """单侧 smoothstep 插值所需的滚动状态。"""
+
     controller: object
     start: np.ndarray
     target: np.ndarray
@@ -296,6 +300,8 @@ def _apply_dual_targets_once(
     phase: str,
     step: int,
 ) -> int:
+    """左右目标都下发后只推进一次 world.step，保证双臂同一仿真时刻生效。"""
+
     if left_targets is not None:
         runtime.left.joint_controller.apply_targets(
             runtime.articulation_action_type, left_targets
@@ -317,6 +323,8 @@ def _write_side_log(
     phase: str,
     runtime: DualRobotRuntime,
 ) -> None:
+    """写入单侧关节日志；未配置 logger 或未到采样步时直接跳过。"""
+
     logger = side_runtime.drive_logger
     if logger is None or targets is None or not logger.should_write(step):
         return
@@ -341,6 +349,8 @@ def _smooth_side_plan(
     start_command: np.ndarray | None,
     base_positions: np.ndarray | None,
 ) -> _SmoothSidePlan | None:
+    """构造单侧 smoothstep 计划，缺省 start 使用当前 articulation command 位置。"""
+
     if start_command is None:
         start = _current_command_positions(side_runtime)
     else:
@@ -367,6 +377,8 @@ def _smooth_side_plan(
 def _targets_from_smooth_plan(
     plan: _SmoothSidePlan | None, smooth: float, smooth_rate: float
 ) -> ControlTargets | None:
+    """按 smoothstep 位置和速度生成单侧 ControlTargets。"""
+
     if plan is None:
         return None
     command = plan.start + smooth * plan.delta
@@ -382,11 +394,15 @@ def _targets_from_smooth_plan(
 def _update_plan_base(
     plan: _SmoothSidePlan | None, targets: ControlTargets | None
 ) -> None:
+    """把本步输出的完整 DOF position 作为下一步 base positions。"""
+
     if plan is not None and targets is not None:
         plan.base = targets.positions
 
 
 def _current_command_positions(side_runtime: RobotSideRuntime) -> np.ndarray:
+    """读取单侧 articulation 当前关节位置并投影到 command-space。"""
+
     positions = np.asarray(
         side_runtime.articulation.get_joint_positions(), dtype=float
     ).reshape(-1)
@@ -396,6 +412,8 @@ def _current_command_positions(side_runtime: RobotSideRuntime) -> np.ndarray:
 def _side_base_positions(
     side_runtime: RobotSideRuntime, base_positions: np.ndarray | None
 ) -> np.ndarray:
+    """读取或规范化完整 DOF base positions，用于保留非 command 关节。"""
+
     if base_positions is None:
         return np.asarray(
             side_runtime.articulation.get_joint_positions(), dtype=float
@@ -409,6 +427,8 @@ def _trajectory_sample_targets(
     sample_index: int,
     base_positions: np.ndarray,
 ) -> ControlTargets | None:
+    """从轨迹样本生成单侧 targets；轨迹结束后保持当前 base command。"""
+
     if trajectory is None or sample_index >= len(trajectory):
         command_positions = base_positions[
             np.asarray(side_runtime.joint_controller.command_indices, dtype=int)
@@ -433,6 +453,8 @@ def _raw_sample_targets(
     sample_index: int,
     base_positions: np.ndarray,
 ) -> ControlTargets:
+    """从 raw command 矩阵读取单个样本，缺省侧保持 base command。"""
+
     if positions is None:
         command_positions = base_positions[
             np.asarray(side_runtime.joint_controller.command_indices, dtype=int)
@@ -451,6 +473,8 @@ def _raw_sample_targets(
 def _dual_sample_count(
     left_trajectory: JointTrajectory | None, right_trajectory: JointTrajectory | None
 ) -> int:
+    """计算左右轨迹同步播放的样本数。"""
+
     if left_trajectory is None and right_trajectory is None:
         raise ValueError("At least one side trajectory is required")
     return max(
@@ -463,6 +487,8 @@ def _raw_sample_count(
     left_positions: np.ndarray | None,
     right_positions: np.ndarray | None,
 ) -> int:
+    """校验 raw command sequence 左右样本数一致并返回样本数。"""
+
     if left_positions is None and right_positions is None:
         raise ValueError("At least one side raw command sequence is required")
     counts = []
@@ -485,6 +511,8 @@ def _sample_phase(
     right_trajectory: JointTrajectory | None,
     sample_index: int,
 ) -> str:
+    """从可用轨迹样本中取 phase，左右都缺失时使用兜底名称。"""
+
     for trajectory in (left_trajectory, right_trajectory):
         if trajectory is not None and sample_index < len(trajectory):
             return str(trajectory.phases[sample_index])
@@ -492,12 +520,16 @@ def _sample_phase(
 
 
 def _zero_side_velocities(side_runtime: RobotSideRuntime) -> None:
+    """执行段结束后清零 articulation 速度，减少下一段开始时的残余速度。"""
+
     side_runtime.articulation.set_joint_velocities(
         np.zeros(side_runtime.articulation.num_dof, dtype=float)
     )
 
 
 def _raise_if_stopped(should_stop: Callable[[], bool] | None, *, step: int) -> None:
+    """检查外部 stop 回调，并携带当前 step 抛出统一中断异常。"""
+
     if should_stop is not None and should_stop():
         raise DualCommandExecutionInterrupted(
             "dual command execution interrupted",

@@ -21,6 +21,8 @@ class ObjectMaterialConfig:
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
     ) -> "ObjectMaterialConfig | None":
+        """解析可选对象接触材质；没有任何覆盖时返回 None。"""
+
         if data is None:
             return None
         allowed = {
@@ -46,6 +48,8 @@ class ObjectMaterialConfig:
         return config if config.has_overrides() else None
 
     def has_overrides(self) -> bool:
+        """返回是否至少设置了一个材质字段。"""
+
         return any(
             value is not None
             for value in (
@@ -75,6 +79,8 @@ def apply_root_pose_to_prim(stage, prim_path: str, pose: RootPoseConfig) -> None
 def optional_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object] | None:
+    """读取可选 mapping 字段；缺省时返回 None。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -86,6 +92,8 @@ def optional_mapping(
 def optional_non_negative_float(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> float | None:
+    """读取可选非负浮点字段。"""
+
     if key not in data:
         return None
     value = float(data[key])
@@ -97,6 +105,8 @@ def optional_non_negative_float(
 def optional_positive_int(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> int | None:
+    """读取可选正整数字段。"""
+
     if key not in data:
         return None
     value = int(data[key])
@@ -108,6 +118,8 @@ def optional_positive_int(
 def optional_non_negative_int(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> int | None:
+    """读取可选非负整数字段。"""
+
     if key not in data:
         return None
     value = int(data[key])
@@ -119,6 +131,8 @@ def optional_non_negative_int(
 def optional_friction_combine_mode(
     data: Mapping[str, object], parent_label: str
 ) -> str | None:
+    """读取 PhysX friction combine mode，并限制在支持的枚举内。"""
+
     if "friction_combine_mode" not in data:
         return None
     value = str(data["friction_combine_mode"]).lower()

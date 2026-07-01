@@ -46,6 +46,8 @@ class CuMotionMotionPlanner:
         tcp_frame_name: str | None = None,
         config: MotionPlannerBackendConfig | None = None,
     ) -> None:
+        """选择本次 planner 使用的 TCP frame 和后端 pipeline 配置。"""
+
         self.context = context
         self.cumotion = context.cumotion
         # cuMotion 的 graph planner 和 optimizer 都需要一个 tool frame 来构造后端 config。

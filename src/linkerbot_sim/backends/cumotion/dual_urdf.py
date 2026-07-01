@@ -209,6 +209,8 @@ def dual_cumotion_config_from_sides(
 def _required_root_pose(
     root_poses: Mapping[str, RootPoseConfig], side: str
 ) -> RootPoseConfig:
+    """从 env root_pose 映射中读取指定侧位姿，缺失时给出生成阶段错误。"""
+
     pose = root_poses.get(side)
     if pose is None:
         raise ValueError(f"dual cuMotion generation missing {side!r} root_pose")
@@ -218,6 +220,8 @@ def _required_root_pose(
 def dual_urdf_generation_config_from_robot_config(
     robot_config: Mapping[str, object]
 ) -> DualUrdfGenerationConfig | None:
+    """从合并后的 robot config 中提取双臂 URDF/XRDF 生成配置。"""
+
     cumotion = robot_config.get("cumotion")
     if not isinstance(cumotion, Mapping):
         return None
@@ -325,6 +329,8 @@ def _cached_output_path(
     left_pose: RootPoseConfig | None = None,
     right_pose: RootPoseConfig | None = None,
 ) -> Path:
+    """根据输入资产路径和 root_pose 生成稳定缓存文件名。"""
+
     digest = hashlib.sha256(
         json.dumps(
             {
@@ -358,6 +364,8 @@ def _cached_output_path(
 def _append_materials(
     target_root: ET.Element, source_root: ET.Element, existing_names: set[str]
 ) -> None:
+    """把源 URDF 顶层 material 复制到目标 URDF，并按名称去重。"""
+
     for material in source_root.findall("material"):
         name = material.get("name")
         key = f"material:{name}" if name else f"material:{id(material)}"
@@ -376,6 +384,8 @@ def _append_robot_tree_without_world_mount(
     existing_names: set[str],
     world_link_name: str,
 ) -> None:
+    """复制源机器人 link/joint 树，跳过源文件里的 world 固定挂载。"""
+
     for child in list(source_root):
         if child.tag == "material":
             continue
@@ -406,6 +416,8 @@ def _append_mount_joint(
     pose: RootPoseConfig,
     existing_names: set[str],
 ) -> None:
+    """在融合 URDF 中追加 parent_link 到单臂 base_link 的 fixed mount joint。"""
+
     key = f"joint:{joint_name}"
     if key in existing_names:
         raise ValueError(f"Duplicate mount joint name: {joint_name}")
@@ -424,6 +436,8 @@ def _append_mount_joint(
 
 
 def _is_world_fixed_joint(element: ET.Element, *, world_link_name: str) -> bool:
+    """判断 URDF 元素是否是源文件中连接 world link 的 fixed joint。"""
+
     if element.tag != "joint" or element.get("type") != "fixed":
         return False
     parent = element.find("parent")
@@ -431,12 +445,16 @@ def _is_world_fixed_joint(element: ET.Element, *, world_link_name: str) -> bool:
 
 
 def _clone_element(element: ET.Element) -> ET.Element:
+    """深拷贝 XML 元素，避免修改源 URDF parse tree。"""
+
     return ET.fromstring(ET.tostring(element, encoding="unicode"))
 
 
 def _rewrite_mesh_filenames(
     element: ET.Element, *, source_dir: Path, output_dir: Path
 ) -> None:
+    """把相对 mesh 路径改写为相对缓存 URDF 输出目录的路径。"""
+
     for child in element.iter():
         filename = child.get("filename")
         if not filename or "://" in filename or Path(filename).is_absolute():
@@ -446,10 +464,14 @@ def _rewrite_mesh_filenames(
 
 
 def _format_vec(values: tuple[float, float, float]) -> str:
+    """按 URDF origin 需要的空格分隔格式输出三维向量。"""
+
     return " ".join(f"{float(value):.9g}" for value in values)
 
 
 def _cumotion_settings(robot_config: Mapping[str, object]) -> Mapping[str, object]:
+    """读取 robot config 顶层 cumotion 分组。"""
+
     settings = robot_config.get("cumotion")
     if not isinstance(settings, Mapping):
         raise ValueError("cuMotion config must be a mapping")
@@ -459,6 +481,8 @@ def _cumotion_settings(robot_config: Mapping[str, object]) -> Mapping[str, objec
 def _side_cumotion_settings(
     robot_config: Mapping[str, object], *, side: str
 ) -> Mapping[str, object]:
+    """读取单侧 robot profile 的 cumotion 资源配置，并拒绝嵌套双臂格式。"""
+
     settings = _cumotion_settings(robot_config)
     for key in ("left", "right"):
         if key in settings:
@@ -471,6 +495,8 @@ def _side_cumotion_settings(
 def _dual_generation_config_from_side_mappings(
     cumotion: Mapping[str, object],
 ) -> DualUrdfGenerationConfig:
+    """从 cumotion.left/right 简写结构构造双臂生成配置。"""
+
     left = _required_mapping(cumotion, "left", section="cumotion")
     right = _required_mapping(cumotion, "right", section="cumotion")
     return DualUrdfGenerationConfig(
@@ -497,6 +523,8 @@ def _dual_generation_config_from_side_mappings(
 
 
 def _dual_flange_frames(cumotion_settings: Mapping[str, object]) -> dict[str, str]:
+    """读取双臂配置中的左右 flange frame 名称。"""
+
     frames: dict[str, str] = {}
     for side in ("left", "right"):
         side_settings = _required_mapping(cumotion_settings, side, section="cumotion")
@@ -506,10 +534,14 @@ def _dual_flange_frames(cumotion_settings: Mapping[str, object]) -> dict[str, st
 
 
 def _dual_xrdf_path_for_urdf(urdf_path: Path) -> Path:
+    """根据缓存 URDF 路径推导同目录同名 XRDF 路径。"""
+
     return urdf_path.with_suffix(".xrdf")
 
 
 def _load_xrdf(path: Path) -> Mapping[str, object]:
+    """读取 XRDF YAML，并要求顶层是 mapping。"""
+
     with path.open("r", encoding="utf-8") as file:
         data = yaml.safe_load(file) or {}
     if not isinstance(data, Mapping):
@@ -520,6 +552,8 @@ def _load_xrdf(path: Path) -> Mapping[str, object]:
 def _merge_xrdf_documents(
     left: Mapping[str, object], right: Mapping[str, object]
 ) -> dict[str, object]:
+    """融合左右单臂 XRDF，生成双臂 C-space 和默认关节配置。"""
+
     left_cspace = _required_mapping(left, "cspace", section="left XRDF")
     right_cspace = _required_mapping(right, "cspace", section="right XRDF")
     left_joint_names = _required_sequence(
@@ -554,6 +588,8 @@ def _merge_xrdf_documents(
 def _merge_default_joint_positions(
     left: Mapping[str, object], right: Mapping[str, object]
 ) -> dict[str, float]:
+    """合并左右 XRDF default_joint_positions，并拒绝重复关节名。"""
+
     merged: dict[str, float] = {}
     for label, document in (("left", left), ("right", right)):
         values = document.get("default_joint_positions", {})
@@ -570,6 +606,8 @@ def _merge_default_joint_positions(
 def _merge_xrdf_cspace(
     left: Mapping[str, object], right: Mapping[str, object]
 ) -> dict[str, object]:
+    """合并左右 XRDF cspace 字段；列表字段拼接，标量字段必须一致或单侧缺省。"""
+
     merged: dict[str, object] = {
         "joint_names": [
             *_required_sequence(left, "joint_names", section="left XRDF cspace"),
@@ -593,6 +631,8 @@ def _merge_xrdf_cspace(
 
 
 def _validate_cspace_width(cspace: object, *, expected_width: int) -> None:
+    """校验合并后 cspace 的列表字段长度等于左右关节数之和。"""
+
     if not isinstance(cspace, Mapping):
         raise ValueError("merged XRDF cspace must be a mapping")
     for key, value in cspace.items():
@@ -606,6 +646,8 @@ def _validate_cspace_width(cspace: object, *, expected_width: int) -> None:
 
 
 def _optional_repo_path(value: object) -> Path | None:
+    """把可选路径解析为仓库路径；None 原样保留。"""
+
     if value is None:
         return None
     return repo_path(value)
@@ -614,6 +656,8 @@ def _optional_repo_path(value: object) -> Path | None:
 def _required_mapping(
     data: Mapping[str, object], key: str, *, section: str
 ) -> Mapping[str, object]:
+    """读取必填 mapping 字段，并把错误定位到 section.key。"""
+
     value = data.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"{section}.{key} must be a mapping")
@@ -623,6 +667,8 @@ def _required_mapping(
 def _required_sequence(
     data: Mapping[str, object], key: str, *, section: str
 ) -> list[object]:
+    """读取必填序列字段；XRDF 中这里要求 YAML list。"""
+
     value = data.get(key)
     if not isinstance(value, list):
         raise ValueError(f"{section}.{key} must be a sequence")
@@ -630,6 +676,8 @@ def _required_sequence(
 
 
 def _optional_sequence(data: Mapping[str, object], key: str) -> list[object]:
+    """读取可选 XRDF list 字段；缺省时返回空列表。"""
+
     value = data.get(key)
     if value is None:
         return []
@@ -639,6 +687,8 @@ def _optional_sequence(data: Mapping[str, object], key: str) -> list[object]:
 
 
 def _merge_unique_sequences(left: list[object], right: list[object]) -> list[object]:
+    """按出现顺序合并两个序列，并用字符串化值去重。"""
+
     merged: list[object] = []
     seen: set[str] = set()
     for value in (*left, *right):
@@ -653,6 +703,8 @@ def _merge_unique_sequences(left: list[object], right: list[object]) -> list[obj
 def _side_required_value(
     data: Mapping[str, object], side: str, key: str
 ) -> object:
+    """读取 cumotion.<side> 下的必填字段。"""
+
     value = data.get(key)
     if value is None:
         raise ValueError(f"cumotion.{side}.{key} is required")
@@ -662,6 +714,8 @@ def _side_required_value(
 def _required_value(
     data: Mapping[str, object], key: str, *, section: str
 ) -> object:
+    """读取必填字段，并把错误定位到 section.key。"""
+
     value = data.get(key)
     if value is None:
         raise ValueError(f"{section}.{key} is required")
@@ -669,5 +723,7 @@ def _required_value(
 
 
 def _require_file(path: Path, *, label: str) -> None:
+    """在生成 URDF/XRDF 前确认输入资源文件存在。"""
+
     if not path.is_file():
         raise FileNotFoundError(f"{label} not found: {path}")

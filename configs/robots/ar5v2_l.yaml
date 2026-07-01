@@ -1,36 +1,82 @@
-# 单独机械臂示例配置。
+# AR5V2_L 单独机械臂配置。
+#
+# 本文件描述一个“单个 Isaac articulation”的机器人 profile：
+# - robot 段负责 Isaac/PhysX 侧的资产导入、stage 路径、碰撞近似和物理覆盖。
+# - cumotion 段负责 cuMotion 规划侧加载的机器人模型资源。
+#
+# 注意：
+# - 这里不写机器人在场景中的 root_pose；root_pose 属于 configs/envs/*.yaml。
+# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/cumotion/*.yaml 管理。
+# - 本 profile 只导入机械臂本体，不包含 LinkerHand 灵巧手。
 robot:
-  # Isaac 场景中的机器人名称。
+  # 机器人逻辑名称。
+  # 运行时会作为 SingleArticulation 的 name 使用，也用于日志、配置选择和调试输出。
   name: ar5v2_l
-  # 当前默认使用 MJCF 资产导入；也可扩展为 urdf。
+
+  # 资产类型。
+  # 当前项目支持 mjcf 和 urdf；这里使用机械臂 MJCF 资产。
   asset_type: mjcf
+
   # 机器人资产路径，相对仓库根目录。
+  # 该文件只包含 AR5V2_L 机械臂，不包含手部模型。
   asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
-  # 导入到 USD stage 的根 prim 路径。
+
+  # 导入到当前 USD stage 的根 prim path，必须是绝对 USD 路径。
+  # Isaac importer 会在该路径下创建机器人 prim，再由代码查找 articulation root。
   prim_path: /World/AR5V2_L
+
   import:
-    # 导入碰撞 mesh 时使用的近似方式：convex_decomposition 或 convex_hull。
+    # Isaac importer 生成碰撞几何时使用的近似方式。
+    # convex_decomposition：把非凸 mesh 分解成多个凸碰撞体，接触形状更贴近原模型，计算成本更高。
+    # convex_hull：每个 mesh 生成一个凸包，速度更快，但会填平凹陷。
     collision_approximation: convex_decomposition
+
   physics:
+    # 机器人刚体重力策略。
+    # false 表示给对应刚体写入 disableGravity=True，即关闭重力；true 表示保留重力。
+    # default 用于未能按名称识别到 arm/hand 的刚体；本 profile 主要使用 arm 分组。
     gravity:
       default: false
       arm: false
       hand: false
+
     physx:
+      # 导入后写到机器人 USD/PhysX 上的资产级物理覆盖。
+      # 这些参数不属于控制器配置；它们影响接触、摩擦、反弹和刚体阻尼。
       material:
+        # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
         contact_static_friction: 0.8
+        # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
         contact_dynamic_friction: 0.6
+        # 恢复系数：0 表示接触基本不反弹。
         contact_restitution: 0.0
+
       rigid_body:
+        # 线速度阻尼：0 表示不额外衰减线速度，由原资产和仿真默认值决定。
         linear_damping: 0.0
+        # 角速度阻尼：适度抑制旋转抖动。
         angular_damping: 0.1
+
     solver:
+      # 机器人刚体的 PhysX solver iteration 覆盖。
+      # position_iterations 主要影响位置约束、接触穿透修正和关节约束收敛。
+      # velocity_iterations 主要影响速度约束、摩擦和碰撞后的速度收敛。
       arm:
+        # 机械臂刚体的位置约束求解迭代次数。
         position_iterations: 32
+        # 机械臂刚体的速度约束求解迭代次数。
         velocity_iterations: 4
 
 cumotion:
-  # 机器人模型资源字段；IK/planner 等算法参数由 configs/cumotion/*.yaml 提供。
+  # cuMotion 规划后端使用的模型资源。
+  # IK/planner 等算法参数由 configs/cumotion/*.yaml 提供，不放在本文件。
+
+  # XRDF 路径：描述 cuMotion 的 C-space、关节语义、默认关节配置等规划信息。
   xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+
+  # URDF 路径：描述 cuMotion 需要的机械臂运动学树和 link/joint 结构。
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+
+  # 机械臂法兰 frame。
+  # 没有显式 TCP 时，IK/规划会把该 frame 作为默认末端；生成自定义 TCP 时也会以它为父 frame。
   flange_frame: AR5V2_L_arm_flan_link

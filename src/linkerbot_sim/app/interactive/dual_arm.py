@@ -138,6 +138,8 @@ def _refresh_hold_once(
     step: int,
     should_stop,
 ) -> int:
+    """空闲时刷新一次保持命令，让 GUI 模式下仿真持续向前推进。"""
+
     if runtime.execution.simulation_app is not None:
         return _hold_for_duration(
             runtime,
@@ -155,6 +157,8 @@ def _hold_for_duration(
     duration_s: float,
     should_stop,
 ) -> int:
+    """在指定时间内保持左右臂当前 command position，不生成新的规划目标。"""
+
     current_left = current_command(runtime.execution.left)
     current_right = current_command(runtime.execution.right)
     return DualCommandPositionTargetStep(
@@ -169,5 +173,7 @@ def _hold_for_duration(
 
 
 def _simulation_app_stopped(runtime: DualRobotAppRuntime) -> bool:
+    """判断 Isaac SimulationApp 是否已经被用户关闭。"""
+
     app = runtime.execution.simulation_app
     return app is not None and not app.is_running()

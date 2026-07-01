@@ -42,6 +42,8 @@ class CapsuleRopePhysicsConfig:
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
     ) -> "CapsuleRopePhysicsConfig":
+        """解析 capsule rope 运行时物理覆盖。"""
+
         if data is None:
             return cls()
         allowed = {
@@ -67,6 +69,8 @@ class CapsuleRopePhysicsConfig:
         )
 
     def has_overrides(self) -> bool:
+        """返回是否有任何需要写入 stage 的运行时物理覆盖。"""
+
         return (
             self.material is not None
             or self.solver_position_iterations is not None
@@ -228,6 +232,8 @@ def apply_capsule_rope_runtime_physics(
 
 
 def _define_runtime_material(stage, path, config: CapsuleRopeMaterialConfig):
+    """在 stage 中创建绳体运行时物理材质 prim。"""
+
     from pxr import PhysxSchema, UsdPhysics, UsdShade
 
     material = UsdShade.Material.Define(stage, path)
@@ -248,6 +254,8 @@ def _define_runtime_material(stage, path, config: CapsuleRopeMaterialConfig):
 
 
 def _reject_generation_fields(data: Mapping[str, object], *, label: str) -> None:
+    """拒绝把资产生成期字段写进运行时 object profile。"""
+
     generation_fields = {
         "segments",
         "length",

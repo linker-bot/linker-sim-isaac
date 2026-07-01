@@ -83,26 +83,38 @@ class SingleRobotRuntime:
 
     @property
     def robot(self):
+        """返回 Isaac SingleArticulation，兼容旧脚本中的 runtime.robot 访问。"""
+
         return self.execution.articulation
 
     @property
     def world(self):
+        """返回当前 Isaac World。"""
+
         return self.execution.simulation_world
 
     @property
     def controller(self):
+        """返回当前机器人使用的关节控制器封装。"""
+
         return self.execution.joint_controller
 
     @property
     def mjcf_path(self) -> Path | None:
+        """返回机器人 MJCF 路径；URDF 资产导入时为 None。"""
+
         return self.prepared_robot.mjcf_path
 
     def mjcf_path_required(self, reason: str) -> Path:
+        """读取必需的 MJCF 路径；调用方给出用途以生成更具体的错误信息。"""
+
         if self.mjcf_path is None:
             raise ValueError(f"{reason} requires an MJCF robot asset")
         return self.mjcf_path
 
     def close(self) -> None:
+        """关闭日志文件和 SimulationApp；多次调用是安全的。"""
+
         if self._closed:
             return
         self._closed = True
@@ -253,6 +265,8 @@ def create_single_robot_runtime(
 
 
 def _print_status(status_prefix: str | None, message: str) -> None:
+    """按可选前缀输出机器可 grep 的 runtime 状态行。"""
+
     if status_prefix is None:
         return
     print(f"{status_prefix}_{message}", flush=True)

@@ -50,6 +50,8 @@ class AssetImportConfig:
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
     ) -> "AssetImportConfig":
+        """从 robot.import / object.import 映射解析 importer 选项。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -224,6 +226,8 @@ class RobotPhysxComponentOverride:
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
     ) -> "RobotPhysxComponentOverride":
+        """解析单个 default/arm/hand 分组的 PhysX 覆盖字段。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -334,6 +338,8 @@ class RobotPhysxOverrides:
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
     ) -> "RobotPhysxOverrides":
+        """解析 robot.physics.physx，并合并通用默认值与分组覆盖。"""
+
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
@@ -569,6 +575,8 @@ def dual_robot_root_poses_from_env_config(
 
 
 def _controlled_joints_from_mapping(data: Mapping[str, object]) -> tuple[str, ...]:
+    """读取 controlled_joints；缺省 ["all"] 表示由控制器自动选择。"""
+
     value = data.get("controlled_joints", ("all",))
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("controlled_joints must be a sequence")
@@ -579,6 +587,8 @@ def _controlled_joints_from_mapping(data: Mapping[str, object]) -> tuple[str, ..
 
 
 def _vec3_from_mapping(data: Mapping[str, object], key: str) -> tuple[float, float, float]:
+    """从 mapping 中读取三维向量字段；缺省为零向量。"""
+
     value = data.get(key, (0.0, 0.0, 0.0))
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"{key} must be a length-3 sequence")
@@ -589,6 +599,8 @@ def _vec3_from_mapping(data: Mapping[str, object], key: str) -> tuple[float, flo
 
 
 def _normalize_collision_approximation(value: object, *, label: str) -> str:
+    """规范化 importer collision approximation，并拒绝旧别名/未知值。"""
+
     normalized = str(value).strip()
     if normalized in SUPPORTED_COLLISION_APPROXIMATIONS:
         return normalized
@@ -599,6 +611,8 @@ def _normalize_collision_approximation(value: object, *, label: str) -> str:
 def _required_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object]:
+    """读取必填子 mapping，并把错误信息定位到 parent.key。"""
+
     value = data.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"{parent_label}.{key} must be a mapping")
@@ -608,6 +622,8 @@ def _required_mapping(
 def _optional_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object] | None:
+    """读取可选子 mapping；字段缺失时返回 None。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -619,6 +635,8 @@ def _optional_mapping(
 def _optional_bool(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> bool | None:
+    """读取可选布尔字段；字段缺失时返回 None。"""
+
     if key not in data:
         return None
     value = data[key]
@@ -630,6 +648,8 @@ def _optional_bool(
 def _optional_non_negative_float(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> float | None:
+    """读取可选非负浮点字段；字段缺失时返回 None。"""
+
     if key not in data:
         return None
     value = float(data[key])
@@ -641,6 +661,8 @@ def _optional_non_negative_float(
 def _reject_unsupported_keys(
     data: Mapping[str, object], allowed: set[str], label: str
 ) -> None:
+    """拒绝配置中的未知 key，避免拼写错误被静默忽略。"""
+
     unsupported_keys = set(data) - allowed
     if unsupported_keys:
         unsupported = ", ".join(sorted(unsupported_keys))

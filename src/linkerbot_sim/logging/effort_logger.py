@@ -202,6 +202,8 @@ class EffortLogger:
         *,
         flush_interval_steps: int = 1,
     ) -> None:
+        """创建 effort CSV writer，并按关节名展开三类 effort 列。"""
+
         self.joint_names = list(joint_names)
         fieldnames = ["step", "time_s", "phase", "drive_update"]
         for name in self.joint_names:

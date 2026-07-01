@@ -1,51 +1,86 @@
 # 机械臂控制器参数。
+#
+# 本文件描述 arm 这组关节的控制器增益和限幅：
+# - position_control：位置命令模式，可走 Isaac implicit drive 或 Python 显式 PD。
+# - velocity_control：速度命令模式，可走 Isaac velocity drive 或 Python 显式速度残差控制。
+# - effort_control：力矩/力命令模式，当前为 direct effort。
+#
+# 注意：
+# - 文件名和 target 应保持一致，用于防止机械臂/灵巧手控制器配置互换。
+# - active_joints 是直接接收上层命令的关节。
+# - follower_joints 是 mimic/equality follower，不作为独立命令关节，但仍需要 drive 维持跟随关系。
 target: arm
 
 position_control:
-  # 机械臂位置控制参数
-  # method=implicit 使用 Isaac/PhysX drive
-  # method=explicit 在 Python 侧计算 PD effort
+  # 机械臂位置控制参数。
+  # implicit：使用 Isaac/PhysX position drive。
+  # explicit：在 Python 侧根据位置误差和速度误差计算 PD effort。
   method: implicit
-  # 主动关节参数：stiffness/damping 用于 implicit drive 或显式 PD.
-  # max_force 用作 drive/effort 限幅
+
+  # 主动关节参数。
+  # stiffness/damping 用于 implicit drive 或显式 PD；max_force 用作 drive/effort 限幅。
   active_joints:
+    # 位置刚度；数值越大，位置误差产生的回正 effort 越大。
     stiffness: 1000.0
+    # 阻尼；抑制速度误差和振荡。
     damping: 50.0
+    # 最大驱动力/力矩限幅。
     max_force: 100.0
+    # 默认关节摩擦；若 MJCF frictionloss 提供同名关节值，会覆盖这里的默认值。
     joint_friction: 0.5
+
   # 从动关节参数：无论主动模式是什么，从动关节都用 Isaac position drive 跟随 master 实际角度。
   # 当前示例臂没有 mimic follower，保留字段方便之后接入带从动关节的机械臂。
   follower_joints:
+    # 从动关节 position drive 刚度。
     stiffness: 1000.0
+    # 从动关节 position drive 阻尼。
     damping: 50.0
+    # 从动关节最大驱动力/力矩限幅。
     max_force: 100.0
+    # 从动关节默认摩擦。
     joint_friction: 0.5
 
 velocity_control:
-  # 机械臂速度控制参数
-  # method=implicit 使用 Isaac velocity drive
-  # method=explicit 计算 damping * 速度残差
+  # 机械臂速度控制参数。
+  # implicit：使用 Isaac/PhysX velocity drive。
+  # explicit：在 Python 侧计算 damping * 速度残差并作为 effort。
   method: explicit
+
   # 主动关节速度控制不使用 stiffness；damping 是速度残差到 effort 的比例，max_force 是限幅。
   active_joints:
+    # 速度残差到 effort 的比例系数。
     damping: 20.0
+    # 最大驱动力/力矩限幅。
     max_force: 100.0
+
   # 从动关节仍然是 position drive，所以必须保留 stiffness/damping/max_force，而不是 effort_limit。
   follower_joints:
+    # 从动关节 position drive 刚度。
     stiffness: 1000.0
+    # 从动关节 position drive 阻尼。
     damping: 20.0
+    # 从动关节最大驱动力/力矩限幅。
     max_force: 100.0
+    # 从动关节默认摩擦。
     joint_friction: 0.5
 
 effort_control:
   # 机械臂 effort 控制参数。method=direct 表示直接把 effort command 下发给 Isaac。
   method: direct
+
   # 主动关节 direct effort 只需要 effort_limit；调用方给出的 effort 会按该值对称限幅。
   active_joints:
+    # effort 命令对称限幅，即 [-effort_limit, effort_limit]。
     effort_limit: 100.0
+
   # 从动关节不接收 direct effort，仍然是 position drive，所以这里配置 drive 增益和 max_force。
   follower_joints:
+    # 从动关节 position drive 刚度。
     stiffness: 1000.0
+    # 从动关节 position drive 阻尼。
     damping: 20.0
+    # 从动关节最大驱动力/力矩限幅。
     max_force: 100.0
+    # 从动关节默认摩擦。
     joint_friction: 0.5

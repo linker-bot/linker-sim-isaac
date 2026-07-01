@@ -149,6 +149,8 @@ def merge_solver_configs(
 def _optional_string(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> str | None:
+    """读取可选非空字符串字段。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -161,6 +163,8 @@ def _optional_string(
 def _optional_int(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> int | None:
+    """读取可选非负整数字段。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -173,6 +177,8 @@ def _optional_int(
 def _optional_group_solver_mapping(
     data: Mapping[str, object], key: str, parent_label: str
 ) -> Mapping[str, object] | None:
+    """读取 arm/hand solver 子分组，并限制只能写 iteration 字段。"""
+
     value = data.get(key)
     if value is None:
         return None
@@ -193,6 +199,8 @@ def _reject_solver_keys(
     *,
     extra_message: str | None = None,
 ) -> None:
+    """拒绝 solver 配置中的未知 key，并可追加层级归属提示。"""
+
     unsupported = set(data) - allowed
     if not unsupported:
         return
@@ -203,10 +211,14 @@ def _reject_solver_keys(
 
 
 def _has_overrides(config: SolverIterationConfig) -> bool:
+    """判断配置是否包含 scene solver type 或任一刚体 iteration 覆盖。"""
+
     return config.solver_type is not None or _has_iteration_overrides(config)
 
 
 def _has_iteration_overrides(config: SolverIterationConfig) -> bool:
+    """判断配置是否包含 arm/hand position/velocity iteration 覆盖。"""
+
     return any(
         getattr(config, field_name) is not None
         for field_name in _ITERATION_FIELD_NAMES
@@ -340,6 +352,8 @@ def apply_solver_iteration_overrides(
 
 
 def _validate_solver_config(config: SolverIterationConfig) -> None:
+    """校验 solver type 和 iteration 数值范围。"""
+
     if config.solver_type is not None:
         solver_type = str(config.solver_type).upper()
         if solver_type not in {"PGS", "TGS"}:

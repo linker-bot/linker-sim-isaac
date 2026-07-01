@@ -97,6 +97,8 @@ class IkMotionGoal:
 
 @dataclass(frozen=True)
 class _DualMoveExecutionResult:
+    """单个双臂 move 执行后的滚动状态，用于串联后续 move。"""
+
     step: int
     cspace_q: np.ndarray
     left_command: np.ndarray
@@ -114,6 +116,8 @@ class DualArmCuMotionExecutionSession:
         cumotion_profile: str = "default",
         dual_arm_profile: str = "ar5v2_l6v1_dual",
     ) -> None:
+        """加载双臂 cuMotion context、规划配置和左右 C-space 分区。"""
+
         tcp.validate()
         self.runtime = runtime
         self.execution = runtime.execution
@@ -165,15 +169,21 @@ class DualArmCuMotionExecutionSession:
             raise
 
     def close(self) -> None:
+        """释放长期持有的 cuMotion context manager。"""
+
         if self._closed:
             return
         self._closed = True
         self._context_manager.__exit__(None, None, None)
 
     def __enter__(self) -> "DualArmCuMotionExecutionSession":
+        """让 session 可用于 with 语句，复用已加载的 cuMotion context。"""
+
         return self
 
     def __exit__(self, exc_type, exc, traceback) -> None:
+        """退出 with 语句时关闭 cuMotion context。"""
+
         self.close()
 
     def execute_moves(
@@ -574,6 +584,8 @@ def _run_dual_move(
     tcp: DualArmTcpSpec,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """分派并执行一个双臂 move，统一维护 C-space 和左右 command-space 状态。"""
+
     if isinstance(move, HandMoveSpec):
         move.validate()
         return _execute_hand_move(
@@ -1053,6 +1065,8 @@ def _plan_dual_motion_trajectory(
     side: str | None,
     execution_mode: str,
 ) -> JointTrajectory:
+    """调用双臂 cuMotion planner，并把结果转成融合 C-space 轨迹。"""
+
     planner = context.make_motion_planner(
         tcp_frame_name=tcp_frame_name,
         config=config,
@@ -1106,6 +1120,8 @@ def _execute_dual_cspace_trajectory(
     default_duration_s: float | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """把融合 C-space 轨迹拆成左右 command-space 轨迹并执行。"""
+
     if len(trajectory) == 0:
         raise ValueError(f"trajectory for {phase!r} cannot be empty")
     goal_q = np.asarray(trajectory.positions[-1], dtype=float).reshape(-1)
@@ -1168,6 +1184,8 @@ def _execute_hand_move(
     sample_dt: float,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """把单手 move 包装成 DualHandMoveSpec，复用双手执行路径。"""
+
     dual = DualHandMoveSpec(
         left=move if _normalize_side(move.side) == "left" else None,
         right=move if _normalize_side(move.side) == "right" else None,
@@ -1197,6 +1215,8 @@ def _execute_dual_hand_move(
     sample_dt: float,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """执行左右手 command-space 线性插值动作，不改变机械臂 C-space。"""
+
     duration_s = _dual_hand_duration(move)
     phase = phase_for_move(move)
     left_target = (
@@ -1257,6 +1277,8 @@ def _execute_raw_joint_sequence_move(
     step: int,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """按 physics step 执行调用方提供的原始左右 command target 序列。"""
+
     phase = move.phase or "raw_joint_sequence"
     left_positions = _raw_sequence_side_matrix(
         move.left,
@@ -1316,6 +1338,8 @@ def _execute_overlays(
     default_duration_s: float | None,
     should_stop: Callable[[], bool] | None = None,
 ) -> tuple[int, np.ndarray, np.ndarray]:
+    """执行指定 timing 的手部 overlays，并返回更新后的 step 与左右 command。"""
+
     current_left = np.asarray(left_command, dtype=float).reshape(-1)
     current_right = np.asarray(right_command, dtype=float).reshape(-1)
     for overlay in overlays:
@@ -1352,6 +1376,8 @@ def _finish_arm_move_with_after_overlays(
     default_duration_s: float | None,
     should_stop: Callable[[], bool] | None = None,
 ) -> _DualMoveExecutionResult:
+    """主臂动作完成后执行 after overlays，并把结果合并为新的滚动状态。"""
+
     step, left_command, right_command = _execute_overlays(
         overlays,
         timing="after",
@@ -1384,6 +1410,8 @@ def _apply_sync_overlays_to_trajectories(
     default_duration_s: float | None,
     phase: str,
 ) -> tuple[JointTrajectory, JointTrajectory]:
+    """把 sync overlays 的手部轨迹合并进主臂左右 command 轨迹。"""
+
     left = left_trajectory
     right = right_trajectory
     left_target = np.asarray(left.positions[-1], dtype=float).reshape(-1)
@@ -1443,6 +1471,8 @@ def _overlay_hand_trajectory(
     default_duration_s: float | None,
     phase: str,
 ) -> JointTrajectory:
+    """为一侧手部 overlay 生成 command 轨迹，并覆盖 base 中的手部列。"""
+
     duration_s = (
         float(hand.duration_s)
         if hand.duration_s is not None
@@ -1473,6 +1503,8 @@ def _merge_hand_columns(
     command_joint_names: Sequence[str],
     hand_joint_names: Sequence[str],
 ) -> JointTrajectory:
+    """按 base 时间轴重采样 overlay，并只替换手部 command 列。"""
+
     names = tuple(str(name) for name in command_joint_names)
     hand_indices = [
         index for index, name in enumerate(names) if name in set(hand_joint_names)
@@ -1517,6 +1549,8 @@ def _hand_target_command(
     start_command: np.ndarray,
     hand: HandMoveSpec,
 ) -> np.ndarray:
+    """把手部目标写入一侧 command 向量，支持按关节名或按手部顺序输入。"""
+
     if _normalize_side(hand.side) != side_runtime.side:
         raise ValueError(
             f"hand target side {hand.side!r} does not match runtime side "
@@ -1561,6 +1595,8 @@ def _raw_sequence_side_matrix(
     current_command: np.ndarray,
     label: str,
 ) -> np.ndarray | None:
+    """把单侧 raw sequence 规范化为 shape=(samples, command_dof) 的矩阵。"""
+
     if side is None:
         return None
     command_names = tuple(
@@ -1600,6 +1636,8 @@ def _raw_mapping_sequence_matrix(
     base_command: np.ndarray,
     label: str,
 ) -> np.ndarray:
+    """把按关节名给出的 raw sequence 展开成完整 command-space 矩阵。"""
+
     if not positions:
         raise ValueError(f"{label} raw joint sequence mapping cannot be empty")
     index_by_name = {
@@ -1630,6 +1668,8 @@ def _validate_raw_side_sample_counts(
     left_positions: np.ndarray | None,
     right_positions: np.ndarray | None,
 ) -> None:
+    """校验 raw sequence 左右两侧样本数一致，避免一侧提前结束。"""
+
     counts = [
         int(matrix.shape[0])
         for matrix in (left_positions, right_positions)
@@ -1642,6 +1682,8 @@ def _validate_raw_side_sample_counts(
 
 
 def _hand_command_joint_names(command_joint_names: Sequence[str]) -> tuple[str, ...]:
+    """从一侧 command-space 名称中过滤出 hand 组件关节。"""
+
     return tuple(
         str(name)
         for name in command_joint_names
@@ -1658,6 +1700,8 @@ def _command_linear_trajectory(
     sample_dt: float,
     phase: str,
 ) -> JointTrajectory:
+    """在 command-space 中生成一条线性插值轨迹。"""
+
     start = np.asarray(start_command, dtype=float).reshape(-1)
     target = np.asarray(target_command, dtype=float).reshape(-1)
     if start.size != target.size:
@@ -1678,6 +1722,8 @@ def _command_linear_trajectory(
 
 
 def _trajectory_sample_times(*, duration_s: float, sample_dt: float) -> np.ndarray:
+    """按仿真采样周期生成轨迹采样时间，并保证至少有一个样本。"""
+
     duration = max(float(duration_s), float(sample_dt))
     dt = max(float(sample_dt), 1.0e-6)
     steps = max(1, int(np.ceil(duration / dt)))
@@ -1688,6 +1734,8 @@ def _trajectory_sample_times(*, duration_s: float, sample_dt: float) -> np.ndarr
 
 
 def _dual_hand_duration(move: DualHandMoveSpec) -> float:
+    """解析双手动作时长；父级缺省时取左右子手动作的最大时长。"""
+
     if move.duration_s is not None:
         return float(move.duration_s)
     durations = [
@@ -1706,6 +1754,8 @@ def _dual_hand_move_from_overlay(
     duration_s: float | None,
     phase: str,
 ) -> DualHandMoveSpec:
+    """把 overlay 转成可直接执行的 DualHandMoveSpec。"""
+
     return DualHandMoveSpec(
         left=_hand_with_default_duration(overlay.left_hand, duration_s),
         right=_hand_with_default_duration(overlay.right_hand, duration_s),
@@ -1718,6 +1768,8 @@ def _hand_with_default_duration(
     hand: HandMoveSpec | None,
     duration_s: float | None,
 ) -> HandMoveSpec | None:
+    """给 overlay 手部动作补默认时长；显式时长优先。"""
+
     if hand is None or hand.duration_s is not None:
         return hand
     if duration_s is None:
@@ -1731,6 +1783,8 @@ def _target_orientation_for_mode(
     current_orientation: np.ndarray,
     target_orientation: np.ndarray | None,
 ) -> np.ndarray | None:
+    """根据 orientation_mode 选择 IK 目标姿态。"""
+
     if mode == "none":
         return None
     if mode == "current":
@@ -1743,6 +1797,8 @@ def _target_orientation_for_mode(
 
 
 def _raise_if_requested_stop(should_stop: Callable[[], bool] | None) -> None:
+    """在可中断边界检查外部停止请求，并抛出统一中断异常。"""
+
     if should_stop is not None and should_stop():
         raise DualCommandExecutionInterrupted("dual command execution interrupted")
 
@@ -1753,6 +1809,8 @@ def _ik_request_with_runtime_defaults(
     current_q: np.ndarray,
     tcp_frame_name: str,
 ) -> IKRequest:
+    """给 IK request 补运行期默认 TCP 和 warm-start C-space seed。"""
+
     return replace(
         request,
         tcp_frame_name=request.tcp_frame_name or tcp_frame_name,
@@ -1770,6 +1828,8 @@ def _planning_request_with_runtime_defaults(
     duration_s: float,
     tcp_frame_name: str,
 ) -> MotionRequest | SpecifiedPathRequest:
+    """给规划 request 补运行期默认 TCP 和 duration。"""
+
     return replace(
         request,
         tcp_frame_name=request.tcp_frame_name or tcp_frame_name,
@@ -1778,12 +1838,16 @@ def _planning_request_with_runtime_defaults(
 
 
 def _dual_execution_mode(move: MoveSpec) -> str:
+    """把 move 映射为双臂执行模式：selected_side 或 dual_cspace。"""
+
     if isinstance(move, CumotionMoveSpec) and move.execution == "dual_cspace":
         return "dual_cspace"
     return "selected_side"
 
 
 def _move_side_required(move: MoveSpec) -> str:
+    """读取双臂 selected-side move 的 side 字段。"""
+
     side = getattr(move, "side", None)
     if side is None:
         raise ValueError(f"{type(move).__name__} requires side in dual-arm runtime")
@@ -1796,6 +1860,8 @@ def _move_tcp_frame_name(
     tcp: DualArmTcpSpec,
     side: str | None,
 ) -> str:
+    """解析 move 使用的 TCP frame；selected-side 模式可从左右默认 TCP 推导。"""
+
     value = explicit_tcp_frame_name(move)
     if value is not None:
         return value
@@ -1809,6 +1875,8 @@ def _move_tcp_frame_name(
 def _side_dual_arm_config(
     dual_arm: Mapping[str, object], side: str
 ) -> Mapping[str, object]:
+    """读取 dual_arm 语义配置中某一侧的配置块，并校验必需字段。"""
+
     side_config = dual_arm.get(side)
     if not isinstance(side_config, Mapping):
         raise ValueError(f"dual_arm.{side} must be a mapping")
@@ -1820,6 +1888,8 @@ def _side_dual_arm_config(
 
 
 def _side_arm_joints(dual_arm: Mapping[str, object], side: str) -> tuple[str, ...]:
+    """读取某一侧机械臂在融合 C-space 中的关节顺序。"""
+
     value = _side_dual_arm_config(dual_arm, side)["arm_joints"]
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"dual_arm.{side}.arm_joints must be a sequence")
@@ -1830,6 +1900,8 @@ def _side_arm_joints(dual_arm: Mapping[str, object], side: str) -> tuple[str, ..
 
 
 def _side_tcp_frame_name(dual_arm: Mapping[str, object], side: str) -> str:
+    """读取某一侧动作层默认 TCP frame 名称。"""
+
     side_config = _side_dual_arm_config(dual_arm, side)
     if "tcp_frame" not in side_config:
         raise ValueError(f"dual_arm.{side}.tcp_frame cannot be empty")
@@ -1840,6 +1912,8 @@ def _side_tcp_frame_name(dual_arm: Mapping[str, object], side: str) -> str:
 
 
 def _side_flange_frame(dual_arm: Mapping[str, object], side: str) -> str:
+    """读取某一侧机械臂法兰 frame，用于绑定临时 TCP link。"""
+
     side_config = _side_dual_arm_config(dual_arm, side)
     if "flange_frame" not in side_config:
         raise ValueError(f"dual_arm.{side}.flange_frame cannot be empty")
@@ -1850,6 +1924,8 @@ def _side_flange_frame(dual_arm: Mapping[str, object], side: str) -> str:
 
 
 def _normalize_side(side: str) -> str:
+    """把 side 规范化为 left/right。"""
+
     normalized = str(side).lower()
     if normalized not in {"left", "right"}:
         raise ValueError(f"side must be 'left' or 'right', got {side!r}")
