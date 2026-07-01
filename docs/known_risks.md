@@ -1,6 +1,12 @@
-# 潜在隐患记录
+# 已知风险与设计约束
+
+本文记录已经遇到或容易回归的仿真风险。它不是普通 TODO 列表，而是用于说明当前代码和资产组织
+为什么采用某些约束：有些风险已经有代码保护，但重构时仍需要保留保护；有些风险属于资产建模边界，
+需要通过配置和导入流程避免。
 
 ## 1. URDF 静态环境物体不要叠加 kinematic/static 覆盖
+
+**当前状态：已有代码保护，重构对象导入逻辑时不要破坏。**
 
 ### 背景
 
@@ -33,7 +39,7 @@ malloc(): mismatching next->prev_size (unsorted)
 
 这个 malloc 崩溃更像是无效 PhysX joint 设置之后的下游失败，不是根因。
 
-### 当前保护
+### 当前保护和设计约束
 
 `src/linkerbot_sim/objects/rigid/runtime.py` 会区分处理 URDF 静态 rigid object 和 USD 静态 rigid object：
 
@@ -42,6 +48,9 @@ malloc(): mismatching next->prev_size (unsorted)
 - URDF + `physics.static: false`：使用 importer `fix_base=False`；物体保持动态。
 - USD + `physics.static: true`：把刚体标成 kinematic，并关闭重力。
 
+这个约束的核心是：**URDF fixed-base 和 USD kinematic/static 是两套固定机制，不要同时叠加到
+同一个对象上。**
+
 ### 后续注意
 
 如果以后重构静态物体处理逻辑，需要保持这两套固定机制分开。若新增资产类型自带 root joint
@@ -49,6 +58,8 @@ malloc(): mismatching next->prev_size (unsorted)
 static-static joint 条件。
 
 ## 2. 机械臂和桌面合并为同一个 URDF 可能隐藏固定关节风险
+
+**当前状态：资产建模约束，当前通过机器人/环境对象拆分来规避。**
 
 ### 背景
 
@@ -76,3 +87,15 @@ static-static joint 条件。
   `robots.dual.left/right.root_pose` 管理。
 
 这种拆分可以降低 URDF 合并资产中 fixed joint、base link 和 importer 固定基座语义混在一起的风险。
+
+### 何时可以例外
+
+只有在明确满足以下条件时，才考虑把环境和机器人放进同一个资产：
+
+- 资产中能清楚区分静态环境 link、机器人 articulation root 和机器人 base link。
+- 环境固定语义、机器人 root pose、controller 初始化位姿不会互相覆盖。
+- 已经在 Isaac 导入后检查 articulation root、root joint、fixed joint 和 rigid body 静态属性。
+- 已经通过最小场景 smoke test 验证没有 `static-static joint`、root pose 冲突或 controller 初始化异常。
+
+否则继续使用当前拆分方案：环境对象走 `configs/objects` + env `objects[]`，机器人走
+`configs/robots` + env `robots.single` / `robots.dual`。
