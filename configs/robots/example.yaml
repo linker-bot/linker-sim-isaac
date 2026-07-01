@@ -5,10 +5,16 @@
 # - 描述 cuMotion 规划层要加载的机器人模型资源。
 #
 # 使用方式：
-#   复制本文件为 configs/robots/<your_robot>.yaml，再替换 name/path/prim_path/root_pose。
+#   复制本文件为 configs/robots/<your_robot>.yaml，再替换 name/path/prim_path。
 #
 # 注意：
+# - 一份 robot YAML 只描述一个 Isaac articulation。单臂/双臂选择写在 configs/envs/*.yaml：
+#   - robots.single 选择一个 robot profile。
+#   - robots.dual.left/right 选择两个单臂 robot profile。
+# - root_pose 属于 scene，不写在 robot profile。
 # - robot.import.collision_approximation 只影响 Isaac importer 生成碰撞几何的方式。
+# - robot.physics.physx 是导入后的机器人 USD/PhysX 材料和刚体阻尼覆盖，不属于控制器配置。
+# - robot.physics.solver 是机器人刚体 solver iteration 覆盖；scene solver type 写在 env。
 # - cumotion 段只放模型资源，不放 IK/planner 算法参数；算法参数放 configs/cumotion/*.yaml。
 
 robot:
@@ -41,11 +47,24 @@ robot:
       default: false
       arm: false
       hand: false
-
-# 机器人导入根在世界坐标中的位姿；xyz 单位 m，rpy 单位 rad，XYZ 固定轴顺序。
-root_pose:
-  xyz: [0.0, 0.0, 0.0]
-  rpy: [0.0, 0.0, 0.0]
+    physx:
+      # 机器人资产级 USD/PhysX 覆盖；控制器 YAML 只放控制律和 drive 参数。
+      material:
+        contact_static_friction: 0.8
+        contact_dynamic_friction: 0.6
+        contact_restitution: 0.0
+      rigid_body:
+        linear_damping: 0.0
+        angular_damping: 0.1
+    solver:
+      # 机器人刚体的 position/velocity solver iteration。
+      # 只写某个字段时，只覆盖对应部件的对应 PhysX 属性。
+      arm:
+        position_iterations: 32
+        velocity_iterations: 4
+      hand:
+        position_iterations: 32
+        velocity_iterations: 4
 
 # 可选：控制关节选择。缺省 ["all"]，控制器会自动剔除 MJCF equality/mimic follower。
 # controlled_joints:

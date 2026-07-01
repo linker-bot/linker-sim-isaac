@@ -1,0 +1,46 @@
+# Capsule rope USD 资产生成配置。
+#
+# 这里描述资产固有属性：几何、质量、阻尼、关节限制、碰撞过滤和可视材质。
+# 运行时接触摩擦和 solver iteration 放在 configs/objects/capsule_rope.yaml。
+
+object:
+  name: capsuleropeV1_default
+  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  root_path: /CapsuleRope
+
+rope:
+  # 中间柔性段数量；越多越像绳子，但仿真成本越高。
+  segments: 12
+  # 绳体总长度，单位 m。
+  length: 0.75
+  # 绳段半径，单位 m；null 表示按 length / segments 自动估算。
+  radius: null
+  # 资产内部局部中心。运行时世界位置由 env scene 的 objects[].root_pose 决定。
+  center: [0.0, 0.0, 0.0]
+  # 绳体总质量，内部按 segment 平均分配。
+  total_mass: 0.2
+  # segment 几何形状：capsule 更适合绳体接触，cuboid 便于调试。
+  shape: capsule
+  # 两端端块质量和尺寸。
+  endpoint_box_mass: 0.5
+  endpoint_box_size: [0.04, 0.03, 0.1]
+  # 端块和中间绳段刚体阻尼。
+  endpoint_linear_damping: 0.015
+  endpoint_angular_damping: 0.05
+  segment_linear_damping: 0.1
+  segment_angular_damping: 0.12
+  # 相邻段弯曲角限制和弹簧阻尼，角度单位 rad。
+  bend_limit: 2.0943951023931953
+  bend_stiffness: 0.1
+  bend_damping: 0.1
+  # 是否完全锁住扭转自由度；false 时用 twist_* 做软限制。
+  lock_twist: true
+  # 扭转角限制，单位 rad；null 表示按 segments 自动估算。
+  twist_limit: null
+  twist_stiffness: 0.1
+  twist_damping: 0.05
+  # 禁用相邻段碰撞，避免关节连接处自碰造成抖动。
+  disable_adjacent_collisions: true
+  # 资产内置可视材质颜色，RGB 范围通常为 0-1。
+  endpoint_color: [0.12, 0.34, 0.95]
+  rope_color: [0.78, 0.62, 0.22]

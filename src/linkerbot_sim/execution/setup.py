@@ -27,7 +27,8 @@ from linkerbot_sim.assets.robot_loader import (
 )
 from linkerbot_sim.assets.solver_overrides import (
     apply_solver_iteration_overrides,
-    solver_settings,
+    merge_solver_configs,
+    scene_solver_settings,
 )
 from linkerbot_sim.assets.usd_overrides import (
     apply_robot_gravity_policy,
@@ -88,8 +89,9 @@ def import_execution_robot_to_stage(
 ) -> ImportedRobot:
     """导入一个机器人 articulation，并写入 reset 前的 stage 级覆盖。
 
-    参数中的 ``robot_execution`` 来自 robot YAML；它决定资产路径、root pose、受控关节选择和
-    机器人重力策略。env YAML 只提供世界/solver 相关配置，不再决定机器人自身重力。
+    参数中的 ``robot_execution`` 合并了 robot profile 的资产/物理属性和 env scene 的 root pose；
+    robot profile 决定资产路径、受控关节选择、重力策略和刚体 solver iteration。
+    env YAML 还提供世界级设置，例如 scene solver type。
     """
 
     articulation_path, asset_path, imported_root_path = import_robot_asset(
@@ -98,14 +100,21 @@ def import_execution_robot_to_stage(
     # root_pose 写在导入根 prim 上，保证 Isaac 执行模型和 cuMotion 双臂生成模型使用同一安装位姿。
     apply_root_pose(stage, imported_root_path, robot_execution.root_pose)
     controlled_joints = tuple(robot_execution.controlled_joints)
-    # USD 层先写 drive/friction/material seed；reset 后 controller 会再写运行时最终控制参数。
+    # USD 层先写 drive/friction seed，并叠加 robot YAML 中的材料和刚体阻尼；
+    # reset 后 controller 会再写运行时最终控制参数。
+    physx_configs = robot_execution.robot.physx_overrides.apply_to_configs(
+        physx_override_configs(controller_profiles)
+    )
     apply_robot_usd_overrides(
         imported_root_path,
-        physx_override_configs(controller_profiles),
+        physx_configs,
         driven_joint_names=controlled_joints,
         mjcf_path=asset_path if robot_execution.robot.asset_type == "mjcf" else None,
     )
-    solver_config = solver_settings(env_config)
+    solver_config = merge_solver_configs(
+        scene_solver_settings(env_config),
+        robot_execution.robot.solver_iterations,
+    )
     solver_counts = (
         apply_solver_iteration_overrides(stage, articulation_path, solver_config)
         if solver_config is not None

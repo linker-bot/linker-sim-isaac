@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from linkerbot_sim.tcp.tcp_frame import TcpFrame
+from linkerbot_sim.backends.cumotion.tcp_frame import TcpFrame
 
 
 def write_tcp_urdf(

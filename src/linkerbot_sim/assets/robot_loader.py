@@ -18,10 +18,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+import numpy as np
+
 from linkerbot_sim.robots.classification import component_for_name
+from linkerbot_sim.assets.solver_overrides import (
+    SolverIterationConfig,
+    robot_solver_settings,
+)
+from linkerbot_sim.assets.usd_overrides import PhysxOverrideConfig
 from linkerbot_sim.utils.paths import repo_path
 
 
@@ -79,6 +86,8 @@ class RobotAssetConfig:
         urdf_drive_type: URDF importer 默认 drive 类型，支持 ``position`` 或 ``none``。
         import_config: 资产导入选项，例如 collision approximation。
         gravity_policy: robot YAML 中的刚体重力策略，按 default/arm/hand 分组。
+        physx_overrides: robot YAML 中的材料和刚体阻尼覆盖，按 default/arm/hand 分组。
+        solver_iterations: robot YAML 中的刚体 solver iteration 覆盖，按 arm/hand 分组。
     输出:
         传给 ``import_robot_asset`` 后得到 articulation root 和实际资产路径。
     """
@@ -92,6 +101,10 @@ class RobotAssetConfig:
     gravity_policy: "RobotGravityPolicy" = field(
         default_factory=lambda: RobotGravityPolicy()
     )
+    physx_overrides: "RobotPhysxOverrides" = field(
+        default_factory=lambda: RobotPhysxOverrides()
+    )
+    solver_iterations: SolverIterationConfig | None = None
 
     @classmethod
     def from_mapping(cls, data: dict) -> "RobotAssetConfig":
@@ -121,6 +134,14 @@ class RobotAssetConfig:
             gravity_policy=RobotGravityPolicy.from_mapping(
                 physics.get("gravity") if physics is not None else None,
                 label="robot.physics.gravity",
+            ),
+            physx_overrides=RobotPhysxOverrides.from_mapping(
+                physics.get("physx") if physics is not None else None,
+                label="robot.physics.physx",
+            ),
+            solver_iterations=robot_solver_settings(
+                physics.get("solver") if physics is not None else None,
+                label="robot.physics.solver",
             ),
         )
 
@@ -187,6 +208,191 @@ class RobotGravityPolicy:
 
 
 @dataclass(frozen=True)
+class RobotPhysxComponentOverride:
+    """单个部件的机器人 USD/PhysX 材料和刚体阻尼覆盖。
+
+    字段为 ``None`` 表示不覆盖 controller/默认值生成的 ``PhysxOverrideConfig``。
+    """
+
+    contact_static_friction: float | None = None
+    contact_dynamic_friction: float | None = None
+    contact_restitution: float | None = None
+    rigid_body_linear_damping: float | None = None
+    rigid_body_angular_damping: float | None = None
+
+    @classmethod
+    def from_mapping(
+        cls, data: Mapping[str, object] | None, *, label: str
+    ) -> "RobotPhysxComponentOverride":
+        if data is None:
+            return cls()
+        if not isinstance(data, Mapping):
+            raise ValueError(f"{label} must be a mapping")
+        unsupported_keys = set(data) - {"material", "rigid_body"}
+        if unsupported_keys:
+            unsupported = ", ".join(sorted(unsupported_keys))
+            raise ValueError(f"{label} contains unsupported keys: {unsupported}")
+        material = _optional_mapping(data, "material", label) or {}
+        rigid_body = _optional_mapping(data, "rigid_body", label) or {}
+        _reject_unsupported_keys(
+            material,
+            {
+                "contact_static_friction",
+                "contact_dynamic_friction",
+                "contact_restitution",
+            },
+            f"{label}.material",
+        )
+        _reject_unsupported_keys(
+            rigid_body,
+            {"linear_damping", "angular_damping"},
+            f"{label}.rigid_body",
+        )
+        return cls(
+            contact_static_friction=_optional_non_negative_float(
+                material, "contact_static_friction", f"{label}.material"
+            ),
+            contact_dynamic_friction=_optional_non_negative_float(
+                material, "contact_dynamic_friction", f"{label}.material"
+            ),
+            contact_restitution=_optional_non_negative_float(
+                material, "contact_restitution", f"{label}.material"
+            ),
+            rigid_body_linear_damping=_optional_non_negative_float(
+                rigid_body, "linear_damping", f"{label}.rigid_body"
+            ),
+            rigid_body_angular_damping=_optional_non_negative_float(
+                rigid_body, "angular_damping", f"{label}.rigid_body"
+            ),
+        )
+
+    def merge(
+        self, override: "RobotPhysxComponentOverride"
+    ) -> "RobotPhysxComponentOverride":
+        """返回 ``override`` 的非空字段覆盖当前对象后的新配置。"""
+
+        return RobotPhysxComponentOverride(
+            contact_static_friction=(
+                self.contact_static_friction
+                if override.contact_static_friction is None
+                else override.contact_static_friction
+            ),
+            contact_dynamic_friction=(
+                self.contact_dynamic_friction
+                if override.contact_dynamic_friction is None
+                else override.contact_dynamic_friction
+            ),
+            contact_restitution=(
+                self.contact_restitution
+                if override.contact_restitution is None
+                else override.contact_restitution
+            ),
+            rigid_body_linear_damping=(
+                self.rigid_body_linear_damping
+                if override.rigid_body_linear_damping is None
+                else override.rigid_body_linear_damping
+            ),
+            rigid_body_angular_damping=(
+                self.rigid_body_angular_damping
+                if override.rigid_body_angular_damping is None
+                else override.rigid_body_angular_damping
+            ),
+        )
+
+    def apply_to(self, config: PhysxOverrideConfig) -> PhysxOverrideConfig:
+        """把非空覆盖字段叠加到完整 USD/PhysX 覆盖配置上。"""
+
+        updates: dict[str, float] = {}
+        for field_name in (
+            "contact_static_friction",
+            "contact_dynamic_friction",
+            "contact_restitution",
+            "rigid_body_linear_damping",
+            "rigid_body_angular_damping",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                updates[field_name] = value
+        return replace(config, **updates) if updates else config
+
+
+@dataclass(frozen=True)
+class RobotPhysxOverrides:
+    """机器人资产级 PhysX 覆盖，支持 default/arm/hand 分组。
+
+    ``robot.physics.physx.material`` 和 ``robot.physics.physx.rigid_body`` 作为通用默认值；
+    ``default``/``arm``/``hand`` 子节可覆盖对应部件。
+    """
+
+    default: RobotPhysxComponentOverride = field(
+        default_factory=RobotPhysxComponentOverride
+    )
+    arm: RobotPhysxComponentOverride | None = None
+    hand: RobotPhysxComponentOverride | None = None
+
+    @classmethod
+    def from_mapping(
+        cls, data: Mapping[str, object] | None, *, label: str
+    ) -> "RobotPhysxOverrides":
+        if data is None:
+            return cls()
+        if not isinstance(data, Mapping):
+            raise ValueError(f"{label} must be a mapping")
+        _reject_unsupported_keys(
+            data,
+            {"material", "rigid_body", "default", "arm", "hand"},
+            label,
+        )
+        common = RobotPhysxComponentOverride.from_mapping(
+            {
+                key: data[key]
+                for key in ("material", "rigid_body")
+                if key in data
+            },
+            label=label,
+        )
+        default = common
+        if "default" in data:
+            default = default.merge(
+                RobotPhysxComponentOverride.from_mapping(
+                    _required_mapping(data, "default", label),
+                    label=f"{label}.default",
+                )
+            )
+        arm = (
+            RobotPhysxComponentOverride.from_mapping(
+                _required_mapping(data, "arm", label),
+                label=f"{label}.arm",
+            )
+            if "arm" in data
+            else None
+        )
+        hand = (
+            RobotPhysxComponentOverride.from_mapping(
+                _required_mapping(data, "hand", label),
+                label=f"{label}.hand",
+            )
+            if "hand" in data
+            else None
+        )
+        return cls(default=default, arm=arm, hand=hand)
+
+    def apply_to_configs(
+        self, configs: dict[str, PhysxOverrideConfig]
+    ) -> dict[str, PhysxOverrideConfig]:
+        """把 robot 资产物理覆盖叠加到 controller 生成的完整 PhysX 配置上。"""
+
+        result = {
+            name: self.default.apply_to(config) for name, config in configs.items()
+        }
+        if self.arm is not None and "arm" in result:
+            result["arm"] = self.arm.apply_to(result["arm"])
+        if self.hand is not None and "hand" in result:
+            result["hand"] = self.hand.apply_to(result["hand"])
+        return result
+
+
+@dataclass(frozen=True)
 class RootPoseConfig:
     """机器人 root 在世界坐标下的固定位姿。"""
 
@@ -213,6 +419,34 @@ class RootPoseConfig:
 
 
 @dataclass(frozen=True)
+class RobotSceneInstanceConfig:
+    """env 中声明的机器人实例。"""
+
+    name: str
+    robot_profile: str
+    root_pose: RootPoseConfig
+
+    @classmethod
+    def from_mapping(
+        cls, name: str, data: Mapping[str, object]
+    ) -> "RobotSceneInstanceConfig":
+        """从 ``env.robots.<name>`` 解析 robot profile 引用和场景摆放。"""
+
+        label = f"robots.{name}"
+        _reject_unsupported_keys(data, {"robot_profile", "root_pose"}, label)
+        robot_profile = str(data.get("robot_profile", ""))
+        if not robot_profile:
+            raise ValueError(f"{label}.robot_profile is required")
+        return cls(
+            name=name,
+            robot_profile=robot_profile,
+            root_pose=RootPoseConfig.from_mapping(
+                _required_mapping(data, "root_pose", label)
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class RobotExecutionConfig:
     """单个 Isaac articulation 的导入配置和主动控制关节。"""
 
@@ -221,16 +455,23 @@ class RobotExecutionConfig:
     root_pose: RootPoseConfig = RootPoseConfig()
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, object]) -> "RobotExecutionConfig":
+    def from_mapping(
+        cls,
+        data: Mapping[str, object],
+        *,
+        root_pose: RootPoseConfig | None = None,
+    ) -> "RobotExecutionConfig":
         """从包含 ``robot`` 和可选 ``controlled_joints`` 的 mapping 解析单侧执行配置。"""
 
         config = dict(data)
+        if "root_pose" in config:
+            raise ValueError("robot root_pose belongs under env robots")
         robot = RobotAssetConfig.from_mapping(config)
         controlled = _controlled_joints_from_mapping(config)
         return cls(
             robot=robot,
             controlled_joints=controlled,
-            root_pose=RootPoseConfig.from_mapping(config.get("root_pose")),
+            root_pose=root_pose or RootPoseConfig(),
         )
 
 
@@ -242,18 +483,24 @@ class DualRobotExecutionConfig:
     right: RobotExecutionConfig
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, object]) -> "DualRobotExecutionConfig":
-        """从 ``robots.left/right`` 解析双机器人执行配置。"""
+    def from_robot_configs(
+        cls,
+        *,
+        left: Mapping[str, object],
+        right: Mapping[str, object],
+        root_poses: Mapping[str, RootPoseConfig] | None = None,
+    ) -> "DualRobotExecutionConfig":
+        """从左右两个单 articulation robot profile 组装双机器人执行配置。"""
 
-        robots = data.get("robots")
-        if not isinstance(robots, Mapping):
-            raise ValueError("Dual robot config must contain top-level robots mapping")
+        root_poses = root_poses or {}
         return cls(
             left=RobotExecutionConfig.from_mapping(
-                _required_mapping(robots, "left", "robots")
+                left,
+                root_pose=root_poses.get("left"),
             ),
             right=RobotExecutionConfig.from_mapping(
-                _required_mapping(robots, "right", "robots")
+                right,
+                root_pose=root_poses.get("right"),
             ),
         )
 
@@ -266,6 +513,59 @@ class DualRobotExecutionConfig:
         if normalized == "right":
             return self.right
         raise ValueError(f"side must be 'left' or 'right', got {side!r}")
+
+
+def robot_scene_instance_from_env_config(
+    env_config: Mapping[str, object], name: str
+) -> RobotSceneInstanceConfig:
+    """从 env ``robots.<name>`` 读取机器人实例声明。"""
+
+    robots = env_config.get("robots")
+    if not isinstance(robots, Mapping):
+        raise ValueError("Environment config must contain top-level robots mapping")
+    return RobotSceneInstanceConfig.from_mapping(
+        name,
+        _required_mapping(robots, name, "robots"),
+    )
+
+
+def dual_robot_scene_instances_from_env_config(
+    env_config: Mapping[str, object],
+) -> dict[str, RobotSceneInstanceConfig]:
+    """从 env ``robots.dual.left/right`` 读取双机器人场景实例声明。"""
+
+    robots = env_config.get("robots")
+    if not isinstance(robots, Mapping):
+        raise ValueError("Environment config must contain top-level robots mapping")
+    dual = _required_mapping(robots, "dual", "robots")
+    return {
+        side: RobotSceneInstanceConfig.from_mapping(
+            f"dual.{side}",
+            _required_mapping(dual, side, "robots.dual"),
+        )
+        for side in ("left", "right")
+    }
+
+
+def robot_root_pose_from_env_config(
+    env_config: Mapping[str, object], name: str
+) -> RootPoseConfig:
+    """从 env ``robots.<name>.root_pose`` 读取机器人场景摆放。"""
+
+    return robot_scene_instance_from_env_config(env_config, name).root_pose
+
+
+def dual_robot_root_poses_from_env_config(
+    env_config: Mapping[str, object],
+) -> dict[str, RootPoseConfig]:
+    """从 env ``robots.dual.left/right`` 读取双机器人场景摆放。"""
+
+    return {
+        side: instance.root_pose
+        for side, instance in dual_robot_scene_instances_from_env_config(
+            env_config
+        ).items()
+    }
 
 
 def _controlled_joints_from_mapping(data: Mapping[str, object]) -> tuple[str, ...]:
@@ -327,6 +627,26 @@ def _optional_bool(
     return value
 
 
+def _optional_non_negative_float(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> float | None:
+    if key not in data:
+        return None
+    value = float(data[key])
+    if value < 0.0:
+        raise ValueError(f"{parent_label}.{key} cannot be negative")
+    return value
+
+
+def _reject_unsupported_keys(
+    data: Mapping[str, object], allowed: set[str], label: str
+) -> None:
+    unsupported_keys = set(data) - allowed
+    if unsupported_keys:
+        unsupported = ", ".join(sorted(unsupported_keys))
+        raise ValueError(f"{label} contains unsupported keys: {unsupported}")
+
+
 def find_articulation_root(prim_path: str, *, require_rigid_body: bool = False) -> str:
     """在指定 prim 子树下查找 articulation root。
 
@@ -379,7 +699,7 @@ def apply_root_pose(stage, root_path: str, pose: RootPoseConfig) -> None:
     xform = UsdGeom.Xformable(prim)
     xform.ClearXformOpOrder()
     xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))
-    xform.AddRotateXYZOp().Set(Gf.Vec3f(*_radians_to_degrees(pose.rpy)))
+    xform.AddRotateXYZOp().Set(Gf.Vec3f(*tuple(np.degrees(pose.rpy))))
     _apply_root_pose_to_mjcf_fixed_root_joints(stage, root_path, pose)
 
 
@@ -417,13 +737,6 @@ def _apply_root_pose_to_mjcf_fixed_root_joints(
         joint = UsdPhysics.Joint(prim)
         joint.CreateLocalPos0Attr().Set(world_anchor_pos)
         joint.CreateLocalRot0Attr().Set(world_anchor_rot)
-
-
-def _radians_to_degrees(values: Sequence[float]) -> tuple[float, float, float]:
-    import math
-
-    return tuple(float(value) * 180.0 / math.pi for value in values)
-
 
 def configure_mjcf_import(
     mjcf_path: Path,

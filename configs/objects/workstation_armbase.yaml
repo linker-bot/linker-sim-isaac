@@ -1,0 +1,19 @@
+# workstation armbase 运行时对象配置。
+#
+# env scene 负责 root_pose；本文件负责对象类别、资产路径、导入参数和运行时物理属性。
+
+object:
+  name: workstation_armbase
+  kind: rigid
+  source: urdf
+  asset_path: assets/static_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
+  prim_path: /World/WorkstationArmBase
+  import:
+    collision_approximation: convex_decomposition
+  physics:
+    static: true
+    material:
+      static_friction: 0.8
+      dynamic_friction: 0.6
+      restitution: 0.0
+      friction_combine_mode: average

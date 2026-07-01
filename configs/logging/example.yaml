@@ -5,11 +5,12 @@
 # - 控制输出路径、flush 周期、采样降频和记录哪些关节列。
 #
 # 使用方式：
-#   复制本文件为 configs/logging/<your_logger>.yaml，然后运行脚本时传入：
+#   复制本文件为 configs/logging/<your_logger>.yaml，然后运行脚本时传入 profile 名：
 #
-#     --logging-config configs/logging/<your_logger>.yaml
+#     --logging-profile <your_logger>
 #
 # 注意：
+# - 默认 profile 是 configs/logging/default_logger.yaml。
 # - 相对路径以仓库根目录为基准。
 # - 如果命令行传了 --log，会覆盖 joint_tracking_path。
 # - 读取 measured_effort/applied_effort 相对更贵，默认只在分析力矩时打开。

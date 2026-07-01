@@ -2,18 +2,39 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from linkerbot_sim.assets.robot_loader import DualRobotExecutionConfig
+from linkerbot_sim.assets.robot_loader import (
+    DualRobotExecutionConfig,
+    dual_robot_root_poses_from_env_config,
+)
 from linkerbot_sim.backends.cumotion.dual_urdf import (
     build_dual_arm_urdf_from_root_poses,
     build_dual_arm_xrdf,
+    dual_cumotion_config_from_sides,
     dual_urdf_generation_config_from_robot_config,
     prepare_cumotion_config_from_robot_config,
 )
 from linkerbot_sim.utils.config import load_yaml
 
 
+def _dual_robot_config() -> dict[str, object]:
+    return dual_cumotion_config_from_sides(
+        left=load_yaml("configs/robots/ar5v2_l6v1_l.yaml"),
+        right=load_yaml("configs/robots/ar5v2_l6v1_r.yaml"),
+    )
+
+
+def _dual_execution_config(root_poses):
+    return DualRobotExecutionConfig.from_robot_configs(
+        left=load_yaml("configs/robots/ar5v2_l6v1_l.yaml"),
+        right=load_yaml("configs/robots/ar5v2_l6v1_r.yaml"),
+        root_poses=root_poses,
+    )
+
+
 def test_dual_urdf_generation_uses_robot_root_poses(tmp_path) -> None:
-    robot_config = load_yaml("configs/robots/ar5v2_l6v1_dual.yaml")
+    robot_config = _dual_robot_config()
+    env_config = load_yaml("configs/envs/scene2.yaml")
+    root_poses = dual_robot_root_poses_from_env_config(env_config)
     generation_config = dual_urdf_generation_config_from_robot_config(robot_config)
     assert generation_config is not None
     generation_config = generation_config.__class__(
@@ -29,7 +50,7 @@ def test_dual_urdf_generation_uses_robot_root_poses(tmp_path) -> None:
         left_mount_joint=generation_config.left_mount_joint,
         right_mount_joint=generation_config.right_mount_joint,
     )
-    dual_execution = DualRobotExecutionConfig.from_mapping(robot_config)
+    dual_execution = _dual_execution_config(root_poses)
 
     output = build_dual_arm_urdf_from_root_poses(
         generation_config,
@@ -52,7 +73,7 @@ def test_dual_urdf_generation_uses_robot_root_poses(tmp_path) -> None:
 
 
 def test_dual_xrdf_generation_merges_left_and_right_cspace(tmp_path) -> None:
-    robot_config = load_yaml("configs/robots/ar5v2_l6v1_dual.yaml")
+    robot_config = _dual_robot_config()
     dual_arm_config = load_yaml("configs/dual_arm/ar5v2_l6v1_dual.yaml")
     generation_config = dual_urdf_generation_config_from_robot_config(robot_config)
     assert generation_config is not None
@@ -88,10 +109,14 @@ def test_dual_xrdf_generation_merges_left_and_right_cspace(tmp_path) -> None:
 
 
 def test_prepare_cumotion_config_from_robot_config_generates_dual_assets(tmp_path) -> None:
-    robot_config = load_yaml("configs/robots/ar5v2_l6v1_dual.yaml")
+    robot_config = _dual_robot_config()
+    env_config = load_yaml("configs/envs/scene2.yaml")
     robot_config["cumotion"]["output_dir"] = str(tmp_path)
 
-    prepared = prepare_cumotion_config_from_robot_config(robot_config)
+    prepared = prepare_cumotion_config_from_robot_config(
+        robot_config,
+        dual_root_poses=dual_robot_root_poses_from_env_config(env_config),
+    )
 
     assert prepared.generated_assets is True
     assert prepared.urdf_path.is_file()

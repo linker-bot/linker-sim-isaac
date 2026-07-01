@@ -1,0 +1,35 @@
+# AR5 机械臂 + LinkerHand L6 右手组合配置。
+robot:
+  name: ar5v2_l6v1_r
+  # 组合资产由 AR5 MJCF 和 L6 MJCF merge 得到。
+  asset_type: mjcf
+  asset_path: assets/combined_system/AR5V2_L6V1_R/AR5V2_L6V1_R.xml
+  prim_path: /World/AR5V2_L6V1_R
+  import:
+    collision_approximation: convex_decomposition
+  physics:
+    gravity:
+      default: false
+      arm: false
+      hand: false
+    physx:
+      material:
+        contact_static_friction: 0.8
+        contact_dynamic_friction: 0.6
+        contact_restitution: 0.0
+      rigid_body:
+        linear_damping: 0.0
+        angular_damping: 0.1
+    solver:
+      arm:
+        position_iterations: 32
+        velocity_iterations: 4
+      hand:
+        position_iterations: 32
+        velocity_iterations: 4
+
+cumotion:
+  # 机器人模型资源字段；IK/planner 等算法参数由 configs/cumotion/*.yaml 提供。
+  xrdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.xrdf
+  urdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.urdf
+  flange_frame: AR5V2_R_arm_flan_link

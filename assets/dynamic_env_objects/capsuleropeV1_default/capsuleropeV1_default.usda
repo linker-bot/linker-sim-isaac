@@ -18,18 +18,13 @@ def Xform "CapsuleRope" (
         )
         {
             rel material:binding = </CapsuleRope/Looks/EndpointBoxMaterial>
-            rel material:binding:physics = </CapsuleRope/PhysicsMaterials/EndpointBoxMaterial> (
-                bindMaterialAs = "strongerThanDescendants"
-            )
             prepend rel physics:filteredPairs = </CapsuleRope/Bodies/segment_00>
             float physics:mass = 0.5
             float physxRigidBody:angularDamping = 0.05
             float physxRigidBody:linearDamping = 0.015
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double size = 1
             float3 xformOp:scale = (0.04, 0.03, 0.1)
-            double3 xformOp:translate = (0.005000000000000022, -0.55, 0.05)
+            double3 xformOp:translate = (-0.395, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
 
@@ -38,17 +33,12 @@ def Xform "CapsuleRope" (
         )
         {
             rel material:binding = </CapsuleRope/Looks/EndpointBoxMaterial>
-            rel material:binding:physics = </CapsuleRope/PhysicsMaterials/EndpointBoxMaterial> (
-                bindMaterialAs = "strongerThanDescendants"
-            )
             float physics:mass = 0.5
             float physxRigidBody:angularDamping = 0.05
             float physxRigidBody:linearDamping = 0.015
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double size = 1
             float3 xformOp:scale = (0.04, 0.03, 0.1)
-            double3 xformOp:translate = (0.795, -0.55, 0.05)
+            double3 xformOp:translate = (0.395, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
         }
 
@@ -63,10 +53,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.05625000000000002, -0.55, 0.05)
+            double3 xformOp:translate = (-0.34375, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -81,10 +69,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.11875000000000002, -0.55, 0.05)
+            double3 xformOp:translate = (-0.28125, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -99,10 +85,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.18125000000000002, -0.55, 0.05)
+            double3 xformOp:translate = (-0.21875, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -117,10 +101,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.24375000000000002, -0.55, 0.05)
+            double3 xformOp:translate = (-0.15625, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -135,10 +117,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.30625, -0.55, 0.05)
+            double3 xformOp:translate = (-0.09375, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -153,10 +133,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.36875, -0.55, 0.05)
+            double3 xformOp:translate = (-0.03125, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -171,10 +149,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.43125, -0.55, 0.05)
+            double3 xformOp:translate = (0.03125, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -189,10 +165,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.49375, -0.55, 0.05)
+            double3 xformOp:translate = (0.09375, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -207,10 +181,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.55625, -0.55, 0.05)
+            double3 xformOp:translate = (0.15625, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -225,10 +197,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.61875, -0.55, 0.05)
+            double3 xformOp:translate = (0.21875, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -243,10 +213,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.68125, -0.55, 0.05)
+            double3 xformOp:translate = (0.28125, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
 
@@ -261,10 +229,8 @@ def Xform "CapsuleRope" (
             float physics:mass = 0.016666668
             float physxRigidBody:angularDamping = 0.12
             float physxRigidBody:linearDamping = 0.1
-            int physxRigidBody:solverPositionIterationCount = 48
-            int physxRigidBody:solverVelocityIterationCount = 4
             double radius = 0.009375
-            double3 xformOp:translate = (0.74375, -0.55, 0.05)
+            double3 xformOp:translate = (0.34375, 0.0, 0.0)
             uniform token[] xformOpOrder = ["xformOp:translate"]
         }
     }
@@ -740,19 +706,6 @@ def Xform "CapsuleRope" (
                 float inputs:roughness = 0.75
                 token outputs:surface
             }
-        }
-    }
-
-    def "PhysicsMaterials"
-    {
-        def Material "EndpointBoxMaterial" (
-            prepend apiSchemas = ["PhysicsMaterialAPI", "PhysxMaterialAPI"]
-        )
-        {
-            float physics:dynamicFriction = 0.5
-            float physics:restitution = 0
-            float physics:staticFriction = 0.7
-            uniform token physxMaterial:frictionCombineMode = "average"
         }
     }
 }

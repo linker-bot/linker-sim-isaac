@@ -38,14 +38,14 @@ grasp 流程。
 │   ├── static_env_objects/   # 静态环境对象
 │   └── dynamic_env_objects/  # 动态对象资产，例如 capsuleropeV1_default
 ├── configs/
-│   ├── controllers/          # arm/hand 控制模式、增益、摩擦和 PhysX 覆盖
+│   ├── controllers/          # arm/hand 控制模式、增益、限幅和 follower drive
 │   ├── cumotion/             # cuMotion 默认 profile 和详细参数示例
 │   ├── dual_arm/             # 双臂动作/规划语义，例如 C-space 分区和 TCP frame 名
-│   ├── envs/                 # empty/table/rope 场景、物理步频、solver
+│   ├── envs/                 # scene、物理步频、solver、机器人/对象实例摆放
 │   ├── logging/              # 关节跟踪日志配置
 │   ├── objects/              # 可生成对象配置，例如 capsule rope
-│   └── robots/               # Isaac 机器人资产、安装位姿、cuMotion XRDF/URDF/frame 资源
-├── docs/                     # cuMotion 接口、规划设计和历史方案文档
+│   └── robots/               # Isaac 机器人资产、物理覆盖、cuMotion 资源
+├── docs/                     # cuMotion 接口、Isaac 碰撞说明和风险记录
 ├── scripts/                  # Isaac Sim 运行入口和资产生成入口
 ├── src/linkerbot_sim/
 │   ├── app/                  # 环境运行参数、SimulationApp/World 会话装配
@@ -103,8 +103,8 @@ GUI 或完整动作，会更容易定位问题。
 | 生成绳体 USD | `scripts/build_capsule_rope_asset.py` | 是，headless | 否 | 根据 `configs/objects/capsule_rope.yaml` 写 USD/PhysX schema |
 | 单臂导入保持 | `scripts/pinch_grasp.py --no-grasp --short-smoke` | 是 | 否 | 验证 AR5+L6、rope、controller、logging 基础链路 |
 | 单臂 pinch grasp | `scripts/pinch_grasp.py` | 是 | 是 | 完整 TCP、IK、motion planner、trajectory、execution 流程 |
-| 双 Isaac 配置 dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 只解析 `robots.left/right`、env `objects[]` 和双机器人执行配置 |
-| 双臂 scripted motion | `scripts/dual_arm_motion_test.py --short-smoke` | 是 | 否 | 不规划，只验证双 controller 同步下发和手/臂 scripted target |
+| 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验 scene runtime、cuMotion 和 dual-arm profile 引用 |
+| 双臂 cuMotion motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 执行脚本内 Python 参数定义的 IK、TCP 直线、TCP 圆弧和 C-space planner 动作 |
 
 常用命令：
 
@@ -118,20 +118,19 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp --short
 # 运行 GUI pinch grasp demo
 PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --gui
 
-# 只检查双 Isaac 机器人执行配置和 env objects，不启动 Isaac
+# 只校验双臂 scene runtime、cuMotion 和 dual-arm profile，不启动 Isaac
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --dry-run
 
-# 导入左右 AR5+L6，并同步执行一个小幅双臂运动测试
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --short-smoke
+# 导入左右 AR5+L6，并执行脚本内定义的双臂 cuMotion 动作
+PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py
 ```
 
-`pinch_grasp.py` 常用覆盖参数：
+`pinch_grasp.py` 常用参数：
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
   --endpoint right \
   --control-mode position \
-  --physics-frequency 240 \
   --gui
 ```
 
@@ -150,11 +149,11 @@ pinch_grasp.py
   load_yaml(...) + merged_robot_config_with_cumotion_profile(...)
   EnvRuntimeSettings.from_env_config(...)
   create_simulation_session(...)
-  add_scene_objects(...) + add_capsule_rope_reference(...)
+  add_rigid_objects(...) + add_capsule_rope_reference(...)
   import_execution_robot_to_stage(...)
   world.reset()
   finalize_robot_controller(...)
-  make_pinch_tcp(...) + make_cumotion_context(...)
+  make_pinch_tcp_transform(...) + make_cumotion_context(...)
   CuMotionInverseKinematics / CuMotionMotionPlanner
   trajectory_sampler.joint_trajectory_from_cumotion(...)
   trajectories.command_trajectory.command_trajectory_from_arm_trajectory(...)
@@ -169,7 +168,7 @@ pinch_grasp.py
 4. 引用 env `objects[]` 和已生成的 capsule rope USD。
 5. 导入 AR5+L6 组合 MJCF，并在 `world.reset()` 前应用 drive、摩擦、solver iteration、重力等 USD 覆盖。
 6. `world.reset()` 后创建 `JointController`，按 `--control-mode` 选择 position、velocity 或 effort 主动控制。
-7. 根据闭合手型和 MJCF body 链计算 pinch TCP，并通过临时 URDF 创建 cuMotion context。
+7. 根据闭合手型和 MJCF body 链在脚本侧计算 pinch TCP 相对末端的 `xyz/rpy`，并通过临时 URDF 创建 cuMotion context。
 8. 使用 cuMotion 求解 approach、grasp、lift、wiggle 等阶段的 IK 和运动轨迹。
 9. 把 cuMotion C-space 结果按关节名映射回 controller command-space。
 10. `execution.steps` 按 physics dt 播放 command-space 目标或轨迹，并写 CSV 日志。
@@ -183,7 +182,9 @@ generation 都在规划阶段完成；执行阶段只按时间采样已经生成
 context，多个可选 TCP frame”：
 
 ```text
-configs/robots/ar5v2_l6v1_dual.yaml       # Isaac root_pose + cuMotion model resources
+configs/envs/scene2.yaml             # dual scene robot instances + root_pose
+configs/robots/ar5v2_l6v1_l.yaml          # left Isaac import + cuMotion model resources
+configs/robots/ar5v2_l6v1_r.yaml          # right Isaac import + cuMotion model resources
 configs/dual_arm/ar5v2_l6v1_dual.yaml     # arm_joints + flange_frame + tcp_frame + MJCF path
 configs/cumotion/default.yaml             # IK/planner algorithm defaults
   -> prepare_cumotion_config_from_robot_config(...)
@@ -196,65 +197,63 @@ configs/cumotion/default.yaml             # IK/planner algorithm defaults
 selected-side goal 和双臂轨迹拆分；`tests/test_dual_cumotion_urdf.py` 验证双臂 URDF/XRDF
 生成路径和左右 flange frame 传递。
 
-### 双 Isaac 执行 Smoke
+### 双臂 cuMotion Motion Test
 
-`scripts/dual_arm_motion_test.py` 不做 cuMotion 规划。它验证的是 Isaac 执行骨架：
+`scripts/dual_arm_motion_test.py` 使用脚本内 Python 参数定义 TCP 和动作序列，通用的 cuMotion
+profile 加载、TCP 注入、IK、路径规划和双臂轨迹执行都封装在 `src`：
 
 ```text
-DualRobotExecutionConfig.from_mapping(...)
-  -> EnvRuntimeSettings.from_env_config(...)
-  -> create_simulation_session(...)
-  -> import_execution_robot_to_stage(left/right)
-  -> world.reset()
-  -> finalize_robot_controller(left/right)
-  -> DualRobotRuntime(left, right)
-  -> DualCommandPositionTargetStep.run(...)
+load_dual_robot_runtime_config(...)
+  -> create_dual_robot_runtime(...)
+  -> DualRobotAppRuntime
+  -> run_dual_arm_cumotion_motion(tcp=..., moves=(...))
+  -> make_cumotion_context(...)
+  -> IK / specified path / C-space planner
+  -> DualCommandPositionTrajectoryStep.run(...)
 ```
 
-`--dry-run` 只解析双机器人和 env 配置，不启动 Isaac。实际运行时脚本会预成型左右手、左右臂
-小幅 scripted reach、闭合手、回到初始目标，适合观察两个 controller 是否在同一个 physics
-step 下同步工作。
+`--dry-run` 只校验 scene runtime、cuMotion 和 dual-arm profile 引用，不启动 Isaac。
 
-## 双臂双手协作第一版
+## 双臂双手协作
 
-双臂协作的第一版方案记录在 `docs/dual_arm_selectable_tcp_plan.md`。当前实现先把“规划模型”
-扩展到双臂：`configs/robots/ar5v2_l6v1_dual.yaml` 用 `robots.left/right.root_pose` 描述左右
-Isaac articulation 的安装位姿；`cumotion.left/right` 延续单臂结构，分别指向左右单臂
-XRDF/URDF/flange。双臂动作/规划语义单独放在 `configs/dual_arm/ar5v2_l6v1_dual.yaml`。
-运行时会生成 cuMotion 融合 URDF 和融合 XRDF，最终 C-space 是 14 个机械臂关节：
+当前双臂实现把“规划模型”和“Isaac 执行模型”分开：cuMotion 看到一个融合的 14-DOF robot
+description，Isaac stage 里仍导入左右两个 AR5+L6 articulation。`configs/envs/scene2.yaml`
+用 `robots.dual.left/right.robot_profile` 选择左右单臂 robot profile，并用
+`robots.dual.left/right.root_pose` 描述左右安装位姿；`configs/robots/ar5v2_l6v1_l.yaml` 和
+`configs/robots/ar5v2_l6v1_r.yaml` 分别提供左右 Isaac 资产和 cuMotion 单臂 XRDF/URDF/flange；
+`configs/dual_arm/ar5v2_l6v1_dual.yaml` 保存左右 arm C-space、flange/TCP frame 和用于计算 pinch
+TCP 的组合 MJCF 路径。运行时会根据左右单臂资源和 scene `root_pose` 生成缓存的
+融合 URDF/XRDF，最终 C-space 是 14 个机械臂关节：
 
 ```text
 left_arm_7 + right_arm_7
 ```
 
-第一版不直接做双 TCP 同时约束，而是在同一个 cuMotion context 中预置
-`left_pinch_tcp` 和 `right_pinch_tcp`，每次规划/运动时显式选择一个 `tcp_frame_name`。选定侧采纳
-IK 结果，另一侧保持当前关节目标；同一侧可以连续执行多个阶段，不要求左右轮流。这样可以先验证
-14-DOF 融合规划描述、多 TCP context 和按阶段选择目标拼接，再逐步升级到完整 Isaac 双机器人执行、
-轨迹后验碰撞检查和双臂同时联合规划。
+双臂没有默认 TCP；IK/planning 必须显式选择左侧或右侧 TCP。典型做法是在同一个 cuMotion context
+中注入 `left_pinch_tcp` 和 `right_pinch_tcp`，每次规划/运动阶段传入一个 `tcp_frame_name`。
+当前 selected-side 规则是：单 TCP IK 返回完整 `q[14]` 后，只采纳选定侧 7 个 arm joints，
+另一侧保持当前目标；同一侧可以连续执行多个阶段，不要求左右轮流。pinch grasp 的预夹/闭合手型
+仍留在动作脚本中，避免机器人配置混入任务语义。
 
-`configs/dual_arm/...` 的 `dual_arm.left/right` 只保存规划 C-space、flange/TCP frame 和侧别 MJCF 路径。pinch grasp 的预夹/闭合
-手型留在 `scripts/pinch_grasp.py`，避免机器人配置混入动作任务语义。双臂配置不直接写单个
-`cumotion.xrdf_path/urdf_path/flange_frame`；而是把左右两份单臂 cuMotion 描述写成
-`cumotion.left/right.xrdf_path/urdf_path/flange_frame`。运行时根据左右单臂 URDF、XRDF 和
-`root_pose` 生成缓存的融合 URDF/XRDF；双臂没有默认 flange，规划/IK 必须显式选择左或右 TCP。
-运行时生成的双臂资产缓存在 `.cache/cumotion/`，由左右单臂路径和 `root_pose` hash 命名。
+执行侧使用双机器人结构：`robots.dual.left/right` 分别描述 Isaac 中导入的左右 articulation。未写
+`controlled_joints` 时执行层默认选择全部主动 DOF，并剔除 mimic follower。`execution.dual_steps`
+会在每个 physics step 前先下发左右 controller 目标，再统一调用一次 `world.step()`；融合 cuMotion
+轨迹执行前按关节名拆回左右 arm command columns，手部目标由动作阶段补齐。
 
-第二版执行侧已经改成双机器人结构：`configs/robots/ar5v2_l6v1_dual.yaml` 的
-`robots.left/right` 分别描述 Isaac 中导入的左右 AR5+L6 articulation。未写
-`controlled_joints` 时执行层默认选择全部主动 DOF，并剔除 mimic follower；`cumotion` 仍指向融合 14-DOF 规划模型。`execution.dual_steps` 会在每个
-physics step 先下发左右 controller 目标，再统一 `world.step()`，用于后续真正同步执行双臂轨迹。
+当前不声称自动免碰撞。融合 XRDF 保留 14-DOF C-space 和后验检查入口，但真正可靠的避碰还需要有效
+collision spheres、正确的 self-collision mask、collision-aware IK/planner，以及轨迹采样后的碰撞检查。
 
 ## 配置系统
 
 配置文件使用固定顶层结构。常见入口如下：
 
-- `configs/robots/ar5v2_l6v1_l.yaml`：单机器人 Isaac 导入、root pose、可选 controlled joint selector，以及 cuMotion URDF/XRDF/frame 资源。
-- `configs/robots/ar5v2_l6v1_dual.yaml`：双机器人 Isaac 执行配置，`robots.left/right` 分别描述左右 articulation，`cumotion.left/right` 描述左右单臂规划资源。
+- `configs/robots/ar5v2_l6v1_l.yaml`：左侧单机器人 Isaac 导入、可选 controlled joint selector、机器人物理属性，以及 cuMotion URDF/XRDF/frame 资源。
+- `configs/robots/ar5v2_l6v1_r.yaml`：右侧单机器人 Isaac 导入、可选 controlled joint selector、机器人物理属性，以及 cuMotion URDF/XRDF/frame 资源。
 - `configs/dual_arm/ar5v2_l6v1_dual.yaml`：双臂规划语义，包括左右 arm C-space 关节顺序、flange/TCP frame 和组合 MJCF 路径。
 - `configs/controllers/arm_controller.yaml` 和 `configs/controllers/hand_controller.yaml`：主动关节和 mimic follower 的控制参数。
-- `configs/envs/rope_scene.yaml`：World 物理步频、渲染步频、重力、solver iteration，以及已有环境资产如何进入 stage。
-- `configs/objects/capsule_rope.yaml`：绳体资产的几何、质量、材质、D6 joint 和 USD 输出路径。
+- `configs/envs/scene1.yaml`：单臂 scene，包含 World 物理步频、渲染步频、重力、scene solver type、`robots.single` 和已有环境资产。
+- `configs/envs/scene2.yaml`：双臂 scene，包含 World 设置、`robots.dual.left/right` 和已有环境资产。
+- `configs/objects/capsule_rope.yaml`：绳体运行时对象 profile，引用已生成 USD 并提供接触材质和 solver iteration 覆盖。
 - `configs/cumotion/default.yaml`：项目默认 cuMotion 算法 profile；脚本可换 profile，但不在脚本中散落算法默认值。
 - `configs/logging/default_logger.yaml`：关节跟踪 CSV 输出和记录列。
 - `scripts/pinch_grasp.py`：自包含 pinch grasp 动作参数和执行流程。
@@ -262,12 +261,11 @@ physics step 先下发左右 controller 目标，再统一 `world.step()`，用�
 每个配置目录都提供了可复制改名的示例文件：
 
 - `configs/robots/example.yaml`：单机器人配置模板。
-- `configs/robots/dual.example.yaml`：双机器人执行配置模板。
 - `configs/dual_arm/example.yaml`：双臂语义配置模板。
 - `configs/controllers/example.yaml`：控制器 profile 字段说明。
-- `configs/envs/default.example.yaml`：环境、solver 和 `objects[]` 字段说明。
-- `configs/objects/example.yaml`：capsule rope 资产生成模板。
-- `configs/cumotion/default.example.yaml`：cuMotion IK/planner profile 字段说明。
+- `configs/envs/example.yaml`：环境、solver、`robots.single` / `robots.dual` 和 `objects[]` 字段说明。
+- `configs/objects/example.yaml`：运行时对象 profile 模板。
+- `configs/cumotion/example.yaml`：cuMotion IK/planner profile 字段说明。
 - `configs/logging/example.yaml`：CSV 日志配置模板。
 
 cuMotion 相关配置的优先级是：
@@ -280,7 +278,7 @@ configs/cumotion/default.yaml
 
 实际合并分两条线：
 
-- `cumotion` profile 先作为 robot config 的默认值；robot YAML 只提供机器人模型资源字段。单臂配置直接提供 `xrdf_path`、`urdf_path`、`flange_frame`，双臂配置提供 `left/right` 两份单臂式描述。
+- `cumotion` profile 先作为 robot config 的默认值；robot YAML 只提供单 articulation 模型资源字段：`xrdf_path`、`urdf_path`、`flange_frame`。双臂由 scene 的 `robots.dual.left/right` 选择两个单臂 robot profile，runtime 再结合左右 `root_pose` 生成临时双臂 URDF/XRDF。
 - `cumotion.motion_planner` profile 直接解析成动作脚本使用的 `MotionPlannerBackendConfig`；抓取目标、阶段时长和手型固定在 `scripts/pinch_grasp.py` 中。
 
 配置合并是递归 mapping merge。列表和标量按覆盖值整体替换，不做逐项合并，这对关节列表、
@@ -292,10 +290,10 @@ configs/cumotion/default.yaml
 
 `configs/` 是项目自带的伴随配置层，不是完全外置的临时输入。项目默认机器人、默认场景、
 默认控制器和默认 cuMotion profile 都可以放在这里，并随代码一起提交。脚本中可以保留“默认选
-哪个 config 文件”的路径，但不应把可替换的资产路径、root pose、solver、controller gain 或
+哪个 scene”的名称，但不应把可替换的资产路径、root pose、solver、controller gain 或
 planner 参数散落硬编码在动作逻辑里。
 
-- `configs/robots/*.yaml`：Isaac 导入、root pose、可选 controlled joint selector、机器人刚体
+- `configs/robots/*.yaml`：Isaac 导入、可选 controlled joint selector、机器人刚体
   重力策略，以及 cuMotion 模型资源字段。这里不放 IK/planner 算法参数，也不放 pinch grasp 手型。
 - `configs/cumotion/*.yaml`：cuMotion 算法 profile，包括 `kinematics`、`motion_planner`、solver
   params、trajectory generation limits 等。
@@ -305,10 +303,13 @@ planner 参数散落硬编码在动作逻辑里。
   避免机器人资产配置变成任务配置。
 - `configs/controllers/*.yaml`：控制器运行时参数，包括 position/velocity/effort 模式、implicit
   drive 或 explicit effort、stiffness/damping/max effort、follower 参数。
-- `configs/envs/*.yaml`：World 物理步频、渲染步频、重力、solver iteration，以及 `objects[]`
-  场景物体摆放。`objects[]` 引用已有 USD/URDF 资产，不生成对象本身。
-- `configs/objects/*.yaml`：对象资产生成参数，例如 capsule rope 的分段、质量、阻尼、关节限制和
-  USD 输出路径。生成后的 USD 再由 env `objects[]` 引入 stage。
+- `configs/robots/*.yaml`：机器人资产、重力、材料、刚体阻尼，以及 cuMotion 模型资源。
+- `configs/envs/*.yaml`：World 物理步频、渲染步频、重力、scene solver type、`robots.single`
+  或 `robots.dual.left/right` 机器人实例选择和安装位姿，以及 `objects[]` 场景物体摆放。`objects[]` 引用已有 USD/URDF
+  资产，不生成对象本身。
+- `configs/objects/*.yaml`：运行时对象 profile，例如已有 USD/URDF 资产路径、导入参数、接触材质
+  和对象级 solver 覆盖。对象在世界中的 `root_pose` 仍由 env `objects[]` 决定；capsule rope
+  等资产生成参数放在 `tools/assets/configs/*.yaml`。
 - `configs/logging/*.yaml`：CSV 日志开关、输出路径、采样降频和需要记录的列。
 
 ### Isaac 导入碰撞近似
@@ -353,10 +354,49 @@ robot:
 ```
 
 `false` 表示导入后禁用对应刚体重力，`true` 表示保留重力。`default` 用于未能按名称分到
-`arm`/`hand` 的刚体，`arm` 和 `hand` 可分别覆盖。双机器人配置中同样写在
-`robots.left.robot.physics.gravity` 和 `robots.right.robot.physics.gravity` 下。
+`arm`/`hand` 的刚体，`arm` 和 `hand` 可分别覆盖。双机器人运行时分别读取左右单 robot profile
+里的 `robot.physics.gravity`。
 
 脚本不再提供额外的重力开关；需要调整机器人重力时直接修改 robot YAML。
+
+### 机器人 PhysX 覆盖
+
+机器人接触材质和刚体阻尼也是机器人资产物理属性，写在 robot YAML，而不是 controller YAML：
+
+```yaml
+robot:
+  physics:
+    physx:
+      material:
+        contact_static_friction: 0.8
+        contact_dynamic_friction: 0.6
+        contact_restitution: 0.0
+      rigid_body:
+        linear_damping: 0.0
+        angular_damping: 0.1
+```
+
+controller YAML 仍负责控制模式、gain、限幅和 follower drive；导入阶段会把 controller 生成的
+drive/friction seed 与 robot YAML 的材料/刚体阻尼合并后写入 USD。
+
+### 机器人 Solver Iteration
+
+机器人刚体的 solver iteration 也是机器人资产物理属性，写在 robot YAML；env YAML 只保留
+scene 级 `solver.type`：
+
+```yaml
+robot:
+  physics:
+    solver:
+      arm:
+        position_iterations: 32
+        velocity_iterations: 4
+      hand:
+        position_iterations: 32
+        velocity_iterations: 4
+```
+
+双机器人运行时分别读取左右单 robot profile 里的 `robot.physics.solver`。
 
 ### cuMotion 配置
 
@@ -443,7 +483,7 @@ cumotion:
 cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，应视为规划失败并调整配置
 或 pipeline。
 
-更完整的字段说明见 `configs/cumotion/default.example.yaml`。
+更完整的字段说明见 `configs/cumotion/example.yaml`。
 
 ## 核心接口职责
 
@@ -457,19 +497,21 @@ cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，
 | `deep_merge(base, override)` | `utils/config.py` | 递归合并 profile 和 robot/action 配置；列表和标量整体替换。 |
 | `RobotAssetConfig` | `assets/robot_loader.py` | 描述单个机器人资产如何导入 Isaac stage：asset type/path、prim path、name。 |
 | `RobotGravityPolicy` | `assets/robot_loader.py` | 描述 robot YAML 中 default/arm/hand 的刚体重力策略。 |
-| `RobotExecutionConfig` | `assets/robot_loader.py` | 单个 articulation 的执行配置：资产、root pose、controlled joint selector。 |
-| `DualRobotExecutionConfig` | `assets/robot_loader.py` | 从 `robots.left/right` 解析双 articulation 执行配置。 |
+| `RobotPhysxOverrides` | `assets/robot_loader.py` | 描述 robot YAML 中 default/arm/hand 的接触材质和刚体阻尼覆盖。 |
+| `RobotSceneInstanceConfig` | `assets/robot_loader.py` | 描述 env 中 `robots.single` 或 `robots.dual.left/right` 的 robot profile 引用和 scene root pose。 |
+| `RobotExecutionConfig` | `assets/robot_loader.py` | 单个 articulation 的执行配置：资产、scene root pose、controlled joint selector。 |
+| `DualRobotExecutionConfig` | `assets/robot_loader.py` | 从左右两个单 robot profile 组装双 articulation 执行配置。 |
 | `import_robot_asset(...)` | `assets/robot_loader.py` | 调 Isaac importer，把 MJCF/URDF 放进当前 USD stage 并返回 articulation root。 |
 | `apply_root_pose(...)` | `assets/robot_loader.py` | 把导入后的机器人根 prim 放到配置指定的世界位姿。 |
 | `apply_robot_usd_overrides(...)` | `assets/usd_overrides.py` | 写入 USD 层 drive seed、摩擦、材质、follower drive 初值。 |
 | `apply_robot_gravity_policy(...)` | `assets/usd_overrides.py` | 按 robot 重力策略写入 rigid body `disableGravity`。 |
-| `solver_settings(...)` / `apply_solver_iteration_overrides(...)` | `assets/solver_overrides.py` | 从 env 配置读取 solver iteration，并写到 articulation 或刚体。 |
+| `scene_solver_settings(...)` / `robot_solver_settings(...)` / `apply_solver_iteration_overrides(...)` | `assets/solver_overrides.py` | 分别读取 env scene solver type 和 robot solver iteration，并写到 scene 或机器人刚体。 |
 
 ### 运行时装配
 
 | 接口 | 位置 | 作用 |
 | --- | --- | --- |
-| `EnvRuntimeSettings.from_env_config(...)` | `app/runtime_settings.py` | 从 env YAML 和 CLI 覆盖解析 physics/render frequency、世界 gravity 和 ground。 |
+| `EnvRuntimeSettings.from_env_config(...)` | `app/runtime_settings.py` | 从 env YAML 解析 physics/render frequency、世界 gravity 和 ground。 |
 | `create_simulation_session(...)` | `app/simulation_session.py` | 启动 Isaac app，创建 World/stage，并返回 Isaac runtime type handle。 |
 | `import_execution_robot_to_stage(...)` | `execution/setup.py` | reset 前导入机器人，并应用 root pose、USD/PhysX、solver 和重力覆盖。 |
 | `finalize_robot_controller(...)` | `execution/setup.py` | reset 后清零速度、创建 `JointController`，并配置 runtime gain。 |
@@ -484,7 +526,7 @@ cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，
 | `CuMotionInverseKinematics` | `backends/cumotion/inverse_kinematics.py` | 把项目 `IKRequest` 转成几何 IK 或 collision-free IK，并返回 `IKResult`。 |
 | `CuMotionMotionPlanner` | `backends/cumotion/motion_planner.py` | 按 `planning_pipeline` 分发到 trajectory optimization、graph search 或 specified path。 |
 | `MotionPlannerBackendConfig` | `backends/cumotion/motion_planner_config.py` | motion planner profile 的 dataclass 结构，按 pipeline 分组保存参数。 |
-| `prepare_cumotion_config_from_robot_config(...)` | `backends/cumotion/dual_urdf.py` | 单臂直接解析资源；双臂按 root pose 生成缓存 URDF，并融合左右 XRDF。 |
+| `prepare_cumotion_config_from_robot_config(...)` | `backends/cumotion/dual_urdf.py` | 单臂直接解析资源；双臂按 env root pose 生成缓存 URDF，并融合左右 XRDF。 |
 | `joint_trajectory_from_cumotion(...)` | `backends/cumotion/trajectory_sampler.py` | 把 cuMotion `Trajectory.eval_all(t)` 采样成项目 `JointTrajectory`。 |
 
 ### Planning 和 Trajectory
@@ -517,10 +559,10 @@ cuMotion `Trajectory`；如果只得到离散 path 而无法生成 trajectory，
 
 | 接口 | 位置 | 作用 |
 | --- | --- | --- |
-| `TcpFrame` | `tcp/tcp_frame.py` | 项目侧 TCP frame 描述：parent frame、frame name、相对位姿。 |
-| `make_pinch_tcp(...)` | `tcp/pinch_tcp.py` | 根据 MJCF 和闭合手型计算 thumb/index 夹捏中心 TCP。 |
+| `TcpTransform` | `backends/cumotion/tcp_frame.py` | 客户侧 TCP 输入；只描述相对末端/flange 的笛卡尔变换，后端再绑定到具体 flange frame。 |
+| `make_pinch_tcp_transform(...)` | `scripts/pinch_grasp.py` | 脚本侧根据 MJCF 和闭合手型计算 thumb/index 夹捏中心 TCP 变换。 |
 | `write_tcp_urdf_with_frames(...)` | `backends/cumotion/tcp_urdf_builder.py` | 把一个或多个 TCP fixed link 写入临时 URDF。 |
-| `CapsuleRopeConfig` | `objects/capsule_rope.py` | 解析绳体几何/物理配置，并生成或引用 USD 资产。 |
+| `CapsuleRopeConfig` | `objects/dynamic_chain/capsule_rope.py` | 解析 capsule rope 运行时 profile，引用已生成 USD 并应用运行时物理覆盖。 |
 
 ## cuMotion 后端
 
@@ -604,7 +646,7 @@ effort。换句话说，轨迹不是按原采样点逐点硬播放，而是按�
 
 1. 展开闭合手型中的 MJCF mimic follower 目标。
 2. 沿 thumb/index body 链计算闭合手型下两指尖位置。
-3. 取两指尖几何中点作为 `pinch_tcp`，并挂到 `flange_frame` 下。
+3. 取两指尖几何中点作为 `pinch_tcp` 相对末端的 `xyz/rpy` 变换。
 4. 通过 `make_cumotion_context(...)` 写临时 URDF，让 cuMotion 能识别该 TCP frame。
 5. 计算 approach、grasp、lift、wiggle 的 TCP 目标。
 6. 对 approach、lift、wiggle 等阶段求 IK 和关节空间规划。

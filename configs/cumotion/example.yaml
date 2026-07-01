@@ -1,0 +1,89 @@
+# cuMotion 算法 profile 示例。
+#
+# 用途：
+# - 说明 configs/cumotion/*.yaml 的合法结构。
+# - 提供 IK/FK 和 motion planner 的算法默认值。
+#
+# 使用方式：
+#   复制本文件为 configs/cumotion/<your_profile>.yaml，然后在脚本中传入：
+#
+#     --cumotion-profile <your_profile>
+#
+# 合并边界：
+#   configs/cumotion/*.yaml  <  configs/robots/*.yaml  <  scripts/pinch_grasp.py 动作参数
+#
+# - 本文件只放算法参数，不放 xrdf_path、urdf_path、flange_frame。
+# - 单臂 robot profile 提供 cuMotion 模型资源字段。
+# - 双臂 scene 通过 robots.dual.left/right 选择两个单臂 robot profile，runtime 再根据左右
+#   root_pose 生成临时双臂 URDF/XRDF。
+# - 抓取目标、阶段时长和手型属于动作脚本，不写在 cuMotion profile。
+
+cumotion:
+  kinematics:
+    ik:
+      # 可选：IK 默认 seed，按 cuMotion C-space 关节顺序排列。
+      # 可以是一条 1D seed，也可以是多条 2D seeds；缺省时使用后端默认初始化逻辑。
+      #
+      # cspace_seeds:
+      #   - [0.0, -0.5, 0.3, 0.0, 0.6, 0.0, 0.0]
+
+      # IK 位置容差，单位 m。
+      position_tolerance: 0.002
+
+      # IK 姿态容差，单位 rad。单次请求若 use_orientation=false，会在请求层忽略姿态目标。
+      orientation_tolerance: 0.01
+
+      # cuMotion IK CCD / BFGS 阶段最大迭代次数。
+      ccd_max_iterations: 180
+      bfgs_max_iterations: 80
+
+      # 姿态误差权重。增大后更重视姿态，可能降低位置收敛余量。
+      orientation_weight: 0.25
+
+      # 传给 collision-free IK solver/config 的额外参数；可用键取决于 cuMotion 版本。
+      collision_free_params: {}
+
+    # 当前 FK 没有项目侧可调参数，保留分组用于表达边界。
+    fk: {}
+
+  motion_planner:
+    # 可选：
+    # - trajectory_optimization
+    # - graph_search
+    # - specified_path
+    planning_pipeline: graph_search
+
+    graph_search:
+      # 是否使用 graph planner 返回的 interpolated_path。
+      generate_interpolated_path: false
+      # 是否使用 context 当前同步的环境障碍物。
+      use_environment_obstacles: true
+      # motion_planner_config_path: null
+      motion_planner_params: {}
+
+    trajectory_generation:
+      # graph_search / specified_path 成功后必须生成连续时间 trajectory。
+      # mode 可选 time_optimal 或 time_stamped。
+      mode: time_stamped
+      # interpolation_mode 可选 linear 或 cubic_spline。
+      interpolation_mode: cubic_spline
+      # 可选关节限制覆盖；数组长度必须等于 cuMotion C-space 维度。
+      limits: {}
+      # 传给 CSpaceTrajectoryGenerator.set_param(...) 的参数覆盖。
+      solver_params: {}
+
+    trajectory_optimization:
+      use_environment_obstacles: true
+      # config_path: null
+      params: {}
+
+    specified_path:
+      # 默认指定路径族。真实路径几何由调用方的 SpecifiedPathRequest.path 提供。
+      family: task_space_segments
+      validate_collision_after_generation: false
+      cspace_waypoints:
+        require_start_match: true
+        start_match_tolerance: 1.0e-9
+      task_space_segments: {}
+      composite:
+        default_transition_mode: free

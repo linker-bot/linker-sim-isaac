@@ -1,4 +1,4 @@
-# 机械臂控制器、材料和刚体参数。
+# 机械臂控制器参数。
 target: arm
 
 position_control:
@@ -49,12 +49,3 @@ effort_control:
     damping: 20.0
     max_force: 100.0
     joint_friction: 0.5
-
-physx:
-  material:
-    contact_static_friction: 0.8
-    contact_dynamic_friction: 0.6
-    contact_restitution: 0.0
-  rigid_body:
-    linear_damping: 0.0
-    angular_damping: 0.1

@@ -3,10 +3,11 @@
 本项目把 cuMotion 配置拆成两层：
 
 * ``configs/cumotion/*.yaml`` 保存算法 profile，例如 IK 容差、planner pipeline 和后端参数。
-* ``configs/robots/*.yaml`` 保存具体机器人资源，例如 XRDF/URDF、frame 名和双臂 root pose。
+* ``configs/robots/*.yaml`` 保存具体机器人资源，例如 XRDF/URDF 和 frame 名。
+* ``configs/envs/*.yaml`` 保存 scene 中的机器人实例选择和 root pose。
 
-动作脚本先把 profile 默认值合到 robot 配置下面，再由这里解析成后端 dataclass。这样脚本只
-选择“使用哪套 profile 和哪台机器人”，不需要知道 cuMotion 配置内部层级。
+动作脚本先按 env scene 选择机器人 profile，再把 cuMotion profile 默认值合到 robot 配置下面，
+最后由这里解析成后端 dataclass。这样脚本只选择“使用哪个 scene”，不需要知道 cuMotion 配置内部层级。
 """
 
 from __future__ import annotations
@@ -42,10 +43,17 @@ def merged_robot_config_with_cumotion_profile(
     return deep_merge({"cumotion": dict(profile_cumotion)}, dict(robot_config))
 
 
-def robot_cumotion_config(robot_config: Mapping[str, Any]) -> CuMotionConfig:
-    """解析机器人级 cuMotion 资源；双臂配置会按 root pose 生成缓存资产。"""
+def robot_cumotion_config(
+    robot_config: Mapping[str, Any],
+    *,
+    dual_root_poses: Mapping[str, object] | None = None,
+) -> CuMotionConfig:
+    """解析机器人级 cuMotion 资源；双臂配置会按 scene root pose 生成缓存资产。"""
 
-    return prepare_cumotion_config_from_robot_config(robot_config).backend_config
+    return prepare_cumotion_config_from_robot_config(
+        robot_config,
+        dual_root_poses=dual_root_poses,
+    ).backend_config
 
 
 def motion_planner_config_from_profile(

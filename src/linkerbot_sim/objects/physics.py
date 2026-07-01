@@ -1,0 +1,131 @@
+"""Shared object runtime physics helpers."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+from linkerbot_sim.assets.robot_loader import RootPoseConfig
+
+
+@dataclass(frozen=True)
+class ObjectMaterialConfig:
+    """Optional object contact material overrides."""
+
+    static_friction: float | None = None
+    dynamic_friction: float | None = None
+    restitution: float | None = None
+    friction_combine_mode: str | None = None
+
+    @classmethod
+    def from_mapping(
+        cls, data: Mapping[str, object] | None, *, label: str
+    ) -> "ObjectMaterialConfig | None":
+        if data is None:
+            return None
+        allowed = {
+            "static_friction",
+            "dynamic_friction",
+            "restitution",
+            "friction_combine_mode",
+        }
+        unsupported = set(data) - allowed
+        if unsupported:
+            names = ", ".join(sorted(unsupported))
+            raise ValueError(f"{label} contains unsupported keys: {names}")
+        config = cls(
+            static_friction=optional_non_negative_float(
+                data, "static_friction", label
+            ),
+            dynamic_friction=optional_non_negative_float(
+                data, "dynamic_friction", label
+            ),
+            restitution=optional_non_negative_float(data, "restitution", label),
+            friction_combine_mode=optional_friction_combine_mode(data, label),
+        )
+        return config if config.has_overrides() else None
+
+    def has_overrides(self) -> bool:
+        return any(
+            value is not None
+            for value in (
+                self.static_friction,
+                self.dynamic_friction,
+                self.restitution,
+                self.friction_combine_mode,
+            )
+        )
+
+
+def apply_root_pose_to_prim(stage, prim_path: str, pose: RootPoseConfig) -> None:
+    """Apply a scene root pose to an existing USD prim."""
+
+    from pxr import Gf, Sdf, UsdGeom
+    import numpy as np
+
+    prim = stage.GetPrimAtPath(Sdf.Path(prim_path))
+    if not prim.IsValid():
+        raise RuntimeError(f"Cannot apply root_pose; object prim not found: {prim_path}")
+    xform = UsdGeom.Xformable(prim)
+    xform.ClearXformOpOrder()
+    xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))
+    xform.AddRotateXYZOp().Set(Gf.Vec3f(*tuple(np.degrees(pose.rpy))))
+
+
+def optional_mapping(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> Mapping[str, object] | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{parent_label}.{key} must be a mapping")
+    return value
+
+
+def optional_non_negative_float(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> float | None:
+    if key not in data:
+        return None
+    value = float(data[key])
+    if value < 0.0:
+        raise ValueError(f"{parent_label}.{key} cannot be negative")
+    return value
+
+
+def optional_positive_int(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> int | None:
+    if key not in data:
+        return None
+    value = int(data[key])
+    if value <= 0:
+        raise ValueError(f"{parent_label}.{key} must be positive")
+    return value
+
+
+def optional_non_negative_int(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> int | None:
+    if key not in data:
+        return None
+    value = int(data[key])
+    if value < 0:
+        raise ValueError(f"{parent_label}.{key} cannot be negative")
+    return value
+
+
+def optional_friction_combine_mode(
+    data: Mapping[str, object], parent_label: str
+) -> str | None:
+    if "friction_combine_mode" not in data:
+        return None
+    value = str(data["friction_combine_mode"]).lower()
+    allowed = {"average", "min", "multiply", "max"}
+    if value not in allowed:
+        raise ValueError(
+            f"{parent_label}.friction_combine_mode must be one of "
+            f"{sorted(allowed)}, got {value!r}"
+        )
+    return value

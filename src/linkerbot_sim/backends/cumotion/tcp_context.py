@@ -1,18 +1,18 @@
 """带可选临时 TCP URDF 的 cuMotion context 装配入口。
 
 cuMotion 的 FK/IK/planner 只能使用 robot description 中已经存在的 frame。也就是说，
-如果动作脚本层计算出了 pinch center 这类临时 TCP，必须在 ``CuMotionContext`` 创建之前把
-该 TCP 作为 fixed link 写进待加载的 URDF。
+如果动作脚本层传入了相对末端的临时 TCP 变换，必须在 ``CuMotionContext`` 创建之前把
+该 TCP 绑定到具体法兰 link，并作为 fixed link 写进待加载的 URDF。
 
-本模块把这个后端约束封装成 context manager：动作脚本层只需要传入 ``TcpFrame``，即可获得已经
-识别该 TCP 的 ``CuMotionContext``，不用直接管理临时目录、临时 URDF 和
+本模块把这个后端约束封装成 context manager：动作脚本层只需要传入 ``TcpTransform``，
+即可获得已经识别该 TCP 的 ``CuMotionContext``，不用直接管理临时目录、临时 URDF 和
 ``CuMotionConfig`` 替换。
 """
 
 from __future__ import annotations
 
 from contextlib import contextmanager
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 import tempfile
@@ -26,14 +26,19 @@ from linkerbot_sim.backends.cumotion.context import (
     CuMotionContext,
 )
 from linkerbot_sim.backends.cumotion.tcp_urdf_builder import write_tcp_urdf_with_frames
-from linkerbot_sim.tcp.tcp_frame import TcpFrame
+from linkerbot_sim.backends.cumotion.tcp_frame import (
+    TcpFrame,
+    TcpTransform,
+    bind_tcp_transform,
+)
 
 
 @contextmanager
 def make_cumotion_context(
     config: CuMotionConfig,
     *,
-    tcp: TcpFrame | Sequence[TcpFrame] | None = None,
+    tcp: TcpTransform | Sequence[TcpTransform] | None = None,
+    tcp_parent_frames: Mapping[str, str] | None = None,
     output_dir: str | Path | None = None,
 ) -> Iterator[CuMotionContext]:
     """按需创建普通或带自定义 TCP 的 ``CuMotionContext``。
@@ -41,23 +46,30 @@ def make_cumotion_context(
     参数:
         config: 基础 cuMotion 配置。``xrdf_path`` 不会被修改；``urdf_path`` 只有在需要追加
             TCP link 时才会替换成临时 URDF。
-        tcp: 可选 TCP 描述。为空时保持原始 ``CuMotionContext(config)`` 语义。
+        tcp: 可选 TCP 描述，解释为相对末端/flange 的坐标变换。为空时保持原始
+            ``CuMotionContext(config)`` 语义。
+        tcp_parent_frames: 可选 frame name 到 parent link 的映射。单 TCP 未提供映射时默认绑定
+            ``config.flange_frame``；双臂或多末端场景应显式提供每个 TCP 的 parent link。
         output_dir: 可选输出目录。为空时本函数创建并持有临时目录；非空时调用方负责该目录
             后续清理，便于调试或测试检查生成的 URDF。
 
     关键语义:
         * 不为了判断 frame 是否存在而先创建一个普通 ``CuMotionContext``，避免重复加载
           cuMotion robot description。
-        * 已存在的非 flange frame 默认报错，因为传入的 ``TcpFrame.xyz/rpy`` 无法覆盖基础
+        * 已存在的非 flange frame 默认报错，因为传入的 TCP ``xyz/rpy`` 无法覆盖基础
           URDF 中已有 link 的真实位姿，静默忽略会非常危险。
         * 临时目录必须活到 ``CuMotionContext`` 使用结束；这正是本函数使用 context manager
           的原因。
     """
 
-    tcp_frames = _normalize_tcp_frames(tcp)
+    tcp_frames = _normalize_tcp_frames(
+        tcp,
+        config=config,
+        tcp_parent_frames=tcp_parent_frames,
+    )
     if not tcp_frames:
         # 没有自定义 TCP 时完全走原始路径，确保现有调用方不因新入口改变行为。
-        yield CuMotionContext(config)
+        yield _create_cumotion_context(config)
         return
 
     base_urdf_path = Path(config.urdf_path)
@@ -82,7 +94,7 @@ def make_cumotion_context(
         ):
             # “TCP 就是法兰本身”是唯一允许复用已有 link 的特殊情况。这里显式清空
             # custom_tcp_frame，避免基础 config 中残留的工具 frame 继续成为 IK/planner 默认值。
-            context = CuMotionContext(replace(config, custom_tcp_frame=None))
+            context = _create_cumotion_context(replace(config, custom_tcp_frame=None))
             _validate_context_tcp(
                 context, existing_passthrough_frames[0], expect_custom_tcp=False
             )
@@ -122,7 +134,7 @@ def _make_context_with_written_tcp(
     write_tcp_urdf_with_frames(base_urdf_path, tcp_urdf_path, tcp_frames)
     # ``custom_tcp_frame`` 写进 config 后，context.make_inverse_kinematics() 和
     # context.make_motion_planner() 在调用方未显式传 tcp_frame_name 时会默认使用该 TCP。
-    context = CuMotionContext(
+    context = _create_cumotion_context(
         replace(
             config,
             urdf_path=tcp_urdf_path,
@@ -136,6 +148,17 @@ def _make_context_with_written_tcp(
             expect_custom_tcp=(frame.frame_name == tcp_frames[0].frame_name),
         )
     return context
+
+
+def _create_cumotion_context(config: CuMotionConfig) -> CuMotionContext:
+    """创建 context，并把 cuMotion/Kit 的静默退出转换成普通异常。"""
+
+    try:
+        return CuMotionContext(config)
+    except SystemExit as exc:
+        raise RuntimeError(
+            f"cuMotion context initialization requested process exit: code={exc.code!r}"
+        ) from exc
 
 
 def _validate_context_tcp(
@@ -181,16 +204,51 @@ def _urdf_link_names(urdf_path: str | Path) -> set[str]:
 
 
 def _normalize_tcp_frames(
-    tcp: TcpFrame | Sequence[TcpFrame] | None,
+    tcp: TcpTransform | Sequence[TcpTransform] | None,
+    *,
+    config: CuMotionConfig,
+    tcp_parent_frames: Mapping[str, str] | None,
 ) -> tuple[TcpFrame, ...]:
     if tcp is None:
         return ()
-    if isinstance(tcp, TcpFrame):
-        return (tcp,)
+    if isinstance(tcp, TcpTransform):
+        return (
+            _bind_endpoint_transform(
+                tcp,
+                config=config,
+                tcp_parent_frames=tcp_parent_frames,
+            ),
+        )
     frames = tuple(tcp)
-    if not all(isinstance(frame, TcpFrame) for frame in frames):
-        raise TypeError("tcp must be a TcpFrame, a sequence of TcpFrame, or None")
-    return frames
+    if not all(isinstance(frame, TcpTransform) for frame in frames):
+        raise TypeError("tcp must be a TcpTransform, a sequence of them, or None")
+    return tuple(
+        _bind_endpoint_transform(
+            frame,
+            config=config,
+            tcp_parent_frames=tcp_parent_frames,
+        )
+        for frame in frames
+    )
+
+
+def _bind_endpoint_transform(
+    transform: TcpTransform,
+    *,
+    config: CuMotionConfig,
+    tcp_parent_frames: Mapping[str, str] | None,
+) -> TcpFrame:
+    parent_frame = None
+    if tcp_parent_frames is not None:
+        parent_frame = tcp_parent_frames.get(transform.frame_name)
+    if parent_frame is None:
+        parent_frame = config.flange_frame
+    if not parent_frame:
+        raise ValueError(
+            "TcpTransform requires a parent frame; set CuMotionConfig.flange_frame "
+            "or pass tcp_parent_frames={frame_name: parent_frame}"
+        )
+    return bind_tcp_transform(transform, parent_frame=str(parent_frame))
 
 
 def _validate_unique_tcp_frame_names(tcp_frames: Sequence[TcpFrame]) -> None:

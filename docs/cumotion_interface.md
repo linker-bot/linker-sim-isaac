@@ -501,7 +501,7 @@ planner.plan(
 
 位置：`src/linkerbot_sim/backends/cumotion/tcp_context.py`
 
-用途：根据可选 `TcpFrame` 创建 `CuMotionContext`。如果 TCP frame 不在基础 URDF 中，后端会写出带 fixed TCP link 的临时 URDF，并用它创建 context；临时目录由 context manager 持有，退出时清理。
+用途：根据可选 `TcpTransform` 创建 `CuMotionContext`。客户脚本只传相对末端/flange 的 `TcpTransform`；后端会把它绑定到 `CuMotionConfig.flange_frame` 或 `tcp_parent_frames` 指定的 parent link，写出带 fixed TCP link 的临时 URDF，并用它创建 context；临时目录由 context manager 持有，退出时清理。
 
 示例：
 
@@ -516,13 +516,16 @@ with make_cumotion_context(config, tcp=pinch_tcp) as context:
 | 参数 | 含义 |
 |---|---|
 | `config` | 基础 `CuMotionConfig` |
-| `tcp` | `TcpFrame | None`；为空时等价于 `CuMotionContext(config)` |
+| `tcp` | `TcpTransform | Sequence[TcpTransform] | None`；为空时等价于 `CuMotionContext(config)` |
+| `tcp_parent_frames` | 可选 `{tcp_frame_name: parent_link}`；多末端/双臂 TCP 需要显式指定 |
 | `output_dir` | 可选输出目录；为空时使用并管理临时目录 |
 
 行为：
 
 - `tcp is None`：直接创建普通 `CuMotionContext`。
-- `tcp.frame_name == config.flange_frame`、`tcp.parent_frame == config.flange_frame` 且零 offset：视作法兰 TCP，不写临时 URDF，并清空 `custom_tcp_frame`。
+- `TcpTransform`：解释为相对末端/flange 的坐标变换；默认绑定到 `config.flange_frame`。
+- `tcp_parent_frames`：提供时按 frame name 覆盖 parent link，适合双臂左右 flange 不同的场景。
+- `tcp.frame_name == parent_link` 且零 offset：视作法兰 TCP，不写临时 URDF，并清空 `custom_tcp_frame`。
 - `tcp.frame_name` 已存在且不是上述法兰 TCP：抛出 `ValueError`，避免传入的 `xyz/rpy` 被静默忽略。
 - `tcp.frame_name` 不存在：写出追加 fixed TCP link 的 URDF，使用 `custom_tcp_frame=tcp.frame_name` 创建 context。
 - context 创建后校验 `tcp.frame_name` 已进入 cuMotion frame 集合。
@@ -541,7 +544,7 @@ with make_cumotion_context(config, tcp=pinch_tcp) as context:
 |---|---|
 | `urdf_path` | 基础 URDF 路径 |
 | `output_urdf_path` | 输出临时 URDF 路径 |
-| `tcp` | `TcpFrame`，包含 `parent_frame`、`frame_name`、`xyz`、`rpy` |
+| `tcp` | 已绑定 parent link 的 `TcpFrame`，包含 `parent_frame`、`frame_name`、`xyz`、`rpy` |
 
 行为：
 

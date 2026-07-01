@@ -12,6 +12,7 @@ import os
 
 from linkerbot_sim.app.launch import launch_simulation_app
 from linkerbot_sim.app.runtime_settings import EnvRuntimeSettings
+from linkerbot_sim.app.simulation_app_lifecycle import close_simulation_app
 from linkerbot_sim.envs.scene_builder import build_world, configure_visuals
 
 
@@ -54,7 +55,7 @@ def create_simulation_session(
             add_ground=settings.add_ground,
         )
         if gui:
-            configure_visuals()
+            configure_visuals(settings.visuals)
         return SimulationSession(
             app=simulation_app,
             world=world,
@@ -63,5 +64,5 @@ def create_simulation_session(
             single_articulation_type=SingleArticulation,
         )
     except Exception:
-        simulation_app.close()
+        close_simulation_app(simulation_app)
         raise

@@ -4,9 +4,10 @@
 #   configs/cumotion/default.yaml < configs/robots/*.yaml < scripts/pinch_grasp.py 内置动作参数
 #
 # 本文件提供项目通用 cuMotion 算法默认值。具体机器人资产字段仍由 configs/robots/*.yaml
-# 提供：单臂配置写 xrdf_path/urdf_path/flange_frame，双臂配置写 left/right 单臂式描述。
-# pinch grasp 的动作参数直接写在脚本里，并可读取本文件的 cumotion.motion_planner 作为
-# planner 默认值。
+# 提供：每份 robot profile 都是单 articulation，并写 xrdf_path/urdf_path/flange_frame。
+# 双臂 scene 通过 configs/envs/*.yaml 的 robots.dual.left/right 选择左右单臂 profile，
+# runtime 再结合 root_pose 生成临时双臂 URDF/XRDF。pinch grasp 的动作参数直接写在脚本里，
+# 并可读取本文件的 cumotion.motion_planner 作为 planner 默认值。
 
 cumotion:
   kinematics:

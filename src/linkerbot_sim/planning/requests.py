@@ -174,13 +174,17 @@ class TcpRotationSegment:
 class TcpArcSegment:
     """specified-path 中的 TCP 圆弧段描述。
 
-    ``arc_mode='tangent'`` 使用当前路径切线和目标点定义圆弧；``arc_mode='three_point'`` 还需要
-    ``intermediate_position``。若提供 ``target_orientation``，后端使用 cuMotion 的
+    ``target_position`` 表示 base/world 约定坐标系下的绝对终点，``target_offset`` 表示相对
+    当前 tracked TCP 位置的位移。``arc_mode='tangent'`` 使用当前路径切线和目标点定义圆弧；
+    ``arc_mode='three_point'`` 还需要绝对 ``intermediate_position`` 或相对
+    ``intermediate_offset``。若提供 ``target_orientation``，后端使用 cuMotion 的
     ``*_with_orientation_target`` 圆弧 API。
     """
 
-    target_position: np.ndarray
+    target_position: np.ndarray | None = None
+    target_offset: np.ndarray | None = None
     intermediate_position: np.ndarray | None = None
+    intermediate_offset: np.ndarray | None = None
     target_orientation: np.ndarray | None = None
     arc_mode: TaskSpaceArcMode = "tangent"
     constant_orientation: bool = True
@@ -307,15 +311,28 @@ def _validate_task_space_segment(segment: TaskSpaceSegment, label: str) -> None:
         np.asarray(segment.target_orientation, dtype=float).reshape(4)
         return
     if isinstance(segment, TcpArcSegment):
-        np.asarray(segment.target_position, dtype=float).reshape(3)
+        if (segment.target_position is None) == (segment.target_offset is None):
+            raise ValueError(
+                f"{label} exactly one of target_position or target_offset must be provided"
+            )
+        if segment.target_position is not None:
+            np.asarray(segment.target_position, dtype=float).reshape(3)
+        if segment.target_offset is not None:
+            np.asarray(segment.target_offset, dtype=float).reshape(3)
         if segment.arc_mode not in {"tangent", "three_point"}:
             raise ValueError(f"{label}.arc_mode must be one of: tangent, three_point")
-        if segment.arc_mode == "three_point" and segment.intermediate_position is None:
-            raise ValueError(
-                f"{label}.intermediate_position is required for three_point arc"
-            )
+        if segment.arc_mode == "three_point":
+            if (segment.intermediate_position is None) == (
+                segment.intermediate_offset is None
+            ):
+                raise ValueError(
+                    f"{label} exactly one of intermediate_position or "
+                    "intermediate_offset is required for three_point arc"
+                )
         if segment.intermediate_position is not None:
             np.asarray(segment.intermediate_position, dtype=float).reshape(3)
+        if segment.intermediate_offset is not None:
+            np.asarray(segment.intermediate_offset, dtype=float).reshape(3)
         if segment.target_orientation is not None:
             np.asarray(segment.target_orientation, dtype=float).reshape(4)
         return

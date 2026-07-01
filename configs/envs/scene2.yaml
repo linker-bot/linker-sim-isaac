@@ -1,0 +1,63 @@
+# scene2: 双 AR5 + L6 桌面运动测试场景。
+# env 控制仿真世界，solver 只控制 scene 级 PhysX 求解器类型。
+env:
+  name: scene2
+  description: dual arm scripted motion scene
+  gravity_z: -9.81
+  add_ground: false
+  # 绳体接触和抓取对物理步频敏感，因此默认高于 empty_scene。
+  physics_frequency: 240.0
+  # 渲染/画面更新频率
+  render_frequency: 60.0
+
+solver:
+  # PhysX solver 类型，TGS 对关节链和接触通常更稳定。
+  type: PGS
+
+visuals:
+  camera:
+    enabled: true
+    eye: [1.35, -1.65, 1.05]
+    target: [0.0, -0.1, 0.42]
+    prim_path: /OmniverseKit_Persp
+  lights:
+    key:
+      enabled: true
+      path: /World/KeyLight
+      intensity: 1200.0
+      angle: 0.5
+    fill:
+      enabled: true
+      path: /World/FillLight
+      intensity: 250.0
+
+robots:
+  # 双机器人 runtime 使用 dual.left/right；每侧引用一个单 articulation robot profile。
+  dual:
+    left:
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        xyz: [0.0, 0.09, 0.0]
+        rpy: [-1.5707, 0.0, 0.0]
+    right:
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+objects:
+  # workstation 是环境中的固定物体；资产路径和 import 参数来自 object_profile。
+  - name: workstation_armbase
+    object_profile: workstation_armbase
+    root_pose:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+
+  # rope 是有语义的动态链式对象；root_pose 属于 scene，资产路径和运行时物理覆盖来自 object_profile。
+  # 几何、质量、关节限制等资产固有属性由 tools/assets/configs/capsule_rope.yaml 生成时决定。
+  - name: rope
+    object_profile: capsule_rope
+    runtime_handle: rope
+    root_pose:
+      xyz: [0.35, 0, -0.4]
+      rpy: [0.0, 0.0, 1.5707]

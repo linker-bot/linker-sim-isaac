@@ -1,8 +1,8 @@
 """控制器 YAML 配置解析。
 
-项目将机械臂和灵巧手的控制、材料、刚体参数拆成独立 YAML 文件。本模块从 controllers
-目录或显式 profile 映射读取这些文件，并转换成 runtime controller 和 USD/PhysX 覆盖所需
-的数据。
+项目将机械臂和灵巧手的控制参数拆成独立 YAML 文件。本模块从 controllers 目录读取这些
+文件，并转换成 runtime controller 和 USD/PhysX drive seed 所需的数据。机器人接触材质和
+刚体阻尼属于资产物理属性，由 robot YAML 的 ``robot.physics.physx`` 描述。
 
 职责边界:
         * 把 YAML 中的 arm/hand profile 解析成纯 Python dataclass。
@@ -45,7 +45,7 @@ class ControllerProfile:
         position_control: 位置控制参数，支持 ``method: implicit`` 或 ``method: explicit``。
         velocity_control: 速度控制参数，支持 ``method: implicit`` 或 ``method: explicit``。
         effort_control: effort 控制参数，当前支持 ``method: direct``。
-        physx: 材料、刚体和导入后 drive 初值覆盖参数。
+        physx: 导入后 drive 初值相关的兼容 section；不再接受材料和刚体阻尼。
     输出:
         可转换为 ``ComponentControlSettings`` 和 ``PhysxOverrideConfig``。
     """
@@ -128,12 +128,20 @@ def _profile_from_mapping(name: str, data: Mapping[str, Any]) -> ControllerProfi
             f"Controller profile {name!r} uses removed section 'implicit_position_drive'; "
             "use 'position_control' with method: implicit"
         )
+    physx = _section(data, "physx")
+    removed_physx_sections = set(physx) & {"material", "rigid_body"}
+    if removed_physx_sections:
+        removed = ", ".join(sorted(removed_physx_sections))
+        raise ValueError(
+            f"Controller profile {name!r} uses robot physics fields under physx: "
+            f"{removed}; move them to robot.physics.physx"
+        )
     return ControllerProfile(
         name=name,
         position_control=_section(data, "position_control"),
         velocity_control=_section(data, "velocity_control"),
         effort_control=_section(data, "effort_control"),
-        physx=_section(data, "physx"),
+        physx=physx,
     )
 
 
@@ -248,17 +256,10 @@ def _physx_override_config(profile: ControllerProfile) -> PhysxOverrideConfig:
 
     # USD/PhysX 覆盖只需要导入后的默认 drive seed。这里固定从 position_control 读取，
     # 因为 Isaac importer 写入的是 joint drive 初值，而不是运行期的速度/effort action。
-    material = _section(profile.physx, "material")
-    rigid_body = _section(profile.physx, "rigid_body")
     drive = _component_control_settings(profile, "position")
     return PhysxOverrideConfig(
-        contact_static_friction=float(material.get("contact_static_friction", 0.8)),
-        contact_dynamic_friction=float(material.get("contact_dynamic_friction", 0.6)),
-        contact_restitution=float(material.get("contact_restitution", 0.0)),
         joint_friction=float(drive.joint_friction),
         follower_joint_friction=float(drive.follower_joint_friction),
-        rigid_body_linear_damping=float(rigid_body.get("linear_damping", 0.0)),
-        rigid_body_angular_damping=float(rigid_body.get("angular_damping", 0.1)),
         drive_stiffness_seed=float(drive.stiffness[0]),
         drive_damping_seed=float(drive.damping[0]),
         follower_drive_stiffness_seed=float(drive.follower_stiffness[0]),

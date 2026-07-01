@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from linkerbot_sim.controllers.config import (
     ControllerProfile,
+    _profile_from_mapping,
     joint_control_settings,
     load_controller_profiles,
     physx_override_configs,
@@ -59,6 +60,21 @@ def test_controller_profiles_require_directory_entrypoint() -> None:
         pass
     else:
         raise AssertionError("load_controller_profiles accepted mapping entrypoint")
+
+
+def test_controller_profiles_reject_robot_physx_fields() -> None:
+    profile = {
+        "target": "arm",
+        "position_control": {"method": "implicit"},
+        "physx": {"material": {"contact_static_friction": 0.9}},
+    }
+
+    try:
+        _profile_from_mapping("arm", profile)
+    except ValueError as exc:
+        assert "move them to robot.physics.physx" in str(exc)
+    else:
+        raise AssertionError("controller accepted robot PhysX material fields")
 
 
 def test_controller_profiles_reject_removed_method_aliases() -> None:

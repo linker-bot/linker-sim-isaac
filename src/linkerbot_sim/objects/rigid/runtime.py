@@ -1,7 +1,7 @@
-"""从 env 配置导入或引用物理世界中的环境物体。
+"""Rigid object runtime import and physics helpers.
 
-本模块只负责“已有资产如何进入当前 USD stage”。对象自身如何生成、几何参数是什么，仍由
-``configs/objects`` 和对应对象模块负责。这样 env 配置描述场景布置，object 配置描述对象资产。
+本模块只负责 rigid object 的运行时导入和物理覆盖。env 配置描述对象实例摆放；
+object profile 描述资产路径、导入参数和运行时物理属性。
 """
 
 from __future__ import annotations
@@ -15,70 +15,34 @@ from linkerbot_sim.assets.robot_loader import (
     RootPoseConfig,
     configure_urdf_import,
 )
+from linkerbot_sim.objects.config import (
+    ObjectProfileConfig,
+    expanded_object_mapping,
+    object_scene_instances_from_env_config,
+)
+from linkerbot_sim.objects.physics import (
+    ObjectMaterialConfig,
+    apply_root_pose_to_prim,
+    optional_mapping,
+)
 from linkerbot_sim.utils.paths import repo_path
 
 
-@dataclass(frozen=True)
-class SceneObjectMaterialConfig:
-    """环境对象的可选物理材质覆盖；字段缺省表示不写入该 USD 属性。"""
-
-    static_friction: float | None = None
-    dynamic_friction: float | None = None
-    restitution: float | None = None
-    friction_combine_mode: str | None = None
-
-    @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None, *, label: str
-    ) -> "SceneObjectMaterialConfig | None":
-        if data is None:
-            return None
-        allowed_keys = {
-            "static_friction",
-            "dynamic_friction",
-            "restitution",
-            "friction_combine_mode",
-        }
-        unsupported_keys = set(data) - allowed_keys
-        if unsupported_keys:
-            unsupported = ", ".join(sorted(unsupported_keys))
-            raise ValueError(f"{label} contains unsupported keys: {unsupported}")
-        config = cls(
-            static_friction=_optional_non_negative_float(
-                data, "static_friction", label
-            ),
-            dynamic_friction=_optional_non_negative_float(
-                data, "dynamic_friction", label
-            ),
-            restitution=_optional_non_negative_float(data, "restitution", label),
-            friction_combine_mode=_optional_friction_combine_mode(data, label),
-        )
-        return config if config.has_overrides() else None
-
-    def has_overrides(self) -> bool:
-        return any(
-            value is not None
-            for value in (
-                self.static_friction,
-                self.dynamic_friction,
-                self.restitution,
-                self.friction_combine_mode,
-            )
-        )
+RigidObjectMaterialConfig = ObjectMaterialConfig
 
 
 @dataclass(frozen=True)
-class SceneObjectPhysicsConfig:
-    """环境层对场景物体的物理放置语义。"""
+class RigidObjectPhysicsConfig:
+    """Rigid object 的运行时物理语义。"""
 
     static: bool = False
-    material: SceneObjectMaterialConfig | None = None
+    material: RigidObjectMaterialConfig | None = None
 
     @classmethod
     def from_mapping(
         cls, data: Mapping[str, object] | None, *, label: str
-    ) -> "SceneObjectPhysicsConfig":
-        """解析 ``objects[].physics``；字段缺省表示不覆盖对应 USD 属性。"""
+    ) -> "RigidObjectPhysicsConfig":
+        """解析 profile/env 合并后的 ``physics``；字段缺省表示不覆盖对应 USD 属性。"""
 
         if data is None:
             return cls()
@@ -92,43 +56,57 @@ class SceneObjectPhysicsConfig:
         static = data.get("static", False)
         if not isinstance(static, bool):
             raise ValueError(f"{label}.static must be a boolean")
-        material_data = _optional_mapping(data, "material", label)
+        material_data = optional_mapping(data, "material", label)
         return cls(
             static=static,
-            material=SceneObjectMaterialConfig.from_mapping(
+            material=RigidObjectMaterialConfig.from_mapping(
                 material_data, label=f"{label}.material"
             ),
         )
 
 
 @dataclass(frozen=True)
-class SceneObjectConfig:
-    """单个环境物体的 stage 放置配置。"""
+class RigidObjectConfig:
+    """单个 rigid object 的 stage 放置配置。"""
 
     name: str
     asset_type: str
     asset_path: Path
     prim_path: str
     root_pose: RootPoseConfig = RootPoseConfig()
-    physics: SceneObjectPhysicsConfig = SceneObjectPhysicsConfig()
+    physics: RigidObjectPhysicsConfig = RigidObjectPhysicsConfig()
     urdf_drive_type: str = "none"
     import_config: AssetImportConfig = field(default_factory=AssetImportConfig)
 
     @classmethod
     def from_mapping(
         cls, data: Mapping[str, object], *, index: int
-    ) -> "SceneObjectConfig":
-        """从 ``env.objects[]`` 项解析环境物体配置。"""
+    ) -> "RigidObjectConfig":
+        """从 profile 展开后的低层导入配置解析 rigid object。"""
 
         if not isinstance(data, Mapping):
             raise ValueError(f"objects[{index}] must be a mapping")
+        if "object_profile" in data:
+            instance = object_scene_instances_from_env_config({"objects": [data]})[0]
+            profile = ObjectProfileConfig.from_profile(instance.object_profile)
+            if profile.kind != "rigid":
+                raise ValueError(
+                    f"objects[{index}].object_profile {instance.object_profile!r} "
+                    f"is {profile.kind!r}; RigidObjectConfig only supports rigid objects"
+                )
+            data = expanded_object_mapping(instance, profile)
+
         name = str(data.get("name", f"object_{index}"))
         if not name:
             raise ValueError(f"objects[{index}].name cannot be empty")
-        asset_type = str(data.get("asset_type", "usd")).lower()
+        if "asset_type" in data:
+            raise ValueError(
+                f"objects[{index}].asset_type is removed; use source instead"
+            )
+        asset_type = str(data.get("source", "usd")).lower()
         if asset_type not in {"usd", "urdf"}:
             raise ValueError(
-                f"objects[{index}].asset_type must be 'usd' or 'urdf', got {asset_type!r}"
+                f"objects[{index}].source must be 'usd' or 'urdf', got {asset_type!r}"
             )
         if "asset_path" not in data:
             raise ValueError(f"objects[{index}].asset_path is required")
@@ -143,23 +121,23 @@ class SceneObjectConfig:
             asset_path=repo_path(str(data["asset_path"])),
             prim_path=prim_path,
             root_pose=RootPoseConfig.from_mapping(
-                _optional_mapping(data, "root_pose", f"objects[{index}]")
+                optional_mapping(data, "root_pose", f"objects[{index}]")
             ),
-            physics=SceneObjectPhysicsConfig.from_mapping(
-                _optional_mapping(data, "physics", f"objects[{index}]"),
+            physics=RigidObjectPhysicsConfig.from_mapping(
+                optional_mapping(data, "physics", f"objects[{index}]"),
                 label=f"objects[{index}].physics",
             ),
             urdf_drive_type=str(data.get("urdf_drive_type", "none")),
             import_config=AssetImportConfig.from_mapping(
-                _optional_mapping(data, "import", f"objects[{index}]"),
+                optional_mapping(data, "import", f"objects[{index}]"),
                 label=f"objects[{index}].import",
             ),
         )
 
 
 @dataclass(frozen=True)
-class AddedSceneObject:
-    """已放入 stage 的环境物体摘要。"""
+class AddedRigidObject:
+    """已放入 stage 的 rigid object 摘要。"""
 
     name: str
     asset_type: str
@@ -169,43 +147,46 @@ class AddedSceneObject:
     static: bool
 
 
-def scene_objects_from_env_config(
+def rigid_objects_from_env_config(
     config: Mapping[str, object],
-) -> tuple[SceneObjectConfig, ...]:
+) -> tuple[RigidObjectConfig, ...]:
     """解析 env YAML 顶层 ``objects`` 列表。"""
 
-    objects = config.get("objects", ())
-    if objects is None:
-        return ()
-    if not isinstance(objects, Sequence) or isinstance(objects, (str, bytes)):
-        raise ValueError("objects must be a sequence")
-    return tuple(
-        SceneObjectConfig.from_mapping(item, index=index)
-        for index, item in enumerate(objects)
-    )
+    rigid_objects: list[RigidObjectConfig] = []
+    for index, item in enumerate(object_scene_instances_from_env_config(config)):
+        profile = ObjectProfileConfig.from_profile(item.object_profile)
+        if profile.kind != "rigid":
+            continue
+        rigid_objects.append(
+            RigidObjectConfig.from_mapping(
+                expanded_object_mapping(item, profile),
+                index=index,
+            )
+        )
+    return tuple(rigid_objects)
 
 
-def add_scene_objects(
-    stage, objects: Sequence[SceneObjectConfig]
-) -> tuple[AddedSceneObject, ...]:
-    """把环境物体加入当前 USD stage。"""
+def add_rigid_objects(
+    stage, objects: Sequence[RigidObjectConfig]
+) -> tuple[AddedRigidObject, ...]:
+    """把 rigid objects 加入当前 USD stage。"""
 
-    return tuple(_add_scene_object(stage, config) for config in objects)
+    return tuple(_add_rigid_object(stage, config) for config in objects)
 
 
-def _add_scene_object(stage, config: SceneObjectConfig) -> AddedSceneObject:
+def _add_rigid_object(stage, config: RigidObjectConfig) -> AddedRigidObject:
     asset_path = config.asset_path.resolve()
     if not asset_path.is_file():
-        raise FileNotFoundError(f"Scene object asset not found: {asset_path}")
+        raise FileNotFoundError(f"Rigid object asset not found: {asset_path}")
     if config.asset_type == "usd":
         imported_path = _add_usd_reference(stage, config, asset_path)
     elif config.asset_type == "urdf":
-        imported_path = _import_urdf_scene_object(stage, config, asset_path)
+        imported_path = _import_urdf_rigid_object(stage, config, asset_path)
     else:
-        raise ValueError(f"Unsupported scene object asset type: {config.asset_type}")
+        raise ValueError(f"Unsupported rigid object asset type: {config.asset_type}")
     # URDF importer 的 fix_base=True 会生成 root fixed joint；不要再把这些刚体设成
     # kinematic/static，否则 PhysX 会看到 static-static joint 并拒绝创建 root_joint。
-    _apply_scene_object_physics(
+    _apply_rigid_object_physics(
         stage,
         imported_path,
         config.physics,
@@ -213,7 +194,7 @@ def _add_scene_object(stage, config: SceneObjectConfig) -> AddedSceneObject:
             config.asset_type == "urdf" and config.physics.static
         ),
     )
-    return AddedSceneObject(
+    return AddedRigidObject(
         name=config.name,
         asset_type=config.asset_type,
         asset_path=asset_path,
@@ -223,17 +204,17 @@ def _add_scene_object(stage, config: SceneObjectConfig) -> AddedSceneObject:
     )
 
 
-def _add_usd_reference(stage, config: SceneObjectConfig, asset_path: Path) -> str:
+def _add_usd_reference(stage, config: RigidObjectConfig, asset_path: Path) -> str:
     from pxr import Sdf, UsdGeom
 
     prim_path = Sdf.Path(config.prim_path)
     xform = UsdGeom.Xform.Define(stage, prim_path)
     xform.GetPrim().GetReferences().AddReference(str(asset_path))
-    _apply_root_pose_to_prim(stage, str(prim_path), config.root_pose)
+    apply_root_pose_to_prim(stage, str(prim_path), config.root_pose)
     return str(prim_path)
 
 
-def _import_urdf_scene_object(stage, config: SceneObjectConfig, asset_path: Path) -> str:
+def _import_urdf_rigid_object(stage, config: RigidObjectConfig, asset_path: Path) -> str:
     imported_path = configure_urdf_import(
         asset_path,
         create_physics_scene=False,
@@ -243,7 +224,7 @@ def _import_urdf_scene_object(stage, config: SceneObjectConfig, asset_path: Path
         fix_base=config.physics.static,
         asset_import_config=config.import_config,
     )
-    _apply_root_pose_to_prim(stage, imported_path, config.root_pose)
+    apply_root_pose_to_prim(stage, imported_path, config.root_pose)
     if imported_path != config.prim_path:
         _rename_prim(stage, imported_path, config.prim_path)
         imported_path = config.prim_path
@@ -259,9 +240,9 @@ def _rename_prim(stage, source_path: str, target_path: str) -> None:
     if source == target:
         return
     if not stage.GetPrimAtPath(source).IsValid():
-        raise RuntimeError(f"Imported scene object prim was not created: {source_path}")
+        raise RuntimeError(f"Imported rigid object prim was not created: {source_path}")
     if stage.GetPrimAtPath(target).IsValid():
-        raise RuntimeError(f"Scene object target prim already exists: {target_path}")
+        raise RuntimeError(f"Rigid object target prim already exists: {target_path}")
     parent_path = target.GetParentPath()
     if (
         parent_path != Sdf.Path.absoluteRootPath
@@ -274,30 +255,30 @@ def _rename_prim(stage, source_path: str, target_path: str) -> None:
     status = result[0] if isinstance(result, tuple) else bool(result)
     if not status:
         raise RuntimeError(
-            f"Failed to move scene object prim {source_path} to {target_path}"
+            f"Failed to move rigid object prim {source_path} to {target_path}"
         )
 
 
-def _apply_scene_object_physics(
+def _apply_rigid_object_physics(
     stage,
     root_path: str,
-    physics: SceneObjectPhysicsConfig,
+    physics: RigidObjectPhysicsConfig,
     *,
     freeze_rigid_bodies: bool = True,
 ) -> None:
     if physics.static and freeze_rigid_bodies:
-        _make_scene_object_static(stage, root_path)
+        _make_rigid_object_static(stage, root_path)
     if physics.material is not None:
-        _apply_scene_object_material(stage, root_path, physics.material)
+        _apply_rigid_object_material(stage, root_path, physics.material)
 
 
-def _make_scene_object_static(stage, root_path: str) -> None:
+def _make_rigid_object_static(stage, root_path: str) -> None:
     from pxr import PhysxSchema, Sdf, Usd, UsdPhysics
 
     root = stage.GetPrimAtPath(Sdf.Path(root_path))
     if not root.IsValid():
         raise RuntimeError(
-            f"Cannot apply static physics; scene object prim not found: {root_path}"
+            f"Cannot apply static physics; rigid object prim not found: {root_path}"
         )
     for prim in Usd.PrimRange(root):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
@@ -312,15 +293,15 @@ def _make_scene_object_static(stage, root_path: str) -> None:
         physx_rigid_body_api.CreateDisableGravityAttr().Set(True)
 
 
-def _apply_scene_object_material(
-    stage, root_path: str, material_config: SceneObjectMaterialConfig
+def _apply_rigid_object_material(
+    stage, root_path: str, material_config: RigidObjectMaterialConfig
 ) -> None:
     from pxr import PhysxSchema, Sdf, Usd, UsdPhysics, UsdShade
 
     root = stage.GetPrimAtPath(Sdf.Path(root_path))
     if not root.IsValid():
         raise RuntimeError(
-            f"Cannot apply material physics; scene object prim not found: {root_path}"
+            f"Cannot apply material physics; rigid object prim not found: {root_path}"
         )
     material = UsdShade.Material.Define(
         stage, Sdf.Path(root_path).AppendPath("PhysicsMaterial")
@@ -351,60 +332,3 @@ def _apply_scene_object_material(
             bindingStrength=UsdShade.Tokens.strongerThanDescendants,
             materialPurpose="physics",
         )
-
-
-def _apply_root_pose_to_prim(stage, prim_path: str, pose: RootPoseConfig) -> None:
-    from pxr import Gf, Sdf, UsdGeom
-
-    prim = stage.GetPrimAtPath(Sdf.Path(prim_path))
-    if not prim.IsValid():
-        raise RuntimeError(
-            f"Cannot apply root_pose; scene object prim not found: {prim_path}"
-        )
-    xform = UsdGeom.Xformable(prim)
-    xform.ClearXformOpOrder()
-    xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))
-    xform.AddRotateXYZOp().Set(Gf.Vec3f(*_radians_to_degrees(pose.rpy)))
-
-
-def _radians_to_degrees(values: Sequence[float]) -> tuple[float, float, float]:
-    import math
-
-    return tuple(float(value) * 180.0 / math.pi for value in values)
-
-
-def _optional_mapping(
-    data: Mapping[str, object], key: str, parent_label: str
-) -> Mapping[str, object] | None:
-    value = data.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{parent_label}.{key} must be a mapping")
-    return value
-
-
-def _optional_non_negative_float(
-    data: Mapping[str, object], key: str, parent_label: str
-) -> float | None:
-    if key not in data:
-        return None
-    value = float(data[key])
-    if value < 0.0:
-        raise ValueError(f"{parent_label}.{key} cannot be negative")
-    return value
-
-
-def _optional_friction_combine_mode(
-    data: Mapping[str, object], parent_label: str
-) -> str | None:
-    if "friction_combine_mode" not in data:
-        return None
-    value = str(data["friction_combine_mode"]).lower()
-    allowed = {"average", "min", "multiply", "max"}
-    if value not in allowed:
-        raise ValueError(
-            f"{parent_label}.friction_combine_mode must be one of "
-            f"{sorted(allowed)}, got {value!r}"
-        )
-    return value

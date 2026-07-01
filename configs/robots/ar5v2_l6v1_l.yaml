@@ -12,10 +12,21 @@ robot:
       default: false
       arm: false
       hand: false
-
-root_pose:
-  xyz: [0.0, 0.09, 0]
-  rpy: [-1.5707, 0.0, 0.0]
+    physx:
+      material:
+        contact_static_friction: 0.8
+        contact_dynamic_friction: 0.6
+        contact_restitution: 0.0
+      rigid_body:
+        linear_damping: 0.0
+        angular_damping: 0.1
+    solver:
+      arm:
+        position_iterations: 32
+        velocity_iterations: 4
+      hand:
+        position_iterations: 32
+        velocity_iterations: 4
 
 cumotion:
   # 机器人模型资源字段；IK/planner 等算法参数由 configs/cumotion/*.yaml 提供。

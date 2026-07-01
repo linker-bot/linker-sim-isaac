@@ -942,6 +942,29 @@ def test_tcp_arc_segment_requires_intermediate_for_three_point_arc() -> None:
         raise AssertionError("expected arc intermediate validation")
 
 
+def test_tcp_arc_segment_rejects_ambiguous_relative_and_absolute_points() -> None:
+    request = SpecifiedPathRequest(
+        current_q=np.asarray([0.0, 0.0]),
+        path=TaskSpacePath(
+            segments=(
+                TcpArcSegment(
+                    target_position=np.asarray([0.2, 0.0, 0.1]),
+                    target_offset=np.asarray([0.1, 0.0, 0.0]),
+                    intermediate_offset=np.asarray([0.1, 0.0, 0.1]),
+                    arc_mode="three_point",
+                ),
+            )
+        ),
+    )
+
+    try:
+        request.validate_structure()
+    except ValueError as exc:
+        assert "target_position or target_offset" in str(exc)
+    else:
+        raise AssertionError("expected arc target ambiguity validation")
+
+
 def test_tcp_pose_sequence_requires_orientations() -> None:
     request = SpecifiedPathRequest(
         current_q=np.asarray([0.0, 0.0]),
@@ -1079,6 +1102,41 @@ def test_specified_path_tcp_line_none_orientation_uses_add_translation() -> None
     assert "family=task_space_segments" in result.diagnostics.message
 
 
+def test_specified_path_conversion_failure_returns_failed_result() -> None:
+    class _BrokenCumotion(_FakeCumotion):
+        def convert_task_space_path_spec_to_cspace(
+            self, path_spec, kinematics, control_frame, conversion_config, ik_config
+        ):
+            return object()
+
+    fake_cumotion = _BrokenCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    result = planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpLineSegment(
+                        target_offset=np.asarray([0.0, 0.0, 0.01]),
+                        orientation_mode="current",
+                    ),
+                )
+            ),
+        )
+    )
+
+    assert not result.success
+    assert result.status == "FAILED"
+    assert "path_conversion=failed" in result.diagnostics.message
+
+
 def test_specified_path_tcp_line_target_orientation_uses_add_linear_path() -> None:
     fake_cumotion = _FakeCumotion()
     context = _FakeContext(fake_cumotion)
@@ -1164,6 +1222,37 @@ def test_specified_path_three_point_arc_uses_official_arc_api() -> None:
     assert call[0] == "add_three_point_arc"
     np.testing.assert_allclose(call[1], [0.2, 0.0, 0.1])
     np.testing.assert_allclose(call[2], [0.1, 0.0, 0.1])
+
+
+def test_specified_path_three_point_arc_accepts_relative_offsets() -> None:
+    fake_cumotion = _FakeCumotion()
+    context = _FakeContext(fake_cumotion)
+    config = MotionPlannerBackendConfig(
+        planning_pipeline="specified_path",
+        specified_path=SpecifiedPathConfig(family="task_space_segments"),
+    )
+    planner = CuMotionMotionPlanner(context, config=config)
+
+    planner.plan(
+        SpecifiedPathRequest(
+            current_q=np.asarray([0.0, 0.0]),
+            tcp_frame_name="pinch_tcp",
+            path=TaskSpacePath(
+                segments=(
+                    TcpArcSegment(
+                        target_offset=np.asarray([0.2, -0.02, 0.0]),
+                        intermediate_offset=np.asarray([0.1, -0.02, 0.05]),
+                        arc_mode="three_point",
+                    ),
+                )
+            ),
+        )
+    )
+
+    call = fake_cumotion.task_space_path_specs[0].calls[0]
+    assert call[0] == "add_three_point_arc"
+    np.testing.assert_allclose(call[1], [0.2, -0.02, 0.0])
+    np.testing.assert_allclose(call[2], [0.1, -0.02, 0.05])
 
 
 def test_specified_path_pose_sequence_uses_linear_path_segments() -> None:

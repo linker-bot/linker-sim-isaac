@@ -63,24 +63,32 @@ def plan_specified_path(
         joint_path = cspace_waypoints_to_joint_path(context, request, config)
     elif isinstance(request.path, TaskSpacePath):
         family = "task_space_segments"
-        # TaskSpacePath 明确使用 TaskSpacePathSpec + convert_task_space_path_spec_to_cspace。
-        joint_path = task_space_path_to_joint_path(
-            context,
-            request,
-            config,
-            tcp_frame_name=frame_name,
-        )
+        try:
+            # TaskSpacePath 明确使用 TaskSpacePathSpec + convert_task_space_path_spec_to_cspace。
+            joint_path = task_space_path_to_joint_path(
+                context,
+                request,
+                config,
+                tcp_frame_name=frame_name,
+            )
+        except ValueError as exc:
+            return _path_conversion_failed_result(family, frame_name, exc)
     elif isinstance(request.path, CompositePath):
         family = "composite"
-        # CompositePath 由 adapter 拼成 CompositePathSpec，再由 cuMotion 统一转换成 C-space。
-        joint_path = composite_path_to_joint_path(
-            context,
-            request,
-            config,
-            tcp_frame_name=frame_name,
-        )
+        try:
+            # CompositePath 由 adapter 拼成 CompositePathSpec，再由 cuMotion 统一转换成 C-space。
+            joint_path = composite_path_to_joint_path(
+                context,
+                request,
+                config,
+                tcp_frame_name=frame_name,
+            )
+        except ValueError as exc:
+            return _path_conversion_failed_result(family, frame_name, exc)
     else:
-        raise ValueError(f"Unsupported specified path type: {type(request.path).__name__}")
+        raise ValueError(
+            f"Unsupported specified path type: {type(request.path).__name__}"
+        )
 
     # Task-space conversion 和 C-space path 生成都发生在规划阶段。执行层不会每个 physics step
     # 重新做 IK 或 path conversion，而是只播放这里已经生成好的 cuMotion trajectory。
@@ -113,6 +121,32 @@ def plan_specified_path(
         path=joint_path,
         trajectory=trajectory,
         success=True,
+        status=diagnostics.status,
+        diagnostics=diagnostics,
+    )
+
+
+def _path_conversion_failed_result(
+    family: str, frame_name: str, exc: ValueError
+) -> MotionResult:
+    """把 cuMotion path conversion 失败归一化成规划失败结果。"""
+
+    diagnostics = PlanningDiagnostics(
+        status="FAILED",
+        message=(
+            f"pipeline=specified_path family={family} "
+            f"path_conversion=failed frame={frame_name}: {exc}"
+        ),
+        metrics={
+            "num_waypoints": 0.0,
+            "num_collision_objects": 0.0,
+            "path_length": 0.0,
+        },
+    )
+    return MotionResult(
+        path=None,
+        trajectory=None,
+        success=False,
         status=diagnostics.status,
         diagnostics=diagnostics,
     )

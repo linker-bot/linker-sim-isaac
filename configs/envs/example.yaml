@@ -1,0 +1,111 @@
+# 环境 / scene profile 示例。
+#
+# 用途：
+# - 说明 configs/envs/*.yaml 的合法结构。
+# - 选择单臂或双臂机器人实例，并保存它们在当前 scene 中的 root_pose。
+# - 摆放已经存在的 object profile；对象资产路径和物理属性不写在 env。
+#
+# 使用方式：
+#   复制本文件为 configs/envs/<your_scene>.yaml，然后在脚本中传入：
+#
+#     --env <your_scene>
+#
+# 边界：
+# - env.gravity_z / physics_frequency / render_frequency 是 World 级设置。
+# - solver.type 是 scene 级 PhysX solver 类型。
+# - robot.physics.solver 中的 arm/hand iteration 属于 robot profile，不写在 env。
+# - robots.single 与 robots.dual 可以共存；单臂脚本读 single，双臂脚本读 dual。
+# - root_pose 属于 scene，因为同一个 robot/object profile 可以在不同场景中摆到不同位置。
+
+env:
+  # 场景语义名称。建议和文件名一致，便于日志和 debug 输出识别。
+  name: example_scene
+
+  # 可选描述，只用于人工阅读和日志上下文。
+  description: example single/dual robot scene
+
+  # 世界重力 z 分量，单位 m/s^2。项目约定 z 轴向上，所以常用负值。
+  gravity_z: -9.81
+
+  # 是否添加 Isaac 默认地面。桌面/工装场景通常由 object profile 提供接触面，可设为 false。
+  add_ground: false
+
+  # 物理步频，单位 Hz。绳体接触、灵巧手抓取通常需要比普通 rigid scene 更高的频率。
+  physics_frequency: 240.0
+
+  # GUI 渲染步频，单位 Hz。headless 时 runtime 会直接使用 physics_dt。
+  render_frequency: 60.0
+
+solver:
+  # 只允许 scene 级 solver 类型。TGS 稳定性通常更好，PGS 成本更低。
+  type: PGS
+
+visuals:
+  # GUI 模式下使用的默认 viewport 视角；headless 运行不会触碰 viewport。
+  camera:
+    enabled: true
+    eye: [1.35, -1.65, 1.05]
+    target: [0.0, -0.1, 0.42]
+    prim_path: /OmniverseKit_Persp
+
+  # 灯光只影响可视化，不参与物理。角度单位为 rad，颜色为 RGB 线性值。
+  lights:
+    key:
+      enabled: true
+      path: /World/KeyLight
+      intensity: 1200.0
+      angle: 0.5
+      # 可选：rotation_rpy: [0.0, 0.0, 0.0]
+      # 可选：color: [1.0, 1.0, 1.0]
+    fill:
+      enabled: true
+      path: /World/FillLight
+      intensity: 250.0
+      # 可选：color: [1.0, 1.0, 1.0]
+
+robots:
+  # 单臂 runtime 使用 robots.single。
+  single:
+    # 引用 configs/robots/ar5v2_l6v1_l.yaml。
+    robot_profile: ar5v2_l6v1_l
+    root_pose:
+      xyz: [0.0, 0.09, 0.0]
+      rpy: [-1.5707, 0.0, 0.0]
+
+  # 双臂 runtime 使用 robots.dual.left/right。
+  # 每侧引用一个“单 articulation”robot profile；不要在 configs/robots 里再写 dual robots mapping。
+  dual:
+    left:
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        xyz: [0.0, 0.09, 0.0]
+        rpy: [-1.5707, 0.0, 0.0]
+    right:
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+objects:
+  # env 只声明对象实例：name、object_profile、可选 runtime_handle 和 root_pose。
+  # kind/source/asset_path/import/physics 写在 configs/objects/*.yaml。
+  - name: workstation_armbase
+    object_profile: workstation_armbase
+    root_pose:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+
+  # 如果要换成 tablebase，只改 object_profile 和摆放，不在 env 内联资产路径。
+  - name: workstation_tablebase
+    object_profile: workstation_tablebase
+    root_pose:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+
+  # 动态对象也由 env 统一实例化和摆放；绳体几何/质量/关节限制由 tools/assets/configs 生成。
+  - name: rope
+    object_profile: capsule_rope
+    runtime_handle: rope
+    root_pose:
+      xyz: [0.1, -0.55, 0.05]
+      rpy: [0.0, 0.0, 0.0]

@@ -1,0 +1,17 @@
+# workstation tablebase 运行时对象配置。
+
+object:
+  name: workstation_tablebase
+  kind: rigid
+  source: urdf
+  asset_path: assets/static_env_objects/workstationV1_tablebase/workstationV1_tablebase.urdf
+  prim_path: /World/WorkstationTableBase
+  import:
+    collision_approximation: convex_decomposition
+  physics:
+    static: true
+    material:
+      static_friction: 0.8
+      dynamic_friction: 0.6
+      restitution: 0.0
+      friction_combine_mode: average

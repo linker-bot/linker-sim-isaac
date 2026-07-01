@@ -23,7 +23,7 @@ articulation 的完整 DOF，调用方需要按关节名映射回完整 DOF 后�
       调用方指定的 C-space/task-space/composite 路径。
     * ``trajectory_sampler``: 把 cuMotion time-parameterized trajectory 采样成项目
       ``JointTrajectory``，统一关节名、时间、位置、速度和 effort 数组。
-    * ``tcp_context``: 根据可选 ``TcpFrame`` 装配普通或带临时 TCP URDF 的
+    * ``tcp_context``: 根据可选 ``TcpTransform`` 装配普通或带临时 TCP URDF 的
       ``CuMotionContext``。
     * ``tcp_urdf_builder``: 在临时 URDF 中追加 fixed TCP link/frame，让 cuMotion 能直接以自定义
       TCP frame 做 FK/IK。
@@ -50,6 +50,7 @@ from linkerbot_sim.backends.cumotion.context import (
 )
 # dual_urdf.py: 从双臂 robot YAML 生成运行时 cuMotion URDF/XRDF，并返回最终后端配置。
 from linkerbot_sim.backends.cumotion.dual_urdf import (
+    dual_cumotion_config_from_sides,
     prepare_cumotion_config_from_robot_config,
 )
 
@@ -84,7 +85,7 @@ from linkerbot_sim.backends.cumotion.motion_planner_config import (
 from linkerbot_sim.backends.cumotion.trajectory_sampler import (
     joint_trajectory_from_cumotion,
 )
-# tcp_context.py: 根据可选 TcpFrame 装配普通或带临时 TCP URDF 的 CuMotionContext。
+# tcp_context.py: 根据可选 TcpTransform 装配普通或带临时 TCP URDF 的 CuMotionContext。
 from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
 
 __all__ = [
@@ -101,6 +102,7 @@ __all__ = [
     "SpecifiedPathConfig",
     "TrajectoryGenerationConfig",
     "TrajectoryOptimizationConfig",
+    "dual_cumotion_config_from_sides",
     "joint_trajectory_from_cumotion",
     "make_collision_world",
     "make_cumotion_context",

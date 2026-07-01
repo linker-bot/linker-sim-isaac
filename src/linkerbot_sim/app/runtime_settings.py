@@ -1,4 +1,4 @@
-"""从环境 YAML 和命令行覆盖中解析仿真运行参数。
+"""从环境 YAML 解析仿真运行参数。
 
 本模块只处理启动 ``World`` 所需的纯配置：物理步频、渲染步频、世界重力和默认地面。
 它不 import Isaac/Omni，因此可以在普通 Python 单元测试或 dry-run 中提前校验 env 配置。
@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from linkerbot_sim.envs.visual_settings import SceneVisualSettings
 
 
 @dataclass(frozen=True)
@@ -22,40 +24,26 @@ class EnvRuntimeSettings:
     render_frequency: float
     gravity_z: float
     add_ground: bool = True
+    visuals: SceneVisualSettings = field(default_factory=SceneVisualSettings)
 
     @classmethod
     def from_env_config(
         cls,
         env_config: Mapping[str, object],
-        *,
-        physics_frequency_override: float | None = None,
-        render_frequency_override: float | None = None,
-        gravity_z_override: float | None = None,
     ) -> "EnvRuntimeSettings":
-        """解析 ``env`` 分组，并套用可选命令行覆盖。
+        """解析 ``env`` 分组。
 
-        覆盖优先级为 CLI 参数高于 YAML。这里仍允许 CLI 覆盖世界级频率和重力，因为这些属于
-        运行实验时常见的调试参数；机器人自身重力策略不在这里处理，而是在 robot YAML 中声明。
+        世界级频率和重力统一来自 env profile；机器人自身重力策略不在这里处理，而是在
+        robot YAML 中声明。
         """
 
         env = env_mapping(env_config)
         config = cls(
-            physics_frequency=float(
-                physics_frequency_override
-                if physics_frequency_override is not None
-                else env.get("physics_frequency", 600.0)
-            ),
-            render_frequency=float(
-                render_frequency_override
-                if render_frequency_override is not None
-                else env.get("render_frequency", 100.0)
-            ),
-            gravity_z=float(
-                gravity_z_override
-                if gravity_z_override is not None
-                else env.get("gravity_z", -9.81)
-            ),
+            physics_frequency=float(env.get("physics_frequency", 600.0)),
+            render_frequency=float(env.get("render_frequency", 100.0)),
+            gravity_z=float(env.get("gravity_z", -9.81)),
             add_ground=bool(env.get("add_ground", True)),
+            visuals=SceneVisualSettings.from_env_config(env_config),
         )
         config.validate()
         return config

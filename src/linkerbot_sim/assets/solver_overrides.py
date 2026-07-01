@@ -1,8 +1,8 @@
-"""机器人刚体的 PhysX solver 覆盖。
+"""PhysX scene 和机器人刚体 solver 覆盖。
 
 复杂接触、细小灵巧手和绳体交互都容易受 solver 迭代次数影响。
-这里把 solver type 和 arm/hand 迭代次数按字段独立配置，便于在不同实验中只覆盖
-真正需要调整的 PhysX 属性。
+这里把 scene 级 solver type 和 robot 级 arm/hand 迭代次数分开配置，便于在不同实验中只覆盖
+真正归属对应层级的 PhysX 属性。
 
 这些覆盖发生在 USD/PhysX 属性层面，只影响求解稳定性和接触收敛，不改变关节目标、
 控制器命令空间或动作脚本 API。arm/hand 分类依赖资产命名约定，未知 prim 会跳过。
@@ -18,14 +18,14 @@ from linkerbot_sim.robots.classification import is_arm_name, is_hand_name
 
 @dataclass(frozen=True)
 class SolverIterationConfig:
-    """PhysX solver type 和每组刚体的可选迭代次数覆盖。
+    """PhysX solver type 和机器人刚体可选迭代次数覆盖。
 
     position/velocity iteration 分别对应 PhysX 位置约束和速度约束求解次数。数值越大通常
     越稳定但越慢，适合在绳体接触、指尖夹持等局部不稳定时按部件提高。字段为 ``None``
     表示不覆盖该 PhysX 属性。
 
     输入字段:
-        solver_type: 可选 ``PGS`` 或 ``TGS``，写到 physics scene。
+        solver_type: 可选 ``PGS`` 或 ``TGS``，写到 physics scene，通常来自 env YAML。
         arm_position_iterations/arm_velocity_iterations: 可选机械臂刚体迭代次数。
         hand_position_iterations/hand_velocity_iterations: 可选灵巧手刚体迭代次数。
     输出:
@@ -39,11 +39,11 @@ class SolverIterationConfig:
     hand_velocity_iterations: int | None = None
 
 
-def solver_settings(env_config: dict) -> SolverIterationConfig | None:
-    """从环境配置构造 PhysX solver 覆盖设置。
+def scene_solver_settings(env_config: Mapping[str, object]) -> SolverIterationConfig | None:
+    """从环境配置构造 scene 级 PhysX solver 覆盖设置。
 
-    配置语义是“写了哪个字段，就覆盖哪个字段”。未出现在 YAML 中的字段保持 Isaac/资产默认值，
-    不再用代码默认值补齐后隐式覆盖。
+    env YAML 只允许声明 ``solver.type``，因为它写到 physics scene。机器人刚体 iteration
+    属于 robot YAML 的 ``robot.physics.solver``。
     """
 
     solver = env_config.get("solver")
@@ -51,34 +51,155 @@ def solver_settings(env_config: dict) -> SolverIterationConfig | None:
         return None
     if not isinstance(solver, Mapping):
         raise ValueError("solver config must be a mapping")
-    config = SolverIterationConfig(
-        solver_type=_optional_string(solver, "type"),
-        arm_position_iterations=_optional_int(solver, "arm_position_iterations"),
-        arm_velocity_iterations=_optional_int(solver, "arm_velocity_iterations"),
-        hand_position_iterations=_optional_int(solver, "hand_position_iterations"),
-        hand_velocity_iterations=_optional_int(solver, "hand_velocity_iterations"),
+    _reject_solver_keys(
+        solver,
+        {"type"},
+        "solver",
+        extra_message=(
+            "arm/hand solver iterations belong under robot.physics.solver"
+        ),
     )
+    config = SolverIterationConfig(solver_type=_optional_string(solver, "type", "solver"))
     return config if _has_overrides(config) else None
 
 
-def _optional_string(data: Mapping[str, object], key: str) -> str | None:
+def robot_solver_settings(
+    robot_solver_config: Mapping[str, object] | None, *, label: str
+) -> SolverIterationConfig | None:
+    """从 ``robot.physics.solver`` 构造机器人刚体 solver iteration 覆盖。"""
+
+    if robot_solver_config is None:
+        return None
+    if not isinstance(robot_solver_config, Mapping):
+        raise ValueError(f"{label} must be a mapping")
+    _reject_solver_keys(
+        robot_solver_config,
+        {"arm", "hand"},
+        label,
+        extra_message="scene solver type belongs under env solver.type",
+    )
+    arm = _optional_group_solver_mapping(robot_solver_config, "arm", label)
+    hand = _optional_group_solver_mapping(robot_solver_config, "hand", label)
+    config = SolverIterationConfig(
+        arm_position_iterations=(
+            _optional_int(arm, "position_iterations", f"{label}.arm")
+            if arm is not None
+            else None
+        ),
+        arm_velocity_iterations=(
+            _optional_int(arm, "velocity_iterations", f"{label}.arm")
+            if arm is not None
+            else None
+        ),
+        hand_position_iterations=(
+            _optional_int(hand, "position_iterations", f"{label}.hand")
+            if hand is not None
+            else None
+        ),
+        hand_velocity_iterations=(
+            _optional_int(hand, "velocity_iterations", f"{label}.hand")
+            if hand is not None
+            else None
+        ),
+    )
+    return config if _has_iteration_overrides(config) else None
+
+
+def merge_solver_configs(
+    *configs: SolverIterationConfig | None,
+) -> SolverIterationConfig | None:
+    """合并 scene solver type 和 robot solver iteration 覆盖。"""
+
+    merged = SolverIterationConfig()
+    has_any = False
+    for config in configs:
+        if config is None:
+            continue
+        has_any = True
+        merged = SolverIterationConfig(
+            solver_type=(
+                config.solver_type
+                if config.solver_type is not None
+                else merged.solver_type
+            ),
+            arm_position_iterations=(
+                config.arm_position_iterations
+                if config.arm_position_iterations is not None
+                else merged.arm_position_iterations
+            ),
+            arm_velocity_iterations=(
+                config.arm_velocity_iterations
+                if config.arm_velocity_iterations is not None
+                else merged.arm_velocity_iterations
+            ),
+            hand_position_iterations=(
+                config.hand_position_iterations
+                if config.hand_position_iterations is not None
+                else merged.hand_position_iterations
+            ),
+            hand_velocity_iterations=(
+                config.hand_velocity_iterations
+                if config.hand_velocity_iterations is not None
+                else merged.hand_velocity_iterations
+            ),
+        )
+    return merged if has_any and _has_overrides(merged) else None
+
+
+def _optional_string(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> str | None:
     value = data.get(key)
     if value is None:
         return None
     text = str(value)
     if not text:
-        raise ValueError(f"solver.{key} cannot be empty")
+        raise ValueError(f"{parent_label}.{key} cannot be empty")
     return text
 
 
-def _optional_int(data: Mapping[str, object], key: str) -> int | None:
+def _optional_int(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> int | None:
     value = data.get(key)
     if value is None:
         return None
     parsed = int(value)
     if parsed < 0:
-        raise ValueError(f"solver.{key} must be non-negative")
+        raise ValueError(f"{parent_label}.{key} must be non-negative")
     return parsed
+
+
+def _optional_group_solver_mapping(
+    data: Mapping[str, object], key: str, parent_label: str
+) -> Mapping[str, object] | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{parent_label}.{key} must be a mapping")
+    _reject_solver_keys(
+        value,
+        {"position_iterations", "velocity_iterations"},
+        f"{parent_label}.{key}",
+    )
+    return value
+
+
+def _reject_solver_keys(
+    data: Mapping[str, object],
+    allowed: set[str],
+    label: str,
+    *,
+    extra_message: str | None = None,
+) -> None:
+    unsupported = set(data) - allowed
+    if not unsupported:
+        return
+    message = f"{label} contains unsupported keys: {', '.join(sorted(unsupported))}"
+    if extra_message is not None:
+        message = f"{message}; {extra_message}"
+    raise ValueError(message)
 
 
 def _has_overrides(config: SolverIterationConfig) -> bool:

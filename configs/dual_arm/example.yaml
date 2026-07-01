@@ -9,6 +9,8 @@
 #   复制本文件为 configs/dual_arm/<your_dual_arm>.yaml，再替换关节名和 frame 名。
 #
 # 注意：
+# - 双臂/单臂由 configs/envs/*.yaml 选择：单臂用 robots.single，双臂用 robots.dual.left/right。
+# - 每侧 robot_profile 仍然是单 articulation robot YAML；本文件不导入 Isaac 机器人。
 # - arm_joints 顺序必须和 cuMotion 双臂 XRDF/URDF 的 C-space 顺序一致。
 # - tcp_frame 是动作脚本阶段选择的末端 frame；pinch TCP 可由组合 MJCF 推导并临时写入 URDF。
 # - combined_mjcf_path 用于从“机械臂+手”的组合资产中推导手指/夹捏几何关系。

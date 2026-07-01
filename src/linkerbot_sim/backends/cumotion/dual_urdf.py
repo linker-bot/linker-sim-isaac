@@ -17,10 +17,7 @@ import xml.etree.ElementTree as ET
 
 import yaml
 
-from linkerbot_sim.assets.robot_loader import (
-    DualRobotExecutionConfig,
-    RootPoseConfig,
-)
+from linkerbot_sim.assets.robot_loader import RootPoseConfig
 from linkerbot_sim.backends.cumotion.context import CuMotionConfig
 from linkerbot_sim.utils.paths import repo_path
 
@@ -100,11 +97,13 @@ class PreparedDualCuMotionAssets:
 
 def prepare_cumotion_config_from_robot_config(
     robot_config: Mapping[str, object],
+    *,
+    dual_root_poses: Mapping[str, RootPoseConfig] | None = None,
 ) -> PreparedDualCuMotionAssets:
     """从 robot YAML 解析最终传给 cuMotion 的配置。
 
     单臂配置直接解析 ``cumotion.xrdf_path/urdf_path/flange_frame``。双臂配置推荐写成
-    ``cumotion.left/right`` 两份单臂式描述；本函数会按左右 ``root_pose`` 生成缓存 URDF，
+    ``cumotion.left/right`` 两份单臂式描述；本函数会按 env 提供的左右 ``root_pose`` 生成缓存 URDF，
     并把左右 XRDF 融合成 14-DOF XRDF。
     """
 
@@ -119,11 +118,12 @@ def prepare_cumotion_config_from_robot_config(
             generated_assets=False,
         )
 
-    dual_robot = DualRobotExecutionConfig.from_mapping(robot_config)
+    if dual_root_poses is None:
+        raise ValueError("dual cuMotion generation requires env robot root poses")
     generated_path = build_dual_arm_urdf_from_root_poses(
         dual_urdf_config,
-        left_pose=dual_robot.left.root_pose,
-        right_pose=dual_robot.right.root_pose,
+        left_pose=_required_root_pose(dual_root_poses, "left"),
+        right_pose=_required_root_pose(dual_root_poses, "right"),
     )
     settings = dict(_cumotion_settings(robot_config))
     generated_xrdf_path = _dual_xrdf_path_for_urdf(generated_path)
@@ -153,6 +153,66 @@ def prepare_cumotion_config_from_robot_config(
         flange_frames=_dual_flange_frames(settings),
         generated_assets=True,
     )
+
+
+def dual_cumotion_config_from_sides(
+    *,
+    left: Mapping[str, object],
+    right: Mapping[str, object],
+    output_dir: str | Path = ".cache/cumotion",
+    robot_name: str = DualUrdfGenerationConfig.robot_name,
+    parent_link: str = DualUrdfGenerationConfig.parent_link,
+    left_base_link: str = DualUrdfGenerationConfig.left_base_link,
+    right_base_link: str = DualUrdfGenerationConfig.right_base_link,
+    left_mount_joint: str = DualUrdfGenerationConfig.left_mount_joint,
+    right_mount_joint: str = DualUrdfGenerationConfig.right_mount_joint,
+) -> dict[str, object]:
+    """把左右单臂 robot profile 组合成双臂 cuMotion 资源配置。"""
+
+    left_cumotion = _side_cumotion_settings(left, side="left")
+    right_cumotion = _side_cumotion_settings(right, side="right")
+    return {
+        "cumotion": {
+            "left": {
+                "xrdf_path": _side_required_value(
+                    left_cumotion, "left", "xrdf_path"
+                ),
+                "urdf_path": _side_required_value(
+                    left_cumotion, "left", "urdf_path"
+                ),
+                "flange_frame": _side_required_value(
+                    left_cumotion, "left", "flange_frame"
+                ),
+            },
+            "right": {
+                "xrdf_path": _side_required_value(
+                    right_cumotion, "right", "xrdf_path"
+                ),
+                "urdf_path": _side_required_value(
+                    right_cumotion, "right", "urdf_path"
+                ),
+                "flange_frame": _side_required_value(
+                    right_cumotion, "right", "flange_frame"
+                ),
+            },
+            "output_dir": str(output_dir),
+            "robot_name": robot_name,
+            "parent_link": parent_link,
+            "left_base_link": left_base_link,
+            "right_base_link": right_base_link,
+            "left_mount_joint": left_mount_joint,
+            "right_mount_joint": right_mount_joint,
+        }
+    }
+
+
+def _required_root_pose(
+    root_poses: Mapping[str, RootPoseConfig], side: str
+) -> RootPoseConfig:
+    pose = root_poses.get(side)
+    if pose is None:
+        raise ValueError(f"dual cuMotion generation missing {side!r} root_pose")
+    return pose
 
 
 def dual_urdf_generation_config_from_robot_config(
@@ -393,6 +453,18 @@ def _cumotion_settings(robot_config: Mapping[str, object]) -> Mapping[str, objec
     settings = robot_config.get("cumotion")
     if not isinstance(settings, Mapping):
         raise ValueError("cuMotion config must be a mapping")
+    return settings
+
+
+def _side_cumotion_settings(
+    robot_config: Mapping[str, object], *, side: str
+) -> Mapping[str, object]:
+    settings = _cumotion_settings(robot_config)
+    for key in ("left", "right"):
+        if key in settings:
+            raise ValueError(
+                f"{side} robot profile must be a single-articulation robot config"
+            )
     return settings
 
 

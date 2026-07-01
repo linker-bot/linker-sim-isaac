@@ -313,7 +313,7 @@ def _add_task_space_segment(context, path_spec, current_pose, segment, label: st
         )
 
     if isinstance(segment, TcpArcSegment):
-        target = np.asarray(segment.target_position, dtype=float).reshape(3)
+        target = _arc_target_position(current_pose, segment)
         if segment.target_orientation is None:
             # 不带 orientation target 的圆弧使用 cuMotion 的位置圆弧 API。constant_orientation
             # 直接透传给官方接口，由 cuMotion 决定沿弧线是否保持姿态。
@@ -327,7 +327,7 @@ def _add_task_space_segment(context, path_spec, current_pose, segment, label: st
             elif segment.arc_mode == "three_point":
                 ok = path_spec.add_three_point_arc(
                     target,
-                    np.asarray(segment.intermediate_position, dtype=float).reshape(3),
+                    _arc_intermediate_position(current_pose, segment),
                     bool(segment.constant_orientation),
                 )
             else:
@@ -344,7 +344,7 @@ def _add_task_space_segment(context, path_spec, current_pose, segment, label: st
             elif segment.arc_mode == "three_point":
                 ok = path_spec.add_three_point_arc_with_orientation_target(
                     target_pose,
-                    np.asarray(segment.intermediate_position, dtype=float).reshape(3),
+                    _arc_intermediate_position(current_pose, segment),
                 )
             else:
                 raise ValueError(f"{label}.arc_mode must be tangent or three_point")
@@ -498,6 +498,26 @@ def _line_target_position(current_pose, segment: TcpLineSegment) -> np.ndarray:
         return np.asarray(segment.target_position, dtype=float).reshape(3)
     current_translation = _pose_translation(current_pose)
     return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(3)
+
+
+def _arc_target_position(current_pose, segment: TcpArcSegment) -> np.ndarray:
+    """解析 ``TcpArcSegment`` 的目标位置。"""
+
+    if segment.target_position is not None:
+        return np.asarray(segment.target_position, dtype=float).reshape(3)
+    current_translation = _pose_translation(current_pose)
+    return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(3)
+
+
+def _arc_intermediate_position(current_pose, segment: TcpArcSegment) -> np.ndarray:
+    """解析三点圆弧的中间点。"""
+
+    if segment.intermediate_position is not None:
+        return np.asarray(segment.intermediate_position, dtype=float).reshape(3)
+    current_translation = _pose_translation(current_pose)
+    return current_translation + np.asarray(
+        segment.intermediate_offset, dtype=float
+    ).reshape(3)
 
 
 def _validate_line_start_position(current_pose, segment: TcpLineSegment, label: str) -> None:

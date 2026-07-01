@@ -13,8 +13,8 @@ from linkerbot_sim.backends.cumotion.context import (
     CuMotionContext,
 )
 from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
+from linkerbot_sim.backends.cumotion.tcp_frame import TcpTransform
 from linkerbot_sim.planning.collision_objects import CollisionObject
-from linkerbot_sim.tcp.tcp_frame import TcpFrame
 
 
 class _FakeKinematics:
@@ -134,6 +134,11 @@ class _FakeCumotion(ModuleType):
         return _FakeObstacle(obstacle_type)
 
 
+class _ExitCumotion(_FakeCumotion):
+    def load_robot_from_file(self, xrdf_path, urdf_path):
+        raise SystemExit(0)
+
+
 def _context(monkeypatch) -> CuMotionContext:
     fake_cumotion = _FakeCumotion()
     monkeypatch.setitem(sys.modules, "cumotion", fake_cumotion)
@@ -204,9 +209,8 @@ def test_make_cumotion_context_with_tcp_writes_temp_urdf(
         urdf_path=base_urdf,
         flange_frame="flange",
     )
-    tcp = TcpFrame.from_xyz_rpy(
+    tcp = TcpTransform.from_xyz_rpy(
         "pinch_tcp",
-        "flange",
         xyz=(0.0, 0.0, 0.12),
     )
 
@@ -221,6 +225,45 @@ def test_make_cumotion_context_with_tcp_writes_temp_urdf(
     assert not temp_parent.exists()
 
 
+def test_make_cumotion_context_binds_tcp_transform_to_flange(
+    monkeypatch, tmp_path
+) -> None:
+    fake_cumotion = _FakeCumotion()
+    monkeypatch.setitem(sys.modules, "cumotion", fake_cumotion)
+    base_urdf = _write_urdf(tmp_path / "robot.urdf")
+    config = CuMotionConfig(
+        xrdf_path=tmp_path / "robot.xrdf",
+        urdf_path=base_urdf,
+        flange_frame="flange",
+    )
+    tcp = TcpTransform.from_xyz_rpy("tool_tcp", xyz=(0.0, 0.0, 0.12))
+
+    with make_cumotion_context(config, tcp=tcp) as context:
+        loaded_urdf = Path(fake_cumotion.loaded_paths[-1][1])
+        root = ET.parse(loaded_urdf).getroot()
+        joint = root.find("./joint[@name='tool_tcp_joint']")
+        assert joint is not None
+        assert joint.find("parent").get("link") == "flange"
+        assert context.has_frame("tool_tcp")
+
+
+def test_make_cumotion_context_converts_system_exit_to_runtime_error(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setitem(sys.modules, "cumotion", _ExitCumotion())
+    base_urdf = _write_urdf(tmp_path / "robot.urdf")
+    config = CuMotionConfig(
+        xrdf_path=tmp_path / "robot.xrdf",
+        urdf_path=base_urdf,
+        flange_frame="flange",
+    )
+    tcp = TcpTransform.from_xyz_rpy("pinch_tcp")
+
+    with pytest.raises(RuntimeError, match="context initialization"):
+        with make_cumotion_context(config, tcp=tcp):
+            pass
+
+
 def test_make_cumotion_context_with_tcp_uses_output_dir(
     monkeypatch, tmp_path
 ) -> None:
@@ -233,7 +276,7 @@ def test_make_cumotion_context_with_tcp_uses_output_dir(
         urdf_path=base_urdf,
         flange_frame="flange",
     )
-    tcp = TcpFrame.from_xyz_rpy("pinch_tcp", "flange")
+    tcp = TcpTransform.from_xyz_rpy("pinch_tcp")
 
     with make_cumotion_context(config, tcp=tcp, output_dir=output_dir) as context:
         loaded_urdf = Path(fake_cumotion.loaded_paths[-1][1])
@@ -256,11 +299,17 @@ def test_make_cumotion_context_with_multiple_tcps(
         urdf_path=base_urdf,
         flange_frame="left_flange",
     )
-    left_tcp = TcpFrame.from_xyz_rpy("left_pinch_tcp", "left_flange")
-    right_tcp = TcpFrame.from_xyz_rpy("right_pinch_tcp", "right_flange")
+    left_tcp = TcpTransform.from_xyz_rpy("left_pinch_tcp")
+    right_tcp = TcpTransform.from_xyz_rpy("right_pinch_tcp")
 
     with make_cumotion_context(
-        config, tcp=(left_tcp, right_tcp), output_dir=output_dir
+        config,
+        tcp=(left_tcp, right_tcp),
+        tcp_parent_frames={
+            "left_pinch_tcp": "left_flange",
+            "right_pinch_tcp": "right_flange",
+        },
+        output_dir=output_dir,
     ) as context:
         loaded_urdf = Path(fake_cumotion.loaded_paths[-1][1])
         assert loaded_urdf.exists()
@@ -284,7 +333,7 @@ def test_make_cumotion_context_with_flange_tcp_does_not_write_urdf(
         flange_frame="flange",
         custom_tcp_frame="tool",
     )
-    tcp = TcpFrame.from_xyz_rpy("flange", "flange")
+    tcp = TcpTransform.from_xyz_rpy("flange")
 
     with make_cumotion_context(config, tcp=tcp) as context:
         assert Path(fake_cumotion.loaded_paths[-1][1]) == base_urdf
@@ -303,7 +352,7 @@ def test_make_cumotion_context_rejects_existing_non_flange_tcp(
         urdf_path=base_urdf,
         flange_frame="flange",
     )
-    tcp = TcpFrame.from_xyz_rpy("tool", "flange", xyz=(0.0, 0.0, 0.1))
+    tcp = TcpTransform.from_xyz_rpy("tool", xyz=(0.0, 0.0, 0.1))
 
     with pytest.raises(ValueError, match="already exists"):
         with make_cumotion_context(config, tcp=tcp):
@@ -317,8 +366,12 @@ def test_make_cumotion_context_rejects_missing_parent_frame(tmp_path) -> None:
         urdf_path=base_urdf,
         flange_frame="flange",
     )
-    tcp = TcpFrame.from_xyz_rpy("pinch_tcp", "missing")
+    tcp = TcpTransform.from_xyz_rpy("pinch_tcp")
 
     with pytest.raises(ValueError, match="Parent frame"):
-        with make_cumotion_context(config, tcp=tcp):
+        with make_cumotion_context(
+            config,
+            tcp=tcp,
+            tcp_parent_frames={"pinch_tcp": "missing"},
+        ):
             pass

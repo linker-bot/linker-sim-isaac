@@ -35,7 +35,7 @@ malloc(): mismatching next->prev_size (unsorted)
 
 ### 当前保护
 
-`src/linkerbot_sim/envs/scene_objects.py` 会区分处理 URDF 静态环境物体和 USD 静态环境物体：
+`src/linkerbot_sim/objects/rigid/runtime.py` 会区分处理 URDF 静态 rigid object 和 USD 静态 rigid object：
 
 - URDF + `physics.static: true`：使用 importer `fix_base=True`；不要再额外把导入的刚体标成
   kinematic/static。
@@ -72,6 +72,7 @@ static-static joint 条件。
 
 - 桌面、安装座作为 `objects[]` 中的环境物体管理。
 - 机械臂/手作为独立机器人 articulation 管理。
-- 机器人安装位姿通过机器人配置的顶层 `root_pose` 管理。
+- 机器人安装位姿通过 env scene 的 `robots.single.root_pose` 或
+  `robots.dual.left/right.root_pose` 管理。
 
 这种拆分可以降低 URDF 合并资产中 fixed joint、base link 和 importer 固定基座语义混在一起的风险。

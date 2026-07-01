@@ -1,55 +1,27 @@
-# Capsule rope 对象配置。
-# 修改这里的参数后，运行 scripts/build_capsule_rope_asset.py 重新生成
-# assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda；仿真入口只读取生成好的 USD 资产。
+# Capsule rope 运行时对象配置。
+#
+# 边界：
+# - scene/env profile 负责世界性质和 root_pose 摆放。
+# - 本文件只放 linkerbot_sim/src 运行时需要读取的对象属性。
+# - 绳体几何、段数、质量、阻尼、关节限制和可视材质属于生成固有属性，
+#   放在 tools/assets/configs/capsule_rope.yaml。
+
 object:
   name: capsuleropeV1_default
-  # 生成后的 USD 资产路径。
+  kind: dynamic_chain
+  source: usd
   asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
-  # 仿真 stage 中引用该资产的 prim 路径。
+  # 默认引用 prim 路径；env scene 只负责 root_pose，不覆盖 prim_path。
   prim_path: /World/CapsuleRope
   # USD 资产文件内部的默认 prim 路径。
   root_path: /CapsuleRope
-
-rope:
-  # 中间柔性段数量；越多越像绳子，但仿真成本越高。
-  segments: 12
-  # 绳体总长度，单位 m。
-  length: 0.75
-  # 绳段半径，单位 m；null 表示按 length / segments 自动估算。
-  radius: null
-  # 绳体中心点世界坐标。
-  center: [0.4, -0.55, 0.05]
-  # 绳体总质量，内部按 segment 平均分配。
-  total_mass: 0.2
-  # segment 几何形状：capsule 更适合绳体接触，cuboid 便于调试。
-  shape: capsule
-  # 两端端块质量和尺寸；抓取目标通常是 endpoint cuboid。
-  endpoint_box_mass: 0.5
-  endpoint_box_size: [0.04, 0.03, 0.1]
-  # 端块和中间绳段刚体阻尼。
-  endpoint_linear_damping: 0.015
-  endpoint_angular_damping: 0.05
-  segment_linear_damping: 0.1
-  segment_angular_damping: 0.12
-  # 相邻段弯曲角限制和弹簧阻尼。
-  bend_limit: 2.0943951023931953
-  bend_stiffness: 0.1
-  bend_damping: 0.1
-  # 是否完全锁住扭转自由度；false 时用 twist_* 做软限制。
-  lock_twist: True
-  # 扭转角限制，单位 rad；null 表示按 segments 自动估算。
-  twist_limit: null
-  twist_stiffness: 0.1
-  twist_damping: 0.05
-  # 禁用相邻段碰撞，避免关节连接处自碰造成抖动。
-  disable_adjacent_collisions: true
-  # 绳体刚体 solver 迭代次数。
-  solver_position_iterations: 48
-  solver_velocity_iterations: 4
-  # 资产内置的可视材质颜色，RGB 范围通常为 0-1。
-  endpoint_color: [0.12, 0.34, 0.95]
-  rope_color: [0.78, 0.62, 0.22]
-  # 端块碰撞物理材质。
-  env_static_friction: 0.7
-  env_dynamic_friction: 0.5
-  env_restitution: 0.0
+  physics:
+    # 接触材质属于运行时仿真属性，可按对象 profile 调整。
+    material:
+      static_friction: 0.7
+      dynamic_friction: 0.5
+      restitution: 0.0
+      friction_combine_mode: average
+    # 绳体刚体 solver 迭代次数是运行时 PhysX 覆盖，不参与资产生成。
+    solver_position_iterations: 48
+    solver_velocity_iterations: 4

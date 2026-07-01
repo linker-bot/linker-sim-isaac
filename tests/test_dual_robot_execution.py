@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from linkerbot_sim.assets.robot_loader import DualRobotExecutionConfig
+from linkerbot_sim.assets.robot_loader import (
+    DualRobotExecutionConfig,
+    dual_robot_root_poses_from_env_config,
+)
 from linkerbot_sim.controllers.types import ControlTargets
 from linkerbot_sim.execution.dual_runtime import DualRobotRuntime, RobotSideRuntime
 from linkerbot_sim.execution.dual_steps import DualCommandPositionTargetStep
@@ -61,8 +64,14 @@ class FakeController:
 
 
 def test_dual_robot_execution_config_parses_left_and_right_assets() -> None:
-    yaml_config = load_yaml("configs/robots/ar5v2_l6v1_dual.yaml")
-    config = DualRobotExecutionConfig.from_mapping(yaml_config)
+    left_config = load_yaml("configs/robots/ar5v2_l6v1_l.yaml")
+    right_config = load_yaml("configs/robots/ar5v2_l6v1_r.yaml")
+    env_config = load_yaml("configs/envs/scene2.yaml")
+    config = DualRobotExecutionConfig.from_robot_configs(
+        left=left_config,
+        right=right_config,
+        root_poses=dual_robot_root_poses_from_env_config(env_config),
+    )
 
     assert config.left.robot.asset_path.name == "AR5V2_L6V1_L.xml"
     assert config.right.robot.asset_path.name == "AR5V2_L6V1_R.xml"
@@ -70,19 +79,19 @@ def test_dual_robot_execution_config_parses_left_and_right_assets() -> None:
     assert config.right.robot.prim_path == "/World/AR5V2_L6V1_R"
     np.testing.assert_allclose(
         config.left.root_pose.xyz,
-        yaml_config["robots"]["left"]["root_pose"]["xyz"],
+        env_config["robots"]["dual"]["left"]["root_pose"]["xyz"],
     )
     np.testing.assert_allclose(
         config.left.root_pose.rpy,
-        yaml_config["robots"]["left"]["root_pose"]["rpy"],
+        env_config["robots"]["dual"]["left"]["root_pose"]["rpy"],
     )
     np.testing.assert_allclose(
         config.right.root_pose.xyz,
-        yaml_config["robots"]["right"]["root_pose"]["xyz"],
+        env_config["robots"]["dual"]["right"]["root_pose"]["xyz"],
     )
     np.testing.assert_allclose(
         config.right.root_pose.rpy,
-        yaml_config["robots"]["right"]["root_pose"]["rpy"],
+        env_config["robots"]["dual"]["right"]["root_pose"]["rpy"],
     )
     assert config.left.controlled_joints == ("all",)
     assert config.right.controlled_joints == ("all",)

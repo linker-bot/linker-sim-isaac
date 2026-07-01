@@ -2,9 +2,10 @@
 #
 # 用途：
 # - 说明 arm_controller.yaml / hand_controller.yaml 的字段含义。
-# - 实际运行脚本通过 --controller-config 指向目录，并固定读取：
+# - 实际运行脚本固定读取默认控制器集合：
 #   - arm_controller.yaml
 #   - hand_controller.yaml
+# - 当前没有 controller-profile 参数；如果要做实验，直接复制/替换 controllers 目录中的两份文件。
 #
 # 使用方式：
 #   复制本文件内容到 arm_controller.yaml 或 hand_controller.yaml，再把 target 改成 arm/hand。
@@ -20,7 +21,7 @@ position_control:
 
   active_joints:
     # stiffness/damping 用于 implicit drive 或显式 PD。
-    stiffness: 1000.0
+    stiffness: 100.0
     damping: 50.0
     # max_force 用作 drive/effort 限幅。
     max_force: 100.0
@@ -67,12 +68,3 @@ effort_control:
     damping: 20.0
     max_force: 100.0
     joint_friction: 0.5
-
-physx:
-  material:
-    contact_static_friction: 0.8
-    contact_dynamic_friction: 0.6
-    contact_restitution: 0.0
-  rigid_body:
-    linear_damping: 0.0
-    angular_damping: 0.1
