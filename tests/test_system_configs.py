@@ -664,6 +664,57 @@ def test_robot_asset_config_parses_collision_approximation() -> None:
     assert config.import_config.collision_approximation == "convex_hull"
 
 
+def test_robot_asset_config_parses_self_collision() -> None:
+    config = RobotAssetConfig.from_mapping(
+        {
+            "robot": {
+                "asset_type": "mjcf",
+                "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
+                "prim_path": "/World/Robot",
+                "import": {
+                    "collision_approximation": "convex_decomposition",
+                    "self_collision": True,
+                },
+            }
+        }
+    )
+
+    assert config.import_config.self_collision is True
+
+
+def test_robot_asset_config_defaults_self_collision_to_false() -> None:
+    config = RobotAssetConfig.from_mapping(
+        {
+            "robot": {
+                "asset_type": "mjcf",
+                "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
+                "prim_path": "/World/Robot",
+                "import": {"collision_approximation": "convex_decomposition"},
+            }
+        }
+    )
+
+    assert config.import_config.self_collision is False
+
+
+def test_robot_asset_config_rejects_non_bool_self_collision() -> None:
+    try:
+        RobotAssetConfig.from_mapping(
+            {
+                "robot": {
+                    "asset_type": "mjcf",
+                    "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
+                    "prim_path": "/World/Robot",
+                    "import": {"self_collision": "true"},
+                }
+            }
+        )
+    except ValueError as exc:
+        assert "self_collision" in str(exc)
+    else:
+        raise AssertionError("RobotAssetConfig accepted non-bool self_collision")
+
+
 def test_import_config_rejects_removed_collision_approximation_aliases() -> None:
     try:
         RobotAssetConfig.from_mapping(
@@ -1017,6 +1068,12 @@ def test_rigid_object_config_rejects_invalid_shapes() -> None:
             "asset_path": "x.usd",
             "prim_path": "/World/Object",
             "import": {"collision_approximation": "convex_hull", "density": 1.0},
+        },
+        {
+            "source": "usd",
+            "asset_path": "x.usd",
+            "prim_path": "/World/Object",
+            "import": {"self_collision": True},
         },
         {
             "source": "usd",

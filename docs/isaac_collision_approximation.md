@@ -1,11 +1,12 @@
 # Isaac 碰撞近似配置
 
-本项目只暴露一个导入阶段字段：
+本项目暴露两个导入阶段碰撞字段：
 
 ```yaml
 robot:
   import:
     collision_approximation: convex_decomposition
+    self_collision: false
 
 objects:
   - name: fixture
@@ -13,7 +14,13 @@ objects:
       collision_approximation: convex_decomposition
 ```
 
-当前支持的项目级取值：
+`collision_approximation` 同时适用于 robot 和 rigid object import；`self_collision` 只适用于
+robot import，用于控制 Isaac/PhysX 是否在同一个 articulation 内部 link 之间生成自碰撞接触。
+rigid object import 不接受 `self_collision`。
+
+## 碰撞近似取值
+
+当前支持的项目级 `collision_approximation` 取值：
 
 | 取值 | Isaac importer 映射 | 含义 |
 | --- | --- | --- |
@@ -21,6 +28,18 @@ objects:
 | `convex_hull` | `convex_decomp = False` / `set_convex_decomp(False)` | 每个 collision mesh 生成一个凸包。更快、更简单，但会填平凹陷区域。 |
 
 默认值是 `convex_decomposition`，保持此前 URDF 导入里硬编码的项目行为。
+
+## 机器人自碰撞开关
+
+`robot.import.self_collision` 默认值为 `false`。设置为 `true` 时：
+
+- URDF importer 会写入 `import_config.self_collision = True`。
+- MJCF importer 会调用 `import_config.set_self_collision(True)`。
+- Isaac/PhysX 会为同一 articulation 内部允许的 link 对生成自碰撞接触。
+
+这个开关只影响 Isaac 物理侧的真实接触生成，不会改变 cuMotion XRDF/URDF 中的 collision spheres
+或 self-collision mask。若需要“哪些 link pair 可以/不可以自碰”的细粒度控制，应在资产或未来的
+collision filter 配置层处理，而不是放进 `collision_approximation`。
 
 ## 不是重复一层凸包
 

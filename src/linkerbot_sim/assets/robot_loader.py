@@ -42,13 +42,20 @@ class AssetImportConfig:
 
     这里的 ``collision_approximation`` 只作用于 Isaac importer 把 MJCF/URDF mesh 写入 USD
     的过程。它不是 cuMotion 规划模型配置，也不是导入后再额外 cooking 一次碰撞体的开关。
+    ``self_collision`` 只用于机器人 articulation 导入，表示是否让 Isaac/PhysX 在同一
+    articulation 内部 link 之间生成自碰撞接触。
     """
 
     collision_approximation: str = DEFAULT_COLLISION_APPROXIMATION
+    self_collision: bool = False
 
     @classmethod
     def from_mapping(
-        cls, data: Mapping[str, object] | None, *, label: str
+        cls,
+        data: Mapping[str, object] | None,
+        *,
+        label: str,
+        allow_self_collision: bool = False,
     ) -> "AssetImportConfig":
         """从 robot.import / object.import 映射解析 importer 选项。"""
 
@@ -56,7 +63,10 @@ class AssetImportConfig:
             return cls()
         if not isinstance(data, Mapping):
             raise ValueError(f"{label} must be a mapping")
-        unsupported_keys = set(data) - {"collision_approximation"}
+        supported_keys = {"collision_approximation"}
+        if allow_self_collision:
+            supported_keys.add("self_collision")
+        unsupported_keys = set(data) - supported_keys
         if unsupported_keys:
             unsupported = ", ".join(sorted(unsupported_keys))
             raise ValueError(f"{label} contains unsupported keys: {unsupported}")
@@ -64,7 +74,8 @@ class AssetImportConfig:
             collision_approximation=_normalize_collision_approximation(
                 data.get("collision_approximation", DEFAULT_COLLISION_APPROXIMATION),
                 label=f"{label}.collision_approximation",
-            )
+            ),
+            self_collision=_optional_bool(data, "self_collision", label) or False,
         )
 
     def use_convex_decomposition(self) -> bool:
@@ -131,7 +142,9 @@ class RobotAssetConfig:
             name=str(robot.get("name", "robot")),
             urdf_drive_type=str(robot.get("urdf_drive_type", "position")),
             import_config=AssetImportConfig.from_mapping(
-                robot.get("import"), label="robot.import"
+                robot.get("import"),
+                label="robot.import",
+                allow_self_collision=True,
             ),
             gravity_policy=RobotGravityPolicy.from_mapping(
                 physics.get("gravity") if physics is not None else None,
@@ -788,6 +801,7 @@ def configure_mjcf_import(
     import_config.set_fix_base(True)
     import_config.set_import_inertia_tensor(True)
     import_config.set_convex_decomp(asset_import.use_convex_decomposition())
+    import_config.set_self_collision(asset_import.self_collision)
 
     status, imported_prim_path = omni.kit.commands.execute(
         "MJCFCreateAsset",
@@ -840,7 +854,7 @@ def configure_urdf_import(
     import_config.convex_decomp = asset_import.use_convex_decomposition()
     import_config.import_inertia_tensor = True
     import_config.fix_base = bool(fix_base)
-    import_config.self_collision = False
+    import_config.self_collision = asset_import.self_collision
     import_config.distance_scale = 1.0
     if drive_type == "none":
         import_config.default_drive_type = UrdfJointTargetType.JOINT_DRIVE_NONE

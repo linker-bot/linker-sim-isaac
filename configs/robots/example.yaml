@@ -13,6 +13,7 @@
 #   - robots.dual.left/right 选择两个单臂 robot profile。
 # - root_pose 属于 scene，不写在 robot profile。
 # - robot.import.collision_approximation 只影响 Isaac importer 生成碰撞几何的方式。
+# - robot.import.self_collision 控制 Isaac/PhysX 是否生成机器人 articulation 内部自碰撞接触。
 # - robot.physics.physx 是导入后的机器人 USD/PhysX 材料和刚体阻尼覆盖，不属于控制器配置。
 # - robot.physics.solver 是机器人刚体 solver iteration 覆盖；scene solver type 写在 env。
 # - cumotion 段只放模型资源，不放 IK/planner 算法参数；算法参数放 configs/cumotion/*.yaml。
@@ -39,6 +40,9 @@ robot:
     # convex_decomposition：非凸 mesh 分解为多个凸碰撞体，接触更贴合，成本更高。
     # convex_hull：每个 mesh 一个凸包，更快但会填平凹陷。
     collision_approximation: convex_decomposition
+    # 是否开启 Isaac/PhysX articulation 内部 link 之间的自碰撞接触。
+    # 默认为 false；开启后可能显著改变手指/机械臂接触行为和求解成本。
+    self_collision: false
 
   physics:
     gravity:

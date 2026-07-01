@@ -576,13 +576,16 @@ robot:
 机器人材料、刚体阻尼和 solver iteration 也写在 robot YAML。controller YAML 只负责控制模式、
 gain、限幅和 follower drive。
 
-导入碰撞近似通过 `collision_approximation` 设置，当前支持：
+Isaac importer 层碰撞选项写在 `robot.import`：
 
 - `convex_decomposition`：接触更贴合，成本更高。
 - `convex_hull`：每个 mesh 一个凸包，更快但会填平凹陷。
+- `self_collision`：是否开启机器人 articulation 内部 link 之间的 PhysX 自碰撞接触，默认
+  `false`。
 
-该字段只作用于 Isaac importer 把 MJCF/URDF mesh 写入 USD 的过程，不改变 cuMotion XRDF/URDF
-规划模型，也不表示运行时重新 cooking 碰撞体。更完整说明见
+`collision_approximation` 只作用于 Isaac importer 把 MJCF/URDF mesh 写入 USD 的过程；
+`self_collision` 只作用于 Isaac/PhysX 物理侧的 articulation 接触生成。它们都不改变
+cuMotion XRDF/URDF 规划模型，也不表示运行时重新 cooking 碰撞体。更完整说明见
 `docs/isaac_collision_approximation.md`。
 
 ## 坐标、单位和命名

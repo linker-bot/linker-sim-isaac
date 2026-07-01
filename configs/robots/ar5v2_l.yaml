@@ -30,6 +30,9 @@ robot:
     # convex_decomposition：把非凸 mesh 分解成多个凸碰撞体，接触形状更贴近原模型，计算成本更高。
     # convex_hull：每个 mesh 生成一个凸包，速度更快，但会填平凹陷。
     collision_approximation: convex_decomposition
+    # 是否开启 Isaac/PhysX articulation 内部 link 之间的自碰撞接触。
+    # 默认保持关闭，避免改变现有机械臂仿真稳定性和成本。
+    self_collision: false
 
   physics:
     # 机器人刚体重力策略。
