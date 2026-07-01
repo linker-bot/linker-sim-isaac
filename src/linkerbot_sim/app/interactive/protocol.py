@@ -21,6 +21,8 @@ from linkerbot_sim.app.motion.specs import (
     HandMoveSpec,
     IkOffsetMoveSpec,
     MoveSpec,
+    RawJointSequenceMoveSpec,
+    RawJointSequenceSideSpec,
     SpecifiedPathMoveSpec,
 )
 from linkerbot_sim.planning.requests import (
@@ -89,6 +91,7 @@ def parse_interactive_motion_message(
         "cspace_delta",
         "task_space_line",
         "task_space_arc",
+        "raw_joint_sequence",
     }:
         return InteractiveMotionCommand(
             kind="moves",
@@ -144,6 +147,10 @@ def _parse_move(
             duration_s=duration_s,
             phase=_optional_str(message.get("phase")),
         )
+        move.validate()
+        return move
+    if move_type == "raw_joint_sequence":
+        move = _parse_raw_joint_sequence_move(message)
         move.validate()
         return move
     if move_type == "ik_pose":
@@ -241,6 +248,40 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     raise ValueError(f"unsupported move type: {move_type!r}")
+
+
+def _parse_raw_joint_sequence_move(
+    message: Mapping[str, object],
+) -> RawJointSequenceMoveSpec:
+    left = _parse_raw_joint_sequence_side(message.get("left"), "left")
+    right = _parse_raw_joint_sequence_side(message.get("right"), "right")
+    if "side" in message or "joint_positions" in message:
+        side = _required_side(message)
+        payload = RawJointSequenceSideSpec(
+            joint_positions=_required_raw_joint_sequence_positions(message)
+        )
+        if side == "left":
+            left = payload
+        else:
+            right = payload
+    return RawJointSequenceMoveSpec(
+        left=left,
+        right=right,
+        step_interval=_optional_int(message.get("step_interval"), default=1),
+        phase=_optional_str(message.get("phase")),
+    )
+
+
+def _parse_raw_joint_sequence_side(
+    value: object,
+    label: str,
+) -> RawJointSequenceSideSpec | None:
+    if value is None:
+        return None
+    data = _expect_mapping(value, label)
+    return RawJointSequenceSideSpec(
+        joint_positions=_required_raw_joint_sequence_positions(data)
+    )
 
 
 def _parse_tcp_line_segment(message: Mapping[str, object]) -> TcpLineSegment:
@@ -360,6 +401,17 @@ def _optional_float(value: object, *, default: float | None) -> float | None:
     return default if value is None else float(value)
 
 
+def _optional_int(value: object, *, default: int) -> int:
+    if value is None:
+        return int(default)
+    if isinstance(value, bool):
+        raise ValueError("integer value is required")
+    number = float(value)
+    if not number.is_integer():
+        raise ValueError("integer value is required")
+    return int(number)
+
+
 def _vector3(message: Mapping[str, object], key: str) -> np.ndarray:
     if key not in message:
         raise ValueError(f"{key} is required")
@@ -407,6 +459,31 @@ def _required_joint_positions(
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return tuple(float(item) for item in value)
     raise ValueError("joint_positions must be a mapping or list")
+
+
+def _required_raw_joint_sequence_positions(
+    message: Mapping[str, object],
+) -> Mapping[str, tuple[float, ...]] | tuple[tuple[float, ...], ...]:
+    if "joint_positions" not in message:
+        raise ValueError("joint_positions is required")
+    value = message["joint_positions"]
+    if isinstance(value, Mapping):
+        return {
+            str(name): _float_tuple(samples, label=f"joint_positions[{name!r}]")
+            for name, samples in value.items()
+        }
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        rows = []
+        for row in value:
+            rows.append(_float_tuple(row, label="joint_positions[]"))
+        return tuple(rows)
+    raise ValueError("joint_positions must be a mapping or matrix")
+
+
+def _float_tuple(value: object, *, label: str) -> tuple[float, ...]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ValueError(f"{label} must be a list")
+    return tuple(float(item) for item in value)
 
 
 def _expect_mapping(value: object, label: str) -> Mapping[str, object]:

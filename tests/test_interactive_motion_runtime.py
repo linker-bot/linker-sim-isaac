@@ -6,6 +6,7 @@ from linkerbot_sim.app.motion.specs import (
     DualHandMoveSpec,
     HandMoveSpec,
     IkOffsetMoveSpec,
+    RawJointSequenceMoveSpec,
     SpecifiedPathMoveSpec,
 )
 from linkerbot_sim.app.interactive.protocol import (
@@ -137,6 +138,40 @@ def test_parse_batch_moves() -> None:
 
     assert command.command_id == "batch-1"
     assert len(command.moves) == 2
+
+
+def test_parse_raw_joint_sequence_matrix_and_mapping() -> None:
+    command = parse_interactive_motion_message(
+        {
+            "id": "raw-1",
+            "type": "raw_joint_sequence",
+            "left": {
+                "joint_positions": [
+                    [0.1, 0.2],
+                    [0.3, 0.4],
+                ]
+            },
+            "right": {
+                "joint_positions": {
+                    "r0": [1.0, 1.1],
+                    "r1": [2.0, 2.1],
+                }
+            },
+            "step_interval": 2,
+            "phase": "external_policy",
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    assert command.command_id == "raw-1"
+    move = command.moves[0]
+    assert isinstance(move, RawJointSequenceMoveSpec)
+    assert move.step_interval == 2
+    assert move.phase == "external_policy"
+    assert move.left is not None
+    assert move.left.joint_positions == ((0.1, 0.2), (0.3, 0.4))
+    assert move.right is not None
+    assert move.right.joint_positions["r0"] == (1.0, 1.1)
 
 
 def test_interactive_queue_status_cancel_and_events() -> None:

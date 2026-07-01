@@ -82,6 +82,34 @@ class DualCommandPositionTrajectoryStep:
         )
 
 
+@dataclass(frozen=True)
+class DualRawCommandTargetSequenceStep:
+    """按 physics step 同步刷新左右 command-space raw target。"""
+
+    left_positions: np.ndarray | None
+    right_positions: np.ndarray | None
+    step_interval: int = 1
+    phase: str = "raw_joint_sequence"
+    left_base_positions: np.ndarray | None = None
+    right_base_positions: np.ndarray | None = None
+    should_stop: Callable[[], bool] | None = None
+
+    def run(self, runtime: DualRobotRuntime, step: int) -> int:
+        """逐样本播放 raw command target 并返回累计 step。"""
+
+        return execute_dual_raw_command_target_sequence(
+            runtime=runtime,
+            left_positions=self.left_positions,
+            right_positions=self.right_positions,
+            step=step,
+            step_interval=self.step_interval,
+            phase=self.phase,
+            left_base_positions=self.left_base_positions,
+            right_base_positions=self.right_base_positions,
+            should_stop=self.should_stop,
+        )
+
+
 @dataclass
 class _SmoothSidePlan:
     controller: object
@@ -198,6 +226,62 @@ def execute_dual_command_position_trajectory(
                 left_base = left_targets.positions
             if right_targets is not None:
                 right_base = right_targets.positions
+    finally:
+        _zero_side_velocities(runtime.left)
+        _zero_side_velocities(runtime.right)
+    return step
+
+
+def execute_dual_raw_command_target_sequence(
+    *,
+    runtime: DualRobotRuntime,
+    left_positions: np.ndarray | None,
+    right_positions: np.ndarray | None,
+    step: int,
+    step_interval: int = 1,
+    phase: str = "raw_joint_sequence",
+    left_base_positions: np.ndarray | None = None,
+    right_base_positions: np.ndarray | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> int:
+    """同步播放 raw command-space target 序列。
+
+    每个样本会保持 ``step_interval`` 个 physics step。函数不做插值、重采样或速度规划；
+    调用方传入的每一行就是要下发的 command-space 位置目标。
+    """
+
+    interval = int(step_interval)
+    if interval <= 0:
+        raise ValueError("step_interval must be a positive integer")
+    sample_count = _raw_sample_count(left_positions, right_positions)
+    left_base = _side_base_positions(runtime.left, left_base_positions)
+    right_base = _side_base_positions(runtime.right, right_base_positions)
+    try:
+        for sample_index in range(sample_count):
+            for _ in range(interval):
+                if (
+                    runtime.simulation_app is not None
+                    and not runtime.simulation_app.is_running()
+                ):
+                    return step
+                _raise_if_stopped(should_stop, step=step)
+                left_targets = _raw_sample_targets(
+                    runtime.left, left_positions, sample_index, left_base
+                )
+                right_targets = _raw_sample_targets(
+                    runtime.right, right_positions, sample_index, right_base
+                )
+                step = _apply_dual_targets_once(
+                    runtime=runtime,
+                    left_targets=left_targets,
+                    right_targets=right_targets,
+                    phase=phase,
+                    step=step,
+                )
+                if left_targets is not None:
+                    left_base = left_targets.positions
+                if right_targets is not None:
+                    right_base = right_targets.positions
     finally:
         _zero_side_velocities(runtime.left)
         _zero_side_velocities(runtime.right)
@@ -343,6 +427,27 @@ def _trajectory_sample_targets(
     )
 
 
+def _raw_sample_targets(
+    side_runtime: RobotSideRuntime,
+    positions: np.ndarray | None,
+    sample_index: int,
+    base_positions: np.ndarray,
+) -> ControlTargets:
+    if positions is None:
+        command_positions = base_positions[
+            np.asarray(side_runtime.joint_controller.command_indices, dtype=int)
+        ]
+    else:
+        matrix = np.asarray(positions, dtype=float)
+        command_positions = matrix[int(sample_index)]
+    return side_runtime.joint_controller.build_control_targets(
+        command_positions=command_positions,
+        command_velocities=np.zeros_like(command_positions),
+        command_efforts=np.zeros_like(command_positions),
+        base_positions=base_positions,
+    )
+
+
 def _dual_sample_count(
     left_trajectory: JointTrajectory | None, right_trajectory: JointTrajectory | None
 ) -> int:
@@ -352,6 +457,27 @@ def _dual_sample_count(
         0 if left_trajectory is None else len(left_trajectory),
         0 if right_trajectory is None else len(right_trajectory),
     )
+
+
+def _raw_sample_count(
+    left_positions: np.ndarray | None,
+    right_positions: np.ndarray | None,
+) -> int:
+    if left_positions is None and right_positions is None:
+        raise ValueError("At least one side raw command sequence is required")
+    counts = []
+    for label, positions in (("left", left_positions), ("right", right_positions)):
+        if positions is None:
+            continue
+        matrix = np.asarray(positions, dtype=float)
+        if matrix.ndim != 2:
+            raise ValueError(f"{label} raw command sequence must have shape (N, dof)")
+        if matrix.shape[0] == 0:
+            raise ValueError(f"{label} raw command sequence cannot be empty")
+        counts.append(int(matrix.shape[0]))
+    if len(set(counts)) != 1:
+        raise ValueError("left/right raw command sequence sample counts must match")
+    return counts[0]
 
 
 def _sample_phase(

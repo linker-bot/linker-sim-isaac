@@ -335,6 +335,48 @@ env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 }
 ```
 
+## Raw Joint Sequence
+
+如果外部控制器已经按 physics step 生成 command-space 关节角 target，可以使用
+`raw_joint_sequence` 直接刷新目标。该模式不走 cuMotion，不插值，不做加减速规划，也不检查
+速度/加速度限制；每个样本就是要下发给 controller 的 position target。
+
+完整 command-space 矩阵示例：
+
+```json
+{
+  "type": "raw_joint_sequence",
+  "left": {
+    "joint_positions": [
+      [0.1, 0.2, 0.3],
+      [0.11, 0.21, 0.31]
+    ]
+  },
+  "step_interval": 1,
+  "phase": "left_policy"
+}
+```
+
+`step_interval` 表示每个样本保持多少个 physics step。`1` 表示每步刷新一个新 target；
+`3` 表示每个 target 连续保持 3 个 physics step 后再切到下一个样本。
+
+也可以用 mapping 只覆盖部分 command-space 关节，未给出的关节保持当前 command 值：
+
+```json
+{
+  "type": "raw_joint_sequence",
+  "right": {
+    "joint_positions": {
+      "AR5V2_R_arm_joint1": [0.0, 0.02, 0.04],
+      "AR5V2_R_arm_joint2": [-0.3, -0.31, -0.32]
+    }
+  },
+  "step_interval": 2
+}
+```
+
+左右两侧可以同时发送，但样本数必须一致；只发送一侧时，另一侧会保持当前姿态。
+
 ## Hand Overlay
 
 所有 arm/cuMotion motion 都可以带 `overlays`。overlay timing 支持：

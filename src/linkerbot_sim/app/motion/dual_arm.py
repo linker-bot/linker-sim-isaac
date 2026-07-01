@@ -18,6 +18,8 @@ from linkerbot_sim.app.motion.specs import (
     HandMoveSpec,
     IkOffsetMoveSpec,
     MoveSpec,
+    RawJointSequenceMoveSpec,
+    RawJointSequenceSideSpec,
     SpecifiedPathMoveSpec,
     default_move_phase,
     normalize_move_sequence,
@@ -51,6 +53,7 @@ from linkerbot_sim.execution.dual_steps import (
     DualCommandExecutionInterrupted,
     DualCommandPositionTargetStep,
     DualCommandPositionTrajectoryStep,
+    DualRawCommandTargetSequenceStep,
 )
 from linkerbot_sim.planning.dual_arm_cspace_partition import (
     DualArmJointPartitions,
@@ -594,6 +597,18 @@ def _run_dual_move(
             right_command=right_command,
             step=step,
             sample_dt=sample_dt,
+            should_stop=should_stop,
+        )
+
+    if isinstance(move, RawJointSequenceMoveSpec):
+        move.validate()
+        return _execute_raw_joint_sequence_move(
+            move,
+            runtime=runtime,
+            joint_names=joint_names,
+            left_command=left_command,
+            right_command=right_command,
+            step=step,
             should_stop=should_stop,
         )
 
@@ -1232,6 +1247,62 @@ def _execute_dual_hand_move(
     )
 
 
+def _execute_raw_joint_sequence_move(
+    move: RawJointSequenceMoveSpec,
+    *,
+    runtime: DualRobotRuntime,
+    joint_names: Sequence[str],
+    left_command: np.ndarray,
+    right_command: np.ndarray,
+    step: int,
+    should_stop: Callable[[], bool] | None = None,
+) -> _DualMoveExecutionResult:
+    phase = move.phase or "raw_joint_sequence"
+    left_positions = _raw_sequence_side_matrix(
+        move.left,
+        side_runtime=runtime.left,
+        current_command=left_command,
+        label="left",
+    )
+    right_positions = _raw_sequence_side_matrix(
+        move.right,
+        side_runtime=runtime.right,
+        current_command=right_command,
+        label="right",
+    )
+    _validate_raw_side_sample_counts(left_positions, right_positions)
+    step = DualRawCommandTargetSequenceStep(
+        left_positions=left_positions,
+        right_positions=right_positions,
+        step_interval=int(move.step_interval),
+        phase=phase,
+        should_stop=should_stop,
+    ).run(runtime, step)
+    next_left = (
+        np.asarray(left_positions[-1], dtype=float).reshape(-1)
+        if left_positions is not None
+        else np.asarray(left_command, dtype=float).reshape(-1)
+    )
+    next_right = (
+        np.asarray(right_positions[-1], dtype=float).reshape(-1)
+        if right_positions is not None
+        else np.asarray(right_command, dtype=float).reshape(-1)
+    )
+    next_q = dual_cspace_vector_from_side_commands(
+        joint_names=joint_names,
+        left_command_joint_names=runtime.left.joint_controller.command_joint_names,
+        right_command_joint_names=runtime.right.joint_controller.command_joint_names,
+        left_command=next_left,
+        right_command=next_right,
+    )
+    return _DualMoveExecutionResult(
+        step=step,
+        cspace_q=next_q,
+        left_command=next_left,
+        right_command=next_right,
+    )
+
+
 def _execute_overlays(
     overlays: Sequence[CommandOverlaySpec],
     *,
@@ -1481,6 +1552,93 @@ def _hand_target_command(
     for name, value in zip(hand_names, values):
         target[index_by_name[name]] = float(value)
     return target
+
+
+def _raw_sequence_side_matrix(
+    side: RawJointSequenceSideSpec | None,
+    *,
+    side_runtime: RobotSideRuntime,
+    current_command: np.ndarray,
+    label: str,
+) -> np.ndarray | None:
+    if side is None:
+        return None
+    command_names = tuple(
+        str(name) for name in side_runtime.joint_controller.command_joint_names
+    )
+    base = np.asarray(current_command, dtype=float).reshape(-1)
+    if base.size != len(command_names):
+        raise ValueError(
+            f"{label} command shape mismatch: {len(command_names)} names, {base.size} values"
+        )
+    positions = side.joint_positions
+    if isinstance(positions, Mapping):
+        matrix = _raw_mapping_sequence_matrix(
+            positions,
+            command_joint_names=command_names,
+            base_command=base,
+            label=label,
+        )
+    else:
+        matrix = np.asarray(positions, dtype=float)
+        if matrix.ndim != 2:
+            raise ValueError(f"{label} raw joint sequence must have shape (N, dof)")
+        if matrix.shape[1] != len(command_names):
+            raise ValueError(
+                f"{label} raw joint sequence expected {len(command_names)} columns, "
+                f"got {matrix.shape[1]}"
+            )
+    if matrix.shape[0] == 0:
+        raise ValueError(f"{label} raw joint sequence cannot be empty")
+    return matrix
+
+
+def _raw_mapping_sequence_matrix(
+    positions: Mapping[str, Sequence[float]],
+    *,
+    command_joint_names: Sequence[str],
+    base_command: np.ndarray,
+    label: str,
+) -> np.ndarray:
+    if not positions:
+        raise ValueError(f"{label} raw joint sequence mapping cannot be empty")
+    index_by_name = {
+        str(name): index for index, name in enumerate(command_joint_names)
+    }
+    sample_count: int | None = None
+    columns: dict[int, np.ndarray] = {}
+    for name, values in positions.items():
+        key = str(name)
+        if key not in index_by_name:
+            raise ValueError(f"{label} raw joint {key!r} is not in command-space")
+        array = np.asarray(values, dtype=float).reshape(-1)
+        if array.size == 0:
+            raise ValueError(f"{label} raw joint {key!r} samples cannot be empty")
+        if sample_count is None:
+            sample_count = int(array.size)
+        elif array.size != sample_count:
+            raise ValueError(f"{label} raw joint sequence sample counts must match")
+        columns[index_by_name[key]] = array
+    assert sample_count is not None
+    matrix = np.tile(np.asarray(base_command, dtype=float).reshape(1, -1), (sample_count, 1))
+    for index, values in columns.items():
+        matrix[:, index] = values
+    return matrix
+
+
+def _validate_raw_side_sample_counts(
+    left_positions: np.ndarray | None,
+    right_positions: np.ndarray | None,
+) -> None:
+    counts = [
+        int(matrix.shape[0])
+        for matrix in (left_positions, right_positions)
+        if matrix is not None
+    ]
+    if not counts:
+        raise ValueError("RawJointSequenceMoveSpec requires at least one side")
+    if len(set(counts)) != 1:
+        raise ValueError("left/right raw joint sequence sample counts must match")
 
 
 def _hand_command_joint_names(command_joint_names: Sequence[str]) -> tuple[str, ...]:

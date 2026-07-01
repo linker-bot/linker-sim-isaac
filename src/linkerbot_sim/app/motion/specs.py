@@ -106,6 +106,38 @@ class DualHandMoveSpec:
 
 
 @dataclass(frozen=True)
+class RawJointSequenceSideSpec:
+    """单侧 command-space raw target 序列。"""
+
+    joint_positions: Mapping[str, Sequence[float]] | Sequence[Sequence[float]]
+
+    def validate(self) -> None:
+        _validate_raw_joint_sequence_side(self.joint_positions)
+
+
+@dataclass(frozen=True)
+class RawJointSequenceMoveSpec:
+    """直接按 physics step 刷新 controller command-space target。"""
+
+    left: RawJointSequenceSideSpec | None = None
+    right: RawJointSequenceSideSpec | None = None
+    step_interval: int = 1
+    phase: str | None = None
+
+    def validate(self, *, require_side: bool = False) -> None:
+        if self.left is None and self.right is None:
+            raise ValueError("RawJointSequenceMoveSpec requires at least one side")
+        if isinstance(self.step_interval, bool):
+            raise ValueError("step_interval must be a positive integer")
+        if int(self.step_interval) != self.step_interval or int(self.step_interval) <= 0:
+            raise ValueError("step_interval must be a positive integer")
+        if self.left is not None:
+            self.left.validate()
+        if self.right is not None:
+            self.right.validate()
+
+
+@dataclass(frozen=True)
 class CommandOverlaySpec:
     """arm/cuMotion motion 前后或同步叠加的 command-space 手部动作。"""
 
@@ -259,6 +291,7 @@ MoveSpec: TypeAlias = (
     | SpecifiedPathMoveSpec
     | HandMoveSpec
     | DualHandMoveSpec
+    | RawJointSequenceMoveSpec
 )
 
 
@@ -406,6 +439,35 @@ def _validate_hand_joint_positions(
     values = np.asarray(joint_positions, dtype=float).reshape(-1)
     if values.size == 0:
         raise ValueError("hand joint_positions cannot be empty")
+
+
+def _validate_raw_joint_sequence_side(
+    joint_positions: Mapping[str, Sequence[float]] | Sequence[Sequence[float]],
+) -> None:
+    if isinstance(joint_positions, Mapping):
+        if not joint_positions:
+            raise ValueError("raw joint sequence mapping cannot be empty")
+        sample_count: int | None = None
+        for name, values in joint_positions.items():
+            if not str(name):
+                raise ValueError("raw joint sequence joint name cannot be empty")
+            if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+                raise ValueError("raw joint sequence mapping values must be lists")
+            array = np.asarray(values, dtype=float).reshape(-1)
+            if array.size == 0:
+                raise ValueError("raw joint sequence samples cannot be empty")
+            if sample_count is None:
+                sample_count = int(array.size)
+            elif array.size != sample_count:
+                raise ValueError("raw joint sequence mapping sample counts must match")
+        return
+    if isinstance(joint_positions, (str, bytes)):
+        raise ValueError("raw joint sequence joint_positions must be a mapping or matrix")
+    matrix = np.asarray(joint_positions, dtype=float)
+    if matrix.ndim != 2:
+        raise ValueError("raw joint sequence matrix must have shape (N, dof)")
+    if matrix.shape[0] == 0 or matrix.shape[1] == 0:
+        raise ValueError("raw joint sequence matrix cannot be empty")
 
 
 def _normalize_side_required(side: str | None) -> str:

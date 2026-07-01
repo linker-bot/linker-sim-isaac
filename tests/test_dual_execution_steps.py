@@ -6,6 +6,7 @@ from linkerbot_sim.execution.dual_runtime import DualRobotRuntime, RobotSideRunt
 from linkerbot_sim.execution.dual_steps import (
     DualCommandExecutionInterrupted,
     execute_dual_command_position_trajectory,
+    execute_dual_raw_command_target_sequence,
 )
 from linkerbot_sim.trajectories.types import JointTrajectory
 
@@ -106,3 +107,37 @@ def test_dual_command_trajectory_can_be_interrupted() -> None:
         raise AssertionError("expected trajectory playback to be interrupted")
 
     assert runtime.simulation_world.step_calls == 1
+
+
+def test_dual_raw_command_sequence_repeats_targets_by_step_interval() -> None:
+    runtime = DualRobotRuntime(
+        left=_side("left"),
+        right=_side("right"),
+        simulation_world=_FakeWorld(),
+        articulation_action_type=object,
+        simulation_app=None,
+        render_enabled=False,
+    )
+    runtime.right.articulation.positions = np.asarray([5.0, 6.0], dtype=float)
+
+    step = execute_dual_raw_command_target_sequence(
+        runtime=runtime,
+        left_positions=np.asarray([[0.1, 0.2], [0.3, 0.4]], dtype=float),
+        right_positions=None,
+        step=10,
+        step_interval=2,
+        phase="raw",
+    )
+
+    assert step == 14
+    assert runtime.simulation_world.step_calls == 4
+    left_positions = [
+        targets.positions.tolist()
+        for targets in runtime.left.joint_controller.applied
+    ]
+    right_positions = [
+        targets.positions.tolist()
+        for targets in runtime.right.joint_controller.applied
+    ]
+    assert left_positions == [[0.1, 0.2], [0.1, 0.2], [0.3, 0.4], [0.3, 0.4]]
+    assert right_positions == [[5.0, 6.0], [5.0, 6.0], [5.0, 6.0], [5.0, 6.0]]
