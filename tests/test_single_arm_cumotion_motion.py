@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from linkerbot_sim.app.single_arm_cumotion_motion import (
+from linkerbot_sim.app.motion.single_arm import (
     _run_single_move,
     cspace_goal_to_command,
     cspace_linear_trajectory,
     cspace_trajectory_from_motion_result,
     current_cspace_command,
 )
-from linkerbot_sim.app.cumotion_motion_specs import CumotionMoveSpec
+from linkerbot_sim.app.motion.specs import CumotionMoveSpec
 from linkerbot_sim.planning.requests import MotionRequest
 from linkerbot_sim.planning.results import MotionResult
 

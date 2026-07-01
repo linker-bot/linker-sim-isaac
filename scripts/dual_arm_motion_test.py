@@ -35,21 +35,24 @@ if str(SOURCE_ROOT) not in sys.path:
 # - app.cumotion_motion_specs：客户脚本直接定义 TCP 和临时动作参数；
 # - app.dual_robot_runtime：按 profile 创建完整 Isaac 双机器人 runtime；
 # - app.dual_arm_cumotion_motion：封装 cuMotion context、规划和同步执行。
-from linkerbot_sim.app.cumotion_motion_specs import (  # noqa: E402
+from linkerbot_sim.app.motion.specs import (  # noqa: E402
     CartesianTcpFrameSpec,
     CSpaceDeltaPlanMoveSpec,
     DualArmTcpSpec,
     IkOffsetMoveSpec,
     SpecifiedPathMoveSpec,
 )
-from linkerbot_sim.app.dual_robot_runtime import (  # noqa: E402
+from linkerbot_sim.app.runtime.dual_robot import (  # noqa: E402
     create_dual_robot_runtime,
     load_dual_robot_runtime_config,
 )
-from linkerbot_sim.app.dual_arm_cumotion_motion import (  # noqa: E402
+from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
     dual_arm_cumotion_summary,
     hold_dual_current_pose,
     run_dual_arm_cumotion_motion,
+)
+from linkerbot_sim.app.interactive.dual_arm import (  # noqa: E402
+    run_interactive_dual_arm_motion,
 )
 from linkerbot_sim.planning.requests import (  # noqa: E402
     TaskSpacePath,
@@ -78,6 +81,15 @@ def parse_args() -> argparse.Namespace:
     # hold 只有配合 --gui 才有意义。main() 会把 hold 参数同时传给 app runtime 和动作序列，
     # 前者决定 SimulationApp 是否保持可用，后者决定动作结束后是否继续 stepping。
     parser.add_argument("--hold", action="store_true", help="最终目标保持到窗口关闭")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="启动交互式 JSON motion runtime",
+    )
+    parser.add_argument("--tcp-jsonl-host", default="127.0.0.1")
+    parser.add_argument("--tcp-jsonl-port", type=int, default=None)
+    parser.add_argument("--websocket-host", default="127.0.0.1")
+    parser.add_argument("--websocket-port", type=int, default=None)
     # dry-run 只校验 profile，不启动 Isaac。它适合在没有 GPU/Kit 的环境里检查配置引用。
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -126,58 +138,79 @@ def main() -> None:
     )
     completed = False
     try:
-        steps = run_dual_arm_cumotion_motion(
-            runtime,
-            tcp=tcp,
-            moves=(
-                IkOffsetMoveSpec(
-                    side="left",
-                    tcp_frame_name="left_demo_tcp",
-                    tcp_offset=(0.2, -0.4, -0.1),
-                    duration_s=1.0,
-                    phase="left_ik_lift",
-                ),
-                SpecifiedPathMoveSpec(
-                    side="left",
-                    tcp_frame_name="left_demo_tcp",
-                    path=TaskSpacePath(
-                        segments=(
-                            TcpLineSegment(
-                                target_offset=(0.0, 0.0, 0.1),
-                                orientation_mode="none",
+        if args.interactive:
+            steps = run_interactive_dual_arm_motion(
+                runtime,
+                tcp=tcp,
+                cumotion_profile=args.cumotion_profile,
+                dual_arm_profile=args.dual_arm_profile,
+                stdin_enabled=True,
+                tcp_jsonl_host=args.tcp_jsonl_host,
+                tcp_jsonl_port=args.tcp_jsonl_port,
+                websocket_host=args.websocket_host,
+                websocket_port=args.websocket_port,
+            )
+        else:
+            steps = run_dual_arm_cumotion_motion(
+                runtime,
+                tcp=tcp,
+                moves=(
+                    IkOffsetMoveSpec(
+                        side="left",
+                        tcp_frame_name="left_demo_tcp",
+                        tcp_offset=(0.2, -0.4, -0.1),
+                        duration_s=1.0,
+                        phase="left_ik_lift",
+                    ),
+                    SpecifiedPathMoveSpec(
+                        side="left",
+                        tcp_frame_name="left_demo_tcp",
+                        path=TaskSpacePath(
+                            segments=(
+                                TcpLineSegment(
+                                    target_offset=(0.0, 0.0, 0.1),
+                                    orientation_mode="none",
+                                ),
                             ),
                         ),
+                        duration_s=1.2,
+                        phase="left_tcp_line",
                     ),
-                    duration_s=1.2,
-                    phase="left_tcp_line",
-                ),
-                SpecifiedPathMoveSpec(
-                    side="right",
-                    tcp_frame_name="right_demo_tcp",
-                    path=TaskSpacePath(
-                        segments=(
-                            TcpArcSegment(
-                                target_offset=(0.2, 0.2, 0.1),
-                                intermediate_offset=(0.0, 0.03, 0.02),
-                                arc_mode="three_point",
-                                constant_orientation=True,
+                    SpecifiedPathMoveSpec(
+                        side="right",
+                        tcp_frame_name="right_demo_tcp",
+                        path=TaskSpacePath(
+                            segments=(
+                                TcpArcSegment(
+                                    target_offset=(0.2, 0.2, 0.1),
+                                    intermediate_offset=(0.0, 0.03, 0.02),
+                                    arc_mode="three_point",
+                                    constant_orientation=True,
+                                ),
                             ),
                         ),
+                        duration_s=1.6,
+                        phase="right_tcp_arc",
                     ),
-                    duration_s=1.6,
-                    phase="right_tcp_arc",
+                    CSpaceDeltaPlanMoveSpec(
+                        side="right",
+                        tcp_frame_name="right_demo_tcp",
+                        joint_deltas=(
+                            0.18,
+                            -0.14,
+                            0.12,
+                            -0.1,
+                            0.08,
+                            -0.06,
+                            0.04,
+                        ),
+                        duration_s=1.6,
+                        phase="right_cspace_plan",
+                    ),
                 ),
-                CSpaceDeltaPlanMoveSpec(
-                    side="right",
-                    tcp_frame_name="right_demo_tcp",
-                    joint_deltas=(0.18, -0.14, 0.12, -0.1, 0.08, -0.06, 0.04),
-                    duration_s=1.6,
-                    phase="right_cspace_plan",
-                ),
-            ),
-            cumotion_profile=args.cumotion_profile,
-            dual_arm_profile=args.dual_arm_profile,
-        )
+                cumotion_profile=args.cumotion_profile,
+                dual_arm_profile=args.dual_arm_profile,
+            )
         if args.hold and args.gui:
             steps = hold_dual_current_pose(
                 runtime.execution,

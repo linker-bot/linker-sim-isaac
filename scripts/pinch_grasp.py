@@ -61,7 +61,7 @@ if str(SOURCE_ROOT) not in sys.path:
 # 4. tcp/robots：pinch TCP、mimic follower、关节分组等领域工具；
 # 5. utils/logging：配置、路径、旋转和 CSV 日志。
 # 这些层次本身比具体类名更重要：本脚本只做 orchestration，不把某一层的细节泄漏到其它层。
-from linkerbot_sim.app.single_robot_runtime import (
+from linkerbot_sim.app.runtime.single_robot import (
     LoggingRuntimeOverrides,
     create_single_robot_runtime,
 )
@@ -875,7 +875,6 @@ def run_pinch_grasp_action(
             wiggle_command_targets.append(wiggle_command)
 
         # 末尾扫动第 1 个机械臂关节是 scripted demo 的额外扰动，用于观察夹持是否稳固。
-        # short_smoke 模式下 post_joint_sweep_target_values 为空，因此不会生成这些扰动轨迹。
         post_joint_sweep_targets = []
         for joint_1_target in post_joint_sweep_target_values:
             sweep_command = lifted_command.copy()

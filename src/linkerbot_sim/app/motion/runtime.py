@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from linkerbot_sim.app.cumotion_motion_specs import (
+from linkerbot_sim.app.motion.specs import (
     CumotionMoveSpec,
     MoveSpec,
     default_move_phase,

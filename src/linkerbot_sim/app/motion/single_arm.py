@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from linkerbot_sim.app.cumotion_motion_specs import (
+from linkerbot_sim.app.motion.specs import (
     CSpaceDeltaPlanMoveSpec,
     CartesianTcpFrameSpec,
     CumotionMoveSpec,
@@ -18,7 +18,7 @@ from linkerbot_sim.app.cumotion_motion_specs import (
     specified_path_planner_config,
     tcp_transform_from_spec,
 )
-from linkerbot_sim.app.cumotion_motion_runtime import (
+from linkerbot_sim.app.motion.runtime import (
     command_indices_for_cspace_joints,
     cspace_goal_to_command_vector,
     cspace_linear_trajectory as _shared_cspace_linear_trajectory,
@@ -31,7 +31,7 @@ from linkerbot_sim.app.cumotion_motion_runtime import (
     phase_for_move,
     solve_ik_request,
 )
-from linkerbot_sim.app.single_robot_runtime import SingleRobotRuntime
+from linkerbot_sim.app.runtime.single_robot import SingleRobotRuntime
 from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.execution.steps import (

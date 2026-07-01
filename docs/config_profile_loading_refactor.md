@@ -272,7 +272,7 @@ dynamic-chain 对象的运行时实现。
 通用单机器人 runtime 入口是：
 
 ```python
-from linkerbot_sim.app.single_robot_runtime import create_single_robot_runtime
+from linkerbot_sim.app.runtime.single_robot import create_single_robot_runtime
 
 runtime = create_single_robot_runtime(
     env="scene1",

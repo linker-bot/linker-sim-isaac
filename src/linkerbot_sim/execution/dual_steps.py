@@ -6,6 +6,7 @@ controller 下发目标，再统一推进一次 ``world.step()``，避免左右�
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -13,6 +14,14 @@ import numpy as np
 from linkerbot_sim.controllers.types import ControlTargets
 from linkerbot_sim.execution.dual_runtime import DualRobotRuntime, RobotSideRuntime
 from linkerbot_sim.trajectories.types import JointTrajectory
+
+
+class DualCommandExecutionInterrupted(RuntimeError):
+    """Raised when a dual command step is stopped by an external request."""
+
+    def __init__(self, message: str, *, step: int | None = None) -> None:
+        super().__init__(message)
+        self.step = step
 
 
 @dataclass(frozen=True)
@@ -27,6 +36,7 @@ class DualCommandPositionTargetStep:
     right_start_command: np.ndarray | None = None
     left_base_positions: np.ndarray | None = None
     right_base_positions: np.ndarray | None = None
+    should_stop: Callable[[], bool] | None = None
 
     def run(self, runtime: DualRobotRuntime, step: int) -> int:
         """执行同步 smoothstep 并返回累计 step。"""
@@ -42,6 +52,7 @@ class DualCommandPositionTargetStep:
             right_start_command=self.right_start_command,
             left_base_positions=self.left_base_positions,
             right_base_positions=self.right_base_positions,
+            should_stop=self.should_stop,
         )
 
 
@@ -54,6 +65,7 @@ class DualCommandPositionTrajectoryStep:
     phase: str | None = None
     left_base_positions: np.ndarray | None = None
     right_base_positions: np.ndarray | None = None
+    should_stop: Callable[[], bool] | None = None
 
     def run(self, runtime: DualRobotRuntime, step: int) -> int:
         """逐样本同步播放左右轨迹并返回累计 step。"""
@@ -66,6 +78,7 @@ class DualCommandPositionTrajectoryStep:
             phase=self.phase,
             left_base_positions=self.left_base_positions,
             right_base_positions=self.right_base_positions,
+            should_stop=self.should_stop,
         )
 
 
@@ -90,6 +103,7 @@ def execute_dual_smooth_command_position_target(
     right_start_command: np.ndarray | None = None,
     left_base_positions: np.ndarray | None = None,
     right_base_positions: np.ndarray | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     """用同一个时间网格同步移动左右 command-space target。"""
 
@@ -108,29 +122,35 @@ def execute_dual_smooth_command_position_target(
         base_positions=right_base_positions,
     )
 
-    for local_step in range(steps):
-        if runtime.simulation_app is not None and not runtime.simulation_app.is_running():
-            break
-        alpha = (local_step + 1) / steps
-        smooth = alpha * alpha * (3.0 - 2.0 * alpha)
-        smooth_rate = (
-            (6.0 * alpha * (1.0 - alpha) / float(duration))
-            if duration > 0
-            else 0.0
-        )
-        left_targets = _targets_from_smooth_plan(left_plan, smooth, smooth_rate)
-        right_targets = _targets_from_smooth_plan(right_plan, smooth, smooth_rate)
-        step = _apply_dual_targets_once(
-            runtime=runtime,
-            left_targets=left_targets,
-            right_targets=right_targets,
-            phase=phase,
-            step=step,
-        )
-        _update_plan_base(left_plan, left_targets)
-        _update_plan_base(right_plan, right_targets)
-    _zero_side_velocities(runtime.left)
-    _zero_side_velocities(runtime.right)
+    try:
+        for local_step in range(steps):
+            if (
+                runtime.simulation_app is not None
+                and not runtime.simulation_app.is_running()
+            ):
+                break
+            _raise_if_stopped(should_stop, step=step)
+            alpha = (local_step + 1) / steps
+            smooth = alpha * alpha * (3.0 - 2.0 * alpha)
+            smooth_rate = (
+                (6.0 * alpha * (1.0 - alpha) / float(duration))
+                if duration > 0
+                else 0.0
+            )
+            left_targets = _targets_from_smooth_plan(left_plan, smooth, smooth_rate)
+            right_targets = _targets_from_smooth_plan(right_plan, smooth, smooth_rate)
+            step = _apply_dual_targets_once(
+                runtime=runtime,
+                left_targets=left_targets,
+                right_targets=right_targets,
+                phase=phase,
+                step=step,
+            )
+            _update_plan_base(left_plan, left_targets)
+            _update_plan_base(right_plan, right_targets)
+    finally:
+        _zero_side_velocities(runtime.left)
+        _zero_side_velocities(runtime.right)
     return step
 
 
@@ -143,37 +163,44 @@ def execute_dual_command_position_trajectory(
     phase: str | None = None,
     left_base_positions: np.ndarray | None = None,
     right_base_positions: np.ndarray | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> int:
     """同步播放左右 command-space 轨迹。"""
 
     sample_count = _dual_sample_count(left_trajectory, right_trajectory)
     left_base = _side_base_positions(runtime.left, left_base_positions)
     right_base = _side_base_positions(runtime.right, right_base_positions)
-    for sample_index in range(sample_count):
-        if runtime.simulation_app is not None and not runtime.simulation_app.is_running():
-            break
-        left_targets = _trajectory_sample_targets(
-            runtime.left, left_trajectory, sample_index, left_base
-        )
-        right_targets = _trajectory_sample_targets(
-            runtime.right, right_trajectory, sample_index, right_base
-        )
-        sample_phase = phase or _sample_phase(
-            left_trajectory, right_trajectory, sample_index
-        )
-        step = _apply_dual_targets_once(
-            runtime=runtime,
-            left_targets=left_targets,
-            right_targets=right_targets,
-            phase=sample_phase,
-            step=step,
-        )
-        if left_targets is not None:
-            left_base = left_targets.positions
-        if right_targets is not None:
-            right_base = right_targets.positions
-    _zero_side_velocities(runtime.left)
-    _zero_side_velocities(runtime.right)
+    try:
+        for sample_index in range(sample_count):
+            if (
+                runtime.simulation_app is not None
+                and not runtime.simulation_app.is_running()
+            ):
+                break
+            _raise_if_stopped(should_stop, step=step)
+            left_targets = _trajectory_sample_targets(
+                runtime.left, left_trajectory, sample_index, left_base
+            )
+            right_targets = _trajectory_sample_targets(
+                runtime.right, right_trajectory, sample_index, right_base
+            )
+            sample_phase = phase or _sample_phase(
+                left_trajectory, right_trajectory, sample_index
+            )
+            step = _apply_dual_targets_once(
+                runtime=runtime,
+                left_targets=left_targets,
+                right_targets=right_targets,
+                phase=sample_phase,
+                step=step,
+            )
+            if left_targets is not None:
+                left_base = left_targets.positions
+            if right_targets is not None:
+                right_base = right_targets.positions
+    finally:
+        _zero_side_velocities(runtime.left)
+        _zero_side_velocities(runtime.right)
     return step
 
 
@@ -342,3 +369,11 @@ def _zero_side_velocities(side_runtime: RobotSideRuntime) -> None:
     side_runtime.articulation.set_joint_velocities(
         np.zeros(side_runtime.articulation.num_dof, dtype=float)
     )
+
+
+def _raise_if_stopped(should_stop: Callable[[], bool] | None, *, step: int) -> None:
+    if should_stop is not None and should_stop():
+        raise DualCommandExecutionInterrupted(
+            "dual command execution interrupted",
+            step=step,
+        )

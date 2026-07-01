@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from linkerbot_sim.app.cumotion_motion_specs import (  # noqa: E402
+from linkerbot_sim.app.motion.specs import (  # noqa: E402
     CartesianTcpFrameSpec,
     CSpaceDeltaPlanMoveSpec,
+    CSpaceGoalPlanMoveSpec,
+    CommandOverlaySpec,
     CumotionMoveSpec,
     DualArmTcpSpec,
+    DualHandMoveSpec,
+    HandMoveSpec,
     IkOffsetMoveSpec,
     SpecifiedPathMoveSpec,
     default_move_phase,
@@ -14,7 +18,7 @@ from linkerbot_sim.app.cumotion_motion_specs import (  # noqa: E402
     tcp_transform_from_spec,
     tcp_transforms_from_dual_spec,
 )
-from linkerbot_sim.app.dual_arm_cumotion_motion import (  # noqa: E402
+from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
     dual_cspace_goal_to_command,
     dual_cspace_linear_trajectory,
     dual_cspace_vector_from_side_commands,
@@ -119,6 +123,50 @@ def test_move_specs_validate_side_only_when_dual_runtime_requires_it() -> None:
         assert "side" in str(exc)
     else:
         raise AssertionError("expected dual-arm move without side to be rejected")
+
+
+def test_hand_move_specs_and_overlays_validate() -> None:
+    left_hand = HandMoveSpec(
+        side="left",
+        joint_positions={"L6V1_L_hand_index_mcp_pitch": 0.7},
+        duration_s=0.5,
+    )
+    right_hand = HandMoveSpec(
+        side="right",
+        joint_positions=(0.2, 0.3),
+        duration_s=0.5,
+    )
+    overlay = CommandOverlaySpec(
+        timing="sync",
+        left_hand=HandMoveSpec(
+            side="left",
+            joint_positions={"L6V1_L_hand_index_mcp_pitch": 0.4},
+        ),
+    )
+    arm_move = CSpaceGoalPlanMoveSpec(
+        side="left",
+        tcp_frame_name="left_tcp",
+        joint_positions=(0.1, 0.2),
+        duration_s=1.0,
+        overlays=(overlay,),
+    )
+
+    left_hand.validate()
+    DualHandMoveSpec(left=left_hand, right=right_hand, duration_s=0.5).validate()
+    arm_move.validate(require_side=True)
+
+
+def test_ik_offset_accepts_target_orientation_mode() -> None:
+    move = IkOffsetMoveSpec(
+        side="right",
+        tcp_frame_name="right_tcp",
+        tcp_offset=(0.0, 0.0, 0.01),
+        duration_s=0.5,
+        orientation_mode="target",
+        target_orientation=(1.0, 0.0, 0.0, 0.0),
+    )
+
+    move.validate(require_side=True)
 
 
 def test_cumotion_move_spec_accepts_optional_phase() -> None:

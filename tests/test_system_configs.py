@@ -32,7 +32,7 @@ from linkerbot_sim.assets.solver_overrides import (
     SolverIterationConfig,
     robot_solver_settings,
 )
-from linkerbot_sim.app.runtime_settings import EnvRuntimeSettings
+from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
 from linkerbot_sim.backends.cumotion.context import CuMotionConfig
 from linkerbot_sim.backends.cumotion.dual_urdf import (
     dual_cumotion_config_from_sides,
@@ -42,7 +42,7 @@ from linkerbot_sim.backends.cumotion.profile_config import (
     merged_robot_config_with_cumotion_profile,
     motion_planner_config_from_profile,
 )
-from linkerbot_sim.app.runtime_objects import runtime_objects_from_env_config
+from linkerbot_sim.app.runtime.objects import runtime_objects_from_env_config
 from linkerbot_sim.objects.rigid.runtime import (
     RigidObjectConfig,
     rigid_objects_from_env_config,

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
@@ -29,6 +29,8 @@ from linkerbot_sim.backends.cumotion.tcp_frame import TcpTransform
 
 
 MoveExecutionMode: TypeAlias = Literal["single", "selected_side", "dual_cspace"]
+OverlayTiming: TypeAlias = Literal["sync", "before", "after"]
+IkOrientationMode: TypeAlias = Literal["current", "target", "none"]
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,72 @@ class DualArmTcpSpec:
 
 
 @dataclass(frozen=True)
+class HandMoveSpec:
+    """直接在 controller command-space 中执行单手动作。"""
+
+    side: str
+    joint_positions: Mapping[str, float] | Sequence[float]
+    duration_s: float | None = None
+    phase: str | None = None
+
+    def validate(self, *, require_side: bool = False) -> None:
+        _normalize_side_required(self.side)
+        _validate_hand_joint_positions(self.joint_positions)
+        _validate_duration(self.duration_s)
+
+
+@dataclass(frozen=True)
+class DualHandMoveSpec:
+    """同步执行左右手 command-space 动作。"""
+
+    left: HandMoveSpec | None = None
+    right: HandMoveSpec | None = None
+    duration_s: float | None = None
+    phase: str | None = None
+
+    def validate(self, *, require_side: bool = False) -> None:
+        if self.left is None and self.right is None:
+            raise ValueError("DualHandMoveSpec requires at least one hand target")
+        if self.left is not None:
+            self.left.validate()
+            if _normalize_side_required(self.left.side) != "left":
+                raise ValueError("DualHandMoveSpec.left must use side='left'")
+        if self.right is not None:
+            self.right.validate()
+            if _normalize_side_required(self.right.side) != "right":
+                raise ValueError("DualHandMoveSpec.right must use side='right'")
+        _validate_duration(self.duration_s)
+        if self.duration_s is None and all(
+            hand is None or hand.duration_s is None
+            for hand in (self.left, self.right)
+        ):
+            raise ValueError("DualHandMoveSpec requires duration_s")
+
+
+@dataclass(frozen=True)
+class CommandOverlaySpec:
+    """arm/cuMotion motion 前后或同步叠加的 command-space 手部动作。"""
+
+    timing: OverlayTiming = "sync"
+    left_hand: HandMoveSpec | None = None
+    right_hand: HandMoveSpec | None = None
+
+    def validate(self) -> None:
+        if self.timing not in {"sync", "before", "after"}:
+            raise ValueError("overlay timing must be one of: sync, before, after")
+        if self.left_hand is None and self.right_hand is None:
+            raise ValueError("CommandOverlaySpec requires at least one hand target")
+        if self.left_hand is not None:
+            self.left_hand.validate()
+            if _normalize_side_required(self.left_hand.side) != "left":
+                raise ValueError("left_hand overlay must use side='left'")
+        if self.right_hand is not None:
+            self.right_hand.validate()
+            if _normalize_side_required(self.right_hand.side) != "right":
+                raise ValueError("right_hand overlay must use side='right'")
+
+
+@dataclass(frozen=True)
 class CumotionMoveSpec:
     """高级入口：直接传项目侧 planning request。"""
 
@@ -70,6 +138,7 @@ class CumotionMoveSpec:
     duration_s: float | None = None
     execution: MoveExecutionMode = "single"
     phase: str | None = None
+    overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
         if require_side and self.execution != "dual_cspace":
@@ -81,6 +150,7 @@ class CumotionMoveSpec:
         if self.tcp_frame_name is not None and not str(self.tcp_frame_name):
             raise ValueError("tcp_frame_name cannot be empty")
         _validate_duration(self.duration_s)
+        _validate_overlays(self.overlays)
         self.request.validate_structure()
 
 
@@ -93,6 +163,9 @@ class IkOffsetMoveSpec:
     duration_s: float
     side: str | None = None
     phase: str | None = None
+    orientation_mode: IkOrientationMode = "current"
+    target_orientation: tuple[float, float, float, float] | None = None
+    overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
         if require_side:
@@ -100,7 +173,39 @@ class IkOffsetMoveSpec:
         if not str(self.tcp_frame_name):
             raise ValueError("tcp_frame_name cannot be empty")
         np.asarray(self.tcp_offset, dtype=float).reshape(3)
+        if self.orientation_mode not in {"current", "target", "none"}:
+            raise ValueError(
+                "orientation_mode must be one of: current, target, none"
+            )
+        if self.orientation_mode == "target" and self.target_orientation is None:
+            raise ValueError("target_orientation is required when orientation_mode='target'")
+        if self.target_orientation is not None:
+            np.asarray(self.target_orientation, dtype=float).reshape(4)
         _validate_duration(self.duration_s)
+        _validate_overlays(self.overlays)
+
+
+@dataclass(frozen=True)
+class CSpaceGoalPlanMoveSpec:
+    """规划到选定侧 arm C-space 的绝对关节角目标。"""
+
+    joint_positions: tuple[float, ...]
+    duration_s: float
+    side: str | None = None
+    tcp_frame_name: str | None = None
+    phase: str | None = None
+    overlays: tuple[CommandOverlaySpec, ...] = ()
+
+    def validate(self, *, require_side: bool = False) -> None:
+        if require_side:
+            _normalize_side_required(self.side)
+        joints = np.asarray(self.joint_positions, dtype=float).reshape(-1)
+        if joints.size == 0:
+            raise ValueError("joint_positions cannot be empty")
+        if self.tcp_frame_name is not None and not str(self.tcp_frame_name):
+            raise ValueError("tcp_frame_name cannot be empty")
+        _validate_duration(self.duration_s)
+        _validate_overlays(self.overlays)
 
 
 @dataclass(frozen=True)
@@ -112,6 +217,7 @@ class CSpaceDeltaPlanMoveSpec:
     side: str | None = None
     tcp_frame_name: str | None = None
     phase: str | None = None
+    overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
         if require_side:
@@ -122,6 +228,7 @@ class CSpaceDeltaPlanMoveSpec:
         if self.tcp_frame_name is not None and not str(self.tcp_frame_name):
             raise ValueError("tcp_frame_name cannot be empty")
         _validate_duration(self.duration_s)
+        _validate_overlays(self.overlays)
 
 
 @dataclass(frozen=True)
@@ -133,6 +240,7 @@ class SpecifiedPathMoveSpec:
     duration_s: float
     side: str | None = None
     phase: str | None = None
+    overlays: tuple[CommandOverlaySpec, ...] = ()
 
     def validate(self, *, require_side: bool = False) -> None:
         if require_side:
@@ -140,13 +248,17 @@ class SpecifiedPathMoveSpec:
         if not str(self.tcp_frame_name):
             raise ValueError("tcp_frame_name cannot be empty")
         _validate_duration(self.duration_s)
+        _validate_overlays(self.overlays)
 
 
 MoveSpec: TypeAlias = (
     CumotionMoveSpec
     | IkOffsetMoveSpec
+    | CSpaceGoalPlanMoveSpec
     | CSpaceDeltaPlanMoveSpec
     | SpecifiedPathMoveSpec
+    | HandMoveSpec
+    | DualHandMoveSpec
 )
 
 
@@ -185,10 +297,16 @@ def motion_type_name(move: MoveSpec | CumotionMoveSpec) -> str:
 
     if isinstance(move, IkOffsetMoveSpec):
         return "ik"
+    if isinstance(move, CSpaceGoalPlanMoveSpec):
+        return "motion"
     if isinstance(move, CSpaceDeltaPlanMoveSpec):
         return "motion"
     if isinstance(move, SpecifiedPathMoveSpec):
         return "specified_path"
+    if isinstance(move, HandMoveSpec):
+        return "hand"
+    if isinstance(move, DualHandMoveSpec):
+        return "dual_hand"
     if isinstance(move, CumotionMoveSpec):
         if isinstance(move.request, IKRequest):
             return "ik"
@@ -265,6 +383,29 @@ def normalize_move_sequence(moves: Sequence[MoveSpec]) -> tuple[MoveSpec, ...]:
 def _validate_duration(duration_s: float | None) -> None:
     if duration_s is not None and float(duration_s) < 0.0:
         raise ValueError("duration_s cannot be negative")
+
+
+def _validate_overlays(overlays: Sequence[CommandOverlaySpec]) -> None:
+    for overlay in tuple(overlays):
+        if not isinstance(overlay, CommandOverlaySpec):
+            raise TypeError("overlays must contain CommandOverlaySpec values")
+        overlay.validate()
+
+
+def _validate_hand_joint_positions(
+    joint_positions: Mapping[str, float] | Sequence[float],
+) -> None:
+    if isinstance(joint_positions, Mapping):
+        if not joint_positions:
+            raise ValueError("hand joint_positions cannot be empty")
+        for name, value in joint_positions.items():
+            if not str(name):
+                raise ValueError("hand joint name cannot be empty")
+            float(value)
+        return
+    values = np.asarray(joint_positions, dtype=float).reshape(-1)
+    if values.size == 0:
+        raise ValueError("hand joint_positions cannot be empty")
 
 
 def _normalize_side_required(side: str | None) -> str:

@@ -11,8 +11,8 @@ from dataclasses import dataclass
 import os
 
 from linkerbot_sim.app.launch import launch_simulation_app
-from linkerbot_sim.app.runtime_settings import EnvRuntimeSettings
-from linkerbot_sim.app.simulation_app_lifecycle import close_simulation_app
+from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
+from linkerbot_sim.app.runtime.simulation_app_lifecycle import close_simulation_app
 from linkerbot_sim.envs.scene_builder import build_world, configure_visuals
 
 
