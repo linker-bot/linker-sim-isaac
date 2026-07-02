@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from linkerbot_sim.app.motion.specs import (
     CSpaceGoalPlanMoveSpec,
     CumotionMoveSpec,
@@ -15,6 +17,7 @@ from linkerbot_sim.app.interactive.protocol import (
 from linkerbot_sim.app.interactive.queue import InteractiveMotionQueue
 from linkerbot_sim.app.interactive.transports import handle_interactive_message
 from linkerbot_sim.planning.requests import IKRequest, TaskSpacePath, TcpArcSegment
+from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 DEFAULT_TCP = {"left": "left_demo_tcp", "right": "right_demo_tcp"}
@@ -48,6 +51,113 @@ def test_parse_interactive_ik_pose_with_hand_overlay() -> None:
     assert move.tcp_frame_name == "left_demo_tcp"
     assert move.overlays[0].left_hand is not None
     assert move.overlays[0].left_hand.duration_s == 1.0
+
+
+def test_parse_interactive_orientation_defaults_to_rpy() -> None:
+    rpy = [0.1, 0.2, -0.3]
+    command = parse_interactive_motion_message(
+        {
+            "type": "ik_pose",
+            "side": "left",
+            "position": [0.35, -0.2, 0.4],
+            "orientation": rpy,
+            "duration_s": 1.0,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    move = command.moves[0]
+    assert isinstance(move, CumotionMoveSpec)
+    assert isinstance(move.request, IKRequest)
+    np.testing.assert_allclose(
+        move.request.target_orientation,
+        rpy_xyz_to_quat_wxyz(rpy),
+    )
+
+
+def test_parse_interactive_explicit_quaternion_orientation() -> None:
+    command = parse_interactive_motion_message(
+        {
+            "type": "ik_pose",
+            "side": "left",
+            "position": [0.35, -0.2, 0.4],
+            "orientation_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+            "duration_s": 1.0,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    move = command.moves[0]
+    assert isinstance(move, CumotionMoveSpec)
+    assert isinstance(move.request, IKRequest)
+    np.testing.assert_allclose(
+        move.request.target_orientation,
+        [1.0, 0.0, 0.0, 0.0],
+    )
+
+
+def test_parse_interactive_rejects_ambiguous_orientation_fields() -> None:
+    try:
+        parse_interactive_motion_message(
+            {
+                "type": "ik_pose",
+                "side": "left",
+                "position": [0.35, -0.2, 0.4],
+                "orientation": [0.0, 0.0, 0.0],
+                "orientation_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+                "duration_s": 1.0,
+            },
+            default_tcp_by_side=DEFAULT_TCP,
+        )
+    except ValueError as exc:
+        assert "cannot both be set" in str(exc)
+    else:
+        raise AssertionError("expected ambiguous orientation fields to be rejected")
+
+
+def test_parse_interactive_ik_offset_orientation_defaults_to_rpy() -> None:
+    rpy = [0.0, 0.1, 0.2]
+    command = parse_interactive_motion_message(
+        {
+            "type": "ik_offset",
+            "side": "right",
+            "offset": [0.0, 0.0, 0.02],
+            "orientation_mode": "target",
+            "orientation": rpy,
+            "duration_s": 0.5,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    move = command.moves[0]
+    assert isinstance(move, IkOffsetMoveSpec)
+    np.testing.assert_allclose(
+        move.target_orientation,
+        rpy_xyz_to_quat_wxyz(rpy),
+    )
+
+
+def test_parse_interactive_task_space_orientation_defaults_to_rpy() -> None:
+    rpy = [0.0, 0.0, 1.5707]
+    command = parse_interactive_motion_message(
+        {
+            "type": "task_space_line",
+            "side": "right",
+            "target_offset": [0.0, 0.0, 0.05],
+            "orientation_mode": "target",
+            "target_orientation": rpy,
+            "duration_s": 1.0,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    move = command.moves[0]
+    assert isinstance(move, SpecifiedPathMoveSpec)
+    segment = move.path.segments[0]
+    np.testing.assert_allclose(
+        segment.target_orientation,
+        rpy_xyz_to_quat_wxyz(rpy),
+    )
 
 
 def test_parse_interactive_motion_modes() -> None:

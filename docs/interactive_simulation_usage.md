@@ -68,12 +68,26 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 
 - 长度单位是 m。
 - 角度单位是 rad。
-- 四元数使用 `wxyz`。
+- 姿态默认使用 RPY 欧拉角，格式为 `[roll, pitch, yaw]`，单位 rad。
 - `side` 为 `left` 或 `right`。
 - `duration_s` 是本条 motion 的执行时长。
 - `tcp_frame_name` 可省略；省略时按 `side` 使用启动脚本里的默认 TCP。
 - 运动命令串行执行。多个客户端可以同时提交命令，但执行队列仍按顺序播放。
 - cuMotion context 是长生命周期对象；普通目标位置、关节角、路径参数变化不会重建 context。
+
+## 姿态字段
+
+交互协议面向人工调试，默认姿态字段使用 RPY 欧拉角。解析层会把 RPY 转成内部 IK/planner 使用的
+`wxyz` 四元数。如果只想约束 TCP 位置，不想约束姿态，省略对应姿态字段即可。
+
+| 字段 | 当前支持 | 含义 |
+| --- | --- | --- |
+| `orientation` | 是 | 目标姿态 RPY，`[roll, pitch, yaw]`。用于 `ik_pose`，以及 `ik_offset` 的 `orientation_mode: "target"`。 |
+| `target_orientation` | 是 | 目标姿态 RPY，`[roll, pitch, yaw]`。用于 task-space line/arc 的目标姿态。 |
+| `orientation_quat_wxyz` | 是 | 显式四元数姿态，`[w, x, y, z]`。用于调用方已经有四元数的情况。 |
+| `target_orientation_quat_wxyz` | 是 | 显式 task-space 四元数姿态，`[w, x, y, z]`。 |
+
+不要在同一条消息里同时写 RPY 字段和对应的 `*_quat_wxyz` 字段；协议会拒绝这种歧义输入。
 
 ## 返回事件
 
@@ -184,7 +198,7 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
   "side": "left",
   "offset": [0.03, 0.0, 0.02],
   "orientation_mode": "target",
-  "orientation": [1.0, 0.0, 0.0, 0.0],
+  "orientation": [0.0, 0.0, 0.0],
   "duration_s": 1.0
 }
 ```
@@ -198,13 +212,25 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
   "type": "ik_pose",
   "side": "left",
   "position": [0.35, -0.40, 0.10],
-  "orientation": [0.3, 0.0, 0.0, -1.5707],
+  "orientation": [0.3, 0.0, -1.5707],
   "duration_s": 2.0,
   "phase": "left_ik_pose"
 }
 ```
 
 不传 `orientation` 时只约束位置。
+
+只约束位置：
+
+```json
+{
+  "type": "ik_pose",
+  "side": "left",
+  "position": [0.35, -0.40, 0.10],
+  "duration_s": 2.0,
+  "phase": "left_ik_pose_position_only"
+}
+```
 
 ### Absolute C-Space Goal
 
@@ -259,7 +285,7 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
   "side": "left",
   "target_position": [0.35, -0.20, 0.45],
   "orientation_mode": "target",
-  "target_orientation": [1.0, 0.0, 0.0, 0.0],
+  "target_orientation": [0.0, 0.0, 0.0],
   "duration_s": 1.2
 }
 ```

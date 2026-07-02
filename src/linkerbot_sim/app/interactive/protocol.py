@@ -31,6 +31,7 @@ from linkerbot_sim.planning.requests import (
     TcpArcSegment,
     TcpLineSegment,
 )
+from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
 InteractiveCommandKind = Literal[
@@ -162,7 +163,7 @@ def _parse_move(
         move = CumotionMoveSpec(
             request=IKRequest(
                 target_position=_vector3(message, "position"),
-                target_orientation=_optional_vector4(message, "orientation"),
+                target_orientation=_optional_orientation_wxyz(message),
                 tcp_frame_name=tcp_frame_name,
                 position_tolerance=_optional_float(
                     message.get("position_tolerance"), default=1.0e-4
@@ -192,7 +193,7 @@ def _parse_move(
             duration_s=duration_s,
             phase=_optional_str(message.get("phase")),
             orientation_mode=str(message.get("orientation_mode", "current")),
-            target_orientation=_optional_tuple4(message, "orientation"),
+            target_orientation=_optional_orientation_tuple_wxyz(message),
             overlays=_parse_overlays(message.get("overlays"), duration_s=duration_s),
         )
         move.validate(require_side=True)
@@ -297,12 +298,7 @@ def _parse_tcp_line_segment(message: Mapping[str, object]) -> TcpLineSegment:
         target_position=_optional_vector3(message, "target_position"),
         target_offset=_optional_vector3(message, "target_offset"),
         orientation_mode=str(message.get("orientation_mode", "current")),
-        target_orientation=_optional_vector4(
-            message,
-            "target_orientation"
-            if "target_orientation" in message
-            else "orientation",
-        ),
+        target_orientation=_optional_task_space_orientation_wxyz(message),
     )
 
 
@@ -314,12 +310,7 @@ def _parse_tcp_arc_segment(message: Mapping[str, object]) -> TcpArcSegment:
         target_offset=_optional_vector3(message, "target_offset"),
         intermediate_position=_optional_vector3(message, "intermediate_position"),
         intermediate_offset=_optional_vector3(message, "intermediate_offset"),
-        target_orientation=_optional_vector4(
-            message,
-            "target_orientation"
-            if "target_orientation" in message
-            else "orientation",
-        ),
+        target_orientation=_optional_task_space_orientation_wxyz(message),
         arc_mode=str(message.get("arc_mode", "three_point")),
         constant_orientation=bool(message.get("constant_orientation", True)),
     )
@@ -460,13 +451,72 @@ def _optional_vector4(message: Mapping[str, object], key: str) -> np.ndarray | N
     return None if key not in message else np.asarray(message[key], dtype=float).reshape(4)
 
 
-def _optional_tuple4(
+def _optional_orientation_wxyz(
     message: Mapping[str, object],
-    key: str,
-) -> tuple[float, float, float, float] | None:
-    """读取可选四维向量，并转成不可变 tuple 供 spec 保存。"""
+    *,
+    rpy_key: str = "orientation",
+    quat_key: str = "orientation_quat_wxyz",
+) -> np.ndarray | None:
+    """读取交互协议姿态字段，并统一转换为 wxyz 四元数。
 
-    value = _optional_vector4(message, key)
+    默认姿态字段使用人类可读的 RPY 欧拉角；若调用方需要直接传四元数，应使用显式
+    ``*_quat_wxyz`` 字段，避免同一个字段同时承担三维和四维语义。
+    """
+
+    has_rpy = rpy_key in message
+    has_quat = quat_key in message
+    if has_rpy and has_quat:
+        raise ValueError(f"{rpy_key} and {quat_key} cannot both be set")
+    if has_quat:
+        return _optional_vector4(message, quat_key)
+    if has_rpy:
+        return rpy_xyz_to_quat_wxyz(_vector3(message, rpy_key))
+    return None
+
+
+def _optional_task_space_orientation_wxyz(
+    message: Mapping[str, object],
+) -> np.ndarray | None:
+    """读取 task-space 目标姿态，支持 target_* 字段和通用 orientation 别名。"""
+
+    provided = [
+        key
+        for key in (
+            "target_orientation",
+            "target_orientation_quat_wxyz",
+            "orientation",
+            "orientation_quat_wxyz",
+        )
+        if key in message
+    ]
+    if len(provided) > 1:
+        raise ValueError(
+            "only one orientation field can be set: "
+            "target_orientation, target_orientation_quat_wxyz, "
+            "orientation, orientation_quat_wxyz"
+        )
+    if "target_orientation" in message or "target_orientation_quat_wxyz" in message:
+        return _optional_orientation_wxyz(
+            message,
+            rpy_key="target_orientation",
+            quat_key="target_orientation_quat_wxyz",
+        )
+    return _optional_orientation_wxyz(message)
+
+
+def _optional_orientation_tuple_wxyz(
+    message: Mapping[str, object],
+    *,
+    rpy_key: str = "orientation",
+    quat_key: str = "orientation_quat_wxyz",
+) -> tuple[float, float, float, float] | None:
+    """读取姿态字段并以不可变 wxyz tuple 形式保存到 motion spec。"""
+
+    value = _optional_orientation_wxyz(
+        message,
+        rpy_key=rpy_key,
+        quat_key=quat_key,
+    )
     if value is None:
         return None
     return tuple(float(item) for item in value.tolist())  # type: ignore[return-value]
