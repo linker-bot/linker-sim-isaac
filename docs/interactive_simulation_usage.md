@@ -7,7 +7,7 @@
 最常用的 GUI 调试启动方式：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_motion_test.py --gui --hold --interactive
+env_isaaclab/bin/python scripts/dual_arm_interactive.py --gui --hold
 ```
 
 启动成功后会打印：
@@ -25,7 +25,7 @@ DUAL_ARM_INTERACTIVE_READY
 默认启用 stdin。每行发送一个 JSON object：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_motion_test.py --gui --hold --interactive
+env_isaaclab/bin/python scripts/dual_arm_interactive.py --gui --hold
 ```
 
 然后在终端输入：
@@ -39,8 +39,8 @@ env_isaaclab/bin/python scripts/dual_arm_motion_test.py --gui --hold --interacti
 启动 TCP JSONL 服务：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
-  --gui --hold --interactive \
+env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+  --gui --hold \
   --tcp-jsonl-host 127.0.0.1 \
   --tcp-jsonl-port 8765
 ```
@@ -56,8 +56,8 @@ printf '%s\n' '{"type":"status"}' | nc 127.0.0.1 8765
 启动 WebSocket 服务：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
-  --gui --hold --interactive \
+env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+  --gui --hold \
   --websocket-host 127.0.0.1 \
   --websocket-port 8766
 ```
@@ -197,9 +197,9 @@ env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 {
   "type": "ik_pose",
   "side": "left",
-  "position": [0.35, -0.20, 0.40],
-  "orientation": [1.0, 0.0, 0.0, 0.0],
-  "duration_s": 1.0,
+  "position": [0.35, -0.40, 0.10],
+  "orientation": [0.3, 0.0, 0.0, -1.5707],
+  "duration_s": 2.0,
   "phase": "left_ik_pose"
 }
 ```

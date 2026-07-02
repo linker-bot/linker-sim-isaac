@@ -95,6 +95,7 @@ PYTHONPATH=src env_isaaclab/bin/python <command>
 ```
 
 项目采用 src-layout。`scripts/pinch_grasp.py`、`scripts/dual_arm_motion_test.py`、
+`scripts/dual_arm_interactive.py`、
 `tools/object_assets/flexible/rope/build_asset.py` 和 `tools/object_assets/rigid/tblock/build_asset.py`
 会自行把 `src/` 放进 `sys.path`，但测试、交互片段和临时 Python 命令仍建议显式设置
 `PYTHONPATH=src`。
@@ -152,8 +153,8 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py
 启动双臂交互式 GUI runtime：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
-  --gui --hold --interactive
+PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+  --gui --hold
 ```
 
 启动后看到 `DUAL_ARM_INTERACTIVE_READY`，即可通过 stdin 输入 JSON motion，例如：
@@ -171,8 +172,8 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 | 单臂导入保持 | `scripts/pinch_grasp.py --no-grasp` | 是 | 否 | 验证 env、objects、AR5+L6、controller 和 logging 基础链路 |
 | 单臂 pinch grasp | `scripts/pinch_grasp.py` | 是 | 是 | 完整 TCP、IK、motion planner、trajectory、execution 流程 |
 | 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验默认 `scene3` runtime、cuMotion 和左右 robot profile 的规划语义 |
-| 双臂 scripted motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 在默认 `scene3` 中执行脚本内 Python 参数定义的 IK、TCP line、TCP arc 和 C-space planner 动作 |
-| 双臂交互 motion | `scripts/dual_arm_motion_test.py --interactive` | 是 | 是 | 长生命周期 runtime，按 JSON 命令串行执行 motion |
+| 双臂写定 motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 在默认 `scene3` 中执行脚本内 Python 参数定义的 IK、TCP line、TCP arc 和 C-space planner 动作 |
+| 双臂交互 motion | `scripts/dual_arm_interactive.py` | 是 | 是 | 长生命周期 runtime，按 JSON 命令串行执行 motion |
 
 `pinch_grasp.py` 常用参数：
 
@@ -190,6 +191,16 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
+  --env scene3 \
+  --cumotion-profile default \
+  --control-mode position \
+  --gui --hold
+```
+
+`dual_arm_interactive.py` 常用参数：
+
+```bash
+PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
   --env scene3 \
   --cumotion-profile default \
   --control-mode position \
@@ -478,7 +489,7 @@ profile 的 `cumotion.flange_frame`。动作脚本默认 TCP 名由入口层构�
 不是完整的物体抓取策略。默认 `scene3` 中的 T block 用于检查刚体对象导入、接触材质和双臂场景
 装配，具体推块策略仍由后续 motion 脚本或交互命令定义。
 
-`--interactive` 会复用同一个双臂 runtime 和长生命周期 cuMotion execution session，通过 JSON
+`scripts/dual_arm_interactive.py` 会复用同一个双臂 runtime 和长生命周期 cuMotion execution session，通过 JSON
 命令队列串行执行 motion。支持的 transport：
 
 - stdin JSONL：默认启用，每行一个 JSON object。
@@ -488,8 +499,8 @@ profile 的 `cumotion.flange_frame`。动作脚本默认 TCP 名由入口层构�
 TCP JSONL 示例：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
-  --gui --hold --interactive \
+PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+  --gui --hold \
   --tcp-jsonl-host 127.0.0.1 \
   --tcp-jsonl-port 8765
 ```
