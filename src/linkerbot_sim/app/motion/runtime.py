@@ -21,6 +21,35 @@ from linkerbot_sim.trajectories.joint_trajectory_builder import (
 from linkerbot_sim.trajectories.types import JointTrajectory
 
 
+class MotionPlanningFailed(RuntimeError):
+    """可恢复的 cuMotion 求解失败。
+
+    这类错误表示后端正常返回了 ``success=False``，调用方可以选择把失败报告给用户后继续
+    保持 Isaac 会话；配置错误、数据结构错误等仍然使用普通异常冒泡。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        phase: str | None = None,
+        status: str | None = None,
+        solver_message: str | None = None,
+        move_index: int | None = None,
+        side: str | None = None,
+        tcp_frame_name: str | None = None,
+        component: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.phase = phase
+        self.status = status
+        self.solver_message = solver_message
+        self.move_index = move_index
+        self.side = side
+        self.tcp_frame_name = tcp_frame_name
+        self.component = component
+
+
 def current_command_from_runtime(runtime) -> np.ndarray:
     """读取 articulation 当前关节位置，并投影到 controller command-space。"""
 
@@ -172,9 +201,16 @@ def solve_ik_request(context, request: IKRequest, *, tcp_frame_name: str, label:
     solver = context.make_inverse_kinematics(tcp_frame_name=tcp_frame_name)
     result = cumotion_boundary("IK", solver.solve, request)
     if not result.success:
-        raise RuntimeError(
+        message = (
             f"cuMotion {label} IK failed: "
             f"tcp={tcp_frame_name} status={result.status} message={result.message}"
+        )
+        raise MotionPlanningFailed(
+            message,
+            status=str(result.status),
+            solver_message=str(result.message),
+            tcp_frame_name=tcp_frame_name,
+            component="IK",
         )
     return result
 

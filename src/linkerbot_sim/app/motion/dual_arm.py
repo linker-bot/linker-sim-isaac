@@ -54,6 +54,7 @@ from linkerbot_sim.app.motion.specs import (
 from linkerbot_sim.app.motion.runtime import (
     duration_for_move,
     explicit_tcp_frame_name,
+    MotionPlanningFailed,
     phase_for_move,
     solve_ik_request,
 )
@@ -85,6 +86,7 @@ DEFAULT_HOLD_REFRESH_DURATION_S = 0.25
 __all__ = [
     "DEFAULT_HOLD_REFRESH_DURATION_S",
     "DualArmCuMotionExecutionSession",
+    "DualArmCuMotionRunResult",
     "DualArmCuMotionSummary",
     "IkMotionGoal",
     "current_command",
@@ -96,6 +98,7 @@ __all__ = [
     "dual_cspace_vector_from_side_commands",
     "hold_dual_current_pose",
     "run_dual_arm_cumotion_motion",
+    "run_dual_arm_cumotion_motion_result",
     "selected_side_dual_trajectory",
     "side_joint_absolute_goal",
     "side_joint_delta_goal",
@@ -114,6 +117,25 @@ class DualArmCuMotionSummary:
     right_tcp: str | None
     left_flange_frame: str
     right_flange_frame: str
+
+
+@dataclass(frozen=True)
+class DualArmCuMotionRunResult:
+    """双臂 move 序列执行结果。
+
+    ``success=False`` 表示 cuMotion 正常返回了求解失败；这时 Isaac runtime 仍可继续保持或接收
+    后续命令。配置错误和运行时异常不会被包装成这个结果。
+    """
+
+    success: bool
+    step: int
+    failed_move_index: int | None = None
+    phase: str | None = None
+    status: str | None = None
+    message: str = ""
+    side: str | None = None
+    tcp_frame_name: str | None = None
+    component: str | None = None
 
 
 class DualArmCuMotionExecutionSession:
@@ -206,35 +228,65 @@ class DualArmCuMotionExecutionSession:
     ) -> int:
         """Execute a move sequence using the already loaded cuMotion context."""
 
+        result = self.execute_moves_result(
+            moves,
+            start_step=start_step,
+            should_stop=should_stop,
+            raise_on_failure=True,
+        )
+        return result.step
+
+    def execute_moves_result(
+        self,
+        moves: Sequence[MoveSpec],
+        *,
+        start_step: int | None = None,
+        should_stop: Callable[[], bool] | None = None,
+        raise_on_failure: bool = False,
+    ) -> DualArmCuMotionRunResult:
+        """Execute moves and return a structured result for recoverable planner failures."""
+
         move_specs = normalize_move_sequence(moves)
         step = self.step if start_step is None else int(start_step)
         current_q, left_command, right_command = self.refresh_current_state()
 
         for move_index, move in enumerate(move_specs, start=1):
             raise_if_requested_stop(should_stop)
-            result = _run_dual_move(
-                move,
-                move_index=move_index,
-                context=self.context,
-                partitions=self.partitions,
-                current_q=current_q,
-                joint_names=self.joint_names,
-                runtime=self.execution,
-                left_command=left_command,
-                right_command=right_command,
-                step=step,
-                sample_dt=self.sample_dt,
-                motion_planner_config=self.motion_planner_config,
-                tcp=self.tcp,
-                should_stop=should_stop,
-            )
+            try:
+                result = _run_dual_move(
+                    move,
+                    move_index=move_index,
+                    context=self.context,
+                    partitions=self.partitions,
+                    current_q=current_q,
+                    joint_names=self.joint_names,
+                    runtime=self.execution,
+                    left_command=left_command,
+                    right_command=right_command,
+                    step=step,
+                    sample_dt=self.sample_dt,
+                    motion_planner_config=self.motion_planner_config,
+                    tcp=self.tcp,
+                    should_stop=should_stop,
+                )
+            except MotionPlanningFailed as exc:
+                if raise_on_failure:
+                    raise
+                failure = _dual_run_failure_result(
+                    exc,
+                    move=move,
+                    move_index=move_index,
+                    step=step,
+                )
+                self.step = step
+                return failure
             step = result.step
             current_q = result.cspace_q
             left_command = result.left_command
             right_command = result.right_command
 
         self.step = step
-        return step
+        return DualArmCuMotionRunResult(success=True, step=step)
 
     def refresh_current_state(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Read current command-space and merged C-space vectors from Isaac."""
@@ -294,6 +346,28 @@ def run_dual_arm_cumotion_motion(
         cumotion_profile=cumotion_profile,
     ) as session:
         return session.execute_moves(moves, start_step=start_step)
+
+
+def run_dual_arm_cumotion_motion_result(
+    runtime: DualRobotAppRuntime,
+    *,
+    tcp: DualArmTcpSpec,
+    moves: Sequence[MoveSpec],
+    start_step: int = 0,
+    cumotion_profile: str = "default",
+) -> DualArmCuMotionRunResult:
+    """执行双臂 cuMotion move 序列，并把可恢复求解失败作为结果返回。"""
+
+    with DualArmCuMotionExecutionSession(
+        runtime,
+        tcp=tcp,
+        cumotion_profile=cumotion_profile,
+    ) as session:
+        return session.execute_moves_result(
+            moves,
+            start_step=start_step,
+            raise_on_failure=False,
+        )
 
 
 def hold_dual_current_pose(
@@ -801,6 +875,54 @@ def _run_dual_move(
         )
 
     raise TypeError(f"unsupported move spec type: {type(move).__name__}")
+
+
+def _dual_run_failure_result(
+    exc: MotionPlanningFailed,
+    *,
+    move: MoveSpec,
+    move_index: int,
+    step: int,
+) -> DualArmCuMotionRunResult:
+    """把可恢复规划失败转成脚本/交互层可以直接报告的结果。"""
+
+    return DualArmCuMotionRunResult(
+        success=False,
+        step=step,
+        failed_move_index=exc.move_index or move_index,
+        phase=exc.phase or _failure_phase_for_move(move),
+        status=exc.status,
+        message=exc.solver_message or str(exc),
+        side=exc.side or _failure_side_for_move(move),
+        tcp_frame_name=exc.tcp_frame_name or explicit_tcp_frame_name(move),
+        component=exc.component,
+    )
+
+
+def _failure_phase_for_move(move: MoveSpec) -> str:
+    """Best-effort phase lookup used only for recoverable failure reporting."""
+
+    try:
+        execution_mode = getattr(move, "execution", "single")
+        side = None if execution_mode == "dual_cspace" else getattr(move, "side", None)
+        return phase_for_move(
+            move,
+            side=None if side is None else str(side),
+            dual_cspace=execution_mode == "dual_cspace",
+        )
+    except Exception:
+        phase = getattr(move, "phase", None)
+        return str(phase) if phase else type(move).__name__
+
+
+def _failure_side_for_move(move: MoveSpec) -> str | None:
+    """Best-effort side lookup used only for recoverable failure reporting."""
+
+    execution_mode = getattr(move, "execution", "single")
+    if execution_mode == "dual_cspace":
+        return None
+    side = getattr(move, "side", None)
+    return None if side is None else str(side)
 
 
 def _ik_request_with_runtime_defaults(

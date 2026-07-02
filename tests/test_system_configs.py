@@ -54,7 +54,8 @@ from linkerbot_sim.objects.config import (
 from linkerbot_sim.objects.dynamic_chain.capsule_rope import CapsuleRopeConfig
 from pinch_grasp import grasp_target_position
 from linkerbot_sim.utils.config import load_yaml
-from tools.assets.capsule_rope_builder import CapsuleRopeAssetConfig
+from tools.object_assets.flexible.rope.builder import CapsuleRopeAssetConfig
+from tools.object_assets.rigid.tblock.builder import TBlockAssetConfig
 
 
 def test_default_robot_config_paths_exist() -> None:
@@ -537,7 +538,7 @@ def test_robot_asset_mesh_references_exist() -> None:
         *Path("assets/single_system").glob("**/*.urdf"),
         *Path("assets/single_system").glob("**/*.xml"),
         *Path("assets/combined_system").glob("**/*.xml"),
-        *Path("assets/static_env_objects").glob("**/*.urdf"),
+        *Path("assets/rigid_env_objects").glob("**/*.urdf"),
     ]
     assert asset_files
 
@@ -606,13 +607,26 @@ def test_capsule_rope_runtime_config_does_not_contain_generation_fields() -> Non
 
 def test_capsule_rope_asset_generation_config_lives_under_tools() -> None:
     asset = CapsuleRopeAssetConfig.from_mapping(
-        load_yaml("tools/assets/configs/capsule_rope.yaml")
+        load_yaml("tools/object_assets/flexible/rope/config.yaml")
     )
     asset.validate()
     assert asset.segments == 12
     assert asset.length == 0.75
     assert asset.radius is not None and asset.radius > 0.0
     assert asset.twist_limit is not None and asset.twist_limit > 0.0
+
+
+def test_tblock_asset_generation_config_lives_under_tools() -> None:
+    asset = TBlockAssetConfig.from_mapping(
+        load_yaml("tools/object_assets/rigid/tblock/config.yaml")
+    )
+    asset.validate()
+    assert asset.asset_path == (
+        "assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda"
+    )
+    assert asset.root_path == "/TBlock"
+    assert asset.stem_size == (0.04, 0.08, 0.16)
+    assert asset.cap_size == (0.04, 0.2, 0.06)
 
 
 def test_scene1_places_rope_from_env_root_pose() -> None:
@@ -1015,7 +1029,7 @@ def test_rigid_object_config_parses_root_pose() -> None:
             "name": "fixture",
             "source": "usd",
             "asset_path": (
-                "assets/dynamic_env_objects/capsuleropeV1_default/"
+                "assets/flexible_env_objects/capsuleropeV1_default/"
                 "capsuleropeV1_default.usda"
             ),
             "prim_path": "/World/Fixture",

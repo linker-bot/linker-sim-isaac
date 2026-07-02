@@ -1,17 +1,19 @@
 # LinkerHand Simulation
 
-这是一个基于 Isaac Sim / Isaac Lab 的机械臂、灵巧手和绳体操作仿真工程。当前工程围绕
-AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 cuMotion 后端运动生成
-展开，用于验证 TCP 定义、IK/FK、路径规划、mimic 关节同步、PhysX 参数、单臂抓绳和双臂
-脚本化/交互式运动流程。
+这是一个基于 Isaac Sim / Isaac Lab 的机械臂、灵巧手和环境物体操作仿真工程。当前工程围绕
+AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体、T 形刚体块，以及 cuMotion 后端
+运动生成展开，用于验证 TCP 定义、IK/FK、路径规划、mimic 关节同步、PhysX 参数、单臂抓绳、
+双臂推块和双臂脚本化/交互式运动流程。
 
 项目主线遵循几个边界：
 
 - `configs/` 随代码一起版本管理，保存默认 robot、env、object、controller、logging 和
   cuMotion profile。脚本可以依赖这些 schema，但具体资产路径、安装位姿、solver、增益和
   planner 参数应优先留在配置里。
-- `scripts/` 是可直接运行的入口。动作目标、阶段顺序、实验用 TCP 和临时 move 序列可以留在
-  脚本里，避免把任务语义塞进机器人资产配置。
+- `scripts/` 是可直接运行的仿真/实验入口。动作目标、阶段顺序、实验用 TCP 和临时 move 序列
+  可以留在脚本里，避免把任务语义塞进机器人资产配置。
+- `tools/object_assets/` 是静态/动态对象的离线资产生成入口。资产固有几何、质量、阻尼、关节
+  限制和可视材质留在 tools 侧；运行时引用和物理覆盖留在 `configs/objects/`。
 - `app/runtime/` 负责 Isaac app、World、stage、机器人导入、对象导入和 controller 装配。
 - `app/motion/` 负责把客户侧 motion spec 转成 cuMotion 请求、轨迹和 command-space 执行。
 - `app/interactive/` 负责 JSON 协议、队列和 stdin/TCP/WebSocket transport。
@@ -27,7 +29,8 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 - 双臂运行：Isaac stage 中左右两个 AR5+L6 articulation 独立导入，cuMotion 侧融合成一个
   14-DOF arm C-space。
 - 交互运动：双臂 runtime 支持 stdin JSONL、TCP JSONL 和 WebSocket JSON 提交运动命令。
-- 绳体对象：支持由 tools 配置生成 capsule/cuboid 刚体链 USD，并由 env `objects[]` 引用到场景。
+- 环境对象：支持由 tools 配置生成 capsule/cuboid 刚体链 USD 和 T 形 compound rigid body USD，
+  并由 env `objects[]` 引用到场景。
 - cuMotion 后端：提供 FK、IK、collision-free IK、trajectory optimization、graph search、
   specified path、task-space path conversion 和 C-space trajectory generation。
 - TCP：支持法兰 TCP、已有工具 TCP、临时 fixed TCP，以及基于闭合手型计算的 thumb/index
@@ -49,8 +52,8 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 │   ├── mesh/                 # arm/hand/env object mesh
 │   ├── single_system/        # 单体机器人资产，例如 AR5V2_L、AR5V2_R、L6V1_L
 │   ├── combined_system/      # 组合机器人资产，例如 AR5V2_L6V1_L/R
-│   ├── static_env_objects/   # 静态环境对象，例如 workstationV1_armbase/tablebase
-│   └── dynamic_env_objects/  # 动态对象资产，例如 capsuleropeV1_default
+│   ├── rigid_env_objects/    # 刚体环境对象，例如 workstationV1_armbase/tablebase
+│   └── flexible_env_objects/ # 柔性/链式对象资产，例如 capsuleropeV1_default
 ├── configs/
 │   ├── controllers/          # arm/hand 控制模式、增益、限幅和 follower drive
 │   ├── cumotion/             # cuMotion IK/planner profile
@@ -59,7 +62,7 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 │   ├── objects/              # 运行时对象 profile，引用已有 USD/URDF
 │   └── robots/               # Isaac 机器人资产、物理覆盖、cuMotion 资源
 ├── docs/                     # cuMotion 接口、交互协议、碰撞近似、风险记录和方案文档
-├── scripts/                  # Isaac Sim 运行入口和资产生成入口
+├── scripts/                  # Isaac Sim 仿真/实验运行入口
 ├── src/linkerbot_sim/
 │   ├── app/                  # runtime/motion/interactive 高层装配
 │   ├── assets/               # 资产导入、USD/PhysX 覆盖、solver 设置
@@ -77,8 +80,8 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 │   ├── utils/                # 配置、路径、旋转、数学、计时工具
 │   └── visualization/        # camera、debug draw、marker
 ├── tests/                    # 尽量不启动 Isaac Sim 的轻量测试
-├── tools/assets/             # 离线资产生成工具，例如 capsule rope USD builder
-├── ASSET_NAMING_CONVENTIONS.md
+├── tools/object_assets/      # 静态/动态对象离线资产生成工具，例如 rope/T block USD builder
+├── docs/assset_name_conventions.md
 ├── pyproject.toml
 └── README.md
 ```
@@ -91,9 +94,10 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体，以及 c
 PYTHONPATH=src env_isaaclab/bin/python <command>
 ```
 
-项目采用 src-layout。`scripts/pinch_grasp.py`、`scripts/dual_arm_motion_test.py` 和
-`scripts/build_capsule_rope_asset.py` 会自行把 `src/` 放进 `sys.path`，但测试、交互片段和
-临时 Python 命令仍建议显式设置 `PYTHONPATH=src`。
+项目采用 src-layout。`scripts/pinch_grasp.py`、`scripts/dual_arm_motion_test.py`、
+`tools/object_assets/flexible/rope/build_asset.py` 和 `tools/object_assets/rigid/tblock/build_asset.py`
+会自行把 `src/` 放进 `sys.path`，但测试、交互片段和临时 Python 命令仍建议显式设置
+`PYTHONPATH=src`。
 
 完整依赖通过 `pyproject.toml` 管理。`simulation` extra 记录了当前代码期望的主要仿真依赖：
 
@@ -113,10 +117,11 @@ env_isaaclab/bin/python -m pip install -e ".[dev,visualization,simulation]"
 
 ## 快速开始
 
-先生成或确认 capsule rope USD：
+先生成或确认环境物体 USD。单臂抓绳依赖 capsule rope；双臂默认 `scene3` 依赖 T block：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py
 ```
 
 只导入单臂场景、机器人、对象、controller 和 logger，不执行抓取：
@@ -131,13 +136,14 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp
 PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --gui
 ```
 
-只校验双臂 scene runtime、cuMotion profile 和左右 robot profile 推导出的 cuMotion 语义，不启动 Isaac：
+只校验双臂 `scene3` runtime、cuMotion profile 和左右 robot profile 推导出的 cuMotion 语义，
+不启动 Isaac：
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --dry-run
 ```
 
-导入左右 AR5+L6，并执行脚本内定义的双臂 cuMotion 动作：
+导入左右 AR5+L6、workstation 和 T block，并执行脚本内定义的双臂 cuMotion 动作：
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py
@@ -160,11 +166,12 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 
 | 模式 | 入口 | 启动 Isaac | 需要 cuMotion | 主要用途 |
 | --- | --- | --- | --- | --- |
-| 生成绳体 USD | `scripts/build_capsule_rope_asset.py` | 是，headless | 否 | 根据 `tools/assets/configs/capsule_rope.yaml` 写 USD/PhysX schema |
+| 生成绳体 USD | `tools/object_assets/flexible/rope/build_asset.py` | 是，headless | 否 | 根据 `tools/object_assets/flexible/rope/config.yaml` 写 USD/PhysX schema |
+| 生成 T 形块 USD | `tools/object_assets/rigid/tblock/build_asset.py` | 是，headless | 否 | 根据 `tools/object_assets/rigid/tblock/config.yaml` 写 USD/PhysX schema |
 | 单臂导入保持 | `scripts/pinch_grasp.py --no-grasp` | 是 | 否 | 验证 env、objects、AR5+L6、controller 和 logging 基础链路 |
 | 单臂 pinch grasp | `scripts/pinch_grasp.py` | 是 | 是 | 完整 TCP、IK、motion planner、trajectory、execution 流程 |
-| 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验 scene runtime、cuMotion 和左右 robot profile 的规划语义 |
-| 双臂 scripted motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 执行脚本内 Python 参数定义的 IK、TCP line、TCP arc 和 C-space planner 动作 |
+| 双臂 motion dry-run | `scripts/dual_arm_motion_test.py --dry-run` | 否 | 否 | 校验默认 `scene3` runtime、cuMotion 和左右 robot profile 的规划语义 |
+| 双臂 scripted motion | `scripts/dual_arm_motion_test.py` | 是 | 是 | 在默认 `scene3` 中执行脚本内 Python 参数定义的 IK、TCP line、TCP arc 和 C-space planner 动作 |
 | 双臂交互 motion | `scripts/dual_arm_motion_test.py --interactive` | 是 | 是 | 长生命周期 runtime，按 JSON 命令串行执行 motion |
 
 `pinch_grasp.py` 常用参数：
@@ -183,18 +190,26 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 
 ```bash
 PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
-  --env scene2 \
+  --env scene3 \
   --cumotion-profile default \
   --control-mode position \
   --gui --hold
 ```
 
-`build_capsule_rope_asset.py` 常用参数：
+`flexible/rope/build_asset.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/build_capsule_rope_asset.py \
-  --config tools/assets/configs/capsule_rope.yaml \
-  --output assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py \
+  --config tools/object_assets/flexible/rope/config.yaml \
+  --output assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+```
+
+`rigid/tblock/build_asset.py` 常用参数：
+
+```bash
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py \
+  --config tools/object_assets/rigid/tblock/config.yaml \
+  --output assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
 ```
 
 ## 配置 Profile
@@ -240,8 +255,9 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 - `configs/objects/*.yaml`：描述运行时对象。包含对象类别、来源、资产路径、stage prim path、
   importer 参数、接触材质和对象级 solver 覆盖。对象在世界中的 `root_pose` 仍放在 env
   `objects[]`。
-- `tools/assets/configs/*.yaml`：描述资产生成固有属性。例如 capsule rope 的段数、长度、质量、
-  阻尼、关节限制、碰撞过滤和可视颜色。
+- `tools/object_assets/<rigid|flexible>/<object>/`：每个对象一个生成工具文件夹，描述该对象资产的
+  固有属性。例如 `flexible/rope` 保存 capsule rope 的段数、长度、质量、阻尼、关节限制、碰撞
+  过滤和可视颜色；`rigid/tblock` 保存 T 形块的 cuboid 尺寸、质量、阻尼和可视颜色。
 - `configs/cumotion/*.yaml`：描述 cuMotion 算法参数，包括 `kinematics.ik` 和
   `motion_planner`。robot 模型资源仍放在 robot profile。
 - `configs/controllers/*.yaml`：描述 position/velocity/effort 模式、implicit/explicit 方法、
@@ -254,9 +270,17 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 `configs/envs/scene1.yaml` 是默认单臂抓绳场景。它通过 `robots.single.robot_profile:
 ar5v2_l6v1_l` 导入左侧 AR5+L6，并通过 `objects[]` 引用 workstation 和 capsule rope。
 
-`configs/envs/scene2.yaml` 是默认双臂运动测试场景。它通过
-`robots.dual.left/right.robot_profile` 分别引用 `ar5v2_l6v1_l` 和 `ar5v2_l6v1_r`，并用
-`root_pose` 描述左右安装位姿。
+当前内置 scene：
+
+| scene | 入口默认 | 机器人 | 主要对象 | 用途 |
+| --- | --- | --- | --- | --- |
+| `scene1` | `pinch_grasp.py` | 单左臂 AR5+L6 | workstation、capsule rope | 单臂抓绳和导入保持 |
+| `scene2` | 手动选择 | 双 AR5+L6 | workstation、capsule rope | 双臂 rope 场景配置检查和动作测试 |
+| `scene3` | `dual_arm_motion_test.py` | 双 AR5+L6 | workstation、T block | 双臂推块/运动测试和交互 runtime |
+
+双臂场景通过 `robots.dual.left/right.robot_profile` 分别引用 `ar5v2_l6v1_l` 和
+`ar5v2_l6v1_r`，并用各自的 `root_pose` 描述左右安装位姿。`scripts/dual_arm_motion_test.py`
+当前默认读取 `scene3`；如需回到双臂 rope 场景，可显式传 `--env scene2`。
 
 env 中的对象实例只允许这些字段：
 
@@ -292,12 +316,12 @@ robots:
 
 绳体分为“生成配置”和“运行时对象配置”两层。
 
-`tools/assets/configs/capsule_rope.yaml` 描述 USD 资产固有属性：
+`tools/object_assets/flexible/rope/config.yaml` 描述 USD 资产固有属性：
 
 ```yaml
 object:
   name: capsuleropeV1_default
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
   root_path: /CapsuleRope
 
 rope:
@@ -312,7 +336,7 @@ rope:
 修改段数、长度、质量、阻尼、关节限制、端块尺寸或可视颜色后，需要重新生成 USD：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/build_capsule_rope_asset.py
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py
 ```
 
 `configs/objects/capsule_rope.yaml` 描述运行时如何引用这个 USD，以及接触材质和 solver iteration
@@ -323,7 +347,7 @@ object:
   name: capsuleropeV1_default
   kind: dynamic_chain
   source: usd
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
   prim_path: /World/CapsuleRope
   root_path: /CapsuleRope
   physics:
@@ -337,6 +361,36 @@ object:
 ```
 
 运行 pinch grasp 或双臂 motion 时只引用已经生成好的 USD，不会每次重新生成绳体资产。
+
+## Rigid T Block
+
+`tools/object_assets/rigid/tblock/config.yaml` 描述 T 形块 USD 资产固有属性，默认生成到
+`assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda`。
+
+生成出的模型是一个根刚体 `/TBlock`，下面包含 `stem` 和 `cap` 两个 cuboid collision/visual
+子块。`tblock.total_mass`、`linear_damping` 和 `angular_damping` 写在根刚体上；cuboid 的尺寸、
+局部偏移和颜色来自 tools 侧配置。
+
+```bash
+PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py
+```
+
+运行时引用由 `configs/objects/TblockV1_default.yaml` 管理。当前默认 `static: false`，也就是作为
+可被推动的动态刚体导入；接触材质、stage `prim_path` 和是否静态冻结都属于运行时对象 profile。
+`configs/envs/scene3.yaml` 通过 `objects[]` 引用该 profile，并设置当前场景里的 root pose：
+
+```yaml
+objects:
+  - name: Tblock
+    object_profile: TblockV1_default
+    root_pose:
+      xyz: [0.15, 0.0, 0.0]
+      rpy: [0.0, 1.5707, 0.0]
+```
+
+生成出的 `TblockV1_default` 遵循 `docs/assset_name_conventions.md` 的环境对象命名规则。修改
+`tools/object_assets/rigid/tblock/config.yaml` 后需要重新运行 `build_asset.py`，运行脚本不会自动
+刷新 `.usda`。
 
 ## 单臂 Pinch Grasp
 
@@ -396,11 +450,14 @@ generation 都在规划阶段完成；执行阶段只播放已经采样好的 `J
 双臂配置链路：
 
 ```text
-configs/envs/scene2.yaml
+configs/envs/scene3.yaml
   robots.dual.left/right.robot_profile + root_pose
+  objects[] -> workstation + TblockV1_default
 configs/robots/ar5v2_l6v1_l.yaml
 configs/robots/ar5v2_l6v1_r.yaml
   Isaac asset + cuMotion single-arm URDF/XRDF/flange resource
+configs/objects/TblockV1_default.yaml
+  T block USD runtime reference + material/static settings
 configs/cumotion/default.yaml
   IK/planner algorithm defaults
 ```
@@ -416,6 +473,10 @@ profile 的 `cumotion.flange_frame`。动作脚本默认 TCP 名由入口层构�
 - 左侧 task-space line specified path。
 - 右侧 task-space arc specified path。
 - 右侧 C-space delta planner。
+
+这些动作主要验证双臂融合 cuMotion C-space、TCP 注入、轨迹拆分和左右 controller 执行链路；
+不是完整的物体抓取策略。默认 `scene3` 中的 T block 用于检查刚体对象导入、接触材质和双臂场景
+装配，具体推块策略仍由后续 motion 脚本或交互命令定义。
 
 `--interactive` 会复用同一个双臂 runtime 和长生命周期 cuMotion execution session，通过 JSON
 命令队列串行执行 motion。支持的 transport：
@@ -598,7 +659,7 @@ cuMotion XRDF/URDF 规划模型，也不表示运行时重新 cooking 碰撞体�
 - cuMotion C-space 顺序由 XRDF/URDF 决定，不能假设等于 Isaac articulation DOF 顺序。
 - 正式资产、关节、link/body、配置引用不使用连字符 `-`，避免 Isaac importer 自动改名。
 
-资产命名细节见 `ASSET_NAMING_CONVENTIONS.md`。
+资产命名细节见 `docs/assset_name_conventions.md`。
 
 ## 日志和调试
 
@@ -638,11 +699,14 @@ server、`JointStates` 曲线和 `SceneUpdate` marker。
   和当前封装评估。
 - `docs/cumotion_motion_modes_examples.md`：不同 cuMotion motion mode 的示例和使用边界。
 - `docs/interactive_simulation_usage.md`：双臂交互式 JSON 协议、transport、返回事件和命令示例。
-- `docs/interactive_motion_runtime_plan.md`：交互式 motion runtime 的设计方案。
+- `docs/object_asset_generation.md`：离线生成 capsule rope、T block 等物体 USD 资产，并接入
+  object/env profile 的流程。
 - `docs/isaac_collision_approximation.md`：Isaac importer 碰撞近似字段和 USD/PhysX 语义。
+- `docs/usd_preview.md`：用 Isaac Sim 预览 `.usd` / `.usda` 资产的命令和检查要点。
 - `docs/known_risks.md`：已知风险，包括 URDF 静态环境物体 fixed-base/kinematic 叠加，以及桌面和
   机器人合并 URDF 的 fixed joint 风险。
-- `ASSET_NAMING_CONVENTIONS.md`：资产、关节、link/body 和配置命名约定。
+- `docs/configs_usage.md`：配置 profile 的职责边界、引用关系和常用操作。
+- `docs/assset_name_conventions.md`：资产、关节、link/body 和配置命名约定。
 
 ## 验证
 

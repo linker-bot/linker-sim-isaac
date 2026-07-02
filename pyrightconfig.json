@@ -6,7 +6,5 @@
   ],
   "extraPaths": [
     "src"
-  ],
-  "venvPath": ".",
-  "venv": "env_isaaclab"
+  ]
 }

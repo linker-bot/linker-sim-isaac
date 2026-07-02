@@ -1,0 +1,36 @@
+# T block USD 资产生成配置。
+#
+# 这里描述资产固有属性：T 形块几何、质量、阻尼和可视材质。
+# 运行时 static/material/import 配置应放在 configs/objects/*.yaml。
+
+object:
+  # 生成出的对象/资产名称；也会用于默认输出目录和日志识别。
+  name: TblockV1_default
+
+  # 生成后的 USD/USDA 资产输出路径，相对仓库根目录。
+  asset_path: assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
+
+  # USD 资产内部的根 prim path。
+  root_path: /TBlock
+
+tblock:
+  # 资产局部中心，单位 m。运行时世界位姿由 env objects[].root_pose 决定。
+  center: [0.0, 0.0, 0.0]
+
+  # stem 尺寸和中心偏移，单位 m；size 为世界/资产根坐标 [x, y, z] 方向长度。
+  stem_size: [0.04, 0.08, 0.16]
+  stem_offset: [-0.02, 0.0, 0.08]
+
+  # cap 尺寸和中心偏移，单位 m；size 为世界/资产根坐标 [x, y, z] 方向长度。
+  cap_size: [0.04, 0.2, 0.06]
+  cap_offset: [-0.02, 0.0, 0.19]
+
+  # T block compound rigid body 的总质量。
+  total_mass: 1.0
+
+  # 刚体阻尼。运行时是否静态冻结由 configs/objects profile 决定。
+  linear_damping: 0.0
+  angular_damping: 0.05
+
+  # 资产内置可视材质颜色，RGB 范围通常为 0-1。
+  color: [0.22, 0.45, 0.78]

@@ -102,7 +102,7 @@ objects:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
 
-  # 动态对象也由 env 统一实例化和摆放；绳体几何/质量/关节限制由 tools/assets/configs 生成。
+  # 动态对象也由 env 统一实例化和摆放；绳体几何/质量/关节限制由 tools/object_assets/flexible/rope 生成。
   - name: rope
     object_profile: capsule_rope
     runtime_handle: rope

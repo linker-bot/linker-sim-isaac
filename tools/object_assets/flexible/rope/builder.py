@@ -29,7 +29,7 @@ class CapsuleRopeAssetConfig:
     """
 
     asset_path: str = (
-        "assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
+        "assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
     )
     root_path: str = "/CapsuleRope"
     segments: int = 12

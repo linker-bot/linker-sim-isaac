@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+import linkerbot_sim.app.motion.dual_arm as dual_arm_motion
 from linkerbot_sim.app.motion.specs import (  # noqa: E402
     CartesianTcpFrameSpec,
     CSpaceDeltaPlanMoveSpec,
@@ -19,14 +20,19 @@ from linkerbot_sim.app.motion.specs import (  # noqa: E402
     tcp_transforms_from_dual_spec,
 )
 from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
+    DualArmCuMotionExecutionSession,
     dual_cspace_goal_to_command,
     dual_cspace_linear_trajectory,
     dual_cspace_vector_from_side_commands,
     side_joint_delta_goal,
 )
+from linkerbot_sim.app.motion.dual_arm_execution import (  # noqa: E402
+    plan_dual_motion_trajectory,
+)
 from linkerbot_sim.app.motion.dual_arm_semantics import (  # noqa: E402
     dual_arm_semantics_from_robot_configs,
 )
+from linkerbot_sim.app.motion.runtime import MotionPlanningFailed  # noqa: E402
 from linkerbot_sim.backends.cumotion.motion_planner_config import (  # noqa: E402
     MotionPlannerBackendConfig,
 )
@@ -37,6 +43,10 @@ from linkerbot_sim.planning.requests import (  # noqa: E402
     SpecifiedPathRequest,
     TaskSpacePath,
     TcpLineSegment,
+)
+from linkerbot_sim.planning.results import (  # noqa: E402
+    MotionResult,
+    PlanningDiagnostics,
 )
 from linkerbot_sim.utils.config import load_yaml
 
@@ -288,6 +298,119 @@ def test_side_joint_delta_goal_updates_only_selected_partition() -> None:
     )
 
     np.testing.assert_allclose(goal, [1.0, 2.0, 10.5, 19.75, 30.0])
+
+
+def test_dual_planner_failure_raises_recoverable_exception() -> None:
+    class _Planner:
+        def plan(self, request):
+            return MotionResult(
+                path=None,
+                trajectory=None,
+                success=False,
+                status="FAILED",
+                diagnostics=PlanningDiagnostics(
+                    message="path_conversion=failed frame=right_tcp"
+                ),
+            )
+
+    class _Context:
+        def make_motion_planner(self, *, tcp_frame_name, config):
+            assert tcp_frame_name == "right_tcp"
+            return _Planner()
+
+    try:
+        plan_dual_motion_trajectory(
+            context=_Context(),
+            request=SpecifiedPathRequest(
+                current_q=np.asarray([0.0, 0.0], dtype=float),
+                path=TaskSpacePath(
+                    segments=(
+                        TcpLineSegment(
+                            target_offset=(0.0, 0.0, 0.1),
+                            orientation_mode="none",
+                        ),
+                    ),
+                ),
+                tcp_frame_name="right_tcp",
+                duration_s=1.0,
+            ),
+            tcp_frame_name="right_tcp",
+            config=MotionPlannerBackendConfig.from_mapping(
+                {"planning_pipeline": "specified_path"}
+            ),
+            joint_names=("j1", "j2"),
+            duration_s=1.0,
+            sample_dt=0.1,
+            phase="right_tcp_line",
+            move_index=3,
+            side="right",
+            execution_mode="selected_side",
+        )
+    except MotionPlanningFailed as exc:
+        assert exc.phase == "right_tcp_line"
+        assert exc.status == "FAILED"
+        assert exc.move_index == 3
+        assert exc.side == "right"
+        assert exc.tcp_frame_name == "right_tcp"
+        assert "path_conversion=failed" in str(exc)
+    else:
+        raise AssertionError("expected planner failure to use recoverable exception")
+
+
+def test_execute_moves_result_returns_failure_without_raising(monkeypatch) -> None:
+    def _fail_move(*args, **kwargs):
+        raise MotionPlanningFailed(
+            "planner failed",
+            phase="right_tcp_arc",
+            status="FAILED",
+            solver_message="path_conversion=failed frame=right_tcp",
+            move_index=kwargs["move_index"],
+            side="right",
+            tcp_frame_name="right_tcp",
+            component="motion planner",
+        )
+
+    session = DualArmCuMotionExecutionSession.__new__(DualArmCuMotionExecutionSession)
+    session.step = 5
+    session.context = object()
+    session.partitions = object()
+    session.joint_names = ("l1", "r1")
+    session.execution = object()
+    session.sample_dt = 0.1
+    session.motion_planner_config = MotionPlannerBackendConfig.from_mapping(None)
+    session.tcp = DualArmTcpSpec(
+        left=CartesianTcpFrameSpec("left_tcp"),
+        right=CartesianTcpFrameSpec("right_tcp"),
+    )
+    session.refresh_current_state = lambda: (
+        np.asarray([0.0, 0.0], dtype=float),
+        np.asarray([0.0], dtype=float),
+        np.asarray([0.0], dtype=float),
+    )
+    monkeypatch.setattr(dual_arm_motion, "_run_dual_move", _fail_move)
+
+    result = session.execute_moves_result(
+        (
+            CSpaceDeltaPlanMoveSpec(
+                side="right",
+                tcp_frame_name="right_tcp",
+                joint_deltas=(0.1,),
+                duration_s=0.5,
+                phase="right_tcp_arc",
+            ),
+        ),
+        start_step=5,
+    )
+
+    assert not result.success
+    assert result.step == 5
+    assert result.failed_move_index == 1
+    assert result.phase == "right_tcp_arc"
+    assert result.side == "right"
+    assert result.tcp_frame_name == "right_tcp"
+    assert result.status == "FAILED"
+    assert result.message == "path_conversion=failed frame=right_tcp"
+    assert session.step == 5
 
 
 def test_dual_arm_semantics_from_robot_configs_reads_xrdf_and_flange() -> None:

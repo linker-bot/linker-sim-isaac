@@ -13,7 +13,7 @@ object:
   source: urdf
 
   # 工装基座 URDF 路径，相对仓库根目录。
-  asset_path: assets/static_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
+  asset_path: assets/rigid_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
 
   # 导入或引用到当前 USD stage 的根 prim path。
   prim_path: /World/WorkstationArmBase

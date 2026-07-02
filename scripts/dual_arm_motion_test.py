@@ -49,7 +49,7 @@ from linkerbot_sim.app.runtime.dual_robot import (  # noqa: E402
 from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
     dual_arm_cumotion_summary,
     hold_dual_current_pose,
-    run_dual_arm_cumotion_motion,
+    run_dual_arm_cumotion_motion_result,
 )
 from linkerbot_sim.app.interactive.dual_arm import (  # noqa: E402
     run_interactive_dual_arm_motion,
@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     # env 是 scene profile 名称，不是直接文件路径。scene 决定机器人实例、对象和世界设置。
-    parser.add_argument("--env", default="scene2")
+    parser.add_argument("--env", default="scene3")
     parser.add_argument("--cumotion-profile", default="default")
     # 目前 motion test 默认只验证 position 控制；保留 control-mode 参数是为了快速对比
     # controller runtime profile 是否也能支持其它模式。
@@ -149,7 +149,7 @@ def main() -> None:
                 websocket_port=args.websocket_port,
             )
         else:
-            steps = run_dual_arm_cumotion_motion(
+            result = run_dual_arm_cumotion_motion_result(
                 runtime,
                 tcp=tcp,
                 moves=(
@@ -208,6 +208,24 @@ def main() -> None:
                 ),
                 cumotion_profile=args.cumotion_profile,
             )
+            steps = result.step
+            if not result.success:
+                print(
+                    "DUAL_ARM_MOTION_TEST_PLAN_FAILED "
+                    f"steps={result.step} move={result.failed_move_index} "
+                    f"side={result.side} tcp={result.tcp_frame_name} "
+                    f"phase={result.phase} status={result.status} "
+                    f"message={result.message}",
+                    flush=True,
+                )
+                if args.gui:
+                    steps = hold_dual_current_pose(
+                        runtime.execution,
+                        step=steps,
+                        simulation_app=runtime.session.app,
+                    )
+                completed = True
+                return
         if args.hold and args.gui:
             steps = hold_dual_current_pose(
                 runtime.execution,

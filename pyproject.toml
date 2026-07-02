@@ -6,19 +6,20 @@ build-backend = "setuptools.build_meta"
 name = "linkerbot-sim"
 version = "0.1.0"
 description = "Isaac Sim manipulation utilities for AR5 and LinkerHand L6 experiments"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-  "numpy",
-  "pyyaml",
-  "scipy",
+  "numpy==1.26.0",
+  "PyYAML==6.0.2",
+  "scipy==1.15.3",
+  "websockets==12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest",
+  "pytest==9.1.1",
 ]
 visualization = [
-  "foxglove-sdk",
+  "foxglove-sdk==0.25.2",
 ]
 simulation = [
   # Isaac Sim provides the isaacsim, omni, and pxr Python modules used by the runtime scripts.

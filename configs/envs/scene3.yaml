@@ -1,4 +1,4 @@
-# scene1: 单左臂 AR5 + L6 抓取 capsule rope 端块的默认桌面场景。
+# scene2: 双 AR5 + L6 桌面运动测试场景。
 #
 # 本文件描述一个运行场景 profile：
 # - env 段配置 Isaac World 级参数，例如重力、地面、物理步频和渲染步频。
@@ -7,10 +7,10 @@
 # - robots / objects 段只选择已有 profile 并给出 root_pose，资产路径和物理属性不在这里写。
 env:
   # 场景语义名称。建议和文件名一致，便于日志和 debug 输出识别。
-  name: scene1
+  name: scene3
 
   # 场景描述，只用于人工阅读和日志上下文。
-  description: single left arm rope pinch grasp scene
+  description: dual arm push T
 
   # 世界重力 z 分量，单位 m/s^2。项目约定 z 轴向上，所以常用负值。
   gravity_z: -9.81
@@ -58,20 +58,30 @@ visuals:
       intensity: 250.0
 
 robots:
-  # 单机器人 runtime 使用 robots.single。
-  single:
-    # 引用 configs/robots/ar5v2_l6v1_l.yaml。
-    robot_profile: ar5v2_l6v1_l
-    # 当前场景中的机器人根位姿；同一 robot profile 可在不同 env 中摆到不同位置。
-    root_pose:
-      # 根节点平移，世界坐标 [x, y, z]，单位 m。
-      xyz: [0.0, 0.09, 0.0]
-      # 根节点欧拉角 [roll, pitch, yaw]，单位 rad。
-      rpy: [-1.5707, 0.0, 0.0]
+  # 双机器人 runtime 使用 dual.left/right；每侧引用一个单 articulation robot profile。
+  dual:
+    left:
+      # 引用 configs/robots/ar5v2_l6v1_l.yaml。
+      robot_profile: ar5v2_l6v1_l
+      # 左臂在当前场景中的根位姿。
+      root_pose:
+        # 根节点平移，世界坐标 [x, y, z]，单位 m。
+        xyz: [0.0, 0.09, 0.0]
+        # 根节点欧拉角 [roll, pitch, yaw]，单位 rad。
+        rpy: [-1.5707, 0.0, 0.0]
+    right:
+      # 引用 configs/robots/ar5v2_l6v1_r.yaml。
+      robot_profile: ar5v2_l6v1_r
+      # 右臂在当前场景中的根位姿；与左臂在 y 方向相对摆放。
+      root_pose:
+        # 根节点平移，世界坐标 [x, y, z]，单位 m。
+        xyz: [0.0, -0.09, 0.0]
+        # 根节点欧拉角 [roll, pitch, yaw]，单位 rad。
+        rpy: [1.5707, 0.0, 0.0]
 
 objects:
   # workstation 是环境中的固定物体；资产路径、导入参数和物理属性来自 object_profile。
-  - name: workstation_armbase
+  - name: workstation
     # 引用 configs/objects/workstation_armbase.yaml。
     object_profile: workstation_armbase
     # 工装基座在当前场景中的根位姿。
@@ -79,14 +89,11 @@ objects:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
 
-  # rope 是有语义的动态链式对象；root_pose 属于 scene，资产路径和运行时物理覆盖来自 object_profile。
-  # 几何、质量、关节限制等资产固有属性由 tools/object_assets/flexible/rope/config.yaml 生成时决定。
-  - name: rope
-    # 引用 configs/objects/capsule_rope.yaml。
-    object_profile: capsule_rope
-    # runtime_handle 供脚本按语义名查找该对象，例如抓取脚本寻找 rope 端块。
-    runtime_handle: rope
-    # 绳体在当前抓取场景中的初始根位姿。
+  # T block 是环境中的刚体对象；资产路径和物理属性来自 object_profile。
+  - name: Tblock
+    # 引用 configs/objects/TblockV1_default.yaml。
+    object_profile: TblockV1_default
+    # T block 在当前场景中的根位姿。
     root_pose:
-      xyz: [0.1, -0.55, -0.4]
-      rpy: [0.0, 0.0, 1.5707]
+      xyz: [0.15, 0.0, 0.0]
+      rpy: [0.0, 1.5707, 0.0]

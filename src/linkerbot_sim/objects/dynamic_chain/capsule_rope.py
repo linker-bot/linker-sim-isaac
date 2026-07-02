@@ -83,7 +83,7 @@ class CapsuleRopeConfig:
     """运行时引用 capsule rope USD 所需的对象 profile。"""
 
     asset_path: str = (
-        "assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
+        "assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda"
     )
     prim_path: str = "/World/CapsuleRope"
     root_path: str = "/CapsuleRope"
@@ -106,7 +106,7 @@ class CapsuleRopeConfig:
                 raise ValueError(
                     "configs/objects capsule rope profiles no longer use rope; "
                     "put runtime physics under object.physics and generation fields "
-                    "under tools/assets/configs"
+                    "under tools/object_assets/flexible/rope"
                 )
 
         object_cfg = dict(data["object"])
@@ -167,7 +167,7 @@ def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, ob
     if not asset_path.is_file():
         raise FileNotFoundError(
             f"Capsule rope asset does not exist: {asset_path}. "
-            "Run scripts/build_capsule_rope_asset.py to generate it."
+            "Run tools/object_assets/flexible/rope/build_asset.py to generate it."
         )
     prim_path = Sdf.Path(config.prim_path)
     rope_xform = UsdGeom.Xform.Define(stage, prim_path)
@@ -290,7 +290,7 @@ def _reject_generation_fields(data: Mapping[str, object], *, label: str) -> None
         names = ", ".join(sorted(intrinsic))
         raise ValueError(
             f"{label} contains asset-generation field(s): {names}; "
-            "move them to tools/assets/configs"
+            "move them to tools/object_assets/flexible/rope"
         )
     unsupported = set(data) - {
         "name",

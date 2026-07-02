@@ -9,7 +9,7 @@ object:
 
   # 生成后的 USD/USDA 资产输出路径，相对仓库根目录。
   # 运行时 object profile 会引用这个文件，而不是重新生成资产。
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
   # USD 资产内部的根 prim path。
   # 运行时 configs/objects/capsule_rope.yaml 的 root_path 需要和这里保持一致。

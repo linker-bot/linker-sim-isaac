@@ -45,19 +45,19 @@ DEFAULT_L6_RIGHT_URDF = (
 )
 DEFAULT_CAPSULE_ROPE_USD = (
     ASSETS_ROOT
-    / "dynamic_env_objects"
+    / "flexible_env_objects"
     / "capsuleropeV1_default"
     / "capsuleropeV1_default.usda"
 )
 DEFAULT_WORKSTATION_V1_ARMBASE_URDF = (
     ASSETS_ROOT
-    / "static_env_objects"
+    / "rigid_env_objects"
     / "workstationV1_armbase"
     / "workstationV1_armbase.urdf"
 )
 DEFAULT_WORKSTATION_V1_TABLEBASE_URDF = (
     ASSETS_ROOT
-    / "static_env_objects"
+    / "rigid_env_objects"
     / "workstationV1_tablebase"
     / "workstationV1_tablebase.urdf"
 )

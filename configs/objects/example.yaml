@@ -7,7 +7,7 @@
 # 边界：
 # - 本文件不描述对象放在世界哪里；root_pose 放在 env 的 objects[] 中。
 # - 本文件不生成对象资产；capsule rope 的几何、段数、质量和关节限制放在
-#   tools/assets/configs/capsule_rope.yaml，生成出的 USD 再由这里引用。
+#   tools/object_assets/flexible/rope/config.yaml，生成出的 USD 再由这里引用。
 # - rigid 对象可以设置 physics.static 和 import.collision_approximation。
 # - dynamic_chain 当前用于 capsule rope，可以设置接触材质和 solver iteration。
 #
@@ -17,7 +17,7 @@
 #   name: fixture
 #   kind: rigid
 #   source: urdf
-#   asset_path: assets/static_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
+#   asset_path: assets/rigid_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
 #   prim_path: /World/Fixture
 #   import:
 #     collision_approximation: convex_decomposition
@@ -38,7 +38,7 @@ object:
 
   # 支持 usd 和 urdf。capsule rope 是已经生成好的 USD 资产。
   source: usd
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
   # 引用到当前 stage 后的根 prim 路径。
   prim_path: /World/ExampleCapsuleRope

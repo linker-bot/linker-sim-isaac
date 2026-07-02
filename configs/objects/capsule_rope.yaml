@@ -4,7 +4,7 @@
 # - scene/env profile 负责世界性质和 root_pose 摆放。
 # - 本文件只放 linkerbot_sim/src 运行时需要读取的对象属性。
 # - 绳体几何、段数、质量、阻尼、关节限制和可视材质属于生成固有属性，
-#   放在 tools/assets/configs/capsule_rope.yaml。
+#   放在 tools/object_assets/flexible/rope/config.yaml。
 
 object:
   # 对象 profile 名称；env 中通过 object_profile: capsule_rope 引用本文件。
@@ -17,7 +17,7 @@ object:
   source: usd
 
   # 绳体 USD 资产路径，相对仓库根目录。
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
   # 默认引用 prim 路径；env scene 只负责 root_pose，不覆盖 prim_path。
   prim_path: /World/CapsuleRope

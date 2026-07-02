@@ -1,0 +1,59 @@
+#usda 1.0
+(
+    defaultPrim = "TBlock"
+    endTimeCode = 0
+    metersPerUnit = 1
+    startTimeCode = 0
+    upAxis = "Z"
+)
+
+def Xform "TBlock" (
+    prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysicsMassAPI", "PhysxRigidBodyAPI"]
+)
+{
+    float physics:mass = 1
+    float physxRigidBody:angularDamping = 0.05
+    float physxRigidBody:linearDamping = 0
+
+    def Scope "Parts"
+    {
+        def Cube "stem" (
+            prepend apiSchemas = ["PhysicsCollisionAPI", "MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </TBlock/Looks/TBlockMaterial>
+            double size = 1
+            float3 xformOp:scale = (0.04, 0.08, 0.16)
+            double3 xformOp:translate = (-0.02, 0, 0.08)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+
+        def Cube "cap" (
+            prepend apiSchemas = ["PhysicsCollisionAPI", "MaterialBindingAPI"]
+        )
+        {
+            rel material:binding = </TBlock/Looks/TBlockMaterial>
+            double size = 1
+            float3 xformOp:scale = (0.04, 0.2, 0.06)
+            double3 xformOp:translate = (-0.02, 0, 0.19)
+            uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+        }
+    }
+
+    def "Looks"
+    {
+        def Material "TBlockMaterial"
+        {
+            token outputs:surface.connect = </TBlock/Looks/TBlockMaterial/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.22, 0.45, 0.78)
+                float inputs:roughness = 0.72
+                token outputs:surface
+            }
+        }
+    }
+}
+

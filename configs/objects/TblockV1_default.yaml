@@ -1,0 +1,36 @@
+# T block 运行时对象配置。
+#
+# env scene 负责 root_pose；本文件负责对象类别、资产路径、导入参数和运行时物理属性。
+# T 形块几何、质量、阻尼和可视材质属于资产固有属性，
+# 放在 tools/object_assets/rigid/tblock/config.yaml。
+
+object:
+  # 对象 profile 名称；env 中通过 object_profile: TblockV1_default 引用本文件。
+  name: TblockV1_default
+
+  # 对象类型。rigid 表示导入后作为刚体/固定物体处理。
+  kind: rigid
+
+  # 资产来源类型。T block 已由 tools 生成 USD/USDA，因此这里直接引用 usd。
+  source: usd
+
+  # T block USD 资产路径，相对仓库根目录。
+  asset_path: assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
+
+  # 引用到当前 USD stage 后的根 prim path。
+  prim_path: /World/TBlock
+
+  physics:
+    # true 表示运行时把该对象作为静态环境，不参与动力学运动。
+    static: false
+
+    # T block 接触材质覆盖；用于和机器人/绳体接触时计算摩擦与反弹。
+    material:
+      # 静摩擦系数：影响接触面开始滑动前的摩擦。
+      static_friction: 0.8
+      # 动摩擦系数：影响已经发生相对滑动后的摩擦。
+      dynamic_friction: 0.6
+      # 恢复系数：0 表示接触基本不反弹。
+      restitution: 0.0
+      # 摩擦合成模式；average 表示与接触另一方材质取平均。
+      friction_combine_mode: average

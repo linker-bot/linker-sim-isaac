@@ -70,6 +70,7 @@ mobilebaseV1_AR5V2_L6V1_L
 capsuleropeV1_default
 workstationV1_armbase
 workstationV1_tablebase
+TblockV1_default
 tableV1_lab
 boxendpointV1_left
 ```
@@ -79,7 +80,7 @@ boxendpointV1_left
 ```yaml
 object:
   name: capsuleropeV1_default
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
 
 对象变体优先使用能直接表达语义的名词字段。如果变体本身已经说明坐标基准或安装基准，
@@ -99,9 +100,9 @@ assets/
       <single-system-name>/
   combined_system/
     <combined-system-name>/
-  static_env_objects/
+  rigid_env_objects/
     <object-name>/
-  dynamic_env_objects/
+  flexible_env_objects/
     <object-name>/
 ```
 
@@ -113,9 +114,9 @@ assets/mesh/hand/L6V1_L/
 assets/single_system/arm/AR5V2_L/
 assets/single_system/hand/L6V1_L/
 assets/combined_system/AR5V2_L6V1_L/
-assets/dynamic_env_objects/capsuleropeV1_default/
-assets/static_env_objects/workstationV1_armbase/
-assets/static_env_objects/workstationV1_tablebase/
+assets/flexible_env_objects/capsuleropeV1_default/
+assets/rigid_env_objects/workstationV1_armbase/
+assets/rigid_env_objects/workstationV1_tablebase/
 ```
 
 ## 文件命名
@@ -265,13 +266,13 @@ controlled_joints:
 
 ## 生成资产和临时资产
 
-脚本生成的正式运行资产仍按本规范命名，并写入 `assets/` 对应目录。例如 capsule rope 由
-`configs/objects/capsule_rope.yaml` 指定输出路径：
+tools 生成的正式运行资产仍按本规范命名，并写入 `assets/` 对应目录。例如 capsule rope 由
+`tools/object_assets/flexible/rope/config.yaml` 指定输出路径：
 
 ```yaml
 object:
   name: capsuleropeV1_default
-  asset_path: assets/dynamic_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
+  asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
 
 临时资产不作为仓库主资产命名的一部分。例如 pinch grasp 为 cuMotion 临时写出的带 TCP URDF

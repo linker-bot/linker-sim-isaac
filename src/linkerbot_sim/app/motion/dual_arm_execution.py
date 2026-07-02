@@ -14,6 +14,7 @@ from linkerbot_sim.app.motion.dual_arm_cspace import (
 )
 from linkerbot_sim.app.motion.runtime import (
     cumotion_boundary,
+    MotionPlanningFailed,
     phase_for_move,
     trajectory_sample_times,
 )
@@ -81,10 +82,20 @@ def plan_dual_motion_trajectory(
     )
     result = cumotion_boundary("motion planner", planner.plan, request)
     if not result.success:
-        raise RuntimeError(
+        message = (
             "cuMotion dual-arm path planning failed: "
             f"phase={phase} status={result.status} "
             f"message={result.diagnostics.message}"
+        )
+        raise MotionPlanningFailed(
+            message,
+            phase=phase,
+            status=str(result.status),
+            solver_message=str(result.diagnostics.message),
+            move_index=move_index,
+            side=side,
+            tcp_frame_name=tcp_frame_name,
+            component="motion planner",
         )
     trajectory = dual_cspace_trajectory_from_motion_result(
         result,
