@@ -211,8 +211,8 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 {
   "type": "ik_pose",
   "side": "left",
-  "position": [0.35, -0.40, 0.10],
-  "orientation": [0.3, 0.0, -1.5707],
+  "position": [0.35, 0.35, -0.25],
+  "orientation": [2.0, -0.1, -0],
   "duration_s": 2.0,
   "phase": "left_ik_pose"
 }
@@ -240,8 +240,8 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 {
   "type": "cspace_goal",
   "side": "right",
-  "joint_positions": [0.2, -0.5, 0.3, -1.0, 0.1, 0.2, 0.0],
-  "duration_s": 1.2,
+  "joint_positions": [1.64, -1.2, -1.5707, 1.57, 0.37, 0.0, 0.0],
+  "duration_s": 2.2,
   "phase": "right_cspace_goal"
 }
 ```
@@ -475,6 +475,30 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
       "duration_s": 1.0
     }
   ]
+}
+```
+
+### 初始姿态
+
+针对于工作台，建议使用如下初始角度：
+
+```json
+{
+  "type": "cspace_goal",
+  "side": "right",
+  "joint_positions": [1.64, -1.2, -1.5707, 1.57, 0.37, 0.0, 0.0],
+  "duration_s": 2.2,
+  "phase": "right_cspace_goal"
+}
+```
+
+```json
+{
+  "type": "cspace_goal",
+  "side": "left",
+  "joint_positions": [1.5, 1.2, -1.5707, 1.57, -0.37, 0.0, 0.0],
+  "duration_s": 2.2,
+  "phase": "left_cspace_goal"
 }
 ```
 
