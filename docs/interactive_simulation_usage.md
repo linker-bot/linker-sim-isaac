@@ -367,15 +367,46 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 `raw_joint_sequence` 直接刷新目标。该模式不走 cuMotion，不插值，不做加减速规划，也不检查
 速度/加速度限制；每个样本就是要下发给 controller 的 position target。
 
-完整 command-space 矩阵示例：
+这里的 command-space 是 controller 暴露的主动命令关节空间，不是完整 articulation DOF：
+
+- 包含机械臂主动关节和可直接命令的手部主动关节。
+- 不包含 mimic follower 关节；例如 L6 手指的 DIP follower 会由 controller 根据 master 关节每帧展开。
+- 不等同于 cuMotion C-space；cuMotion 只覆盖 7 个 AR5 机械臂关节，raw sequence 可以同时直接命令手部主动关节。
+
+以 `AR5V2_L6V1_L` 为例，左侧 command-space 矩阵共有 13 列，列顺序就是启动时
+`DUAL_ARM_INTERACTIVE_IMPORTED ... command_joints=[...]` 打印出来的顺序：
+
+| 列 | 关节名 |
+| --- | --- |
+| 0 | `AR5V2_L_arm_joint_1` |
+| 1 | `AR5V2_L_arm_joint_2` |
+| 2 | `AR5V2_L_arm_joint_3` |
+| 3 | `AR5V2_L_arm_joint_4` |
+| 4 | `AR5V2_L_arm_joint_5` |
+| 5 | `AR5V2_L_arm_joint_6` |
+| 6 | `AR5V2_L_arm_joint_7` |
+| 7 | `L6V1_L_hand_thumb_cmc_roll` |
+| 8 | `L6V1_L_hand_index_mcp_pitch` |
+| 9 | `L6V1_L_hand_middle_mcp_pitch` |
+| 10 | `L6V1_L_hand_ring_mcp_pitch` |
+| 11 | `L6V1_L_hand_pinky_mcp_pitch` |
+| 12 | `L6V1_L_hand_thumb_cmc_pitch` |
+
+右侧 `AR5V2_L6V1_R` 的列语义相同，只是关节名中的 `_L_` 换成 `_R_`。例如第 0 列是
+`AR5V2_R_arm_joint_1`，第 8 列是 `L6V1_R_hand_index_mcp_pitch`。
+
+矩阵 shape 是 `(N, 13)`：每一行是一个 physics step 的完整 command target，每一列对应该侧
+command-space 的一个主动关节。下面示例给左侧发送 3 个连续 target；前 7 列命令 AR5
+机械臂，后 6 列命令 L6 主动手指关节：
 
 ```json
 {
   "type": "raw_joint_sequence",
   "left": {
     "joint_positions": [
-      [0.1, 0.2, 0.3],
-      [0.11, 0.21, 0.31]
+      [1.50, 1.20, -1.5707, 1.57, -0.37, 0.00, 0.00, 0.00, 0.10, 0.10, 0.10, 0.10, 0.00],
+      [1.51, 1.19, -1.5707, 1.57, -0.36, 0.00, 0.00, 0.05, 0.30, 0.30, 0.30, 0.30, 0.10],
+      [1.52, 1.18, -1.5707, 1.57, -0.35, 0.00, 0.00, 0.10, 0.50, 0.50, 0.50, 0.50, 0.20]
     ]
   },
   "step_interval": 1,
@@ -386,22 +417,25 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 `step_interval` 表示每个样本保持多少个 physics step。`1` 表示每步刷新一个新 target；
 `3` 表示每个 target 连续保持 3 个 physics step 后再切到下一个样本。
 
-也可以用 mapping 只覆盖部分 command-space 关节，未给出的关节保持当前 command 值：
+如果只想覆盖部分关节，推荐用 mapping。mapping 的 key 必须是该侧 command-space 中真实存在的
+关节名；每个 value 是同一个长度的采样序列。未给出的关节会从当前 command 值复制到每一行：
 
 ```json
 {
   "type": "raw_joint_sequence",
   "right": {
     "joint_positions": {
-      "AR5V2_R_arm_joint1": [0.0, 0.02, 0.04],
-      "AR5V2_R_arm_joint2": [-0.3, -0.31, -0.32]
+      "AR5V2_R_arm_joint_1": [1.64, 1.66, 1.68],
+      "AR5V2_R_arm_joint_2": [-1.20, -1.18, -1.16],
+      "L6V1_R_hand_index_mcp_pitch": [0.0, 0.3, 0.6]
     }
   },
   "step_interval": 2
 }
 ```
 
-左右两侧可以同时发送，但样本数必须一致；只发送一侧时，另一侧会保持当前姿态。
+左右两侧可以同时发送，但样本数必须一致；只发送一侧时，另一侧会保持当前姿态。若 env 使用
+`physics_frequency: 240.0`，`step_interval: 2` 表示每个 target 保持约 `2 / 240 = 0.0083 s`。
 
 ## Hand Overlay
 
