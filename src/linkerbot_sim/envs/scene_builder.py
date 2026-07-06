@@ -1,6 +1,6 @@
 """基础 Isaac 场景构建工具。
 
-本模块放置“所有动作脚本都可能复用”的最小场景初始化逻辑，例如灯光、相机、
+本模块放置“所有动作脚本都可能复用”的最小场景初始化逻辑，例如灯光、GUI viewport、
 Isaac ``World``、物理步长和重力设置。机器人、绳体、桌面等具体对象不在这里
 创建，而是由对应的 robot/env/object 模块负责，这样可以避免动作脚本里重复写
 Omni/USD 初始化代码，也让基础世界和具体场景对象保持解耦。
@@ -26,7 +26,7 @@ def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
 
     - 按配置创建主方向光，用来提供清晰的主体照明。
     - 按配置创建 DomeLight，用来补环境亮度，减少全黑阴影。
-    - 按配置调整默认 perspective viewport 的相机位置。
+    - 按配置调整默认 perspective viewport 的观察位置。
 
     参数:
         settings: 来自 env profile 的可选视觉配置；为 ``None`` 时使用默认值。
@@ -68,12 +68,12 @@ def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
         if settings.fill_light.color is not None:
             fill.CreateColorAttr(Gf.Vec3f(*settings.fill_light.color))
 
-    if settings.camera.enabled:
-        # eye 是相机位置，target 是视线目标点，单位与 stage 一致，此处为 m。
+    if settings.viewport.enabled:
+        # eye 是 viewport 观察位置，target 是视线目标点，单位与 stage 一致，此处为 m。
         set_camera_view(
-            eye=Gf.Vec3d(*settings.camera.eye),
-            target=Gf.Vec3d(*settings.camera.target),
-            camera_prim_path=settings.camera.prim_path,
+            eye=Gf.Vec3d(*settings.viewport.eye),
+            target=Gf.Vec3d(*settings.viewport.target),
+            camera_prim_path=settings.viewport.prim_path,
         )
 
 

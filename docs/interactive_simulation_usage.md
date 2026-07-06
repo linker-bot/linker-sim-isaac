@@ -94,7 +94,7 @@ python scripts/dual_arm_interactive.py \
   --foxglove-joint-effort-field measured
 ```
 
-当前 Foxglove 输出只用于状态遥测，不接收 motion command。项目交互 TCP/WebSocket 仍只负责命令和队列状态。
+当前 Foxglove 输出只用于遥测，不接收 motion command。项目交互 TCP/WebSocket 仍只负责命令和队列状态。
 
 默认 topic：
 
@@ -104,7 +104,9 @@ python scripts/dual_arm_interactive.py \
 
 `/joint_states` 只有一个 `effort` 字段。`--foxglove-joint-effort-field` 可以选择 `none`、`commanded`、`measured` 或 `applied`；完整三类 effort 始终放在 `/linkerbot/state` 中。
 
-完整 topic、MCAP、JSON 快照、effort 语义和连接排错见 `docs/foxglove_data_usage.md`。
+传感器相机图像不通过这些状态流 CLI 参数配置，而是通过 env profile 的 `sensors.cameras.<name>.output` 配置。启用后会发布 `/cameras/<name>/rgb`、`/cameras/<name>/depth` 和 `/cameras/<name>/info`。
+
+完整 topic、MCAP、JSON 快照、effort 语义、相机图像和连接排错见 `docs/foxglove_data_usage.md`。
 
 ## 通用规则
 

@@ -1,12 +1,15 @@
 # Foxglove Data Usage
 
-本文说明当前双臂交互 runtime 如何通过 Foxglove live server 和 MCAP 输出仿真状态，以及外部程序应该如何使用这些数据。
+本文说明当前双臂交互 runtime 如何通过 Foxglove live server 和 MCAP 输出仿真状态，以及仿真传感器相机如何输出 RGB/depth 图像。
 
 这份文档是使用说明。实时状态流的设计背景和线程边界见 `docs/interactive_realtime_state_streaming.md`。
 
 ## 能力边界
 
-当前实现只在 `scripts/dual_arm_interactive.py` 中接入 Foxglove 状态遥测。
+当前实现包含两类 Foxglove 输出：
+
+- 交互状态流：由 `scripts/dual_arm_interactive.py` 的 CLI 参数开启，发布关节状态、对象 marker 和完整状态 JSON。
+- 传感器相机图像：由 env profile 的 `sensors.cameras.<name>.output` 开启，发布 camera `RawImage` 和 JSON info。
 
 支持：
 
@@ -16,6 +19,9 @@
 - 可选读取并发布 commanded、measured、applied 三类 effort。
 - 可选发布 env runtime object 的 root pose。
 - 使用同一份 `StateSnapshot` 同步驱动 live server 和 MCAP。
+- 发布 sensor camera RGB `RawImage`。
+- 发布 sensor camera depth `RawImage`。
+- 保存 RGB、depth 和 metadata 到本地目录。
 
 不支持：
 
@@ -23,6 +29,8 @@
 - 把项目交互 TCP/WebSocket 和 Foxglove live server 放在同一个端口。
 - 在后台线程直接读取 Isaac articulation、PhysX view 或 USD stage。
 - 非交互脚本的 CLI 级 Foxglove 状态流。底层 `FoxgloveLogger` 可以复用，但当前脚本参数只接在双臂交互 runtime 上。
+- 通过交互脚本 CLI 覆盖 sensor camera 的输出目录或 Foxglove 端口；相机输出当前由 env profile 配置。
+- 把 RGB 和 depth 合并成单个视频 topic；当前它们是两个独立 Image topic。
 
 ## 启动 Live Server
 
@@ -102,6 +110,56 @@ MCAP 是数据容器，不只能由 Foxglove 读取。任何支持 MCAP 的工�
 
 如果外部程序只想快速拿完整状态，优先读取 `/linkerbot/state`。如果要直接使用 Foxglove 标准可视化能力，优先用 `/joint_states` 和 `/scene`。
 
+## 传感器相机图像
+
+相机输出由 env profile 配置，而不是由 `--foxglove-live-port` 这组状态流 CLI 参数配置。例如 `configs/envs/scene3.yaml` 中的世界固定 RGB-D 相机：
+
+```yaml
+sensors:
+  cameras:
+    world_rgbd:
+      enabled: true
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      modalities: [rgb, depth]
+      output:
+        save_dir: logs/cameras/world_rgbd
+        foxglove_topic_prefix: /cameras/world_rgbd
+        foxglove_live_host: 127.0.0.1
+        foxglove_live_port: 8766
+```
+
+相机 live port 是 `output.foxglove_live_port`。如果只看相机图像，Foxglove 连接对应端口，例如：
+
+```text
+ws://127.0.0.1:8766
+```
+
+相机 topic：
+
+| topic | 编码 | 用途 |
+| --- | --- | --- |
+| `/cameras/world_rgbd/rgb` | Foxglove `RawImage`，`rgb8` | RGB 彩色图像。 |
+| `/cameras/world_rgbd/depth` | Foxglove `RawImage`，`32FC1` | float32 深度图，单位沿用 Isaac camera depth 输出。 |
+| `/cameras/world_rgbd/info` | JSON | frame index、shape、dtype、内参和相机世界 pose。 |
+
+在 Foxglove 的 Image panel 里，RGB 和 depth 需要分别选择 topic。topic 列表里出现 `/cameras/world_rgbd/rgb` 只说明数据源收到了 RGB topic；右侧图像面板如果仍选中 `/cameras/world_rgbd/depth`，显示的仍然是深度图。
+
+depth 是 `32FC1` 浮点图，默认显示范围不一定合适。画面看起来偏黑时，先在 Image panel 设置里调 depth/color scale 的 min/max，例如从 `0.0` 到 `1.0` 试起，再根据 `logs/cameras/world_rgbd/depth/*.npy` 的实际数值范围调整。
+
+离线输出目录结构：
+
+```text
+logs/cameras/world_rgbd/
+├── metadata.jsonl
+├── rgb/
+│   └── 000000.ppm
+└── depth/
+    └── 000000.npy
+```
+
+如果本地 `rgb/*.ppm` 和 `metadata.jsonl` 中的 `modality: "rgb"` 正常存在，但 Foxglove 面板没有彩色画面，优先检查 Image panel 当前选择的 topic 是否是 `/cameras/world_rgbd/rgb`。
+
 ## CLI 参数
 
 | 参数 | 默认值 | 含义 |
@@ -110,13 +168,13 @@ MCAP 是数据容器，不只能由 Foxglove 读取。任何支持 MCAP 的工�
 | `--state-include-objects` | 关闭 | 采样 env runtime object root pose，并发布到 `/linkerbot/state` 和 `/scene`。 |
 | `--state-include-efforts` | 关闭 | 读取 commanded、measured、applied 三类 effort。读取失败或不可用时填 `nan` 或 `null`。 |
 | `--foxglove-live-host` | `127.0.0.1` | live server 监听地址。 |
-| `--foxglove-live-port` | 无 | live server 监听端口。未设置时不启动 live server。 |
-| `--foxglove-mcap-path` | 无 | MCAP 输出路径。未设置时不写 MCAP。 |
+| `--foxglove-live-port` | 无 | 状态流 live server 监听端口。未设置时不启动状态流 live server；相机 live port 在 env profile 中配置。 |
+| `--foxglove-mcap-path` | 无 | 状态流 MCAP 输出路径。未设置时不写状态流 MCAP；相机 MCAP path 在 env profile 中配置。 |
 | `--foxglove-joint-effort-field` | `none` | 选择写入 `/joint_states` 标准 `effort` 字段的 effort 语义，可选 `none`、`commanded`、`measured`、`applied`。 |
 
 ## Topic 约定
 
-默认发布三个 topic：
+状态流默认发布三个 topic：
 
 | topic | 编码 | 用途 |
 | --- | --- | --- |
@@ -132,6 +190,8 @@ right/AR5V2_R_arm_joint_1
 ```
 
 `/scene` 当前只把对象 root position 画成 marker，不表达对象真实几何和姿态。对象完整 pose 请读取 `/linkerbot/state`。
+
+相机 topic 不属于状态流 CLI 参数的一部分；它们由 `sensors.cameras.<name>.output.foxglove_topic_prefix` 决定。当前 `scene3` 的默认前缀是 `/cameras/world_rgbd`。
 
 ## `/linkerbot/state` JSON
 
@@ -248,6 +308,14 @@ python scripts/dual_arm_interactive.py \
 - `--state-rate-hz` 是否大于 0。
 - live port 是否被其它进程占用。
 - Foxglove 数据源是否是 `Foxglove WebSocket`，不是普通 WebSocket 或 MCAP 文件源。
+
+如果缺的是相机图像，还要检查：
+
+- env profile 里对应 `sensors.cameras.<name>.enabled` 是否为 `true`。
+- 是否设置了 `output.foxglove_live_port` 或 `output.foxglove_mcap_path`。
+- Foxglove 连接的是相机 live port，或当前连接中确实能看到 `/cameras/<name>/rgb`、`/cameras/<name>/depth`。
+- Image panel 顶部选择的是 RGB topic，而不是 depth topic。
+- 本地 `logs/cameras/<name>/rgb/` 是否有 `.ppm` 文件；如果有，说明 RGB 已经采样成功，问题多半在 Foxglove 面板选择或显示设置。
 
 ## 和 CSV Logger 的关系
 

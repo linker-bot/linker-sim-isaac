@@ -58,6 +58,7 @@ class SmoothCommandPositionTargetStep:
             step=step,
             base_positions=self.base_positions,
             drive_logger=runtime.drive_logger,
+            camera_observer=runtime.camera_observer,
         )
 
 
@@ -80,6 +81,7 @@ class CommandPositionTrajectoryStep:
             render_enabled=runtime.render_enabled,
             step=step,
             drive_logger=runtime.drive_logger,
+            camera_observer=runtime.camera_observer,
         )
 
 
@@ -108,6 +110,7 @@ class HoldCommandPositionTargetStep:
             step=step,
             base_positions=self.base_positions,
             drive_logger=runtime.drive_logger,
+            camera_observer=runtime.camera_observer,
         )
 
 
@@ -138,6 +141,7 @@ def _apply_control_targets_once(
     phase: str,
     drive_logger=None,
     log_indices: np.ndarray | None = None,
+    camera_observer=None,
 ) -> int:
     """下发一帧已经构造好的控制目标，并推进一个 physics step。
 
@@ -149,6 +153,7 @@ def _apply_control_targets_once(
 
     joint_controller.apply_targets(articulation_action_type, targets)
     simulation_world.step(render=render_enabled)
+    _observe_cameras(camera_observer, simulation_world, step=step, phase=phase)
     if drive_logger is not None and drive_logger.should_write(step):
         indices = (
             np.asarray(joint_controller.driven_indices, dtype=int)
@@ -182,6 +187,7 @@ def _apply_command_joint_target_once(
     step: int,
     phase: str,
     drive_logger=None,
+    camera_observer=None,
 ) -> tuple[int, ControlTargets]:
     """从 controller command-space 目标构造控制目标，并下发一帧。
 
@@ -206,6 +212,7 @@ def _apply_command_joint_target_once(
         step=step,
         phase=phase,
         drive_logger=drive_logger,
+        camera_observer=camera_observer,
     )
     return next_step, targets
 
@@ -225,6 +232,7 @@ def execute_smooth_command_position_target(
     step: int,
     base_positions: np.ndarray | None = None,
     drive_logger=None,
+    camera_observer=None,
 ) -> int:
     """用 smoothstep 在两个 command-space 位置目标之间平滑移动。
 
@@ -263,6 +271,7 @@ def execute_smooth_command_position_target(
             step=step,
             phase=phase,
             drive_logger=drive_logger,
+            camera_observer=camera_observer,
         )
         full_position = targets.positions
     articulation.set_joint_velocities(np.zeros(articulation.num_dof, dtype=float))
@@ -280,6 +289,7 @@ def execute_command_position_trajectory(
     render_enabled: bool,
     step: int = 0,
     drive_logger=None,
+    camera_observer=None,
     hold: bool = False,
 ) -> int:
     """按采样点播放命令子空间位置轨迹。
@@ -307,12 +317,20 @@ def execute_command_position_trajectory(
             step=step,
             phase=trajectory.phases[sample_index],
             drive_logger=drive_logger,
+            camera_observer=camera_observer,
         )
         full_position = targets.positions
     if hold and targets is not None:
         while simulation_app is None or simulation_app.is_running():
             joint_controller.apply_targets(articulation_action_type, targets)
             simulation_world.step(render=render_enabled)
+            _observe_cameras(
+                camera_observer,
+                simulation_world,
+                step=step,
+                phase=trajectory.phases[-1],
+            )
+            step += 1
             if simulation_app is None:
                 break
     return step
@@ -332,6 +350,7 @@ def execute_command_position_hold(
     step: int,
     base_positions: np.ndarray | None = None,
     drive_logger=None,
+    camera_observer=None,
 ) -> int:
     """保持一个 command-space 位置目标一段时间。
 
@@ -365,7 +384,19 @@ def execute_command_position_hold(
             step=step,
             phase=phase,
             drive_logger=drive_logger,
+            camera_observer=camera_observer,
         )
         full_position = targets.positions
         local_step += 1
     return step
+
+
+def _observe_cameras(camera_observer, simulation_world, *, step: int, phase: str) -> None:
+    """执行一帧后的可选 camera 采样；observer 自身负责频率和输出策略。"""
+
+    if camera_observer is None:
+        return
+    observe = getattr(camera_observer, "observe", None)
+    if observe is None:
+        return
+    observe(simulation_world, step=step, phase=phase)

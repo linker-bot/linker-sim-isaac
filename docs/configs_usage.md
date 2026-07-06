@@ -27,7 +27,7 @@ profile 名称必须是简单文件名，不包含 `/` 或 `\`。配置中的相
 
 | 目录 | 用途 | 选择方式 |
 | --- | --- | --- |
-| `configs/envs/` | scene profile：世界频率、重力、solver、灯光相机、机器人实例和对象实例摆放 | 脚本参数 `--env <name>` |
+| `configs/envs/` | scene profile：世界频率、重力、solver、灯光、GUI viewport、机器人实例和对象实例摆放 | 脚本参数 `--env <name>` |
 | `configs/robots/` | robot profile：单个 Isaac articulation 的资产、物理覆盖、cuMotion 模型资源 | 由 env 中的 `robot_profile` 引用 |
 | `configs/objects/` | object profile：环境对象的资产路径、导入方式和运行时物理属性 | 由 env 中的 `object_profile` 引用 |
 | `configs/controllers/` | arm/hand 控制模式、增益、限幅和 mimic follower drive | runtime 固定读取 `arm_controller.yaml` 和 `hand_controller.yaml` |
@@ -349,4 +349,3 @@ PYTHONPATH=src python scripts/pinch_grasp.py \
 `Controller profile 'arm' has mismatched target`
 
 : `arm_controller.yaml` 或 `hand_controller.yaml` 中的 `target` 和文件角色不一致。
-

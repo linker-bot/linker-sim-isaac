@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from linkerbot_sim.envs.visual_settings import SceneVisualSettings
+from linkerbot_sim.sensors.camera_config import SceneSensorSettings
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class EnvRuntimeSettings:
     gravity_z: float
     add_ground: bool = True
     visuals: SceneVisualSettings = field(default_factory=SceneVisualSettings)
+    sensors: SceneSensorSettings = field(default_factory=SceneSensorSettings)
 
     @classmethod
     def from_env_config(
@@ -44,6 +46,7 @@ class EnvRuntimeSettings:
             gravity_z=float(env.get("gravity_z", -9.81)),
             add_ground=bool(env.get("add_ground", True)),
             visuals=SceneVisualSettings.from_env_config(env_config),
+            sensors=SceneSensorSettings.from_env_config(env_config),
         )
         config.validate()
         return config

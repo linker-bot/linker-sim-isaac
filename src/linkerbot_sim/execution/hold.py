@@ -31,6 +31,8 @@ def hold_current_pose(
         targets = controller.targets_from_full_state(full_target, full_velocity)
         controller.apply_targets(runtime.articulation_action_type, targets)
         world.step(render=runtime.render_enabled)
+        if runtime.camera_observer is not None:
+            runtime.camera_observer.observe(world, step=step, phase=phase)
         if runtime.drive_logger is not None:
             driven_indices = controller.driven_indices
             if runtime.drive_logger.should_write(step):

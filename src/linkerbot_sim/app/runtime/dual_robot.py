@@ -31,6 +31,16 @@ from linkerbot_sim.execution.setup import (
     finalize_robot_controller,
     import_execution_robot_to_stage,
 )
+from linkerbot_sim.sensors.camera_runtime import (
+    SensorCameraRuntime,
+    create_sensor_camera_runtimes,
+    initialize_sensor_camera_runtimes,
+)
+from linkerbot_sim.sensors.camera_observer import (
+    CameraOutputHandle,
+    start_camera_output,
+)
+from linkerbot_sim.utils.paths import repo_path
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,8 @@ class DualRobotAppRuntime:
     prepared: Mapping[str, PreparedRobotRuntime]
     object_handles: tuple[RuntimeObjectHandle, ...]
     objects: Mapping[str, RuntimeObjectHandle]
+    sensor_cameras: tuple[SensorCameraRuntime, ...]
+    camera_output: CameraOutputHandle | None
     status_prefix: str | None = None
     _closed: bool = False
 
@@ -86,6 +98,8 @@ class DualRobotAppRuntime:
         if self._closed:
             return
         self._closed = True
+        if self.camera_output is not None:
+            self.camera_output.close()
         close_simulation_app(self.session.app)
 
 
@@ -138,6 +152,7 @@ def create_dual_robot_runtime(
     )
     controller_profiles = load_default_controller_profiles()
     session = create_simulation_session(gui=gui, settings=config.runtime_settings)
+    camera_output: CameraOutputHandle | None = None
     try:
         object_handles = add_runtime_objects(
             session.stage,
@@ -167,10 +182,26 @@ def create_dual_robot_runtime(
                 f"{side.upper()}_SOLVER {imported_side.solver_counts}",
             )
 
+        sensor_cameras = create_sensor_camera_runtimes(
+            stage=session.stage,
+            sensors=config.runtime_settings.sensors,
+        )
+        camera_output = start_camera_output(
+            sensor_cameras,
+            path_resolver=repo_path,
+        )
         session.world.reset()
         session.world.get_physics_context().set_gravity(
             config.runtime_settings.gravity_z
         )
+        initialize_sensor_camera_runtimes(sensor_cameras)
+        for sensor_camera in sensor_cameras:
+            _print_status(
+                status_prefix,
+                "SENSOR_CAMERA "
+                f"name={sensor_camera.name} prim_path={sensor_camera.prim_path} "
+                f"modalities={','.join(sensor_camera.settings.modalities)}",
+            )
 
         prepared: dict[str, PreparedRobotRuntime] = {}
         side_runtimes: dict[str, RobotSideRuntime] = {}
@@ -207,7 +238,8 @@ def create_dual_robot_runtime(
             simulation_world=session.world,
             articulation_action_type=session.articulation_action_type,
             simulation_app=session.app if hold_app else None,
-            render_enabled=gui,
+            render_enabled=gui or camera_output is not None,
+            camera_observer=None if camera_output is None else camera_output.observer,
         )
         return DualRobotAppRuntime(
             session=session,
@@ -220,9 +252,13 @@ def create_dual_robot_runtime(
             prepared=prepared,
             object_handles=object_handles,
             objects=objects,
+            sensor_cameras=sensor_cameras,
+            camera_output=camera_output,
             status_prefix=status_prefix,
         )
     except Exception:
+        if camera_output is not None:
+            camera_output.close()
         close_simulation_app(session.app)
         raise
 

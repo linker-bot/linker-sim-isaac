@@ -30,16 +30,37 @@ solver:
   # PGS 成本较低；TGS 对关节链和复杂接触通常更稳定。
   type: PGS
 
+sensors:
+  # 仿真传感器摄像机和 GUI viewport 分开配置；这里是世界坐标系下的固定 RGBD 相机。
+  cameras:
+    world_rgbd:
+      enabled: true
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      pose:
+        xyz: [0.08, 0.0, 0.08]
+        rpy: [0.0, 1.1, 0.0]
+      resolution: [640, 480]
+      frequency: 30.0
+      modalities: [rgb, depth]
+      clipping_range: [0.01, 5.0]
+      output:
+        save_dir: logs/cameras/world_rgbd
+        foxglove_topic_prefix: /cameras/world_rgbd
+        foxglove_live_host: 127.0.0.1
+        foxglove_live_port: 8766
+        # foxglove_mcap_path: logs/cameras/world_rgbd.mcap
+
 visuals:
   # GUI 模式下使用的默认 viewport 视角；headless 运行不会触碰 viewport。
-  camera:
-    # 是否应用该相机配置。
+  viewport:
+    # 是否应用该 GUI viewport 视角配置。
     enabled: true
-    # 相机位置，世界坐标 [x, y, z]。
+    # viewport 观察位置，世界坐标 [x, y, z]。
     eye: [1.35, -1.65, 1.05]
-    # 相机观察目标点，世界坐标 [x, y, z]。
+    # viewport 观察目标点，世界坐标 [x, y, z]。
     target: [0.0, -0.1, 0.42]
-    # Isaac viewport camera prim path。
+    # Isaac viewport 使用的 camera prim path。
     prim_path: /OmniverseKit_Persp
 
   # 灯光只影响可视化，不参与物理仿真。

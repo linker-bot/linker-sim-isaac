@@ -270,7 +270,7 @@ def test_env_runtime_settings_read_env_profile_values() -> None:
                 "add_ground": False,
             },
             "visuals": {
-                "camera": {
+                "viewport": {
                     "enabled": True,
                     "eye": [2.0, -1.0, 1.2],
                     "target": [0.1, 0.0, 0.4],
@@ -303,9 +303,9 @@ def test_env_runtime_settings_read_env_profile_values() -> None:
     assert settings.physics_dt == 1.0 / 300.0
     assert settings.rendering_dt(gui=True) == 1.0 / 60.0
     assert settings.rendering_dt(gui=False) == settings.physics_dt
-    assert settings.visuals.camera.eye == (2.0, -1.0, 1.2)
-    assert settings.visuals.camera.target == (0.1, 0.0, 0.4)
-    assert settings.visuals.camera.prim_path == "/OmniverseKit_Persp"
+    assert settings.visuals.viewport.eye == (2.0, -1.0, 1.2)
+    assert settings.visuals.viewport.target == (0.1, 0.0, 0.4)
+    assert settings.visuals.viewport.prim_path == "/OmniverseKit_Persp"
     assert settings.visuals.key_light.path == "/World/TestKeyLight"
     assert settings.visuals.key_light.intensity == 900.0
     assert settings.visuals.key_light.angle == 0.25
@@ -315,13 +315,14 @@ def test_env_runtime_settings_read_env_profile_values() -> None:
     assert settings.visuals.fill_light.path == "/World/TestFillLight"
     assert settings.visuals.fill_light.intensity == 125.0
     assert settings.visuals.fill_light.color == (0.8, 0.9, 1.0)
+    assert settings.sensors.cameras == ()
 
 
 def test_env_runtime_settings_use_default_visuals() -> None:
     settings = EnvRuntimeSettings.from_env_config({"env": {}})
 
-    assert settings.visuals.camera.eye == (1.35, -1.65, 1.05)
-    assert settings.visuals.camera.target == (0.0, -0.1, 0.42)
+    assert settings.visuals.viewport.eye == (1.35, -1.65, 1.05)
+    assert settings.visuals.viewport.target == (0.0, -0.1, 0.42)
     assert settings.visuals.key_light.intensity == 1200.0
     assert settings.visuals.key_light.angle == 0.5
     assert settings.visuals.fill_light.intensity == 250.0
@@ -346,13 +347,25 @@ def test_env_runtime_settings_reject_invalid_env_mapping() -> None:
         EnvRuntimeSettings.from_env_config(
             {
                 "env": {},
-                "visuals": {"camera": {"eye": [1.0, 2.0]}},
+                "visuals": {"viewport": {"eye": [1.0, 2.0]}},
             }
         )
     except ValueError as exc:
-        assert "visuals.camera.eye" in str(exc)
+        assert "visuals.viewport.eye" in str(exc)
     else:
-        raise AssertionError("EnvRuntimeSettings accepted invalid camera eye")
+        raise AssertionError("EnvRuntimeSettings accepted invalid viewport eye")
+
+    try:
+        EnvRuntimeSettings.from_env_config(
+            {
+                "env": {},
+                "visuals": {"camera": {"enabled": True}},
+            }
+        )
+    except ValueError as exc:
+        assert "visuals.camera was renamed to visuals.viewport" in str(exc)
+    else:
+        raise AssertionError("EnvRuntimeSettings accepted legacy visuals.camera")
 
 
 def test_cumotion_profile_merge_order() -> None:
@@ -799,7 +812,7 @@ def test_env_profiles_define_robot_scene_instances() -> None:
     for path in sorted(Path("configs/envs").glob("*.yaml")):
         config = load_yaml(path)
         settings = EnvRuntimeSettings.from_env_config(config)
-        assert settings.visuals.camera.prim_path.startswith("/")
+        assert settings.visuals.viewport.prim_path.startswith("/")
         assert settings.visuals.key_light.path.startswith("/")
         assert settings.visuals.fill_light.path.startswith("/")
         robots = config.get("robots")

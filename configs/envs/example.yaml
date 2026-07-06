@@ -42,7 +42,7 @@ solver:
 
 visuals:
   # GUI 模式下使用的默认 viewport 视角；headless 运行不会触碰 viewport。
-  camera:
+  viewport:
     enabled: true
     eye: [1.35, -1.65, 1.05]
     target: [0.0, -0.1, 0.42]
@@ -62,6 +62,27 @@ visuals:
       path: /World/FillLight
       intensity: 250.0
       # 可选：color: [1.0, 1.0, 1.0]
+
+sensors:
+  # 仿真传感器摄像机和 GUI viewport 分开配置。disabled 示例只用于说明 schema。
+  cameras:
+    wrist_rgbd:
+      enabled: false
+      parent_prim_path: /World/AR5V2_L6V1_L/AR5V2_L_arm_flan_link
+      prim_path: /World/AR5V2_L6V1_L/AR5V2_L_arm_flan_link/WristRGBD
+      pose:
+        xyz: [0.0, 0.0, 0.08]
+        rpy: [0.0, 0.0, 0.0]
+      resolution: [640, 480]
+      frequency: 30.0
+      modalities: [rgb, depth]
+      clipping_range: [0.01, 5.0]
+      output:
+        save_dir: logs/cameras/wrist_rgbd
+        foxglove_topic_prefix: /cameras/wrist_rgbd
+        # 可选：foxglove_live_host: 127.0.0.1
+        # 可选：foxglove_live_port: 8770
+        # 可选：foxglove_mcap_path: logs/cameras/wrist_rgbd.mcap
 
 robots:
   # 单臂 runtime 使用 robots.single。

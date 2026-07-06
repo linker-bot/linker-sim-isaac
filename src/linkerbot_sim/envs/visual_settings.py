@@ -12,41 +12,45 @@ from dataclasses import dataclass, field
 
 Vec3 = tuple[float, float, float]
 
-DEFAULT_CAMERA_EYE: Vec3 = (1.35, -1.65, 1.05)
-DEFAULT_CAMERA_TARGET: Vec3 = (0.0, -0.1, 0.42)
-DEFAULT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
+DEFAULT_VIEWPORT_EYE: Vec3 = (1.35, -1.65, 1.05)
+DEFAULT_VIEWPORT_TARGET: Vec3 = (0.0, -0.1, 0.42)
+DEFAULT_VIEWPORT_PRIM_PATH = "/OmniverseKit_Persp"
 DEFAULT_KEY_LIGHT_PATH = "/World/KeyLight"
 DEFAULT_FILL_LIGHT_PATH = "/World/FillLight"
 
 
 @dataclass(frozen=True)
-class CameraViewSettings:
-    """GUI viewport camera view settings."""
+class ViewportViewSettings:
+    """GUI viewport view settings."""
 
     enabled: bool = True
-    eye: Vec3 = DEFAULT_CAMERA_EYE
-    target: Vec3 = DEFAULT_CAMERA_TARGET
-    prim_path: str = DEFAULT_CAMERA_PRIM_PATH
+    eye: Vec3 = DEFAULT_VIEWPORT_EYE
+    target: Vec3 = DEFAULT_VIEWPORT_TARGET
+    prim_path: str = DEFAULT_VIEWPORT_PRIM_PATH
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, object] | None) -> "CameraViewSettings":
-        """解析 visuals.camera；缺省时使用项目默认视角。"""
+    def from_mapping(cls, data: Mapping[str, object] | None) -> "ViewportViewSettings":
+        """解析 visuals.viewport；缺省时使用项目默认视角。"""
 
         if data is None:
             return cls()
         if not isinstance(data, Mapping):
-            raise ValueError("visuals.camera must be a mapping")
+            raise ValueError("visuals.viewport must be a mapping")
         return cls(
-            enabled=_optional_bool(data, "enabled", default=True, label="visuals.camera"),
-            eye=_optional_vec3(data, "eye", DEFAULT_CAMERA_EYE, label="visuals.camera"),
+            enabled=_optional_bool(
+                data, "enabled", default=True, label="visuals.viewport"
+            ),
+            eye=_optional_vec3(
+                data, "eye", DEFAULT_VIEWPORT_EYE, label="visuals.viewport"
+            ),
             target=_optional_vec3(
-                data, "target", DEFAULT_CAMERA_TARGET, label="visuals.camera"
+                data, "target", DEFAULT_VIEWPORT_TARGET, label="visuals.viewport"
             ),
             prim_path=_optional_path(
                 data,
                 "prim_path",
-                DEFAULT_CAMERA_PRIM_PATH,
-                label="visuals.camera",
+                DEFAULT_VIEWPORT_PRIM_PATH,
+                label="visuals.viewport",
             ),
         )
 
@@ -128,7 +132,7 @@ class SceneVisualSettings:
     ``visuals`` 是 env profile 的可选顶层分组；缺省时使用旧版硬编码默认值。
     """
 
-    camera: CameraViewSettings = field(default_factory=CameraViewSettings)
+    viewport: ViewportViewSettings = field(default_factory=ViewportViewSettings)
     key_light: DistantLightSettings = field(default_factory=DistantLightSettings)
     fill_light: DomeLightSettings = field(default_factory=DomeLightSettings)
 
@@ -141,13 +145,15 @@ class SceneVisualSettings:
             return cls()
         if not isinstance(visuals, Mapping):
             raise ValueError("visuals must be a mapping")
+        if "camera" in visuals:
+            raise ValueError("visuals.camera was renamed to visuals.viewport")
         lights = visuals.get("lights", {})
         if lights is None:
             lights = {}
         if not isinstance(lights, Mapping):
             raise ValueError("visuals.lights must be a mapping")
         return cls(
-            camera=CameraViewSettings.from_mapping(visuals.get("camera")),
+            viewport=ViewportViewSettings.from_mapping(visuals.get("viewport")),
             key_light=DistantLightSettings.from_mapping(lights.get("key")),
             fill_light=DomeLightSettings.from_mapping(lights.get("fill")),
         )

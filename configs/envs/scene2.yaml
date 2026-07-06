@@ -32,14 +32,14 @@ solver:
 
 visuals:
   # GUI 模式下使用的默认 viewport 视角；headless 运行不会触碰 viewport。
-  camera:
-    # 是否应用该相机配置。
+  viewport:
+    # 是否应用该 GUI viewport 视角配置。
     enabled: true
-    # 相机位置，世界坐标 [x, y, z]。
+    # viewport 观察位置，世界坐标 [x, y, z]。
     eye: [1.35, -1.65, 1.05]
-    # 相机观察目标点，世界坐标 [x, y, z]。
+    # viewport 观察目标点，世界坐标 [x, y, z]。
     target: [0.0, -0.1, 0.42]
-    # Isaac viewport camera prim path。
+    # Isaac viewport 使用的 camera prim path。
     prim_path: /OmniverseKit_Persp
 
   # 灯光只影响可视化，不参与物理仿真。

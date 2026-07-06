@@ -46,6 +46,15 @@ from linkerbot_sim.logging.config import (
 )
 from linkerbot_sim.logging.joint_logger import JointTrackingLogger
 from linkerbot_sim.robots.mimic import mjcf_equality_follower_joint_names
+from linkerbot_sim.sensors.camera_runtime import (
+    SensorCameraRuntime,
+    create_sensor_camera_runtimes,
+    initialize_sensor_camera_runtimes,
+)
+from linkerbot_sim.sensors.camera_observer import (
+    CameraOutputHandle,
+    start_camera_output,
+)
 from linkerbot_sim.utils.paths import repo_path
 
 
@@ -75,6 +84,8 @@ class SingleRobotRuntime:
     prepared_robot: PreparedRobotRuntime
     object_handles: tuple[RuntimeObjectHandle, ...]
     objects: Mapping[str, RuntimeObjectHandle]
+    sensor_cameras: tuple[SensorCameraRuntime, ...]
+    camera_output: CameraOutputHandle | None
     logging_config: JointLoggingConfig
     log_path: Path | None
     logger: JointTrackingLogger
@@ -118,6 +129,8 @@ class SingleRobotRuntime:
         if self._closed:
             return
         self._closed = True
+        if self.camera_output is not None:
+            self.camera_output.close()
         self.logger.close()
         close_simulation_app(self.session.app)
 
@@ -167,6 +180,7 @@ def create_single_robot_runtime(
 
     session = create_simulation_session(gui=gui, settings=runtime_settings)
     logger: JointTrackingLogger | None = None
+    camera_output: CameraOutputHandle | None = None
     try:
         object_handles = add_runtime_objects(
             session.stage,
@@ -186,8 +200,24 @@ def create_single_robot_runtime(
         _print_status(status_prefix, f"GRAVITY {imported.gravity_counts}")
         _print_status(status_prefix, f"SOLVER {imported.solver_counts}")
 
+        sensor_cameras = create_sensor_camera_runtimes(
+            stage=session.stage,
+            sensors=runtime_settings.sensors,
+        )
+        camera_output = start_camera_output(
+            sensor_cameras,
+            path_resolver=repo_path,
+        )
         session.world.reset()
         session.world.get_physics_context().set_gravity(runtime_settings.gravity_z)
+        initialize_sensor_camera_runtimes(sensor_cameras)
+        for sensor_camera in sensor_cameras:
+            _print_status(
+                status_prefix,
+                "SENSOR_CAMERA "
+                f"name={sensor_camera.name} prim_path={sensor_camera.prim_path} "
+                f"modalities={','.join(sensor_camera.settings.modalities)}",
+            )
 
         prepared = finalize_robot_controller(
             imported=imported,
@@ -220,8 +250,9 @@ def create_single_robot_runtime(
             articulation_action_type=session.articulation_action_type,
             joint_controller=controller,
             simulation_app=session.app,
-            render_enabled=gui,
+            render_enabled=gui or camera_output is not None,
             drive_logger=logger,
+            camera_observer=None if camera_output is None else camera_output.observer,
         )
 
         mimic_names = (
@@ -252,12 +283,16 @@ def create_single_robot_runtime(
             prepared_robot=prepared,
             object_handles=object_handles,
             objects=objects,
+            sensor_cameras=sensor_cameras,
+            camera_output=camera_output,
             logging_config=logging_config,
             log_path=log_path,
             logger=logger,
             status_prefix=status_prefix,
         )
     except Exception:
+        if camera_output is not None:
+            camera_output.close()
         if logger is not None:
             logger.close()
         close_simulation_app(session.app)

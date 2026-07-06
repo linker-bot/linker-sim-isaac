@@ -79,7 +79,7 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体、T 形刚
 │   ├── telemetry/            # Foxglove、MCAP、WebSocket
 │   ├── trajectories/         # JointTrajectory 容器、builder 和 command-space 轨迹组装
 │   ├── utils/                # 配置、路径、旋转、数学、计时工具
-│   └── visualization/        # camera、debug draw、marker
+│   └── visualization/        # GUI viewport、debug draw、marker
 ├── tests/                    # 尽量不启动 Isaac Sim 的轻量测试
 ├── tools/object_assets/      # 静态/动态对象离线资产生成工具，例如 rope/T block USD builder
 ├── docs/assset_name_conventions.md
@@ -280,7 +280,7 @@ PYTHONPATH=src python scripts/pinch_grasp.py \
   iteration、可选 `controlled_joints`，以及 cuMotion 单臂 `xrdf_path`、`urdf_path`、
   `flange_frame`。这里不放 IK/planner 算法参数，也不放抓取动作参数。
 - `configs/envs/*.yaml`：描述 scene。包含 World 物理步频、渲染步频、重力、是否添加默认地面、
-  scene solver type、GUI camera/lights、`robots.single` 或 `robots.dual.left/right` 的 profile
+  scene solver type、GUI viewport/lights、`robots.single` 或 `robots.dual.left/right` 的 profile
   引用和安装位姿，以及 `objects[]` 对象实例摆放。
 - `configs/objects/*.yaml`：描述运行时对象。包含对象类别、来源、资产路径、stage prim path、
   importer 参数、接触材质和对象级 solver 覆盖。对象在世界中的 `root_pose` 仍放在 env
@@ -453,7 +453,7 @@ pinch_grasp.py
 
 1. 加载 cuMotion、env、robot、controller、object 和 logging profile。
 2. 将 cuMotion profile 的默认值合入 robot config；robot config 提供模型资源字段。
-3. 启动 Isaac `SimulationApp`，创建 World、stage、physics/render dt、camera 和 lights。
+3. 启动 Isaac `SimulationApp`，创建 World、stage、physics/render dt、GUI viewport 和 lights。
 4. 根据 env `objects[]` 导入 workstation、capsule rope 等运行时对象。
 5. 导入 AR5+L6 组合 MJCF，并在 `world.reset()` 前应用 root pose、drive seed、摩擦、材料、
    solver iteration 和机器人重力策略。
@@ -730,8 +730,10 @@ Foxglove 状态流位于 `src/linkerbot_sim/telemetry/` 和 `src/linkerbot_sim/a
   和当前封装评估。
 - `docs/cumotion_motion_modes_examples.md`：不同 cuMotion motion mode 的示例和使用边界。
 - `docs/interactive_simulation_usage.md`：双臂交互式 JSON 协议、transport、返回事件和命令示例。
-- `docs/foxglove_data_usage.md`：双臂交互实时状态流的 Foxglove live、MCAP、topic、JSON 快照和
-  effort 字段使用说明。
+- `docs/foxglove_data_usage.md`：双臂交互实时状态流和传感器相机图像的 Foxglove live、MCAP、
+  topic、JSON 快照和 effort 字段使用说明。
+- `docs/camera_types_and_sensor_setup.md`：区分 GUI viewport 观察视角和仿真传感器摄像机，并说明
+  RGB-D sensor camera 的配置、离线保存和 Foxglove 输出边界。
 - `docs/object_asset_generation.md`：离线生成 capsule rope、T block 等物体 USD 资产，并接入
   object/env profile 的流程。
 - `docs/isaac_collision_approximation.md`：Isaac importer 碰撞近似字段和 USD/PhysX 语义。
