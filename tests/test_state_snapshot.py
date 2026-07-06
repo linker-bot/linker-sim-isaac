@@ -79,6 +79,23 @@ def test_dual_state_sampler_differentiates_joint_acceleration() -> None:
     assert second.as_dict()["robots"]["left"]["commanded_efforts"][0] is None
 
 
+def test_dual_state_sampler_reset_clears_acceleration_history() -> None:
+    runtime = _runtime()
+    sampler = DualRobotStateSampler(
+        stage=None,
+        rate_hz=10.0,
+        include_efforts=False,
+        include_objects=False,
+    )
+
+    sampler.sample(runtime, step=0, phase="before_reset")
+    runtime.left.articulation.velocities = np.asarray([0.2, -0.1], dtype=float)
+    sampler.reset()
+    after_reset = sampler.sample(runtime, step=0, phase="after_reset")
+
+    assert np.isnan(after_reset.robots[0].accelerations_rad_s2).all()
+
+
 def test_state_stream_keeps_latest_snapshot() -> None:
     stream = StateStream()
     snapshot = DualRobotStateSampler(

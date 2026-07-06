@@ -14,6 +14,26 @@ from linkerbot_sim.app.interactive.protocol import InteractiveMotionCommand
 CommandState = Literal["pending", "running", "done", "failed", "cancelled"]
 
 
+@dataclass(frozen=True)
+class ResetRequest:
+    """One requested simulation reset operation."""
+
+    reset_id: str
+    mode: str = "runtime"
+    clear_queue: bool = True
+    hold_after_reset: bool = True
+
+    def snapshot(self) -> dict[str, object]:
+        """返回可序列化 reset 请求。"""
+
+        return {
+            "id": self.reset_id,
+            "mode": self.mode,
+            "clear_queue": self.clear_queue,
+            "hold_after_reset": self.hold_after_reset,
+        }
+
+
 @dataclass
 class QueuedMotionCommand:
     """One queued motion command and its execution state."""
@@ -49,6 +69,10 @@ class InteractiveMotionQueue:
         self._commands: dict[str, QueuedMotionCommand] = {}
         self._order: list[str] = []
         self._current_id: str | None = None
+        self._next_reset_id = 1
+        self._reset_request: ResetRequest | None = None
+        self._resetting = False
+        self._last_reset: dict[str, object] | None = None
         self._cancel_current = Event()
         self._estop = Event()
         self._quit = Event()
@@ -101,11 +125,15 @@ class InteractiveMotionQueue:
 
         with self._condition:
             if not self._condition.wait_for(
-                lambda: self._quit.is_set() or self._next_pending_locked() is not None,
+                lambda: (
+                    self._quit.is_set()
+                    or self._reset_request is not None
+                    or self._next_pending_locked() is not None
+                ),
                 timeout=timeout_s,
             ):
                 return None
-            if self._quit.is_set():
+            if self._quit.is_set() or self._reset_request is not None:
                 return None
             queued = self._next_pending_locked()
             if queued is None:
@@ -156,6 +184,95 @@ class InteractiveMotionQueue:
         if should_emit:
             self.emit({"event": "cancelled", "id": command_id, "state": "cancelled"})
         return True
+
+    def request_reset(
+        self,
+        *,
+        reset_id: str | None = None,
+        mode: str = "runtime",
+        clear_queue: bool = True,
+        hold_after_reset: bool = True,
+    ) -> ResetRequest:
+        """请求主循环在安全边界执行 reset。"""
+
+        if mode != "runtime":
+            raise ValueError("reset mode must be 'runtime'")
+        request = ResetRequest(
+            reset_id=reset_id or self._new_reset_id(),
+            mode=mode,
+            clear_queue=bool(clear_queue),
+            hold_after_reset=bool(hold_after_reset),
+        )
+        cancelled_ids: list[str] = []
+        with self._condition:
+            self._reset_request = request
+            self._resetting = True
+            self._last_reset = {
+                "id": request.reset_id,
+                "state": "requested",
+                "mode": request.mode,
+            }
+            if request.clear_queue:
+                for command in self._commands.values():
+                    if command.state == "pending":
+                        command.state = "cancelled"
+                        cancelled_ids.append(command.command_id)
+            if self._current_id is not None:
+                self._cancel_current.set()
+            self._condition.notify_all()
+        for command_id in cancelled_ids:
+            self.emit({"event": "cancelled", "id": command_id, "state": "cancelled"})
+        self.emit({"event": "reset_requested", **request.snapshot()})
+        return request
+
+    def consume_reset_request(self) -> ResetRequest | None:
+        """取出 pending reset 请求；只有主循环应调用。"""
+
+        with self._condition:
+            request = self._reset_request
+            self._reset_request = None
+            return request
+
+    def mark_reset_done(self, reset_id: str, *, step: int | None = None) -> None:
+        """标记 reset 成功完成。"""
+
+        with self._condition:
+            self._resetting = False
+            self._last_reset = {
+                "id": reset_id,
+                "state": "done",
+                "step": step,
+            }
+            self._cancel_current.clear()
+            self._condition.notify_all()
+        event: dict[str, object] = {
+            "event": "reset_done",
+            "id": reset_id,
+            "state": "done",
+        }
+        if step is not None:
+            event["step"] = step
+        self.emit(event)
+
+    def mark_reset_failed(self, reset_id: str, error: str) -> None:
+        """标记 reset 失败。"""
+
+        with self._condition:
+            self._resetting = False
+            self._last_reset = {
+                "id": reset_id,
+                "state": "failed",
+                "error": error,
+            }
+            self._condition.notify_all()
+        self.emit(
+            {
+                "event": "reset_failed",
+                "id": reset_id,
+                "state": "failed",
+                "error": error,
+            }
+        )
 
     def request_cancel_current(self) -> bool:
         """请求中断当前 running 命令；没有当前命令时返回 False。"""
@@ -218,6 +335,8 @@ class InteractiveMotionQueue:
                 ],
                 "current_id": self._current_id,
                 "estop": self._estop.is_set(),
+                "resetting": self._resetting,
+                "last_reset": self._last_reset,
             }
 
     def pending_index(self, command_id: str) -> int | None:
@@ -291,3 +410,11 @@ class InteractiveMotionQueue:
             command_id = f"cmd-{self._next_id}"
             self._next_id += 1
             return command_id
+
+    def _new_reset_id(self) -> str:
+        """生成进程内递增的 reset id。"""
+
+        with self._lock:
+            reset_id = f"reset-{self._next_reset_id}"
+            self._next_reset_id += 1
+            return reset_id

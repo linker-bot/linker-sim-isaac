@@ -250,6 +250,24 @@ def test_parse_batch_moves() -> None:
     assert len(command.moves) == 2
 
 
+def test_parse_interactive_reset_command() -> None:
+    command = parse_interactive_motion_message(
+        {
+            "type": "reset",
+            "id": "reset-a",
+            "clear_queue": False,
+            "hold_after_reset": False,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    assert command.kind == "reset"
+    assert command.reset_id == "reset-a"
+    assert command.reset_mode == "runtime"
+    assert command.reset_clear_queue is False
+    assert command.reset_hold_after_reset is False
+
+
 def test_parse_raw_joint_sequence_matrix_and_mapping() -> None:
     command = parse_interactive_motion_message(
         {
@@ -311,6 +329,37 @@ def test_interactive_queue_status_cancel_and_events() -> None:
     assert events[-1]["event"] == "cancelled"
 
 
+def test_interactive_queue_reset_cancels_pending_and_tracks_status() -> None:
+    queue = InteractiveMotionQueue()
+    events = []
+    queue.add_listener(events.append)
+    command = parse_interactive_motion_message(
+        {
+            "id": "cmd-a",
+            "type": "hand",
+            "side": "left",
+            "joint_positions": [0.1],
+            "duration_s": 0.2,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+    queue.submit(command)
+
+    request = queue.request_reset(reset_id="reset-a")
+    consumed = queue.consume_reset_request()
+    status = queue.status()
+    queue.mark_reset_done("reset-a", step=0)
+
+    assert request.reset_id == "reset-a"
+    assert consumed == request
+    assert status["resetting"] is True
+    assert status["last_reset"]["state"] == "requested"
+    assert queue.status("cmd-a")["commands"][0]["state"] == "cancelled"
+    assert events[-2]["event"] == "reset_requested"
+    assert events[-1]["event"] == "reset_done"
+    assert queue.status()["last_reset"]["state"] == "done"
+
+
 def test_transport_status_and_cancel_current_responses() -> None:
     queue = InteractiveMotionQueue()
 
@@ -335,3 +384,18 @@ def test_transport_status_and_cancel_current_responses() -> None:
     assert running is not None
     assert cancel["accepted"] is True
     assert queue.should_stop_current() is True
+
+
+def test_transport_reset_response() -> None:
+    queue = InteractiveMotionQueue()
+
+    response = handle_interactive_message(
+        message={"type": "reset", "id": "reset-a"},
+        queue=queue,
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    assert response["event"] == "reset"
+    assert response["accepted"] is True
+    assert response["id"] == "reset-a"
+    assert queue.consume_reset_request().reset_id == "reset-a"

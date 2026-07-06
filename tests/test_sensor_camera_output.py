@@ -197,6 +197,25 @@ def test_camera_frame_observer_samples_by_frequency() -> None:
     ]
 
 
+def test_camera_frame_observer_reset_clears_sampling_state() -> None:
+    publisher = _CollectingPublisher()
+    observer = CameraFrameObserver(
+        cameras=(_camera_runtime(),),
+        publisher=publisher,
+    )
+
+    observer.observe(_FakeWorld(), step=0, phase="before_reset")
+    observer.reset()
+    observer.observe(_FakeWorld(), step=0, phase="after_reset")
+
+    assert [(frame.modality, frame.frame_index) for frame in publisher.frames] == [
+        ("rgb", 0),
+        ("depth", 0),
+        ("rgb", 0),
+        ("depth", 0),
+    ]
+
+
 def test_camera_frame_publisher_writes_in_background() -> None:
     frames = sample_camera_frames(
         _camera_runtime(),

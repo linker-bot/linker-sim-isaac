@@ -37,6 +37,7 @@ from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 InteractiveCommandKind = Literal[
     "moves",
     "hold",
+    "reset",
     "status",
     "cancel",
     "cancel_current",
@@ -55,6 +56,10 @@ class InteractiveMotionCommand:
     duration_s: float | None = None
     cancel_id: str | None = None
     status_id: str | None = None
+    reset_id: str | None = None
+    reset_mode: str = "runtime"
+    reset_clear_queue: bool = True
+    reset_hold_after_reset: bool = True
 
 
 def parse_interactive_motion_message(
@@ -104,6 +109,23 @@ def parse_interactive_motion_message(
             kind="hold",
             command_id=_optional_str(message.get("id")),
             duration_s=_optional_float(message.get("duration_s"), default=0.25),
+        )
+    if command_type == "reset":
+        mode = str(message.get("mode", "runtime"))
+        if mode != "runtime":
+            raise ValueError("reset mode must be 'runtime'")
+        return InteractiveMotionCommand(
+            kind="reset",
+            reset_id=_optional_str(message.get("id")),
+            reset_mode=mode,
+            reset_clear_queue=_optional_bool(
+                message.get("clear_queue"), default=True, label="clear_queue"
+            ),
+            reset_hold_after_reset=_optional_bool(
+                message.get("hold_after_reset"),
+                default=True,
+                label="hold_after_reset",
+            ),
         )
     if command_type == "status":
         return InteractiveMotionCommand(
@@ -429,6 +451,16 @@ def _optional_int(value: object, *, default: int) -> int:
     if not number.is_integer():
         raise ValueError("integer value is required")
     return int(number)
+
+
+def _optional_bool(value: object, *, default: bool, label: str) -> bool:
+    """读取可选布尔字段，拒绝字符串等隐式 truthy/falsy 值。"""
+
+    if value is None:
+        return bool(default)
+    if not isinstance(value, bool):
+        raise ValueError(f"{label} must be a boolean")
+    return value
 
 
 def _vector3(message: Mapping[str, object], key: str) -> np.ndarray:

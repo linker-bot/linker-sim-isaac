@@ -191,6 +191,36 @@ python scripts/dual_arm_interactive.py \
 {"type":"cancel_current"}
 ```
 
+重置当前仿真 episode：
+
+```json
+{"type":"reset","id":"reset-1"}
+```
+
+reset 会请求当前 running 命令尽快停止，默认取消 pending 命令，然后在仿真主线程恢复 robot/object
+runtime 状态、调用 `world.reset()`、清理状态流和相机采样缓存。可选字段：
+
+```json
+{
+  "type": "reset",
+  "id": "reset-1",
+  "clear_queue": true,
+  "hold_after_reset": true
+}
+```
+
+reset 事件示例：
+
+```json
+{"event":"reset_requested","id":"reset-1","mode":"runtime","clear_queue":true,"hold_after_reset":true}
+{"event":"reset_started","id":"reset-1","mode":"runtime","clear_queue":true,"hold_after_reset":true}
+{"event":"reset_done","id":"reset-1","state":"done","step":0}
+```
+
+stdin/TCP JSONL 会先返回同步 accepted 响应；reset 完成状态可通过后续 `{"type":"status"}` 查询，
+也会打印 `DUAL_ARM_INTERACTIVE_RESET_STARTED` / `DUAL_ARM_INTERACTIVE_RESET_DONE` 日志。WebSocket
+客户端还会收到 queue 广播事件。
+
 急停。急停会取消当前 running 命令并取消所有 pending 命令：
 
 ```json

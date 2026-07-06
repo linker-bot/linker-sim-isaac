@@ -144,6 +144,14 @@ def _apply_command(
             "event": "cancel_current",
             "accepted": queue.request_cancel_current(),
         }
+    if command.kind == "reset":
+        request = queue.request_reset(
+            reset_id=command.reset_id,
+            mode=command.reset_mode,
+            clear_queue=command.reset_clear_queue,
+            hold_after_reset=command.reset_hold_after_reset,
+        )
+        return {"event": "reset", "accepted": True, **request.snapshot()}
     if command.kind == "estop":
         queue.request_estop()
         return {"event": "estop", "accepted": True}

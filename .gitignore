@@ -56,6 +56,7 @@ tem-file/
 pip-log.txt
 pip-delete-this-directory.txt
 docs/tem
+design_plan/
 
 # Jupyter / docs / local app data
 .ipynb_checkpoints/

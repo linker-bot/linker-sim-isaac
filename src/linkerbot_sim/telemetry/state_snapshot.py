@@ -192,6 +192,11 @@ class DualRobotStateSampler:
         interval_steps = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
         return int(step) % interval_steps == 0
 
+    def reset(self) -> None:
+        """清理 reset 前的差分速度缓存。"""
+
+        self._previous_velocities.clear()
+
     def sample(self, runtime, *, step: int, phase: str | None = None) -> StateSnapshot:
         """采样一帧双臂和对象状态。"""
 
@@ -294,6 +299,11 @@ class DualRobotStateObserver:
         if not self.sampler.should_sample(step=step, physics_dt=physics_dt):
             return
         self.stream.publish(self.sampler.sample(runtime, step=step, phase=phase))
+
+    def reset(self) -> None:
+        """清理状态采样器内部派生缓存。"""
+
+        self.sampler.reset()
 
 
 def _num_dof(robot) -> int:

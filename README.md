@@ -734,6 +734,8 @@ Foxglove 状态流位于 `src/linkerbot_sim/telemetry/` 和 `src/linkerbot_sim/a
   topic、JSON 快照和 effort 字段使用说明。
 - `docs/camera_types_and_sensor_setup.md`：区分 GUI viewport 观察视角和仿真传感器摄像机，并说明
   RGB-D sensor camera 的配置、离线保存和 Foxglove 输出边界。
+- `docs/simulation_environment_reset_plan.md`：交互式仿真环境 reset 功能的语义、协议、runtime
+  接入顺序和分阶段落地建议。
 - `docs/object_asset_generation.md`：离线生成 capsule rope、T block 等物体 USD 资产，并接入
   object/env profile 的流程。
 - `docs/isaac_collision_approximation.md`：Isaac importer 碰撞近似字段和 USD/PhysX 语义。

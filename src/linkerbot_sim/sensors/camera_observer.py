@@ -57,6 +57,12 @@ class CameraFrameObserver:
         self._next_sample_time[camera.name] = time_s + 1.0 / camera.settings.frequency
         return True
 
+    def reset(self) -> None:
+        """清理 reset 前的采样节奏和 frame index。"""
+
+        self._next_sample_time.clear()
+        self._frame_indices.clear()
+
 
 @dataclass
 class CameraOutputHandle:

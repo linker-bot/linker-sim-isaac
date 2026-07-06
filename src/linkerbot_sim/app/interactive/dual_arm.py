@@ -9,6 +9,10 @@ from linkerbot_sim.app.motion.dual_arm import (
     current_command,
 )
 from linkerbot_sim.app.runtime.dual_robot import DualRobotAppRuntime
+from linkerbot_sim.app.runtime.reset import (
+    RuntimeResetOptions,
+    reset_dual_robot_runtime,
+)
 from linkerbot_sim.app.interactive.queue import InteractiveMotionQueue
 from linkerbot_sim.app.interactive.state_stream import (
     InteractiveStateStreamConfig,
@@ -68,6 +72,51 @@ def run_interactive_dual_arm_motion(
             while not queue.quit_requested():
                 if _simulation_app_stopped(runtime):
                     break
+                reset_request = queue.consume_reset_request()
+                if reset_request is not None:
+                    try:
+                        queue.emit(
+                            {
+                                "event": "reset_started",
+                                **reset_request.snapshot(),
+                            }
+                        )
+                        print(
+                            "DUAL_ARM_INTERACTIVE_RESET_STARTED "
+                            f"id={reset_request.reset_id}",
+                            flush=True,
+                        )
+                        result = reset_dual_robot_runtime(
+                            runtime,
+                            options=RuntimeResetOptions(
+                                hold_after_reset=reset_request.hold_after_reset
+                            ),
+                        )
+                        step = int(result.step)
+                        if reset_request.hold_after_reset:
+                            step = _hold_for_duration(
+                                runtime,
+                                step=step,
+                                duration_s=DEFAULT_HOLD_REFRESH_DURATION_S,
+                                should_stop=queue.should_stop_current,
+                            )
+                        session.step = step
+                        queue.mark_reset_done(reset_request.reset_id, step=step)
+                        print(
+                            "DUAL_ARM_INTERACTIVE_RESET_DONE "
+                            f"id={reset_request.reset_id} step={step}",
+                            flush=True,
+                        )
+                        continue
+                    except Exception as exc:
+                        queue.mark_reset_failed(reset_request.reset_id, str(exc))
+                        print(
+                            "DUAL_ARM_INTERACTIVE_RESET_FAILED "
+                            f"id={reset_request.reset_id} "
+                            f"error={type(exc).__name__}: {exc}",
+                            flush=True,
+                        )
+                        continue
                 queued = queue.next_pending(timeout_s=0.05)
                 if queued is None:
                     if queue.estop_requested():
