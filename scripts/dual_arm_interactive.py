@@ -18,6 +18,9 @@ if str(SOURCE_ROOT) not in sys.path:
 from linkerbot_sim.app.interactive.dual_arm import (  # noqa: E402
     run_interactive_dual_arm_motion,
 )
+from linkerbot_sim.app.interactive.state_stream import (  # noqa: E402
+    InteractiveStateStreamConfig,
+)
 from linkerbot_sim.app.motion.specs import (  # noqa: E402
     CartesianTcpFrameSpec,
     DualArmTcpSpec,
@@ -38,6 +41,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--tcp-jsonl-port", type=int, default=None)
     parser.add_argument("--websocket-host", default="127.0.0.1")
     parser.add_argument("--websocket-port", type=int, default=None)
+    parser.add_argument(
+        "--state-rate-hz",
+        type=float,
+        default=60.0,
+        help="Foxglove 状态采样频率；<=0 时关闭状态采样",
+    )
+    parser.add_argument(
+        "--state-include-efforts",
+        action="store_true",
+        help="读取并发布 commanded/measured/applied effort",
+    )
+    parser.add_argument(
+        "--state-include-objects",
+        action="store_true",
+        help="读取并发布 env runtime object 位姿",
+    )
+    parser.add_argument("--foxglove-live-host", default="127.0.0.1")
+    parser.add_argument("--foxglove-live-port", type=int, default=None)
+    parser.add_argument("--foxglove-mcap-path", default=None)
+    parser.add_argument(
+        "--foxglove-joint-effort-field",
+        choices=("none", "commanded", "measured", "applied"),
+        default="none",
+        help="写入 Foxglove /joint_states effort 字段的 effort 语义",
+    )
     return parser.parse_args()
 
 
@@ -79,6 +107,15 @@ def run_interactive_mode(args: argparse.Namespace) -> int:
             tcp_jsonl_port=args.tcp_jsonl_port,
             websocket_host=args.websocket_host,
             websocket_port=args.websocket_port,
+            state_stream_config=InteractiveStateStreamConfig(
+                rate_hz=args.state_rate_hz,
+                include_efforts=args.state_include_efforts,
+                include_objects=args.state_include_objects,
+                foxglove_live_host=args.foxglove_live_host,
+                foxglove_live_port=args.foxglove_live_port,
+                foxglove_mcap_path=args.foxglove_mcap_path,
+                foxglove_joint_effort_field=args.foxglove_joint_effort_field,
+            ),
         )
         print(f"DUAL_ARM_INTERACTIVE_OK steps={steps}", flush=True)
         completed = True

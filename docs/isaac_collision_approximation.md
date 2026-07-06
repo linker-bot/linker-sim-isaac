@@ -106,7 +106,7 @@ MJCF importer：
 
 ## 已检查来源
 
-- 本地 Isaac Sim URDF importer 扩展：`env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.asset.importer.urdf`
-- 本地 Isaac Sim MJCF importer 扩展：`env_isaaclab/lib/python3.11/site-packages/isaacsim/exts/isaacsim.asset.importer.mjcf`
+- 本地 Isaac Sim URDF importer 扩展：`<python-env>/lib/python3.11/site-packages/isaacsim/exts/isaacsim.asset.importer.urdf`
+- 本地 Isaac Sim MJCF importer 扩展：`<python-env>/lib/python3.11/site-packages/isaacsim/exts/isaacsim.asset.importer.mjcf`
 - 本地 Isaac Core geometry prim 源码/文档：`GeomPrim.set_collision_approximations(...)`
 - 本地 PhysX support UI 源码/文档：static/dynamic collider creation 相关实现

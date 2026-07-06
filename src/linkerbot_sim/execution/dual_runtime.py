@@ -25,6 +25,7 @@ class DualRobotRuntime:
     articulation_action_type: object
     simulation_app: object | None
     render_enabled: bool
+    state_observer: object | None = None
 
     def side(self, side: str) -> RobotSideRuntime:
         """返回指定侧 runtime。"""

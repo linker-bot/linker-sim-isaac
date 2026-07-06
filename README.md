@@ -42,7 +42,8 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体、T 形刚
 - Mimic 关节：解析 MJCF `equality/joint` 的 `polycoef`，运行时按实际 master 状态刷新 follower
   目标。
 - 日志和遥测：支持关节目标、实际位置/速度、command effort、action effort、PhysX
-  measured/applied effort 的 CSV 记录；可选 Foxglove MCAP/WebSocket 输出。
+  measured/applied effort 的 CSV 记录；双臂交互 runtime 可选 Foxglove live server 和 MCAP
+  状态流。
 
 ## 目录结构
 
@@ -88,11 +89,15 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体、T 形刚
 
 ## 环境约定
 
-示例命令默认从仓库根目录运行，并使用仓库内 `env_isaaclab/` Python 环境：
+示例命令默认从仓库根目录运行，并假设已经激活了包含 Isaac Sim、Isaac Lab、cuMotion 和项目
+Python 依赖的环境：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python <command>
+PYTHONPATH=src python <command>
 ```
+
+如果没有激活环境，可以把示例里的 `python` 替换成实际解释器路径，例如
+`/path/to/venv/bin/python`。仓库不要求虚拟环境目录使用固定名称。
 
 项目采用 src-layout。`scripts/pinch_grasp.py`、`scripts/dual_arm_motion_test.py`、
 `scripts/dual_arm_interactive.py`、
@@ -109,53 +114,67 @@ PYTHONPATH=src env_isaaclab/bin/python <command>
 安装示例：
 
 ```bash
-env_isaaclab/bin/python -m pip install -e ".[dev,visualization,simulation]"
+python -m pip install -e ".[dev,visualization,simulation]"
 ```
 
-如果 Isaac Lab 环境已经安装了 Isaac Sim、cuMotion 和 torch，也可以只安装缺失的普通 Python
-依赖。cuMotion/Isaac 导入失败通常会在创建后端 context 或启动脚本时暴露；配置解析和大多数
-单元测试不需要启动 Isaac。
+如果已有环境已经安装了 Isaac Sim、cuMotion 和 torch，也可以只安装缺失的普通 Python 依赖。
+cuMotion/Isaac 导入失败通常会在创建后端 context 或启动脚本时暴露；配置解析和大多数单元测试
+不需要启动 Isaac。
 
 ## 快速开始
 
 先生成或确认环境物体 USD。单臂抓绳依赖 capsule rope；双臂默认 `scene3` 依赖 T block：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py
+PYTHONPATH=src python tools/object_assets/flexible/rope/build_asset.py
+PYTHONPATH=src python tools/object_assets/rigid/tblock/build_asset.py
 ```
 
 只导入单臂场景、机器人、对象、controller 和 logger，不执行抓取：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --no-grasp
+PYTHONPATH=src python scripts/pinch_grasp.py --no-grasp
 ```
 
 打开 GUI 并运行单臂 pinch grasp demo：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --gui
+PYTHONPATH=src python scripts/pinch_grasp.py --gui
 ```
 
 只校验双臂 `scene3` runtime、cuMotion profile 和左右 robot profile 推导出的 cuMotion 语义，
 不启动 Isaac：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --dry-run
+PYTHONPATH=src python scripts/dual_arm_motion_test.py --dry-run
 ```
 
 导入左右 AR5+L6、workstation 和 T block，并执行脚本内定义的双臂 cuMotion 动作：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py
+PYTHONPATH=src python scripts/dual_arm_motion_test.py
 ```
 
 启动双臂交互式 GUI runtime：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+PYTHONPATH=src python scripts/dual_arm_interactive.py \
   --gui --hold
 ```
+
+启动双臂交互式 GUI runtime，并把实时状态发布给 Foxglove：
+
+```bash
+PYTHONPATH=src python scripts/dual_arm_interactive.py \
+  --gui --hold \
+  --foxglove-live-host 127.0.0.1 \
+  --foxglove-live-port 8765 \
+  --state-rate-hz 60 \
+  --state-include-objects
+```
+
+Foxglove Desktop 中选择 `Foxglove WebSocket`，连接 `ws://127.0.0.1:8765`。完整 topic、MCAP
+和 effort 字段说明见 `docs/foxglove_data_usage.md`。
 
 启动后看到 `DUAL_ARM_INTERACTIVE_READY`，即可通过 stdin 输入 JSON motion，例如：
 
@@ -178,7 +197,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 `pinch_grasp.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --env scene1 \
   --cumotion-profile default \
   --logging-profile default_logger \
@@ -190,7 +209,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 `dual_arm_motion_test.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
+PYTHONPATH=src python scripts/dual_arm_motion_test.py \
   --env scene3 \
   --cumotion-profile default \
   --control-mode position \
@@ -200,7 +219,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 `dual_arm_interactive.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+PYTHONPATH=src python scripts/dual_arm_interactive.py \
   --env scene3 \
   --cumotion-profile default \
   --control-mode position \
@@ -210,7 +229,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
 `flexible/rope/build_asset.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py \
+PYTHONPATH=src python tools/object_assets/flexible/rope/build_asset.py \
   --config tools/object_assets/flexible/rope/config.yaml \
   --output assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
@@ -218,7 +237,7 @@ PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_a
 `rigid/tblock/build_asset.py` 常用参数：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py \
+PYTHONPATH=src python tools/object_assets/rigid/tblock/build_asset.py \
   --config tools/object_assets/rigid/tblock/config.yaml \
   --output assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
 ```
@@ -245,7 +264,7 @@ configs/<group>/<name>.yaml
 改文件名后通过命令行传 profile 名：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --env my_scene \
   --cumotion-profile my_planner \
   --logging-profile my_logger
@@ -347,7 +366,7 @@ rope:
 修改段数、长度、质量、阻尼、关节限制、端块尺寸或可视颜色后，需要重新生成 USD：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py
+PYTHONPATH=src python tools/object_assets/flexible/rope/build_asset.py
 ```
 
 `configs/objects/capsule_rope.yaml` 描述运行时如何引用这个 USD，以及接触材质和 solver iteration
@@ -383,7 +402,7 @@ object:
 局部偏移和颜色来自 tools 侧配置。
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py
+PYTHONPATH=src python tools/object_assets/rigid/tblock/build_asset.py
 ```
 
 运行时引用由 `configs/objects/TblockV1_default.yaml` 管理。当前默认 `static: false`，也就是作为
@@ -499,7 +518,7 @@ profile 的 `cumotion.flange_frame`。动作脚本默认 TCP 名由入口层构�
 TCP JSONL 示例：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+PYTHONPATH=src python scripts/dual_arm_interactive.py \
   --gui --hold \
   --tcp-jsonl-host 127.0.0.1 \
   --tcp-jsonl-port 8765
@@ -687,7 +706,7 @@ cuMotion XRDF/URDF 规划模型，也不表示运行时重新 cooking 碰撞体�
 默认不记录读取成本较高的 effort 字段。可以通过命令行打开：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --log-measured-effort \
   --log-applied-effort \
   --log-action-effort
@@ -696,13 +715,14 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 也可以覆盖输出路径和采样间隔：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --log logs/joint_tracking/my_run.csv \
   --log-interval-steps 1
 ```
 
-Foxglove 输出位于 `src/linkerbot_sim/telemetry/foxglove.py`，支持离线 MCAP、本地 WebSocket live
-server、`JointStates` 曲线和 `SceneUpdate` marker。
+Foxglove 状态流位于 `src/linkerbot_sim/telemetry/` 和 `src/linkerbot_sim/app/interactive/state_stream.py`，
+支持本地 live server、离线 MCAP、`JointStates` 曲线、`SceneUpdate` marker，以及
+`/linkerbot/state` JSON 完整快照。使用方式和数据结构见 `docs/foxglove_data_usage.md`。
 
 ## 文档索引
 
@@ -710,6 +730,8 @@ server、`JointStates` 曲线和 `SceneUpdate` marker。
   和当前封装评估。
 - `docs/cumotion_motion_modes_examples.md`：不同 cuMotion motion mode 的示例和使用边界。
 - `docs/interactive_simulation_usage.md`：双臂交互式 JSON 协议、transport、返回事件和命令示例。
+- `docs/foxglove_data_usage.md`：双臂交互实时状态流的 Foxglove live、MCAP、topic、JSON 快照和
+  effort 字段使用说明。
 - `docs/object_asset_generation.md`：离线生成 capsule rope、T block 等物体 USD 资产，并接入
   object/env profile 的流程。
 - `docs/isaac_collision_approximation.md`：Isaac importer 碰撞近似字段和 USD/PhysX 语义。
@@ -724,19 +746,19 @@ server、`JointStates` 曲线和 `SceneUpdate` marker。
 语法检查：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python -m compileall -q src scripts tests
+PYTHONPATH=src python -m compileall -q src scripts tests
 ```
 
 运行轻量测试：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python -m pytest -q tests
+PYTHONPATH=src python -m pytest -q tests
 ```
 
 检查 YAML 是否可解析：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python - <<'PY'
+PYTHONPATH=src python - <<'PY'
 from pathlib import Path
 import yaml
 

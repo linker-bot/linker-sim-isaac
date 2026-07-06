@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -117,6 +118,19 @@ def _load_foxglove():
     return foxglove, messages
 
 
+def _load_foxglove_channels():
+    """导入 Foxglove well-known message channel 封装。"""
+
+    try:
+        from foxglove import channels
+    except ImportError as exc:
+        raise ImportError(
+            "Foxglove telemetry requires the optional dependency 'foxglove-sdk'. "
+            "Install it with: pip install foxglove-sdk"
+        ) from exc
+    return channels
+
+
 @dataclass(frozen=True)
 class FoxgloveTopicConfig:
     """Foxglove topic 名称配置。
@@ -130,6 +144,7 @@ class FoxgloveTopicConfig:
 
     joint_states: str = "/joint_states"
     scene: str = "/scene"
+    state: str = "/linkerbot/state"
 
 
 class FoxgloveLogger:
@@ -153,16 +168,16 @@ class FoxgloveLogger:
         """
 
         self.foxglove, self.messages = _load_foxglove()
+        self.channels = _load_foxglove_channels()
         self.sink = sink
         self.topics = topics or FoxgloveTopicConfig()
-        # channel 在构造时绑定 topic 和 schema，后续每帧只需要构造消息并 log。
-        self.joint_channel = self.foxglove.Channel(
-            self.topics.joint_states,
-            schema=self.messages.JointStates.get_schema(),
-        )
-        self.scene_channel = self.foxglove.Channel(
-            self.topics.scene,
-            schema=self.messages.SceneUpdate.get_schema(),
+        # SDK 的 typed channel 会绑定 Foxglove well-known protobuf schema/encoding，
+        # 后续可以直接 log Foxglove message 对象。
+        self.joint_channel = self.channels.JointStatesChannel(self.topics.joint_states)
+        self.scene_channel = self.channels.SceneUpdateChannel(self.topics.scene)
+        self.state_channel = self.foxglove.Channel(
+            self.topics.state,
+            message_encoding="json",
         )
 
     @classmethod
@@ -310,6 +325,25 @@ class FoxgloveLogger:
         )
         self.joint_channel.log(
             msg, log_time=None if time_s is None else _ns_time(time_s)
+        )
+
+    def log_state_json(
+        self,
+        state: Mapping[str, object],
+        *,
+        time_s: float | None = None,
+    ) -> None:
+        """写入项目完整状态 JSON 快照。
+
+        参数:
+            state: JSON 可序列化的状态字典。
+            time_s: 可选日志时间，单位 s。
+        返回:
+            无返回值。
+        """
+
+        self.state_channel.log(
+            dict(state), log_time=None if time_s is None else _ns_time(time_s)
         )
 
     def log_scene_spheres(

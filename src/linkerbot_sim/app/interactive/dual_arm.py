@@ -10,6 +10,10 @@ from linkerbot_sim.app.motion.dual_arm import (
 )
 from linkerbot_sim.app.runtime.dual_robot import DualRobotAppRuntime
 from linkerbot_sim.app.interactive.queue import InteractiveMotionQueue
+from linkerbot_sim.app.interactive.state_stream import (
+    InteractiveStateStreamConfig,
+    start_interactive_state_stream,
+)
 from linkerbot_sim.app.interactive.transports import start_interactive_transports
 from linkerbot_sim.execution.dual_steps import (
     DualCommandExecutionInterrupted,
@@ -27,6 +31,7 @@ def run_interactive_dual_arm_motion(
     tcp_jsonl_port: int | None = None,
     websocket_host: str | None = None,
     websocket_port: int | None = None,
+    state_stream_config: InteractiveStateStreamConfig | None = None,
     start_step: int = 0,
 ) -> int:
     """Run a long-lived interactive motion loop."""
@@ -45,9 +50,15 @@ def run_interactive_dual_arm_motion(
         websocket_host=websocket_host,
         websocket_port=websocket_port,
     )
+    state_stream = None
     step = int(start_step)
-    print("DUAL_ARM_INTERACTIVE_READY", flush=True)
     try:
+        state_stream = start_interactive_state_stream(
+            runtime,
+            config=state_stream_config,
+            status_prefix=runtime.status_prefix,
+        )
+        print("DUAL_ARM_INTERACTIVE_READY", flush=True)
         with DualArmCuMotionExecutionSession(
             runtime,
             tcp=tcp,
@@ -125,6 +136,8 @@ def run_interactive_dual_arm_motion(
                     flush=True,
                 )
     finally:
+        if state_stream is not None:
+            state_stream.close()
         transports.stop()
         print("DUAL_ARM_INTERACTIVE_EXIT", flush=True)
     return step

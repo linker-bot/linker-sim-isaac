@@ -64,6 +64,14 @@ class _FakeController:
         self.applied.append(targets)
 
 
+class _FakeObserver:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def observe(self, runtime, *, step: int, phase: str | None = None) -> None:
+        self.calls.append((runtime, step, phase))
+
+
 def _side(side: str) -> RobotSideRuntime:
     return RobotSideRuntime(
         side=side,
@@ -141,3 +149,28 @@ def test_dual_raw_command_sequence_repeats_targets_by_step_interval() -> None:
     ]
     assert left_positions == [[0.1, 0.2], [0.1, 0.2], [0.3, 0.4], [0.3, 0.4]]
     assert right_positions == [[5.0, 6.0], [5.0, 6.0], [5.0, 6.0], [5.0, 6.0]]
+
+
+def test_dual_runtime_state_observer_runs_after_world_step() -> None:
+    observer = _FakeObserver()
+    runtime = DualRobotRuntime(
+        left=_side("left"),
+        right=_side("right"),
+        simulation_world=_FakeWorld(),
+        articulation_action_type=object,
+        simulation_app=None,
+        render_enabled=False,
+        state_observer=observer,
+    )
+
+    step = execute_dual_raw_command_target_sequence(
+        runtime=runtime,
+        left_positions=np.asarray([[0.1, 0.2]], dtype=float),
+        right_positions=np.asarray([[0.3, 0.4]], dtype=float),
+        step=5,
+        phase="observe",
+    )
+
+    assert step == 6
+    assert runtime.simulation_world.step_calls == 1
+    assert observer.calls == [(runtime, 5, "observe")]

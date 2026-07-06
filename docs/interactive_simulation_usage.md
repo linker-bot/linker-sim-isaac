@@ -7,7 +7,7 @@
 最常用的 GUI 调试启动方式：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_interactive.py --gui --hold
+python scripts/dual_arm_interactive.py --gui --hold
 ```
 
 启动成功后会打印：
@@ -25,7 +25,7 @@ DUAL_ARM_INTERACTIVE_READY
 默认启用 stdin。每行发送一个 JSON object：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_interactive.py --gui --hold
+python scripts/dual_arm_interactive.py --gui --hold
 ```
 
 然后在终端输入：
@@ -39,7 +39,7 @@ env_isaaclab/bin/python scripts/dual_arm_interactive.py --gui --hold
 启动 TCP JSONL 服务：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+python scripts/dual_arm_interactive.py \
   --gui --hold \
   --tcp-jsonl-host 127.0.0.1 \
   --tcp-jsonl-port 8765
@@ -56,13 +56,55 @@ printf '%s\n' '{"type":"status"}' | nc 127.0.0.1 8765
 启动 WebSocket 服务：
 
 ```bash
-env_isaaclab/bin/python scripts/dual_arm_interactive.py \
+python scripts/dual_arm_interactive.py \
   --gui --hold \
   --websocket-host 127.0.0.1 \
   --websocket-port 8766
 ```
 
 每条 WebSocket message 是一个 JSON object。WebSocket 适合浏览器控制面板使用。
+
+### Foxglove 状态遥测
+
+交互 runtime 可以同时启动 Foxglove live server，用于实时观察关节状态、对象位置和完整状态快照：
+
+```bash
+python scripts/dual_arm_interactive.py \
+  --gui --hold \
+  --foxglove-live-host 127.0.0.1 \
+  --foxglove-live-port 8767 \
+  --state-rate-hz 60 \
+  --state-include-objects
+```
+
+打开 Foxglove 后连接：
+
+```text
+ws://127.0.0.1:8767
+```
+
+也可以写离线 MCAP：
+
+```bash
+python scripts/dual_arm_interactive.py \
+  --gui --hold \
+  --foxglove-mcap-path logs/interactive_state.mcap \
+  --state-rate-hz 60 \
+  --state-include-efforts \
+  --foxglove-joint-effort-field measured
+```
+
+当前 Foxglove 输出只用于状态遥测，不接收 motion command。项目交互 TCP/WebSocket 仍只负责命令和队列状态。
+
+默认 topic：
+
+- `/joint_states`: Foxglove 标准 JointStates，发布关节位置和速度。
+- `/scene`: 环境对象位置 marker。
+- `/linkerbot/state`: JSON 编码的完整快照，包含 `q/dq/ddq`、三类 effort、对象 pose、step 和 time。
+
+`/joint_states` 只有一个 `effort` 字段。`--foxglove-joint-effort-field` 可以选择 `none`、`commanded`、`measured` 或 `applied`；完整三类 effort 始终放在 `/linkerbot/state` 中。
+
+完整 topic、MCAP、JSON 快照、effort 语义和连接排错见 `docs/foxglove_data_usage.md`。
 
 ## 通用规则
 

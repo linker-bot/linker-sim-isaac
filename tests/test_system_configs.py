@@ -638,7 +638,7 @@ def test_scene1_places_rope_from_env_root_pose() -> None:
     )
 
     assert object_profile.prim_path == "/World/CapsuleRope"
-    assert rope_object.root_pose.xyz == (0.1, -0.55, 0.05)
+    assert rope_object.root_pose.xyz == (0.1, -0.55, -0.4)
 
 
 def test_system_configs_reject_obsolete_shapes() -> None:

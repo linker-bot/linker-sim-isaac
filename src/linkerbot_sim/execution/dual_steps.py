@@ -313,7 +313,20 @@ def _apply_dual_targets_once(
     runtime.simulation_world.step(render=runtime.render_enabled)
     _write_side_log(runtime.left, left_targets, step, phase, runtime)
     _write_side_log(runtime.right, right_targets, step, phase, runtime)
+    _observe_state(runtime, step=step, phase=phase)
     return step + 1
+
+
+def _observe_state(runtime: DualRobotRuntime, *, step: int, phase: str) -> None:
+    """执行一帧后的可选状态采样；observer 自身负责频率和输出策略。"""
+
+    observer = getattr(runtime, "state_observer", None)
+    if observer is None:
+        return
+    observe = getattr(observer, "observe", None)
+    if observe is None:
+        return
+    observe(runtime, step=step, phase=phase)
 
 
 def _write_side_log(

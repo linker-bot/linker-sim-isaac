@@ -7,7 +7,7 @@
 `configs/` 里的文件按 profile 名称使用。脚本参数通常传文件名 stem，而不是 YAML 路径：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --env scene1 \
   --cumotion-profile default \
   --logging-profile default_logger
@@ -154,7 +154,7 @@ controller 配置固定从 `configs/controllers/arm_controller.yaml` 和 `config
 脚本通过 `--control-mode` 选择读取哪个控制段：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --control-mode position
 ```
 
@@ -177,7 +177,7 @@ cuMotion profile 只放算法参数，例如 IK 容差、planner pipeline、grap
 使用方式：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --cumotion-profile default
 ```
 
@@ -203,14 +203,14 @@ logging profile 控制关节跟踪 CSV 是否写入、输出路径、flush 周�
 使用方式：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --logging-profile default_logger
 ```
 
 常用命令行覆盖：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --log logs/joint_tracking/test.csv \
   --log-interval-steps 1 \
   --log-measured-effort
@@ -304,7 +304,7 @@ objects[].object_profile
 双臂 dry-run 不启动 Isaac，适合快速检查 env、左右 robot profile 和 cuMotion 资源组合：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
+PYTHONPATH=src python scripts/dual_arm_motion_test.py \
   --dry-run \
   --env scene2 \
   --cumotion-profile default
@@ -313,7 +313,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py \
 单臂导入检查会启动 Isaac、导入对象和机器人，但不执行抓取：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --env scene1 \
   --no-grasp
 ```
@@ -321,7 +321,7 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
 打开 GUI 检查 stage、碰撞体和 root pose：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py \
+PYTHONPATH=src python scripts/pinch_grasp.py \
   --env scene1 \
   --gui \
   --hold \

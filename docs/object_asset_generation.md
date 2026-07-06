@@ -19,11 +19,11 @@
 
 ## 运行环境
 
-从仓库根目录执行生成命令：
+先激活包含 Isaac/Omni 扩展的 Python 环境，再从仓库根目录执行生成命令：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py
+PYTHONPATH=src python tools/object_assets/flexible/rope/build_asset.py
+PYTHONPATH=src python tools/object_assets/rigid/tblock/build_asset.py
 ```
 
 注意：
@@ -49,7 +49,7 @@ assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 常用命令：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/flexible/rope/build_asset.py \
+PYTHONPATH=src python tools/object_assets/flexible/rope/build_asset.py \
   --config tools/object_assets/flexible/rope/config.yaml \
   --output assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 ```
@@ -90,7 +90,7 @@ assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
 常用命令：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python tools/object_assets/rigid/tblock/build_asset.py \
+PYTHONPATH=src python tools/object_assets/rigid/tblock/build_asset.py \
   --config tools/object_assets/rigid/tblock/config.yaml \
   --output assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
 ```
@@ -119,7 +119,7 @@ configs/objects/TblockV1_default.yaml
 推荐使用 Isaac Sim 打开生成后的 USD：
 
 ```bash
-env_isaaclab/bin/isaacsim isaacsim.exp.full --exec \
+isaacsim isaacsim.exp.full --exec \
   "open_stage.py assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda"
 ```
 
@@ -160,19 +160,19 @@ objects:
 配置和轻量测试：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python -m pytest tests/test_system_configs.py -q
+PYTHONPATH=src python -m pytest tests/test_system_configs.py -q
 ```
 
 双臂场景配置 dry-run：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/dual_arm_motion_test.py --dry-run --env scene3
+PYTHONPATH=src python scripts/dual_arm_motion_test.py --dry-run --env scene3
 ```
 
 单臂导入保持：
 
 ```bash
-PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --env scene1 --no-grasp --gui
+PYTHONPATH=src python scripts/pinch_grasp.py --env scene1 --no-grasp --gui
 ```
 
 ## 常见问题
@@ -184,7 +184,8 @@ PYTHONPATH=src env_isaaclab/bin/python scripts/pinch_grasp.py --env scene1 --no-
 : 从仓库根目录运行，并设置 `PYTHONPATH=src`。
 
 `pxr`、`PhysxSchema` 或 USD schema 相关错误
-: 用 `env_isaaclab/bin/python` 运行 `build_asset.py`。这些 schema 依赖 Isaac/Omni 扩展加载。
+: 确认当前 `python` 来自 Isaac/Omni 环境，再运行 `build_asset.py`。这些 schema 依赖 Isaac/Omni
+  扩展加载。
 
 资产生成了，但仿真中找不到 prim
 : 检查 `configs/objects/*.yaml` 的 `asset_path` 和 `prim_path`；如果该对象 profile 使用
