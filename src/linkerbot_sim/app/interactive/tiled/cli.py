@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hold",
         action="store_true",
-        help="stdin EOF 后仍保持交互进程，适合 IDE/后台启动或只看 Foxglove",
+        help="空闲时保持当前姿态并持续刷新 GUI/Foxglove；stdin EOF 后仍保持进程",
     )
     parser.add_argument("--tcp-jsonl-host", default="127.0.0.1")
     parser.add_argument("--tcp-jsonl-port", type=int, default=None)
@@ -169,6 +169,7 @@ def main() -> None:
             telemetry=telemetry,
             request_queue=request_queue,
             telemetry_rate_hz=float(args.telemetry_rate_hz),
+            hold=bool(args.hold),
         )
     finally:
         if server is not None:

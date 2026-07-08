@@ -21,6 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--logging-profile", default="default_logger")
     parser.add_argument("--control-mode", default="position")
     parser.add_argument("--gui", action="store_true")
+    parser.add_argument("--hold", action="store_true", help="无命令时保持当前姿态")
     parser.add_argument("--tcp-jsonl-host", default="127.0.0.1")
     parser.add_argument("--tcp-jsonl-port", type=int, default=None)
     parser.add_argument("--websocket-host", default="127.0.0.1")
@@ -67,6 +68,7 @@ def run_interactive_mode(args: argparse.Namespace) -> int:
         logging_profile=args.logging_profile,
         control_mode=args.control_mode,
         gui=args.gui,
+        hold_app=args.hold,
         status_prefix="SINGLE_ARM_INTERACTIVE",
     )
     completed = False

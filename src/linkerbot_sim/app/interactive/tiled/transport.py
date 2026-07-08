@@ -73,11 +73,12 @@ def run_interactive_loop(
     telemetry: TiledInteractiveTelemetrySink | None,
     request_queue: "queue.Queue[_InteractiveRequest | _InteractiveControl]",
     telemetry_rate_hz: float,
+    hold: bool = False,
 ) -> None:
     """运行真正的 tiled interactive 主循环。"""
 
     telemetry_period_s = _telemetry_period_s(telemetry, telemetry_rate_hz)
-    idle_period_s = _runtime_idle_period_s(runtime, telemetry_period_s)
+    idle_period_s = _runtime_idle_period_s(runtime, telemetry_period_s, hold=hold)
     now = time.monotonic()
     next_telemetry_at = now + telemetry_period_s if telemetry_period_s is not None else now
     next_idle_at = now + idle_period_s if idle_period_s is not None else now
@@ -225,9 +226,13 @@ def _interactive_queue_timeout(
 def _runtime_idle_period_s(
     runtime: object,
     telemetry_period_s: float | None,
+    *,
+    hold: bool,
 ) -> float | None:
     """判断主循环是否需要空闲刷新，以及刷新周期。"""
 
+    if not hold:
+        return None
     idle_step = getattr(runtime, "idle_step", None)
     if not callable(idle_step):
         return None

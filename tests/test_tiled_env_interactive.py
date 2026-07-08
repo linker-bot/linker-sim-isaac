@@ -449,7 +449,7 @@ def test_interactive_loop_processes_queued_requests_on_main_loop() -> None:
     assert runtime.quit_event.is_set()
 
 
-def test_interactive_loop_idles_gui_runtime_without_requests() -> None:
+def test_interactive_loop_idles_gui_runtime_with_hold_without_requests() -> None:
     module = load_tiled_interactive_module()
 
     class FakeRuntime:
@@ -471,9 +471,47 @@ def test_interactive_loop_idles_gui_runtime_without_requests() -> None:
         telemetry=None,
         request_queue=queue.Queue(),
         telemetry_rate_hz=0.0,
+        hold=True,
     )
 
     assert runtime.idle_steps == 1
+
+
+def test_interactive_loop_does_not_idle_gui_runtime_without_hold() -> None:
+    module = load_tiled_interactive_module()
+
+    class FakeRuntime:
+        render = True
+        idle_period_s = 0.001
+
+        def __init__(self) -> None:
+            self.quit_event = threading.Event()
+            self.idle_steps = 0
+
+        def idle_step(self) -> None:
+            self.idle_steps += 1
+
+        def quit(self) -> dict[str, object]:
+            self.quit_event.set()
+            return {"event": "quit", "accepted": True}
+
+    runtime = FakeRuntime()
+    request_queue: queue.Queue[object] = queue.Queue()
+    request_queue.put(
+        tiled_transport._InteractiveRequest(
+            line='{"type":"quit"}',
+            source="unit",
+        )
+    )
+
+    module.run_interactive_loop(
+        runtime,
+        telemetry=None,
+        request_queue=request_queue,
+        telemetry_rate_hz=0.0,
+    )
+
+    assert runtime.idle_steps == 0
 
 
 def test_stdin_eof_quit_policy_keeps_tcp_and_telemetry_alive() -> None:

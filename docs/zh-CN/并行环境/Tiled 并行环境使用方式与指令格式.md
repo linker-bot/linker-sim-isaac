@@ -149,7 +149,7 @@ tiled:
 | `--max-pending-requests` | in-flight planner 请求上限，默认 `64`。 |
 | `--max-completed-results` | completed result 摘要缓存上限，默认 `256`；设为 `0` 表示不保留。 |
 | `--stdin / --no-stdin` | 是否从 stdin 读取 JSONL。默认开启。 |
-| `--hold` | stdin EOF 后仍保持进程，适合 IDE/后台启动、TCP-only 或只看 Foxglove。 |
+| `--hold` | 空闲时保持当前 target 并持续刷新 GUI/Foxglove；stdin EOF 后仍保持进程，适合 IDE/后台启动、TCP-only 或只看 Foxglove。 |
 | `--tcp-jsonl-host` | TCP JSONL host，默认 `127.0.0.1`。 |
 | `--tcp-jsonl-port` | TCP JSONL port；不传则不启动 TCP server。 |
 

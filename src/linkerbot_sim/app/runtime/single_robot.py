@@ -142,6 +142,7 @@ def create_single_robot_runtime(
     logging_profile: str = "default_logger",
     control_mode: str = "position",
     gui: bool = False,
+    hold_app: bool = False,
     status_prefix: str | None = None,
     logging_overrides: LoggingRuntimeOverrides | None = None,
 ) -> SingleRobotRuntime:
@@ -249,7 +250,7 @@ def create_single_robot_runtime(
             simulation_world=session.world,
             articulation_action_type=session.articulation_action_type,
             joint_controller=controller,
-            simulation_app=session.app,
+            simulation_app=session.app if hold_app else None,
             render_enabled=gui or camera_output is not None,
             drive_logger=logger,
             camera_observer=None if camera_output is None else camera_output.observer,

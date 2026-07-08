@@ -130,7 +130,7 @@ The env count is defined by YAML `tiled.num_envs`; the CLI does not override it.
 | `--planner-workers` | Number of async planner workers. Workers consume snapshots and do not access Isaac runtime. |
 | `--max-pending-requests` | In-flight planner request limit. |
 | `--stdin / --no-stdin` | Enable/disable stdin JSONL. |
-| `--hold` | Keep the process alive after stdin EOF. |
+| `--hold` | Keep current targets and continue idle GUI/Foxglove stepping; also keep the process alive after stdin EOF. |
 | `--tcp-jsonl-host` | TCP JSONL host. |
 | `--tcp-jsonl-port` | TCP JSONL port. |
 
