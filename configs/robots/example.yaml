@@ -79,8 +79,16 @@ cumotion:
   xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
   urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
 
-  # 规划/IK 默认工具坐标系，必须存在于 cuMotion 加载的 URDF/XRDF 模型中。
+  # 规划/IK 默认法兰坐标系，必须存在于 cuMotion 加载的 URDF/XRDF 模型中。
   flange_frame: AR5V2_L_arm_flan_link
 
-  # 可选：基础 URDF 中已有的 TCP frame；pinch TCP 通常由脚本临时写入，不在这里手写。
-  # custom_tcp_frame: tool_tcp
+  # 可选：默认 TCP frame。若省略，IK/规划会回退到 flange_frame。
+  default_tcp_frame: example_tool_tcp
+
+  # 可选：一个或多个自定义 TCP fixed frames。每个 TCP 默认相对 flange_frame，也可以显式写
+  # parent_frame 指向其它已存在的 URDF link。运行时 JSON 的 tcp_frame_name 只能选择这些
+  # 已进入 cuMotion context 的 frame，不会创建新 TCP。
+  custom_tcps:
+    example_tool_tcp:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]

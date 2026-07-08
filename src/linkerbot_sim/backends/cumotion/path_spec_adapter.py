@@ -16,6 +16,7 @@ import numpy as np
 from linkerbot_sim.backends.cumotion.motion_planner_config import (
     MotionPlannerBackendConfig,
 )
+from linkerbot_sim.backends.cumotion.context import validate_cumotion_frame
 from linkerbot_sim.backends.cumotion.motion_planner_utils import (
     attr,
     validate_cspace_width,
@@ -571,8 +572,7 @@ def _validate_frame(context, tcp_frame_name: str) -> None:
     而不是等 pybind 在 conversion 深处抛出更难定位的异常。
     """
 
-    if hasattr(context, "has_frame") and not context.has_frame(tcp_frame_name):
-        raise ValueError(f"cuMotion frame {tcp_frame_name!r} not found")
+    validate_cumotion_frame(context, tcp_frame_name, label="tcp_frame_name")
 
 
 def _set_if_present(target, name: str, source, *, cast=float) -> None:

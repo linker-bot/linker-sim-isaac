@@ -18,12 +18,17 @@ world view 查询。cuMotion 导入被放到构造函数中，保证没有安装
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+import hashlib
+import json
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
+from linkerbot_sim.backends.cumotion.tcp_frame import TcpFrame
+from linkerbot_sim.backends.cumotion.tcp_urdf_builder import write_tcp_urdf_with_frames
 from linkerbot_sim.planning.collision_objects import CollisionObject
 from linkerbot_sim.utils.paths import repo_path
 from linkerbot_sim.backends.cumotion.motion_planner_config import (
@@ -170,9 +175,10 @@ class CuMotionConfig:
     # 默认末端 frame 名
     # 单臂配置通常填机械臂法兰；双臂融合模型不设置默认 frame，调用方必须显式选择 TCP。
     flange_frame: str | None
-    # 自定义 TCP frame 名
-    # 只有 URDF/XRDF 中已经包含额外工具坐标系，或动作脚本临时写入 fixed TCP frame 时才设置
-    custom_tcp_frame: str | None = None
+    # 默认 TCP frame 名；为空时回退到 flange_frame。该 frame 必须存在于最终 cuMotion context 中。
+    default_tcp_frame: str | None = None
+    # 从 YAML custom_tcps 解析得到的 fixed TCP frames。创建 context 前会 materialize 到派生 URDF。
+    custom_tcp_frames: tuple[TcpFrame, ...] = ()
     # FK/IK 相关参数
     kinematics: CuMotionKinematicsConfig = field(default_factory=CuMotionKinematicsConfig)
     # motion-planner facade 的分组配置；为 None 时 context 会用上面的默认参数构造配置
@@ -209,10 +215,15 @@ class CuMotionConfig:
         # 路径立即按仓库根目录解析，避免后续后端对象依赖调用脚本当前工作目录。
         # seed 和 frame 名先保持配置形式；它们是否匹配机器人 C-space/URDF link 树，只有
         # cuMotion 加载模型后才能可靠判断。
-        custom_tcp_frame = settings.get("custom_tcp_frame")
         flange_frame = settings.get("flange_frame")
-        if flange_frame is not None and custom_tcp_frame == flange_frame:
-            custom_tcp_frame = None
+        default_tcp_frame = settings.get("default_tcp_frame")
+        if flange_frame is not None and default_tcp_frame == flange_frame:
+            default_tcp_frame = None
+        custom_tcp_frames = _parse_custom_tcp_frames(
+            settings.get("custom_tcps"),
+            default_parent_frame=None if flange_frame is None else str(flange_frame),
+            label="cumotion.custom_tcps",
+        )
 
         _reject_removed_cumotion_fields(settings)
         kinematics = _kinematics_config_from_settings(settings)
@@ -221,9 +232,10 @@ class CuMotionConfig:
             xrdf_path=repo_path(settings["xrdf_path"]),
             urdf_path=repo_path(settings["urdf_path"]),
             flange_frame=None if flange_frame is None else str(flange_frame),
-            custom_tcp_frame=None
-            if custom_tcp_frame is None
-            else str(custom_tcp_frame),
+            default_tcp_frame=None
+            if default_tcp_frame is None
+            else str(default_tcp_frame),
+            custom_tcp_frames=custom_tcp_frames,
             kinematics=kinematics,
             motion_planner=MotionPlannerBackendConfig.from_mapping(
                 settings.get("motion_planner"),
@@ -246,13 +258,15 @@ class CuMotionConfig:
             raise ValueError("urdf_path cannot be empty")
         if self.flange_frame is not None and not self.flange_frame:
             raise ValueError("flange_frame cannot be empty")
-        if self.custom_tcp_frame is not None and not self.custom_tcp_frame:
-            raise ValueError("custom_tcp_frame cannot be empty")
+        if self.default_tcp_frame is not None and not self.default_tcp_frame:
+            raise ValueError("default_tcp_frame cannot be empty")
+        _validate_unique_tcp_frames(self.custom_tcp_frames)
 
         # 解析函数并校验可选字段，确保手动构造 CuMotionConfig 时也满足同样约束。
         self.kinematics.validate()
         if self.motion_planner is not None:
             self.motion_planner.validate()
+
 
 def _parse_optional_cspace_seeds(value) -> np.ndarray | None:
     """解析可选 C-space 种子数组。
@@ -277,6 +291,84 @@ def _mapping_or_empty(value, label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be a mapping")
     return value
+
+
+def _parse_custom_tcp_frames(
+    value: object,
+    *,
+    default_parent_frame: str | None,
+    label: str,
+) -> tuple[TcpFrame, ...]:
+    """解析 ``cumotion.custom_tcps`` 为已绑定 parent frame 的 fixed TCP frames。"""
+
+    if value is None:
+        return ()
+    frames: list[TcpFrame] = []
+    if isinstance(value, Mapping):
+        iterable = value.items()
+        for frame_name, frame_data in iterable:
+            data = _mapping_or_empty(frame_data, f"{label}.{frame_name}")
+            frames.append(
+                _tcp_frame_from_mapping(
+                    str(frame_name),
+                    data,
+                    default_parent_frame=default_parent_frame,
+                    label=f"{label}.{frame_name}",
+                )
+            )
+        return tuple(frames)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for index, item in enumerate(value):
+            data = _mapping_or_empty(item, f"{label}[{index}]")
+            frame_name = data.get("frame_name")
+            if not isinstance(frame_name, str) or not frame_name:
+                raise ValueError(f"{label}[{index}].frame_name is required")
+            frames.append(
+                _tcp_frame_from_mapping(
+                    frame_name,
+                    data,
+                    default_parent_frame=default_parent_frame,
+                    label=f"{label}[{index}]",
+                )
+            )
+        return tuple(frames)
+    raise ValueError(f"{label} must be a mapping or a sequence")
+
+
+def _tcp_frame_from_mapping(
+    frame_name: str,
+    data: Mapping[str, Any],
+    *,
+    default_parent_frame: str | None,
+    label: str,
+) -> TcpFrame:
+    """从单个 custom TCP mapping 构造 ``TcpFrame``。"""
+
+    if not frame_name:
+        raise ValueError(f"{label}.frame_name cannot be empty")
+    parent_frame = data.get("parent_frame", default_parent_frame)
+    if not isinstance(parent_frame, str) or not parent_frame:
+        raise ValueError(
+            f"{label}.parent_frame is required when cumotion.flange_frame is not set"
+        )
+    return TcpFrame.from_xyz_rpy(
+        frame_name=frame_name,
+        parent_frame=parent_frame,
+        xyz=data.get("xyz", (0.0, 0.0, 0.0)),
+        rpy=data.get("rpy", (0.0, 0.0, 0.0)),
+    )
+
+
+def _validate_unique_tcp_frames(frames: Sequence[TcpFrame]) -> None:
+    names: set[str] = set()
+    for frame in frames:
+        if not frame.frame_name:
+            raise ValueError("custom TCP frame_name cannot be empty")
+        if frame.frame_name in names:
+            raise ValueError(f"Duplicate custom TCP frame: {frame.frame_name}")
+        names.add(frame.frame_name)
+        if not frame.parent_frame:
+            raise ValueError(f"custom TCP {frame.frame_name!r} parent_frame cannot be empty")
 
 
 def _kinematics_config_from_settings(
@@ -310,6 +402,7 @@ def _reject_removed_cumotion_fields(settings: Mapping[str, Any]) -> None:
         "motion_planner_params",
         "trajectory_limits",
         "trajectory_solver_params",
+        "custom_tcp_frame",
     }
     _reject_removed_keys(settings, removed_keys, label="cumotion")
 
@@ -347,6 +440,108 @@ def _parse_optional_params_mapping(value) -> dict[str, Any]:
     return params
 
 
+def materialize_cumotion_config(config: CuMotionConfig) -> CuMotionConfig:
+    """把 YAML 声明的 custom TCP fixed frames materialize 到派生 URDF。
+
+    运行时 JSON 只能选择已经存在的 frame；因此 ``custom_tcps`` 必须在创建 cuMotion context
+    前写入 URDF。输出路径使用输入资源和 TCP 定义的 hash，稳定写入 ``.cache/cumotion``。
+    """
+
+    if not config.custom_tcp_frames:
+        return config
+    output_path = _custom_tcp_urdf_path(config)
+    if not output_path.is_file():
+        write_tcp_urdf_with_frames(
+            config.urdf_path,
+            output_path,
+            config.custom_tcp_frames,
+        )
+    return replace(config, urdf_path=output_path, custom_tcp_frames=())
+
+
+def default_tcp_frame_name(config: CuMotionConfig) -> str | None:
+    """返回配置层默认 TCP frame，未配置时回退到 flange frame。"""
+
+    return config.default_tcp_frame or config.flange_frame
+
+
+def resolve_tcp_frame_name(
+    context: object,
+    *,
+    tcp_frame_name: str | None = None,
+    default_tcp_frame_name: str | None = None,
+    label: str = "tcp_frame_name",
+) -> str:
+    """按统一优先级解析并校验 cuMotion frame。
+
+    优先级为显式 ``tcp_frame_name``、调用方默认、context config 默认 TCP、flange frame。
+    该函数不创建 frame；解析出的 frame 必须已经在 context 的 frame 集合中。
+    """
+
+    config = getattr(context, "config", None)
+    frame_name = (
+        tcp_frame_name
+        or default_tcp_frame_name
+        or (default_tcp_frame_name_from_config(config) if config is not None else None)
+    )
+    if frame_name is None:
+        raise ValueError(f"{label} is required because this cuMotion config has no default frame")
+    frame = str(frame_name)
+    validate_cumotion_frame(context, frame, label=label)
+    return frame
+
+
+def default_tcp_frame_name_from_config(config: object) -> str | None:
+    """从 CuMotionConfig-like 对象读取默认 frame。"""
+
+    return (
+        getattr(config, "default_tcp_frame", None)
+        or getattr(config, "flange_frame", None)
+    )
+
+
+def validate_cumotion_frame(context: object, frame_name: str, *, label: str = "frame") -> None:
+    """校验 frame 名非空，且在支持查询的 context 中必须存在。"""
+
+    if not str(frame_name):
+        raise ValueError(f"{label} cannot be empty")
+    if hasattr(context, "has_frame") and not context.has_frame(str(frame_name)):
+        raise ValueError(f"cuMotion frame {frame_name!r} not found")
+
+
+def _custom_tcp_urdf_path(config: CuMotionConfig) -> Path:
+    """为 custom TCP 派生 URDF 生成稳定缓存路径。"""
+
+    base = Path(config.urdf_path)
+    frames = [
+        {
+            "frame_name": frame.frame_name,
+            "parent_frame": frame.parent_frame,
+            "xyz": np.asarray(frame.xyz, dtype=float).reshape(3).tolist(),
+            "rpy": np.asarray(frame.rpy, dtype=float).reshape(3).tolist(),
+        }
+        for frame in config.custom_tcp_frames
+    ]
+    digest = hashlib.sha256(
+        json.dumps(
+            {
+                "urdf_path": str(base.resolve()),
+                "urdf_sha256": hashlib.sha256(base.read_bytes()).hexdigest(),
+                "frames": frames,
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()[:12]
+    return repo_path(".cache/cumotion") / f"{base.stem}_custom_tcps_{digest}.urdf"
+
+
+def urdf_link_names(urdf_path: str | Path) -> set[str]:
+    """读取 URDF 中所有 link 名称。"""
+
+    root = ET.parse(Path(urdf_path)).getroot()
+    return {str(link.get("name")) for link in root.findall("link") if link.get("name")}
+
+
 class CuMotionContext:
     """缓存 cuMotion robot description 和 kinematics。
 
@@ -356,6 +551,8 @@ class CuMotionContext:
 
     def __init__(self, config: CuMotionConfig) -> None:
         """延迟导入 cuMotion 并加载机器人描述文件。"""
+
+        config = materialize_cumotion_config(config)
 
         # cuMotion 是可选且体量较大的依赖。把导入错误包装成项目语义更清晰的提示，
         # 可以让用户区分“后端未安装”和“配置文件写错”。
@@ -498,7 +695,7 @@ class CuMotionContext:
                     )
         for frame_name, label in (
             (self.config.flange_frame, "flange_frame"),
-            (self.config.custom_tcp_frame, "custom_tcp_frame"),
+            (self.config.default_tcp_frame, "default_tcp_frame"),
         ):
             if frame_name and not self.has_frame(frame_name):
                 raise ValueError(
@@ -508,7 +705,7 @@ class CuMotionContext:
     def make_inverse_kinematics(self, *, tcp_frame_name: str | None = None):
         """创建逆运动学组件。
 
-        ``tcp_frame_name`` 为空时优先使用自定义 TCP，否则回退到法兰 frame；返回对象会复用本 context 的
+        ``tcp_frame_name`` 为空时优先使用默认 TCP，否则回退到法兰 frame；返回对象会复用本 context 的
         ``robot_description`` 和 ``kinematics``。
         """
 
@@ -516,16 +713,11 @@ class CuMotionContext:
             CuMotionInverseKinematics,
         )
 
-        # tcp_frame_name, custom_tcp_frame, flange_frame, 从左到右取第一个有效值
-        frame_name = (
-            tcp_frame_name
-            or self.config.custom_tcp_frame
-            or self.config.flange_frame
+        frame_name = resolve_tcp_frame_name(
+            self,
+            tcp_frame_name=tcp_frame_name,
+            label="tcp_frame_name",
         )
-        if frame_name is None:
-            raise ValueError(
-                "tcp_frame_name is required because this cuMotion config has no default frame"
-            )
         return CuMotionInverseKinematics(
             self,
             tcp_frame_name=frame_name,
@@ -560,17 +752,11 @@ class CuMotionContext:
             CuMotionMotionPlanner,
         )
 
-        # tcp_frame_name, custom_tcp_frame, flange_frame 从左到右取第一个有效值。这里不动态
-        # 写自定义 TCP URDF；frame 必须已经存在于创建 context 时加载的 robot description。
-        frame_name = (
-            tcp_frame_name
-            or self.config.custom_tcp_frame
-            or self.config.flange_frame
+        frame_name = resolve_tcp_frame_name(
+            self,
+            tcp_frame_name=tcp_frame_name,
+            label="tcp_frame_name",
         )
-        if frame_name is None:
-            raise ValueError(
-                "tcp_frame_name is required because this cuMotion config has no default frame"
-            )
         return CuMotionMotionPlanner(
             self,
             tcp_frame_name=frame_name,

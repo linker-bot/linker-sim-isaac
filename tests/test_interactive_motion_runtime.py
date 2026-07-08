@@ -20,7 +20,7 @@ from linkerbot_sim.planning.requests import IKRequest, TaskSpacePath, TcpArcSegm
 from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
-DEFAULT_TCP = {"left": "left_demo_tcp", "right": "right_demo_tcp"}
+DEFAULT_TCP = {"left": "AR5V2_L_pinch_tcp", "right": "AR5V2_R_pinch_tcp"}
 
 
 def test_parse_interactive_ik_pose_with_hand_overlay() -> None:
@@ -48,7 +48,7 @@ def test_parse_interactive_ik_pose_with_hand_overlay() -> None:
     move = command.moves[0]
     assert isinstance(move, CumotionMoveSpec)
     assert isinstance(move.request, IKRequest)
-    assert move.tcp_frame_name == "left_demo_tcp"
+    assert move.tcp_frame_name == "AR5V2_L_pinch_tcp"
     assert move.overlays[0].left_hand is not None
     assert move.overlays[0].left_hand.duration_s == 1.0
 

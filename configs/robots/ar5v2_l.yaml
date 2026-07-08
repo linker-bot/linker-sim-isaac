@@ -83,3 +83,12 @@ cumotion:
   # 机械臂法兰 frame。
   # 没有显式 TCP 时，IK/规划会把该 frame 作为默认末端；生成自定义 TCP 时也会以它为父 frame。
   flange_frame: AR5V2_L_arm_flan_link
+
+  # 默认 TCP frame。运行时 JSON 中的 tcp_frame_name 只负责在已加载 frame 中选择。
+  default_tcp_frame: AR5V2_L_tool_tcp
+
+  # 自定义 TCP fixed frames，位姿相对 flange_frame；创建 cuMotion context 前会写入派生 URDF。
+  custom_tcps:
+    AR5V2_L_tool_tcp:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]

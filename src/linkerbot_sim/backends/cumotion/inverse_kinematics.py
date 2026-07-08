@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import numpy as np
+from linkerbot_sim.backends.cumotion.context import validate_cumotion_frame
 from linkerbot_sim.backends.cumotion.pose_adapter import (
     pose_from_position_quat_wxyz,
     rotation_from_quat_wxyz,
@@ -42,8 +43,8 @@ class CuMotionInverseKinematics:
     """使用 cuMotion 求解 TCP 逆运动学。
 
     ``tcp_frame_name`` 必须是 cuMotion robot description 中存在的 link/frame；自定义 TCP
-    通常由 ``tcp_context.make_cumotion_context`` 装配进临时 URDF/context。实例会复用上一帧成功解作为 seed，
-    以提高连续轨迹的求解稳定性。
+    通常来自 robot YAML 的 ``cumotion.custom_tcps``，并在 ``CuMotionContext`` 创建时写入
+    派生 URDF。实例会复用上一帧成功解作为 seed，以提高连续轨迹的求解稳定性。
     """
 
     def __init__(self, context, *, tcp_frame_name: str | None = None) -> None:
@@ -86,8 +87,8 @@ class CuMotionInverseKinematics:
     def frame_names(self) -> list[str]:
         """返回当前机器人描述中 IK 可使用的 frame 名。
 
-        如果自定义 TCP 没有出现在这里，说明临时 URDF/robot description 尚未把该 fixed frame
-        写入 cuMotion。
+        如果自定义 TCP 没有出现在这里，说明 robot YAML/base URDF 没有声明该 frame，或
+        ``CuMotionContext`` 尚未用派生 URDF 加载它。
         """
 
         return self.context.frame_names()
@@ -114,8 +115,7 @@ class CuMotionInverseKinematics:
 
         # TCP frame 是否存在。
         frame_name = str(request.tcp_frame_name or self.tcp_frame_name)
-        if hasattr(self.context, "has_frame") and not self.context.has_frame(frame_name):
-            raise ValueError(f"cuMotion frame {frame_name!r} not found")
+        validate_cumotion_frame(self.context, frame_name, label="tcp_frame_name")
         # warm-start IK C-space seed 是否匹配当前 C-space 宽度。
         if request.warm_start_ik_cspace_seed is not None:
             size = np.asarray(

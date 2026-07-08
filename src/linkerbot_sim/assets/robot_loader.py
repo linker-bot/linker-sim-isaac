@@ -735,7 +735,49 @@ def apply_root_pose(stage, root_path: str, pose: RootPoseConfig) -> None:
     xform.ClearXformOpOrder()
     xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))
     xform.AddRotateXYZOp().Set(Gf.Vec3f(*tuple(np.degrees(pose.rpy))))
+    apply_mjcf_fixed_root_joint_pose(stage, root_path, pose)
+
+
+def apply_mjcf_fixed_root_joint_pose(
+    stage, root_path: str, pose: RootPoseConfig
+) -> None:
+    """只同步 MJCF fixed-base root joint 的 world anchor。
+
+    tiled envs 中机器人 prim 本身位于 ``/World/envs/env_i`` 下，视觉和 link Xform 应保持
+    env-local ``root_pose``，由 env root 负责世界偏移。但 MJCF importer 生成的
+    ``rootJoint_*`` 在 ``body0`` 为空时使用 world anchor；clone 后需要单独把每个 env
+    的 anchor 写到世界坐标，不能再调用完整 ``apply_root_pose()``，否则机器人 Xform 会被
+    加两次 env origin。
+    """
+
     _apply_root_pose_to_mjcf_fixed_root_joints(stage, root_path, pose)
+
+
+def mjcf_fixed_root_joint_paths_without_body0(
+    stage, root_path: str
+) -> tuple[str, ...]:
+    """返回 MJCF fixed-base world anchor joints。
+
+    这类 joint 的 ``physics:body0`` 为空，单 env 下可以代表“固定到 world”。但 PhysX
+    replication 克隆它们时不会为 clone 更新 local pose，因此 tiled scene builder 需要据此
+    关闭 replication，避免机器人 reset 后跑到错误 tile。
+    """
+
+    from pxr import Sdf, Usd
+
+    root = stage.GetPrimAtPath(Sdf.Path(root_path))
+    if not root.IsValid():
+        return ()
+    result: list[str] = []
+    for prim in Usd.PrimRange(root):
+        if prim.GetTypeName() != "PhysicsFixedJoint":
+            continue
+        if not prim.GetName().startswith("rootJoint_"):
+            continue
+        body0_targets = prim.GetRelationship("physics:body0").GetTargets()
+        if not body0_targets:
+            result.append(str(prim.GetPath()))
+    return tuple(result)
 
 
 def _apply_root_pose_to_mjcf_fixed_root_joints(
@@ -749,26 +791,17 @@ def _apply_root_pose_to_mjcf_fixed_root_joints(
     ``localPos0/localRot0``。
     """
 
-    from pxr import Gf, Sdf, Usd, UsdPhysics
+    from pxr import Gf, Sdf, UsdPhysics
     from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
-    root = stage.GetPrimAtPath(Sdf.Path(root_path))
-    if not root.IsValid():
-        return
     quat = rpy_xyz_to_quat_wxyz(pose.rpy)
     world_anchor_pos = Gf.Vec3f(*pose.xyz)
     world_anchor_rot = Gf.Quatf(
         float(quat[0]),
         Gf.Vec3f(float(quat[1]), float(quat[2]), float(quat[3])),
     )
-    for prim in Usd.PrimRange(root):
-        if prim.GetTypeName() != "PhysicsFixedJoint":
-            continue
-        if not prim.GetName().startswith("rootJoint_"):
-            continue
-        body0_targets = prim.GetRelationship("physics:body0").GetTargets()
-        if body0_targets:
-            continue
+    for joint_path in mjcf_fixed_root_joint_paths_without_body0(stage, root_path):
+        prim = stage.GetPrimAtPath(Sdf.Path(joint_path))
         joint = UsdPhysics.Joint(prim)
         joint.CreateLocalPos0Attr().Set(world_anchor_pos)
         joint.CreateLocalRot0Attr().Set(world_anchor_rot)

@@ -90,6 +90,7 @@ def execute_cspace_trajectory(
     command_start: np.ndarray,
     step: int,
     phase: str,
+    should_stop=None,
 ) -> SingleMoveExecutionResult:
     """把单臂 C-space 轨迹投影到 controller command-space 并执行。"""
 
@@ -114,7 +115,10 @@ def execute_cspace_trajectory(
         target_command=target_command,
         phase=phase,
     )
-    step = CommandPositionTrajectoryStep(command_trajectory).run(runtime, step)
+    step = CommandPositionTrajectoryStep(
+        command_trajectory,
+        should_stop=should_stop,
+    ).run(runtime, step)
     return SingleMoveExecutionResult(
         step=step,
         cspace_q=goal_q,

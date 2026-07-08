@@ -1,0 +1,9 @@
+# env_000 使用 base.yaml 中同一组对象，只覆盖 TBlock 的局部初始位姿。
+env_id: 0
+objects:
+  Tblock:
+    root_pose:
+      xyz: [0.15, 0.0, -0.4]
+      rpy: [0.0, 1.5707, 0.0]
+metadata:
+  replay_id: scene3_tiled_000

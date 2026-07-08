@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 
 from linkerbot_sim.app.motion.single_arm import (
@@ -20,6 +22,13 @@ class _Controller:
 
 class _Runtime:
     joint_controller = _Controller()
+
+
+class _FakeContext:
+    config = SimpleNamespace(default_tcp_frame="tool_tcp", flange_frame="flange")
+
+    def has_frame(self, frame_name: str) -> bool:
+        return frame_name in {"tool_tcp", "flange"}
 
 
 def test_current_cspace_command_uses_joint_names() -> None:
@@ -100,7 +109,7 @@ def test_single_arm_cumotion_move_rejects_dual_cspace_execution() -> None:
         _run_single_move(
             move,
             move_index=1,
-            context=object(),
+            context=_FakeContext(),
             current_q=np.asarray([0.0, 0.0], dtype=float),
             joint_names=("j1", "j2"),
             runtime=object(),
@@ -108,7 +117,6 @@ def test_single_arm_cumotion_move_rejects_dual_cspace_execution() -> None:
             step=0,
             sample_dt=0.01,
             motion_planner_config=None,
-            default_tcp_frame_name="tool_tcp",
         )
     except ValueError as exc:
         assert "execution='single'" in str(exc)

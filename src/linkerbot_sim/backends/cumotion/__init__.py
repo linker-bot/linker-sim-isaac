@@ -23,10 +23,10 @@ articulation 的完整 DOF，调用方需要按关节名映射回完整 DOF 后�
       调用方指定的 C-space/task-space/composite 路径。
     * ``trajectory_sampler``: 把 cuMotion time-parameterized trajectory 采样成项目
       ``JointTrajectory``，统一关节名、时间、位置、速度和 effort 数组。
-    * ``tcp_context``: 根据可选 ``TcpTransform`` 装配普通或带临时 TCP URDF 的
-      ``CuMotionContext``。
-    * ``tcp_urdf_builder``: 在临时 URDF 中追加 fixed TCP link/frame，让 cuMotion 能直接以自定义
-      TCP frame 做 FK/IK。
+    * ``tiled_ik``: 封装 cuMotion ``CollisionFreeIkSolver.solve_array``，为 tiled
+      command-step runtime 提供真正 batch IK，不走 per-env planner/IK loop。
+    * ``tcp_urdf_builder``: 根据 robot YAML 中的 ``custom_tcps`` 生成带 fixed TCP link/frame
+      的派生 URDF，让 cuMotion 能直接以自定义 TCP frame 做 FK/IK。
 
 入口文件只重新导出项目常用封装类和函数，不在导入时加载机器人模型。由于 cuMotion 可能只在
 Isaac 环境中安装，具体模块会尽量在构造 ``CuMotionContext`` 时再导入第三方库，而不是在包
@@ -85,10 +85,18 @@ from linkerbot_sim.backends.cumotion.motion_planner_config import (
 from linkerbot_sim.backends.cumotion.trajectory_sampler import (
     joint_trajectory_from_cumotion,
 )
-# tcp_context.py: 根据可选 TcpTransform 装配普通或带临时 TCP URDF 的 CuMotionContext。
-from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
+# tiled_ik.py: tiled runtime 的 cuMotion batch IK 适配，放在 backend 层而不是 tiled 核心层。
+from linkerbot_sim.backends.cumotion.tiled_ik import (
+    BatchedCuMotionIKSolver,
+    CuMotionJointMapping,
+)
+# tiled_planner.py: tiled async planner 的 cuMotion adapter，和 tiled 核心 manager 解耦。
+from linkerbot_sim.backends.cumotion.tiled_planner import CuMotionJointPlannerBackend
 
 __all__ = [
+    "BatchedCuMotionIKSolver",
+    "CuMotionJointPlannerBackend",
+    "CuMotionJointMapping",
     "CuMotionConfig",
     "CuMotionContext",
     "CuMotionCollisionWorld",
@@ -105,6 +113,5 @@ __all__ = [
     "dual_cumotion_config_from_sides",
     "joint_trajectory_from_cumotion",
     "make_collision_world",
-    "make_cumotion_context",
     "prepare_cumotion_config_from_robot_config",
 ]

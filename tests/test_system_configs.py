@@ -94,7 +94,10 @@ def test_robot_configs_are_cumotion_only() -> None:
         assert "arm_joints" not in config
         assert "hand_master_joints" not in config
         assert "tcp" not in config
-        assert cumotion.custom_tcp_frame is None or cumotion.custom_tcp_frame
+        assert cumotion.default_tcp_frame is None or cumotion.default_tcp_frame
+        for tcp in cumotion.custom_tcp_frames:
+            assert tcp.frame_name
+            assert tcp.parent_frame
         assert "robot_description" not in config["cumotion"]
         assert "base_urdf" not in config["cumotion"]
         assert "lula" not in config
@@ -135,6 +138,10 @@ def test_dual_robot_scene_builds_from_single_robot_profiles() -> None:
     assert prepared.urdf_path.is_file()
     assert prepared.xrdf_path.is_file()
     assert cumotion.flange_frame is None
+    assert {tcp.frame_name for tcp in cumotion.custom_tcp_frames} == {
+        "AR5V2_L_pinch_tcp",
+        "AR5V2_R_pinch_tcp",
+    }
     assert prepared.flange_frames["left"]
     assert prepared.flange_frames["right"]
 
@@ -163,7 +170,8 @@ def _assert_robot_cumotion_section_contains_only_model_resources(config: dict) -
         "xrdf_path",
         "urdf_path",
         "flange_frame",
-        "custom_tcp_frame",
+        "default_tcp_frame",
+        "custom_tcps",
     }
 
 
@@ -268,6 +276,7 @@ def test_env_runtime_settings_read_env_profile_values() -> None:
                 "render_frequency": 60.0,
                 "gravity_z": -9.81,
                 "add_ground": False,
+                "ground_height": 0.12,
             },
             "visuals": {
                 "viewport": {
@@ -300,6 +309,7 @@ def test_env_runtime_settings_read_env_profile_values() -> None:
     assert settings.render_frequency == 60.0
     assert settings.gravity_z == -9.81
     assert settings.add_ground is False
+    assert settings.ground_height == 0.12
     assert settings.physics_dt == 1.0 / 300.0
     assert settings.rendering_dt(gui=True) == 1.0 / 60.0
     assert settings.rendering_dt(gui=False) == settings.physics_dt
@@ -323,6 +333,7 @@ def test_env_runtime_settings_use_default_visuals() -> None:
 
     assert settings.visuals.viewport.eye == (1.35, -1.65, 1.05)
     assert settings.visuals.viewport.target == (0.0, -0.1, 0.42)
+    assert settings.ground_height == 0.0
     assert settings.visuals.key_light.intensity == 1200.0
     assert settings.visuals.key_light.angle == 0.5
     assert settings.visuals.fill_light.intensity == 250.0
@@ -769,6 +780,9 @@ def test_env_configs_provide_solver_settings() -> None:
         assert isinstance(env, dict)
         if "add_ground" in env:
             assert isinstance(env["add_ground"], bool)
+        if "ground_height" in env:
+            assert isinstance(env["ground_height"], (int, float))
+            assert not isinstance(env["ground_height"], bool)
         assert "solver" in config, f"{path} must provide solver settings"
         solver = config["solver"]
         parsed = SolverIterationConfig(solver_type=str(solver["type"]))

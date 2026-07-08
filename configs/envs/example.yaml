@@ -30,6 +30,9 @@ env:
   # 是否添加 Isaac 默认地面。桌面/工装场景通常由 object profile 提供接触面，可设为 false。
   add_ground: false
 
+  # Isaac 默认地面的 z 高度，单位 m；仅在 add_ground 为 true 时生效。
+  ground_height: 0.0
+
   # 物理步频，单位 Hz。绳体接触、灵巧手抓取通常需要比普通 rigid scene 更高的频率。
   physics_frequency: 240.0
 

@@ -32,6 +32,8 @@ class ExecutionRuntime:
     render_enabled: bool
     # 可选驱动日志器，记录下发目标、实际关节状态和控制误差等逐步数据。
     drive_logger: object | None = None
+    # 可选状态 observer，在 world.step 后从主线程采样机器人和场景状态。
+    state_observer: object | None = None
     # 可选 camera observer，在 world.step 后从主线程采样 sensor camera。
     camera_observer: object | None = None
 

@@ -1,7 +1,7 @@
 """cuMotion motion 客户参数描述。
 
 本模块只保存轻量 Python 参数对象，不创建 Isaac runtime，也不加载 cuMotion context。
-客户脚本可以直接导入这些 spec 来描述 TCP 和临时实验动作。
+客户脚本可以直接导入这些 spec 来描述临时实验动作；TCP 几何定义来自 robot YAML。
 """
 
 from __future__ import annotations
@@ -25,45 +25,11 @@ from linkerbot_sim.planning.requests import (
     SpecifiedPathRequest,
     TaskSpacePath,
 )
-from linkerbot_sim.backends.cumotion.tcp_frame import TcpTransform
 
 
 MoveExecutionMode: TypeAlias = Literal["single", "selected_side", "dual_cspace"]
 OverlayTiming: TypeAlias = Literal["sync", "before", "after"]
 IkOrientationMode: TypeAlias = Literal["current", "target", "none"]
-
-
-@dataclass(frozen=True)
-class CartesianTcpFrameSpec:
-    """客户脚本传入的末端相对 TCP 变换。"""
-
-    frame_name: str
-    xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)
-
-    def validate(self) -> None:
-        """校验 TCP 名称非空，并确保 xyz/rpy 都能解释为三维向量。"""
-
-        if not str(self.frame_name):
-            raise ValueError("TCP frame_name cannot be empty")
-        np.asarray(self.xyz, dtype=float).reshape(3)
-        np.asarray(self.rpy, dtype=float).reshape(3)
-
-
-@dataclass(frozen=True)
-class DualArmTcpSpec:
-    """双臂运行时使用的左右 TCP spec。"""
-
-    left: CartesianTcpFrameSpec
-    right: CartesianTcpFrameSpec
-
-    def validate(self) -> None:
-        """校验左右 TCP spec，并要求 frame_name 唯一以避免 URDF frame 冲突。"""
-
-        self.left.validate()
-        self.right.validate()
-        if self.left.frame_name == self.right.frame_name:
-            raise ValueError("left/right TCP frame_name must be unique")
 
 
 @dataclass(frozen=True)
@@ -317,36 +283,6 @@ MoveSpec: TypeAlias = (
     | DualHandMoveSpec
     | RawJointSequenceMoveSpec
 )
-
-
-def tcp_transform_from_spec(spec: CartesianTcpFrameSpec) -> TcpTransform:
-    """把客户 TCP spec 转为末端相对 ``TcpTransform``。"""
-
-    spec.validate()
-    return TcpTransform.from_xyz_rpy(
-        frame_name=str(spec.frame_name),
-        xyz=spec.xyz,
-        rpy=spec.rpy,
-    )
-
-
-def tcp_transforms_from_dual_spec(
-    spec: DualArmTcpSpec,
-) -> tuple[TcpTransform, TcpTransform]:
-    """把双臂 TCP spec 转为末端相对 ``TcpTransform``。"""
-
-    spec.validate()
-    return (
-        tcp_transform_from_spec(spec.left),
-        tcp_transform_from_spec(spec.right),
-    )
-
-
-def side_tcp_frame_name(tcp: DualArmTcpSpec, side: str) -> str:
-    """按 side 返回双臂 TCP frame 名称。"""
-
-    normalized = _normalize_side_required(side)
-    return tcp.left.frame_name if normalized == "left" else tcp.right.frame_name
 
 
 def motion_type_name(move: MoveSpec | CumotionMoveSpec) -> str:

@@ -1,9 +1,9 @@
-"""生成带固定 TCP link 的临时 URDF。
+"""生成带固定 TCP link 的派生 URDF。
 
 cuMotion 只能对 URDF 中已有 link 求解。对于 pinch center 或自定义 TCP，
 这里会复制基础机械臂 URDF，并在指定 parent frame 下追加一个 fixed joint/link。
 
-生成文件通常写入临时目录或构建目录，并作为 ``CuMotionConfig.urdf_path`` 传给后端。
+生成文件通常写入 ``.cache/cumotion`` 或构建目录，并作为 ``CuMotionConfig.urdf_path`` 传给后端。
 ``TcpFrame.xyz`` 使用米，``TcpFrame.rpy`` 使用弧度，均相对于 parent link 坐标系。
 """
 

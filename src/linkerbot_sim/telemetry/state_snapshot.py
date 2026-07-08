@@ -263,24 +263,7 @@ class DualRobotStateSampler:
     def _sample_objects(self) -> tuple[ObjectPoseSnapshot, ...]:
         """采样 runtime objects 的 root prim 世界位姿。"""
 
-        snapshots: list[ObjectPoseSnapshot] = []
-        for handle in self.object_handles:
-            prim_path = _runtime_object_prim_path(handle)
-            if prim_path is None:
-                continue
-            pose = _read_prim_world_pose(self.stage, prim_path)
-            if pose is None:
-                continue
-            position, orientation = pose
-            snapshots.append(
-                ObjectPoseSnapshot(
-                    name=str(getattr(handle, "name", prim_path)),
-                    prim_path=prim_path,
-                    position_m=position,
-                    orientation_wxyz=orientation,
-                )
-            )
-        return tuple(snapshots)
+        return _sample_runtime_objects(self.stage, self.object_handles)
 
 
 class DualRobotStateObserver:
@@ -306,12 +289,168 @@ class DualRobotStateObserver:
         self.sampler.reset()
 
 
+class SingleRobotStateSampler:
+    """从单 articulation runtime 采样状态快照。"""
+
+    def __init__(
+        self,
+        *,
+        stage,
+        object_handles: Sequence[object] = (),
+        rate_hz: float = 60.0,
+        include_efforts: bool = False,
+        include_objects: bool = False,
+        side_label: str = "single",
+    ) -> None:
+        """创建单臂状态采样器。"""
+
+        self.stage = stage
+        self.object_handles = tuple(object_handles)
+        self.rate_hz = float(rate_hz)
+        self.include_efforts = bool(include_efforts)
+        self.include_objects = bool(include_objects)
+        self.side_label = str(side_label)
+        self._previous_velocity: tuple[float, np.ndarray] | None = None
+
+    def should_sample(self, *, step: int, physics_dt: float) -> bool:
+        """按配置频率判断当前 physics step 是否采样。"""
+
+        if self.rate_hz <= 0.0:
+            return False
+        if physics_dt <= 0.0:
+            return True
+        interval_steps = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
+        return int(step) % interval_steps == 0
+
+    def reset(self) -> None:
+        """清理 reset 前的差分速度缓存。"""
+
+        self._previous_velocity = None
+
+    def sample(self, runtime, *, step: int, phase: str | None = None) -> StateSnapshot:
+        """采样一帧单臂和对象状态。"""
+
+        physics_dt = float(runtime.simulation_world.get_physics_dt())
+        time_s = (int(step) + 1) * physics_dt
+        objects = (
+            _sample_runtime_objects(self.stage, self.object_handles)
+            if self.include_objects and self.stage is not None
+            else ()
+        )
+        return StateSnapshot(
+            step=int(step),
+            time_s=time_s,
+            phase=phase,
+            robots=(self._sample_robot(runtime, time_s=time_s),),
+            objects=objects,
+        )
+
+    def _sample_robot(self, runtime, *, time_s: float) -> RobotJointStateSnapshot:
+        """采样单 articulation 的关节状态。"""
+
+        robot = runtime.articulation
+        positions = _vector_from_method(robot, "get_joint_positions", _num_dof(robot))
+        velocities = _vector_from_method(robot, "get_joint_velocities", positions.size)
+        accelerations = self._acceleration_from_velocity(velocities, time_s=time_s)
+        commanded = measured = applied = None
+        if self.include_efforts:
+            commanded = _commanded_efforts(runtime.joint_controller, positions.size)
+            efforts = read_joint_efforts(robot, None, measured=True, applied=True)
+            measured = efforts.measured
+            applied = efforts.applied
+        return RobotJointStateSnapshot(
+            side=self.side_label,
+            joint_names=tuple(str(name) for name in getattr(robot, "dof_names", ())),
+            positions_rad=positions,
+            velocities_rad_s=velocities,
+            accelerations_rad_s2=accelerations,
+            commanded_efforts=commanded,
+            measured_efforts=measured,
+            applied_efforts=applied,
+        )
+
+    def _acceleration_from_velocity(
+        self,
+        velocities: np.ndarray,
+        *,
+        time_s: float,
+    ) -> np.ndarray:
+        """用上一帧速度计算差分加速度。"""
+
+        previous = self._previous_velocity
+        self._previous_velocity = (float(time_s), velocities.copy())
+        if previous is None:
+            return np.full(velocities.size, np.nan, dtype=float)
+        previous_time, previous_velocity = previous
+        dt = float(time_s) - float(previous_time)
+        if dt <= 0.0 or previous_velocity.size != velocities.size:
+            return np.full(velocities.size, np.nan, dtype=float)
+        return (velocities - previous_velocity) / dt
+
+
+class SingleRobotStateObserver:
+    """单臂执行层 step 后调用的状态观察器。"""
+
+    def __init__(
+        self,
+        *,
+        runtime,
+        sampler: SingleRobotStateSampler,
+        stream: StateStream,
+    ) -> None:
+        """保存 app runtime、采样器和快照通道。"""
+
+        self.runtime = runtime
+        self.sampler = sampler
+        self.stream = stream
+
+    def observe(self, _world, *, step: int, phase: str | None = None) -> None:
+        """必要时采样并发布一帧状态。"""
+
+        execution = self.runtime.execution
+        physics_dt = float(execution.simulation_world.get_physics_dt())
+        if not self.sampler.should_sample(step=step, physics_dt=physics_dt):
+            return
+        self.stream.publish(self.sampler.sample(execution, step=step, phase=phase))
+
+    def reset(self) -> None:
+        """清理状态采样器内部派生缓存。"""
+
+        self.sampler.reset()
+
+
 def _num_dof(robot) -> int:
     """读取 articulation DOF 数。"""
 
     if hasattr(robot, "num_dof"):
         return int(robot.num_dof)
     return len(getattr(robot, "dof_names", ()))
+
+
+def _sample_runtime_objects(
+    stage,
+    object_handles: Sequence[object],
+) -> tuple[ObjectPoseSnapshot, ...]:
+    """采样 runtime objects 的 root prim 世界位姿。"""
+
+    snapshots: list[ObjectPoseSnapshot] = []
+    for handle in object_handles:
+        prim_path = _runtime_object_prim_path(handle)
+        if prim_path is None:
+            continue
+        pose = _read_prim_world_pose(stage, prim_path)
+        if pose is None:
+            continue
+        position, orientation = pose
+        snapshots.append(
+            ObjectPoseSnapshot(
+                name=str(getattr(handle, "name", prim_path)),
+                prim_path=prim_path,
+                position_m=position,
+                orientation_wxyz=orientation,
+            )
+        )
+    return tuple(snapshots)
 
 
 def _vector_from_method(source, method_name: str, expected_size: int) -> np.ndarray:

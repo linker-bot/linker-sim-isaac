@@ -66,6 +66,7 @@ def parse_interactive_motion_message(
     message: Mapping[str, object],
     *,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None = None,
 ) -> InteractiveMotionCommand:
     """Parse one JSON object into an interactive command."""
 
@@ -76,7 +77,11 @@ def parse_interactive_motion_message(
         ):
             raise ValueError("moves must be a list")
         moves = tuple(
-            _parse_move(_expect_mapping(item, "moves[]"), default_tcp_by_side)
+            _parse_move(
+                _expect_mapping(item, "moves[]"),
+                default_tcp_by_side,
+                default_side=default_side,
+            )
             for item in moves_value
         )
         if not moves:
@@ -102,7 +107,13 @@ def parse_interactive_motion_message(
         return InteractiveMotionCommand(
             kind="moves",
             command_id=_optional_str(message.get("id")),
-            moves=(_parse_move(message, default_tcp_by_side),),
+            moves=(
+                _parse_move(
+                    message,
+                    default_tcp_by_side,
+                    default_side=default_side,
+                ),
+            ),
         )
     if command_type == "hold":
         return InteractiveMotionCommand(
@@ -148,12 +159,14 @@ def parse_interactive_motion_message(
 def _parse_move(
     message: Mapping[str, object],
     default_tcp_by_side: Mapping[str, str],
+    *,
+    default_side: str | None = None,
 ) -> MoveSpec:
     """解析单条 motion payload，并立即调用 spec.validate 做结构校验。"""
 
     move_type = _required_str(message, "type")
     if move_type == "hand":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         move = HandMoveSpec(
             side=side,
             joint_positions=_required_joint_positions(message),
@@ -175,11 +188,11 @@ def _parse_move(
         move.validate()
         return move
     if move_type == "raw_joint_sequence":
-        move = _parse_raw_joint_sequence_move(message)
+        move = _parse_raw_joint_sequence_move(message, default_side=default_side)
         move.validate()
         return move
     if move_type == "ik_pose":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         tcp_frame_name = _tcp_frame_name(message, default_tcp_by_side, side)
         duration_s = _required_float(message, "duration_s")
         move = CumotionMoveSpec(
@@ -205,7 +218,7 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     if move_type == "ik_offset":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         tcp_frame_name = _tcp_frame_name(message, default_tcp_by_side, side)
         duration_s = _required_float(message, "duration_s")
         move = IkOffsetMoveSpec(
@@ -221,7 +234,7 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     if move_type == "cspace_goal":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         duration_s = _required_float(message, "duration_s")
         move = CSpaceGoalPlanMoveSpec(
             side=side,
@@ -234,7 +247,7 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     if move_type == "cspace_delta":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         duration_s = _required_float(message, "duration_s")
         move = CSpaceDeltaPlanMoveSpec(
             side=side,
@@ -247,7 +260,7 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     if move_type == "task_space_line":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         duration_s = _required_float(message, "duration_s")
         move = SpecifiedPathMoveSpec(
             side=side,
@@ -260,7 +273,7 @@ def _parse_move(
         move.validate(require_side=True)
         return move
     if move_type == "task_space_arc":
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         duration_s = _required_float(message, "duration_s")
         move = SpecifiedPathMoveSpec(
             side=side,
@@ -277,13 +290,15 @@ def _parse_move(
 
 def _parse_raw_joint_sequence_move(
     message: Mapping[str, object],
+    *,
+    default_side: str | None = None,
 ) -> RawJointSequenceMoveSpec:
     """解析原始关节序列命令，支持左右子对象或单侧扁平写法。"""
 
     left = _parse_raw_joint_sequence_side(message.get("left"), "left")
     right = _parse_raw_joint_sequence_side(message.get("right"), "right")
     if "side" in message or "joint_positions" in message:
-        side = _required_side(message)
+        side = _side_for_message(message, default_side=default_side)
         payload = RawJointSequenceSideSpec(
             joint_positions=_required_raw_joint_sequence_positions(message)
         )
@@ -402,9 +417,29 @@ def _tcp_frame_name(
 def _required_side(message: Mapping[str, object]) -> str:
     """读取 side 字段并规范化为 left/right。"""
 
-    side = _required_str(message, "side").lower()
+    return _normalize_side(_required_str(message, "side"), label="side")
+
+
+def _side_for_message(
+    message: Mapping[str, object],
+    *,
+    default_side: str | None,
+) -> str:
+    """读取 side；单臂 runtime 可传 default_side 让消息省略 side。"""
+
+    if "side" in message:
+        return _required_side(message)
+    if default_side is None:
+        return _required_side(message)
+    return _normalize_side(default_side, label="default_side")
+
+
+def _normalize_side(value: object, *, label: str) -> str:
+    """把 side 字段规范化为 left/right。"""
+
+    side = str(value).lower()
     if side not in {"left", "right"}:
-        raise ValueError(f"side must be 'left' or 'right', got {side!r}")
+        raise ValueError(f"{label} must be 'left' or 'right', got {side!r}")
     return side
 
 

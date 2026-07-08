@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -24,6 +25,16 @@ import numpy as np
 from linkerbot_sim.controllers.types import ControlTargets, JointControlSettings
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.trajectories.types import JointTrajectory
+
+
+class CommandExecutionInterrupted(RuntimeError):
+    """Raised when a single-robot command step is stopped by an external request."""
+
+    def __init__(self, message: str, *, step: int | None = None) -> None:
+        """保存中断发生时的累计 physics step，便于交互循环续接。"""
+
+        super().__init__(message)
+        self.step = step
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,7 @@ class SmoothCommandPositionTargetStep:
     duration: float
     phase: str
     base_positions: np.ndarray | None = None
+    should_stop: Callable[[], bool] | None = None
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
         """执行 command-space position smoothstep 并返回累计 step。"""
@@ -57,7 +69,9 @@ class SmoothCommandPositionTargetStep:
             render_enabled=runtime.render_enabled,
             step=step,
             base_positions=self.base_positions,
+            should_stop=self.should_stop,
             drive_logger=runtime.drive_logger,
+            state_observer=runtime.state_observer,
             camera_observer=runtime.camera_observer,
         )
 
@@ -67,6 +81,7 @@ class CommandPositionTrajectoryStep:
     """按采样行播放 command-space 位置轨迹。"""
 
     trajectory: JointTrajectory
+    should_stop: Callable[[], bool] | None = None
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
         """逐样本播放 command-space position 轨迹并返回累计 step。"""
@@ -80,7 +95,9 @@ class CommandPositionTrajectoryStep:
             simulation_app=runtime.simulation_app,
             render_enabled=runtime.render_enabled,
             step=step,
+            should_stop=self.should_stop,
             drive_logger=runtime.drive_logger,
+            state_observer=runtime.state_observer,
             camera_observer=runtime.camera_observer,
         )
 
@@ -93,6 +110,7 @@ class HoldCommandPositionTargetStep:
     duration: float
     phase: str
     base_positions: np.ndarray | None = None
+    should_stop: Callable[[], bool] | None = None
 
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
         """保持 command-space position 目标指定时长并返回累计 step。"""
@@ -109,7 +127,9 @@ class HoldCommandPositionTargetStep:
             render_enabled=runtime.render_enabled,
             step=step,
             base_positions=self.base_positions,
+            should_stop=self.should_stop,
             drive_logger=runtime.drive_logger,
+            state_observer=runtime.state_observer,
             camera_observer=runtime.camera_observer,
         )
 
@@ -141,6 +161,7 @@ def _apply_control_targets_once(
     phase: str,
     drive_logger=None,
     log_indices: np.ndarray | None = None,
+    state_observer=None,
     camera_observer=None,
 ) -> int:
     """下发一帧已经构造好的控制目标，并推进一个 physics step。
@@ -153,6 +174,7 @@ def _apply_control_targets_once(
 
     joint_controller.apply_targets(articulation_action_type, targets)
     simulation_world.step(render=render_enabled)
+    _observe_state(state_observer, simulation_world, step=step, phase=phase)
     _observe_cameras(camera_observer, simulation_world, step=step, phase=phase)
     if drive_logger is not None and drive_logger.should_write(step):
         indices = (
@@ -187,6 +209,7 @@ def _apply_command_joint_target_once(
     step: int,
     phase: str,
     drive_logger=None,
+    state_observer=None,
     camera_observer=None,
 ) -> tuple[int, ControlTargets]:
     """从 controller command-space 目标构造控制目标，并下发一帧。
@@ -212,6 +235,7 @@ def _apply_command_joint_target_once(
         step=step,
         phase=phase,
         drive_logger=drive_logger,
+        state_observer=state_observer,
         camera_observer=camera_observer,
     )
     return next_step, targets
@@ -231,7 +255,9 @@ def execute_smooth_command_position_target(
     render_enabled: bool,
     step: int,
     base_positions: np.ndarray | None = None,
+    should_stop: Callable[[], bool] | None = None,
     drive_logger=None,
+    state_observer=None,
     camera_observer=None,
 ) -> int:
     """用 smoothstep 在两个 command-space 位置目标之间平滑移动。
@@ -253,6 +279,7 @@ def execute_smooth_command_position_target(
     for local_step in range(steps):
         if simulation_app is not None and not simulation_app.is_running():
             break
+        _raise_if_stopped(should_stop, step=step)
         alpha = (local_step + 1) / steps
         smooth = alpha * alpha * (3.0 - 2.0 * alpha)
         smooth_rate = (6.0 * alpha * (1.0 - alpha) / duration) if duration > 0 else 0.0
@@ -271,6 +298,7 @@ def execute_smooth_command_position_target(
             step=step,
             phase=phase,
             drive_logger=drive_logger,
+            state_observer=state_observer,
             camera_observer=camera_observer,
         )
         full_position = targets.positions
@@ -288,7 +316,9 @@ def execute_command_position_trajectory(
     simulation_app,
     render_enabled: bool,
     step: int = 0,
+    should_stop: Callable[[], bool] | None = None,
     drive_logger=None,
+    state_observer=None,
     camera_observer=None,
     hold: bool = False,
 ) -> int:
@@ -304,6 +334,7 @@ def execute_command_position_trajectory(
     for sample_index in range(len(trajectory)):
         if simulation_app is not None and not simulation_app.is_running():
             break
+        _raise_if_stopped(should_stop, step=step)
         step, targets = _apply_command_joint_target_once(
             articulation=articulation,
             simulation_world=simulation_world,
@@ -317,13 +348,21 @@ def execute_command_position_trajectory(
             step=step,
             phase=trajectory.phases[sample_index],
             drive_logger=drive_logger,
+            state_observer=state_observer,
             camera_observer=camera_observer,
         )
         full_position = targets.positions
     if hold and targets is not None:
         while simulation_app is None or simulation_app.is_running():
+            _raise_if_stopped(should_stop, step=step)
             joint_controller.apply_targets(articulation_action_type, targets)
             simulation_world.step(render=render_enabled)
+            _observe_state(
+                state_observer,
+                simulation_world,
+                step=step,
+                phase=trajectory.phases[-1],
+            )
             _observe_cameras(
                 camera_observer,
                 simulation_world,
@@ -349,7 +388,9 @@ def execute_command_position_hold(
     render_enabled: bool,
     step: int,
     base_positions: np.ndarray | None = None,
+    should_stop: Callable[[], bool] | None = None,
     drive_logger=None,
+    state_observer=None,
     camera_observer=None,
 ) -> int:
     """保持一个 command-space 位置目标一段时间。
@@ -371,6 +412,7 @@ def execute_command_position_hold(
     while total_steps is None or local_step < total_steps:
         if simulation_app is not None and not simulation_app.is_running():
             break
+        _raise_if_stopped(should_stop, step=step)
         step, targets = _apply_command_joint_target_once(
             articulation=articulation,
             simulation_world=simulation_world,
@@ -384,11 +426,23 @@ def execute_command_position_hold(
             step=step,
             phase=phase,
             drive_logger=drive_logger,
+            state_observer=state_observer,
             camera_observer=camera_observer,
         )
         full_position = targets.positions
         local_step += 1
     return step
+
+
+def _observe_state(state_observer, simulation_world, *, step: int, phase: str) -> None:
+    """执行一帧后的可选状态采样；observer 自身负责频率和输出策略。"""
+
+    if state_observer is None:
+        return
+    observe = getattr(state_observer, "observe", None)
+    if observe is None:
+        return
+    observe(simulation_world, step=step, phase=phase)
 
 
 def _observe_cameras(camera_observer, simulation_world, *, step: int, phase: str) -> None:
@@ -400,3 +454,17 @@ def _observe_cameras(camera_observer, simulation_world, *, step: int, phase: str
     if observe is None:
         return
     observe(simulation_world, step=step, phase=phase)
+
+
+def _raise_if_stopped(
+    should_stop: Callable[[], bool] | None,
+    *,
+    step: int,
+) -> None:
+    """把外部 cancel/estop/quit 请求转成带 step 的中断异常。"""
+
+    if should_stop is not None and should_stop():
+        raise CommandExecutionInterrupted(
+            "single command execution interrupted",
+            step=step,
+        )

@@ -22,6 +22,7 @@ from linkerbot_sim.backends.cumotion.graph_motion_planner import (
 from linkerbot_sim.backends.cumotion.motion_planner_config import (
     MotionPlannerBackendConfig,
 )
+from linkerbot_sim.backends.cumotion.context import resolve_tcp_frame_name
 from linkerbot_sim.backends.cumotion.specified_path_planner import (
     plan_specified_path,
 )
@@ -52,16 +53,12 @@ class CuMotionMotionPlanner:
         self.cumotion = context.cumotion
         # cuMotion 的 graph planner 和 optimizer 都需要一个 tool frame 来构造后端 config。
         # 关节空间目标虽然不直接约束 TCP，但仍要绑定 robot description 中存在的 frame。
-        frame_name = (
-            tcp_frame_name
-            or context.config.custom_tcp_frame
-            or context.config.flange_frame
+        frame_name = resolve_tcp_frame_name(
+            context,
+            tcp_frame_name=tcp_frame_name,
+            label="tcp_frame_name",
         )
-        if frame_name is None:
-            raise ValueError(
-                "tcp_frame_name is required because this cuMotion config has no default frame"
-            )
-        self.tcp_frame_name = str(frame_name)
+        self.tcp_frame_name = frame_name
         # 优先使用调用方本次传入的配置；否则使用 CuMotionConfig 中的分组配置。
         self.config = config or getattr(context.config, "motion_planner", None)
         if self.config is None:

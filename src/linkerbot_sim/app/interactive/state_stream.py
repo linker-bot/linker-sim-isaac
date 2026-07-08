@@ -16,6 +16,8 @@ from linkerbot_sim.telemetry.foxglove_state import (
 from linkerbot_sim.telemetry.state_snapshot import (
     DualRobotStateObserver,
     DualRobotStateSampler,
+    SingleRobotStateObserver,
+    SingleRobotStateSampler,
     StateStream,
 )
 
@@ -45,7 +47,7 @@ class InteractiveStateStreamConfig:
 class InteractiveStateStreamHandle:
     """交互状态流运行时句柄，用于关闭线程和恢复 execution runtime。"""
 
-    runtime: DualRobotAppRuntime
+    runtime: object
     previous_execution: object
     publisher: StatePublisher
     stream: StateStream
@@ -60,7 +62,7 @@ class InteractiveStateStreamHandle:
 
 
 def start_interactive_state_stream(
-    runtime: DualRobotAppRuntime,
+    runtime: DualRobotAppRuntime | object,
     *,
     config: InteractiveStateStreamConfig | None,
     status_prefix: str | None = None,
@@ -77,14 +79,11 @@ def start_interactive_state_stream(
         sinks[0] if len(sinks) == 1 else CompositeStateSink(tuple(sinks))
     )
     stream = StateStream()
-    sampler = DualRobotStateSampler(
-        stage=runtime.session.stage,
-        object_handles=runtime.object_handles,
-        rate_hz=config.rate_hz,
-        include_efforts=config.include_efforts,
-        include_objects=config.include_objects,
+    observer = _state_observer_for_runtime(
+        runtime,
+        stream=stream,
+        config=config,
     )
-    observer = DualRobotStateObserver(sampler=sampler, stream=stream)
     publisher = StatePublisher(
         stream=stream, sink=sink, name="interactive-foxglove-state"
     )
@@ -102,6 +101,34 @@ def start_interactive_state_stream(
         runtime=runtime,
         previous_execution=previous_execution,
         publisher=publisher,
+        stream=stream,
+    )
+
+
+def _state_observer_for_runtime(
+    runtime: object,
+    *,
+    stream: StateStream,
+    config: InteractiveStateStreamConfig,
+) -> DualRobotStateObserver | SingleRobotStateObserver:
+    """按 app runtime 类型创建主线程状态 observer。"""
+
+    execution = getattr(runtime, "execution")
+    sampler_kwargs = {
+        "stage": runtime.session.stage,
+        "object_handles": runtime.object_handles,
+        "rate_hz": config.rate_hz,
+        "include_efforts": config.include_efforts,
+        "include_objects": config.include_objects,
+    }
+    if hasattr(execution, "left") and hasattr(execution, "right"):
+        return DualRobotStateObserver(
+            sampler=DualRobotStateSampler(**sampler_kwargs),
+            stream=stream,
+        )
+    return SingleRobotStateObserver(
+        runtime=runtime,
+        sampler=SingleRobotStateSampler(**sampler_kwargs),
         stream=stream,
     )
 

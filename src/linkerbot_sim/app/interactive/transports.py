@@ -39,6 +39,7 @@ def start_interactive_transports(
     *,
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None = None,
     stdin_enabled: bool = True,
     tcp_jsonl_host: str | None = None,
     tcp_jsonl_port: int | None = None,
@@ -56,6 +57,7 @@ def start_interactive_transports(
             kwargs={
                 "queue": queue,
                 "default_tcp_by_side": default_tcp_by_side,
+                "default_side": default_side,
                 "stop_event": stop_event,
                 "quit_on_eof": tcp_jsonl_port is None and websocket_port is None,
             },
@@ -68,6 +70,7 @@ def start_interactive_transports(
         tcp_server = _start_tcp_jsonl_server(
             queue=queue,
             default_tcp_by_side=default_tcp_by_side,
+            default_side=default_side,
             host=tcp_jsonl_host or "127.0.0.1",
             port=int(tcp_jsonl_port),
         )
@@ -85,6 +88,7 @@ def start_interactive_transports(
             kwargs={
                 "queue": queue,
                 "default_tcp_by_side": default_tcp_by_side,
+                "default_side": default_side,
                 "host": websocket_host or "127.0.0.1",
                 "port": int(websocket_port),
                 "stop_event": stop_event,
@@ -106,12 +110,14 @@ def handle_interactive_message(
     message: Mapping[str, object],
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None = None,
 ) -> dict[str, object]:
     """Parse and apply one transport message."""
 
     command = parse_interactive_motion_message(
         message,
         default_tcp_by_side=default_tcp_by_side,
+        default_side=default_side,
     )
     return _apply_command(command, queue)
 
@@ -168,6 +174,7 @@ def _stdin_jsonl_reader(
     *,
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None,
     stop_event: Event,
     quit_on_eof: bool,
 ) -> None:
@@ -183,6 +190,7 @@ def _stdin_jsonl_reader(
             line,
             queue=queue,
             default_tcp_by_side=default_tcp_by_side,
+            default_side=default_side,
         )
         print(json.dumps(response, ensure_ascii=False), flush=True)
 
@@ -191,6 +199,7 @@ def _start_tcp_jsonl_server(
     *,
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None,
     host: str,
     port: int,
 ) -> socketserver.ThreadingTCPServer:
@@ -210,6 +219,7 @@ def _start_tcp_jsonl_server(
                     line.decode("utf-8"),
                     queue=queue,
                     default_tcp_by_side=default_tcp_by_side,
+                    default_side=default_side,
                 )
                 self.wfile.write((json.dumps(response) + "\n").encode("utf-8"))
 
@@ -227,6 +237,7 @@ def _handle_json_line(
     *,
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None,
 ) -> dict[str, object]:
     """解析一行 JSONL 并执行；所有异常都会转成 rejected 响应。"""
 
@@ -238,6 +249,7 @@ def _handle_json_line(
             message=message,
             queue=queue,
             default_tcp_by_side=default_tcp_by_side,
+            default_side=default_side,
         )
     except Exception as exc:
         return {"event": "rejected", "error": str(exc)}
@@ -247,6 +259,7 @@ def _run_websocket_server(
     *,
     queue: InteractiveMotionQueue,
     default_tcp_by_side: Mapping[str, str],
+    default_side: str | None,
     host: str,
     port: int,
     stop_event: Event,
@@ -293,6 +306,7 @@ def _run_websocket_server(
                         message=message,
                         queue=queue,
                         default_tcp_by_side=default_tcp_by_side,
+                        default_side=default_side,
                     )
                 except Exception as exc:
                     response = {"event": "rejected", "error": str(exc)}

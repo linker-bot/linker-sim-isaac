@@ -4,20 +4,16 @@ import numpy as np
 
 import linkerbot_sim.app.motion.dual_arm as dual_arm_motion
 from linkerbot_sim.app.motion.specs import (  # noqa: E402
-    CartesianTcpFrameSpec,
     CSpaceDeltaPlanMoveSpec,
     CSpaceGoalPlanMoveSpec,
     CommandOverlaySpec,
     CumotionMoveSpec,
-    DualArmTcpSpec,
     DualHandMoveSpec,
     HandMoveSpec,
     IkOffsetMoveSpec,
     SpecifiedPathMoveSpec,
     default_move_phase,
     specified_path_planner_config,
-    tcp_transform_from_spec,
-    tcp_transforms_from_dual_spec,
 )
 from linkerbot_sim.app.motion.dual_arm import (  # noqa: E402
     DualArmCuMotionExecutionSession,
@@ -49,34 +45,6 @@ from linkerbot_sim.planning.results import (  # noqa: E402
     PlanningDiagnostics,
 )
 from linkerbot_sim.utils.config import load_yaml
-
-
-def test_cartesian_tcp_frame_spec_converts_to_tcp_transform() -> None:
-    spec = CartesianTcpFrameSpec(
-        frame_name="tool_tcp",
-        xyz=(0.1, 0.2, 0.3),
-        rpy=(0.0, 0.1, 0.2),
-    )
-
-    transform = tcp_transform_from_spec(spec)
-
-    assert transform.frame_name == "tool_tcp"
-    np.testing.assert_allclose(transform.xyz, [0.1, 0.2, 0.3])
-    np.testing.assert_allclose(transform.rpy, [0.0, 0.1, 0.2])
-
-
-def test_dual_arm_tcp_spec_rejects_duplicate_frame_names() -> None:
-    tcp = DualArmTcpSpec(
-        left=CartesianTcpFrameSpec("shared_tcp"),
-        right=CartesianTcpFrameSpec("shared_tcp"),
-    )
-
-    try:
-        tcp_transforms_from_dual_spec(tcp)
-    except ValueError as exc:
-        assert "unique" in str(exc)
-    else:
-        raise AssertionError("expected duplicate TCP names to be rejected")
 
 
 def test_default_move_phase_is_optional_and_stable() -> None:
@@ -378,10 +346,7 @@ def test_execute_moves_result_returns_failure_without_raising(monkeypatch) -> No
     session.execution = object()
     session.sample_dt = 0.1
     session.motion_planner_config = MotionPlannerBackendConfig.from_mapping(None)
-    session.tcp = DualArmTcpSpec(
-        left=CartesianTcpFrameSpec("left_tcp"),
-        right=CartesianTcpFrameSpec("right_tcp"),
-    )
+    session.default_tcp_by_side = {"left": "left_tcp", "right": "right_tcp"}
     session.refresh_current_state = lambda: (
         np.asarray([0.0, 0.0], dtype=float),
         np.asarray([0.0], dtype=float),
@@ -429,3 +394,5 @@ def test_dual_arm_semantics_from_robot_configs_reads_xrdf_and_flange() -> None:
     )
     assert semantics.left_flange_frame == "AR5V2_L_arm_flan_link"
     assert semantics.right_flange_frame == "AR5V2_R_arm_flan_link"
+    assert semantics.left_default_tcp_frame == "AR5V2_L_pinch_tcp"
+    assert semantics.right_default_tcp_frame == "AR5V2_R_pinch_tcp"

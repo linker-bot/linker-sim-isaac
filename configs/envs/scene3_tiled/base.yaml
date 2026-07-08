@@ -1,0 +1,97 @@
+# scene3_tiled: 双臂 + 同构物体集合的 tiled envs 示例。
+#
+# base.yaml 只保存所有 env 共用的设置：World/PhysX、灯光、视角、机器人和对象集合。
+# 每个 env 的对象初始位姿差异写在同目录 envs/env_XXX.yaml 里。
+env:
+  name: scene3_tiled
+  description: dual arm T block tiled replay scene
+  gravity_z: -9.81
+  add_ground: false
+  ground_height: 0.0
+  physics_frequency: 240.0
+  render_frequency: 60.0
+
+solver:
+  type: PGS
+
+sensors:
+  cameras:
+    world_rgbd:
+      enabled: true
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      pose:
+        xyz: [0.08, 0.0, 0.08]
+        rpy: [0.0, 1.1, 0.0]
+      resolution: [640, 480]
+      frequency: 30.0
+      modalities: [rgb, depth]
+      clipping_range: [0.01, 5.0]
+      output:
+        save_dir: logs/cameras/world_rgbd
+        foxglove_topic_prefix: /cameras/world_rgbd
+        foxglove_live_host: 127.0.0.1
+        foxglove_live_port: 8770
+
+
+visuals:
+  viewport:
+    enabled: true
+    eye: [1.35, -1.65, 1.05]
+    target: [0.0, -0.1, 0.42]
+    prim_path: /OmniverseKit_Persp
+  lights:
+    key:
+      enabled: true
+      path: /World/KeyLight
+      intensity: 1200.0
+      angle: 0.5
+    fill:
+      enabled: true
+      path: /World/FillLight
+      intensity: 250.0
+
+robots:
+  dual:
+    left:
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        xyz: [0.0, 0.09, 0.0]
+        rpy: [-1.5707, 0.0, 0.0]
+    right:
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+objects:
+  - name: workstation
+    object_profile: workstation_armbase
+    root_pose:
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+  - name: Tblock
+    object_profile: TblockV1_default
+    root_pose:
+      xyz: [0.15, 0.0, -0.4]
+      rpy: [0.0, 1.5707, 0.0]
+
+tiled:
+  enabled: true
+  num_envs: 8
+  base_env_path: /World/envs
+  env_prefix: env
+  spacing: 3.0
+  per_env_config_dir: envs
+  clone:
+    use_grid_cloner: true
+    # 当前 MJCF fixed-base 机器人含 body0 为空的 rootJoint_*，PhysX replication
+    # 不会为 cloned env 更新这类 joint 的 local pose，默认关闭以保证机器人位于各自 env。
+    replicate_physics: true
+    copy_from_source: true
+    enable_env_ids: true
+    filter_collisions: true
+    collision_root_path: /World/collisions
+  runtime:
+    use_batched_articulation_view: true
+    inspect_env_ids: [0]

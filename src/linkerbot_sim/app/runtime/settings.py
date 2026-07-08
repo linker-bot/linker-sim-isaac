@@ -25,6 +25,7 @@ class EnvRuntimeSettings:
     render_frequency: float
     gravity_z: float
     add_ground: bool = True
+    ground_height: float = 0.0
     visuals: SceneVisualSettings = field(default_factory=SceneVisualSettings)
     sensors: SceneSensorSettings = field(default_factory=SceneSensorSettings)
 
@@ -45,6 +46,7 @@ class EnvRuntimeSettings:
             render_frequency=float(env.get("render_frequency", 100.0)),
             gravity_z=float(env.get("gravity_z", -9.81)),
             add_ground=bool(env.get("add_ground", True)),
+            ground_height=float(env.get("ground_height", 0.0)),
             visuals=SceneVisualSettings.from_env_config(env_config),
             sensors=SceneSensorSettings.from_env_config(env_config),
         )

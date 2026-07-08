@@ -6,6 +6,7 @@ import numpy as np
 
 from linkerbot_sim.telemetry.state_snapshot import (
     DualRobotStateSampler,
+    SingleRobotStateSampler,
     StateStream,
 )
 
@@ -94,6 +95,29 @@ def test_dual_state_sampler_reset_clears_acceleration_history() -> None:
     after_reset = sampler.sample(runtime, step=0, phase="after_reset")
 
     assert np.isnan(after_reset.robots[0].accelerations_rad_s2).all()
+
+
+def test_single_state_sampler_uses_single_robot_label() -> None:
+    articulation = _Articulation(("j0", "j1"))
+    runtime = SimpleNamespace(
+        simulation_world=_World(),
+        articulation=articulation,
+        joint_controller=SimpleNamespace(
+            last_commanded_efforts=np.asarray([0.1, 0.2], dtype=float)
+        ),
+    )
+    sampler = SingleRobotStateSampler(
+        stage=None,
+        rate_hz=10.0,
+        include_efforts=True,
+        include_objects=False,
+    )
+
+    snapshot = sampler.sample(runtime, step=0, phase="single")
+
+    assert snapshot.robots[0].side == "single"
+    assert snapshot.as_dict()["robots"]["single"]["joint_names"] == ["j0", "j1"]
+    np.testing.assert_allclose(snapshot.robots[0].commanded_efforts, [0.1, 0.2])
 
 
 def test_state_stream_keeps_latest_snapshot() -> None:

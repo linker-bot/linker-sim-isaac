@@ -126,6 +126,9 @@ def prepare_cumotion_config_from_robot_config(
         right_pose=_required_root_pose(dual_root_poses, "right"),
     )
     settings = dict(_cumotion_settings(robot_config))
+    dual_custom_tcps = _dual_custom_tcps(settings)
+    if dual_custom_tcps:
+        settings["custom_tcps"] = dual_custom_tcps
     generated_xrdf_path = _dual_xrdf_path_for_urdf(generated_path)
     if dual_urdf_config.left_xrdf_path is not None:
         generated_xrdf_path = build_dual_arm_xrdf(
@@ -171,30 +174,22 @@ def dual_cumotion_config_from_sides(
 
     left_cumotion = _side_cumotion_settings(left, side="left")
     right_cumotion = _side_cumotion_settings(right, side="right")
+    left_entry = {
+        "xrdf_path": _side_required_value(left_cumotion, "left", "xrdf_path"),
+        "urdf_path": _side_required_value(left_cumotion, "left", "urdf_path"),
+        "flange_frame": _side_required_value(left_cumotion, "left", "flange_frame"),
+    }
+    right_entry = {
+        "xrdf_path": _side_required_value(right_cumotion, "right", "xrdf_path"),
+        "urdf_path": _side_required_value(right_cumotion, "right", "urdf_path"),
+        "flange_frame": _side_required_value(right_cumotion, "right", "flange_frame"),
+    }
+    _copy_optional_side_tcp_fields(left_entry, left_cumotion)
+    _copy_optional_side_tcp_fields(right_entry, right_cumotion)
     return {
         "cumotion": {
-            "left": {
-                "xrdf_path": _side_required_value(
-                    left_cumotion, "left", "xrdf_path"
-                ),
-                "urdf_path": _side_required_value(
-                    left_cumotion, "left", "urdf_path"
-                ),
-                "flange_frame": _side_required_value(
-                    left_cumotion, "left", "flange_frame"
-                ),
-            },
-            "right": {
-                "xrdf_path": _side_required_value(
-                    right_cumotion, "right", "xrdf_path"
-                ),
-                "urdf_path": _side_required_value(
-                    right_cumotion, "right", "urdf_path"
-                ),
-                "flange_frame": _side_required_value(
-                    right_cumotion, "right", "flange_frame"
-                ),
-            },
+            "left": left_entry,
+            "right": right_entry,
             "output_dir": str(output_dir),
             "robot_name": robot_name,
             "parent_link": parent_link,
@@ -531,6 +526,86 @@ def _dual_flange_frames(cumotion_settings: Mapping[str, object]) -> dict[str, st
         value = _side_required_value(side_settings, side, "flange_frame")
         frames[side] = str(value)
     return frames
+
+
+def _copy_optional_side_tcp_fields(
+    target: dict[str, object], side_cumotion: Mapping[str, object]
+) -> None:
+    """把单侧 robot profile 中的 TCP 配置带入双臂合成输入。"""
+
+    for key in ("default_tcp_frame", "custom_tcps"):
+        if key in side_cumotion:
+            target[key] = side_cumotion[key]
+
+
+def _dual_custom_tcps(cumotion_settings: Mapping[str, object]) -> dict[str, object]:
+    """把左右单侧 custom TCP 配置合并成融合 URDF 可写的全局 mapping。"""
+
+    merged: dict[str, object] = {}
+    for side in ("left", "right"):
+        side_settings = _required_mapping(cumotion_settings, side, section="cumotion")
+        flange_frame = str(_side_required_value(side_settings, side, "flange_frame"))
+        side_tcps = _side_custom_tcps(
+            side_settings.get("custom_tcps"),
+            default_parent_frame=flange_frame,
+            label=f"cumotion.{side}.custom_tcps",
+        )
+        for frame_name, frame_data in side_tcps.items():
+            if frame_name in merged:
+                raise ValueError(
+                    f"Duplicate dual custom TCP frame name: {frame_name!r}. "
+                    "Use globally unique left/right frame names."
+                )
+            merged[frame_name] = frame_data
+    return merged
+
+
+def _side_custom_tcps(
+    value: object,
+    *,
+    default_parent_frame: str,
+    label: str,
+) -> dict[str, object]:
+    """解析单侧 custom_tcps，并把缺省 parent_frame 绑定到该侧 flange。"""
+
+    if value is None:
+        return {}
+    result: dict[str, object] = {}
+    if isinstance(value, Mapping):
+        for frame_name, frame_data in value.items():
+            if not isinstance(frame_data, Mapping):
+                raise ValueError(f"{label}.{frame_name} must be a mapping")
+            result[str(frame_name)] = _side_tcp_data_with_parent(
+                frame_data,
+                default_parent_frame=default_parent_frame,
+            )
+        return result
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            if not isinstance(item, Mapping):
+                raise ValueError(f"{label}[{index}] must be a mapping")
+            frame_name = item.get("frame_name")
+            if not isinstance(frame_name, str) or not frame_name:
+                raise ValueError(f"{label}[{index}].frame_name is required")
+            result[frame_name] = _side_tcp_data_with_parent(
+                item,
+                default_parent_frame=default_parent_frame,
+            )
+        return result
+    raise ValueError(f"{label} must be a mapping or list")
+
+
+def _side_tcp_data_with_parent(
+    data: Mapping[str, object],
+    *,
+    default_parent_frame: str,
+) -> dict[str, object]:
+    """复制单个 custom TCP 数据，并补齐 parent_frame。"""
+
+    copied = dict(data)
+    copied.pop("frame_name", None)
+    copied.setdefault("parent_frame", default_parent_frame)
+    return copied
 
 
 def _dual_xrdf_path_for_urdf(urdf_path: Path) -> Path:

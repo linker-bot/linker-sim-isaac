@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -40,16 +40,13 @@ from linkerbot_sim.app.motion.specs import (
     CSpaceGoalPlanMoveSpec,
     CumotionMoveSpec,
     DualHandMoveSpec,
-    DualArmTcpSpec,
     HandMoveSpec,
     IkOffsetMoveSpec,
     MoveSpec,
     RawJointSequenceMoveSpec,
     SpecifiedPathMoveSpec,
     normalize_move_sequence,
-    side_tcp_frame_name,
     specified_path_planner_config,
-    tcp_transforms_from_dual_spec,
 )
 from linkerbot_sim.app.motion.runtime import (
     duration_for_move,
@@ -68,7 +65,10 @@ from linkerbot_sim.backends.cumotion.profile_config import (
     motion_planner_config_from_profile,
     robot_cumotion_config,
 )
-from linkerbot_sim.backends.cumotion.tcp_context import make_cumotion_context
+from linkerbot_sim.backends.cumotion.context import (
+    CuMotionContext,
+    resolve_tcp_frame_name,
+)
 from linkerbot_sim.configs.profiles import load_profile_yaml
 from linkerbot_sim.execution.dual_runtime import DualRobotRuntime
 from linkerbot_sim.execution.dual_steps import (
@@ -113,8 +113,8 @@ class DualArmCuMotionSummary:
     env: str
     cumotion_profile: str
     planning_pipeline: str
-    left_tcp: str | None
-    right_tcp: str | None
+    left_default_tcp_frame: str
+    right_default_tcp_frame: str
     left_flange_frame: str
     right_flange_frame: str
 
@@ -145,19 +145,20 @@ class DualArmCuMotionExecutionSession:
         self,
         runtime: DualRobotAppRuntime,
         *,
-        tcp: DualArmTcpSpec,
         cumotion_profile: str = "default",
     ) -> None:
         """加载双臂 cuMotion context、规划配置和左右 C-space 分区。"""
 
-        tcp.validate()
         self.runtime = runtime
         self.execution = runtime.execution
-        self.tcp = tcp
         self.cumotion_profile = str(cumotion_profile)
         self.dual_arm_semantics = dual_arm_semantics_from_robot_configs(
             runtime.side_robot_configs
         )
+        self.default_tcp_by_side = {
+            "left": self.dual_arm_semantics.left_default_tcp_frame,
+            "right": self.dual_arm_semantics.right_default_tcp_frame,
+        }
 
         physics_dt = float(self.execution.simulation_world.get_physics_dt())
         self.sample_dt = max(physics_dt, 1.0e-6)
@@ -176,17 +177,7 @@ class DualArmCuMotionExecutionSession:
         self.motion_planner_config = motion_planner_config_from_profile(
             cumotion_profile_data
         )
-        tcp_transforms = tcp_transforms_from_dual_spec(tcp)
-        tcp_parent_frames = {
-            tcp.left.frame_name: self.dual_arm_semantics.left_flange_frame,
-            tcp.right.frame_name: self.dual_arm_semantics.right_flange_frame,
-        }
-        self._context_manager = make_cumotion_context(
-            cumotion_config,
-            tcp=tcp_transforms,
-            tcp_parent_frames=tcp_parent_frames,
-        )
-        self.context = self._context_manager.__enter__()
+        self.context = CuMotionContext(cumotion_config)
         self._closed = False
         try:
             self.context.clear_collision_world()
@@ -207,7 +198,6 @@ class DualArmCuMotionExecutionSession:
         if self._closed:
             return
         self._closed = True
-        self._context_manager.__exit__(None, None, None)
 
     def __enter__(self) -> "DualArmCuMotionExecutionSession":
         """让 session 可用于 with 语句，复用已加载的 cuMotion context。"""
@@ -266,7 +256,7 @@ class DualArmCuMotionExecutionSession:
                     step=step,
                     sample_dt=self.sample_dt,
                     motion_planner_config=self.motion_planner_config,
-                    tcp=self.tcp,
+                    default_tcp_by_side=self.default_tcp_by_side,
                     should_stop=should_stop,
                 )
             except MotionPlanningFailed as exc:
@@ -311,7 +301,6 @@ def dual_arm_cumotion_summary(
     *,
     env: str,
     cumotion_profile: str,
-    tcp: DualArmTcpSpec | None = None,
 ) -> DualArmCuMotionSummary:
     """加载 profile 并返回不创建后端 context 的 cuMotion 摘要。"""
 
@@ -323,8 +312,8 @@ def dual_arm_cumotion_summary(
         env=env,
         cumotion_profile=cumotion_profile,
         planning_pipeline=motion_config.planning_pipeline,
-        left_tcp=tcp.left.frame_name if tcp is not None else None,
-        right_tcp=tcp.right.frame_name if tcp is not None else None,
+        left_default_tcp_frame=semantics.left_default_tcp_frame,
+        right_default_tcp_frame=semantics.right_default_tcp_frame,
         left_flange_frame=semantics.left_flange_frame,
         right_flange_frame=semantics.right_flange_frame,
     )
@@ -333,7 +322,6 @@ def dual_arm_cumotion_summary(
 def run_dual_arm_cumotion_motion(
     runtime: DualRobotAppRuntime,
     *,
-    tcp: DualArmTcpSpec,
     moves: Sequence[MoveSpec],
     start_step: int = 0,
     cumotion_profile: str = "default",
@@ -342,7 +330,6 @@ def run_dual_arm_cumotion_motion(
 
     with DualArmCuMotionExecutionSession(
         runtime,
-        tcp=tcp,
         cumotion_profile=cumotion_profile,
     ) as session:
         return session.execute_moves(moves, start_step=start_step)
@@ -351,7 +338,6 @@ def run_dual_arm_cumotion_motion(
 def run_dual_arm_cumotion_motion_result(
     runtime: DualRobotAppRuntime,
     *,
-    tcp: DualArmTcpSpec,
     moves: Sequence[MoveSpec],
     start_step: int = 0,
     cumotion_profile: str = "default",
@@ -360,7 +346,6 @@ def run_dual_arm_cumotion_motion_result(
 
     with DualArmCuMotionExecutionSession(
         runtime,
-        tcp=tcp,
         cumotion_profile=cumotion_profile,
     ) as session:
         return session.execute_moves_result(
@@ -407,7 +392,7 @@ def _run_dual_move(
     step: int,
     sample_dt: float,
     motion_planner_config,
-    tcp: DualArmTcpSpec,
+    default_tcp_by_side: dict[str, str],
     should_stop: Callable[[], bool] | None = None,
 ) -> DualMoveExecutionResult:
     """分派并执行一个双臂 move，统一维护 C-space 和左右 command-space 状态。"""
@@ -452,7 +437,12 @@ def _run_dual_move(
 
     execution_mode = _dual_execution_mode(move)
     side = None if execution_mode == "dual_cspace" else _move_side_required(move)
-    tcp_frame_name = _move_tcp_frame_name(move, tcp=tcp, side=side)
+    tcp_frame_name = _move_tcp_frame_name(
+        move,
+        context=context,
+        default_tcp_by_side=default_tcp_by_side,
+        side=side,
+    )
     duration_s = duration_for_move(move)
     phase = phase_for_move(
         move,
@@ -979,16 +969,19 @@ def _move_side_required(move: MoveSpec) -> str:
 def _move_tcp_frame_name(
     move: MoveSpec,
     *,
-    tcp: DualArmTcpSpec,
+    context,
+    default_tcp_by_side: Mapping[str, str],
     side: str | None,
 ) -> str:
     """解析 move 使用的 TCP frame；selected-side 模式可从左右默认 TCP 推导。"""
 
     value = explicit_tcp_frame_name(move)
-    if value is not None:
-        return value
+    default = None
     if side is not None:
-        return side_tcp_frame_name(tcp, side)
-    raise ValueError(
-        f"{type(move).__name__} requires tcp_frame_name when side is not set"
+        default = default_tcp_by_side.get(side)
+    return resolve_tcp_frame_name(
+        context,
+        tcp_frame_name=value,
+        default_tcp_frame_name=default,
+        label=f"{type(move).__name__}.tcp_frame_name",
     )

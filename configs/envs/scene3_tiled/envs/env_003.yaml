@@ -1,0 +1,8 @@
+env_id: 3
+objects:
+  Tblock:
+    root_pose:
+      xyz: [0.1, -0.02, -0.4]
+      rpy: [0.0, 1.5707, 0.32]
+metadata:
+  replay_id: scene3_tiled_003

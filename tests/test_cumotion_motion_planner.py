@@ -480,7 +480,7 @@ class _FakeContext:
     def __init__(self, cumotion) -> None:
         self.cumotion = cumotion
         self.config = SimpleNamespace(
-            custom_tcp_frame="tool",
+            default_tcp_frame="tool",
             flange_frame="flange",
             kinematics=SimpleNamespace(
                 ik=SimpleNamespace(

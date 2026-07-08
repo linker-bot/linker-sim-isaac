@@ -53,6 +53,7 @@ def create_simulation_session(
             rendering_dt=settings.rendering_dt(gui=gui),
             gravity_z=settings.gravity_z,
             add_ground=settings.add_ground,
+            ground_height=settings.ground_height,
         )
         if gui:
             configure_visuals(settings.visuals)

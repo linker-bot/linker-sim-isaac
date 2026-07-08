@@ -83,6 +83,7 @@ def build_world(
     rendering_dt: float | None,
     gravity_z: float,
     add_ground: bool = True,
+    ground_height: float = 0.0,
 ):
     """创建带可选默认地面和重力的 Isaac ``World``。
 
@@ -95,6 +96,7 @@ def build_world(
         rendering_dt: 渲染步长，单位 s；为 ``None`` 时使用 Isaac 默认值。
         gravity_z: z 方向重力加速度，单位 m/s^2。
         add_ground: 是否添加 Isaac 默认地面。
+        ground_height: Isaac 默认地面的 z 高度，单位 m；仅在 ``add_ground`` 为 true 时生效。
     返回:
         已设置重力并按需创建默认地面的 ``World`` 实例。
     """
@@ -113,5 +115,5 @@ def build_world(
 
     # 添加 Isaac 默认地面，给机器人、绳体等对象提供基础接触面；桌面/工装场景可关闭。
     if add_ground:
-        world.scene.add_default_ground_plane()
+        world.scene.add_default_ground_plane(z_position=float(ground_height))
     return world
