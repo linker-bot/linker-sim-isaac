@@ -32,7 +32,6 @@ def test_tiled_config_parses_nested_settings() -> None:
                     "collision_root_path": "/World/CollisionGroups",
                 },
                 "runtime": {
-                    "use_batched_articulation_view": True,
                     "inspect_env_ids": [0, 3],
                 },
             }
@@ -81,6 +80,33 @@ def test_tiled_config_parses_per_env_object_pose_overrides() -> None:
     assert config.per_env[0].metadata == {"replay_id": "case_001"}
 
 
+def test_tiled_config_parses_per_env_camera_pose_overrides() -> None:
+    config = TiledEnvConfig.from_env_config(
+        {
+            "tiled": {
+                "enabled": True,
+                "num_envs": 2,
+                "per_env": [
+                    {
+                        "env_id": 1,
+                        "cameras": {
+                            "world_rgbd": {
+                                "pose": {
+                                    "xyz": [0.2, 0.1, 0.3],
+                                    "rpy": [0.0, 1.2, 0.1],
+                                }
+                            }
+                        },
+                    }
+                ],
+            }
+        }
+    )
+
+    assert config.per_env[0].camera_poses["world_rgbd"].xyz == (0.2, 0.1, 0.3)
+    assert config.per_env[0].camera_poses["world_rgbd"].rpy == (0.0, 1.2, 0.1)
+
+
 def test_tiled_num_envs_comes_from_yaml() -> None:
     config = TiledEnvConfig.from_env_config(
         {"tiled": {"enabled": True, "num_envs": 4}},
@@ -101,16 +127,73 @@ def test_tiled_num_envs_comes_from_yaml() -> None:
         ({"tiled": {"runtime": {"inspect_env_ids": [2]}}}, "inspect_env_ids"),
         ({"tiled": {"runtime": {"render_env_ids": [0]}}}, "unsupported"),
         (
-            {"tiled": {"clone": {"use_grid_cloner": False}}},
-            "use_grid_cloner",
+            {"tiled": {"clone": {"use_grid_cloner": True}}},
+            "unsupported",
         ),
         (
-            {"tiled": {"runtime": {"use_batched_articulation_view": False}}},
-            "use_batched_articulation_view",
+            {"tiled": {"runtime": {"use_batched_articulation_view": True}}},
+            "unsupported",
         ),
         (
             {"tiled": {"num_envs": 1, "per_env": [{"env_id": 2, "objects": {}}]}},
             "env_id",
+        ),
+        (
+            {
+                "tiled": {
+                    "per_env": [
+                        {
+                            "env_id": 0,
+                            "cameras": {"world_rgbd": {"root_pose": {}}},
+                        }
+                    ]
+                }
+            },
+            "unsupported",
+        ),
+        (
+            {
+                "tiled": {
+                    "per_env": [
+                        {
+                            "env_id": 0,
+                            "objects": {
+                                "overrides": {
+                                    "Tblock": {
+                                        "root_pose": {
+                                            "xyz": [0.0, 0.0, 0.0],
+                                            "rpy": [0.0, 0.0, 0.0],
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    ]
+                }
+            },
+            "unsupported",
+        ),
+        (
+            {
+                "tiled": {
+                    "per_env": [
+                        {
+                            "env_id": 0,
+                            "cameras": {
+                                "overrides": {
+                                    "world_rgbd": {
+                                        "pose": {
+                                            "xyz": [0.0, 0.0, 0.0],
+                                            "rpy": [0.0, 0.0, 0.0],
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    ]
+                }
+            },
+            "unsupported",
         ),
         ({"tiled": {"unknown": True}}, "unsupported"),
     ],

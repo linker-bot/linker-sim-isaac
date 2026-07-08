@@ -35,17 +35,6 @@ CONTROL_MESSAGE_TYPES = frozenset(
         "quit",
     }
 )
-PLANNING_MESSAGE_TYPES = frozenset(
-    {
-        "plan",
-        "plan_queue",
-        "cspace_goal",
-        "cspace_delta",
-        "task_space_line",
-        "task_space_arc",
-        "specified_path",
-    }
-)
 HAND_MESSAGE_TYPES = frozenset({"hand", "dual_hand"})
 ACTION_ALIASES = {
     "joint_positions": "joint_position_target",
@@ -128,7 +117,7 @@ def handle_tiled_interactive_message(
                     else None
                 ),
             )
-        if message_type in PLANNING_MESSAGE_TYPES or "moves" in message:
+        if message_type == "plan":
             return runtime.submit_plan(
                 message,
                 env_ids=_message_env_ids(message),
@@ -188,6 +177,8 @@ def _message_robot_names(message: Mapping[str, object]) -> RobotSelection:
     表示消息未指定机器人；返回 ``ALL_ROBOTS`` 表示用户显式写了 ``robots:"all"``。
     """
 
+    if "side" in message:
+        raise ValueError("side is not supported in tiled messages; use robot")
     if "robot_names" in message:
         raise ValueError("robot_names is not supported; use robot or robots")
     if "robot" in message:
@@ -214,15 +205,12 @@ def _message_robot_names(message: Mapping[str, object]) -> RobotSelection:
 def _message_single_robot_name(message: Mapping[str, object]) -> str | None:
     """解析需要单机器人语义的消息。"""
 
+    if "side" in message:
+        raise ValueError("side is not supported in tiled messages; use robot")
     if "robot" in message:
         value = str(message["robot"]).strip()
         if not value:
             raise ValueError("robot cannot be empty")
-        return value
-    if "side" in message:
-        value = str(message["side"]).strip()
-        if not value:
-            raise ValueError("side cannot be empty")
         return value
     names = _message_robot_names(message)
     if names is None:

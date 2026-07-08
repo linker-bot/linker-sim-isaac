@@ -83,7 +83,7 @@ AR5 机械臂、LinkerHand L6 灵巧手、capsule/cuboid 近似绳体、T 形刚
 │   ├── telemetry/            # Foxglove、MCAP、WebSocket
 │   ├── trajectories/         # JointTrajectory 容器、builder 和 command-space 轨迹组装
 │   ├── utils/                # 配置、路径、旋转、数学、计时工具
-│   └── visualization/        # GUI viewport、debug draw、marker
+│   └── visualization/        # GUI viewport 辅助
 ├── tests/                    # 尽量不启动 Isaac Sim 的轻量测试
 ├── tools/object_assets/      # 静态/动态对象离线资产生成工具，例如 rope/T block USD builder
 ├── README.md                 # 项目语言入口

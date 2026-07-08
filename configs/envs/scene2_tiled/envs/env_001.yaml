@@ -1,0 +1,8 @@
+env_id: 1
+objects:
+  rope:
+    root_pose:
+      xyz: [0.3, -0.02, -0.1]
+      rpy: [0.0, -1.57, 0]
+metadata:
+  replay_id: scene2_tiled_001

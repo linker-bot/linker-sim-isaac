@@ -22,6 +22,7 @@ from linkerbot_sim.tiled.batched_ik import (
     BatchedIKSolver,
     apply_ik_failure_fallback,
 )
+from linkerbot_sim.tiled.cameras import tiled_sensor_camera_settings
 from linkerbot_sim.tiled.paths import (
     env_origins,
     env_root_path,
@@ -94,4 +95,5 @@ __all__ = [
     "interpolate_joint_targets",
     "make_env_local_prim_path",
     "tiled_robot_instances_from_env_config",
+    "tiled_sensor_camera_settings",
 ]

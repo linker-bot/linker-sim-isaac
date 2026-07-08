@@ -75,8 +75,6 @@ def _clone_envs(
 
     from isaacsim.core.cloner import GridCloner
 
-    if not config.clone.use_grid_cloner:
-        raise ValueError("Only GridCloner tiled scene cloning is implemented")
     cloner = GridCloner(
         spacing=float(config.spacing),
         num_per_row=(

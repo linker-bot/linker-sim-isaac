@@ -42,7 +42,7 @@ def test_linear_joint_planner_returns_batched_trajectory() -> None:
     np.testing.assert_allclose(result.positions[1, -1], [3.0, 5.0])
 
 
-def test_linear_joint_planner_concatenates_joint_move_queue() -> None:
+def test_linear_joint_planner_concatenates_joint_segments() -> None:
     request = TiledPlanningRequest(
         request_id="queue",
         robot_name="left",
@@ -53,13 +53,13 @@ def test_linear_joint_planner_concatenates_joint_move_queue() -> None:
         sample_dt_s=0.05,
         segments=(
             TiledPlanningSegment(
-                kind="cspace_delta",
+                kind="joint_delta_pos",
                 goal_positions=np.asarray([[1.0, 0.0]]),
                 duration_s=0.1,
                 sample_dt_s=0.05,
             ),
             TiledPlanningSegment(
-                kind="cspace_goal",
+                kind="joint_position_target",
                 goal_positions=np.asarray([[1.0, 2.0]]),
                 duration_s=0.05,
                 sample_dt_s=0.05,

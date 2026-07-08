@@ -1,7 +1,6 @@
 """Dual-arm interactive runtime package."""
 
 from linkerbot_sim.app.interactive.dual_arm.cli import (
-    default_dual_arm_tcp,
     main,
     parse_args,
     run_interactive_mode,
@@ -11,7 +10,6 @@ from linkerbot_sim.app.interactive.dual_arm.runtime import (
 )
 
 __all__ = [
-    "default_dual_arm_tcp",
     "main",
     "parse_args",
     "run_interactive_mode",

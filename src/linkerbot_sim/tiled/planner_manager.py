@@ -70,8 +70,8 @@ class TiledPlanningRequest:
     ``(len(env_ids), command_dim)``。worker 只消费这些 numpy 副本，不读取 runtime 当前
     状态。
 
-    旧的单段关节目标使用 ``goal_positions``；新版 MoveSpec/路径队列使用 ``segments``，
-    每段可以是关节目标，也可以携带 specified-path 几何给支持该能力的后端。
+    单段关节目标可使用 ``goal_positions``；多段或路径规划使用 ``segments``，每段可以
+    是关节目标，也可以携带 specified-path 几何给支持该能力的后端。
     """
 
     request_id: str

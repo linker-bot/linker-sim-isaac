@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -14,6 +14,7 @@ from linkerbot_sim.app.interactive.tiled.isaac_ik_solver import (
 )
 from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
 from linkerbot_sim.app.interactive.tiled.object_states import (
+    TiledDynamicChainObjectPoseView,
     _capture_tiled_object_pose_snapshot,
     _restore_tiled_object_pose_snapshot,
 )
@@ -47,6 +48,8 @@ from linkerbot_sim.tiled import (
     TiledPlanningResult,
     TiledTrajectoryBuffer,
 )
+from linkerbot_sim.sensors.camera_observer import CameraOutputHandle
+from linkerbot_sim.sensors.camera_runtime import SensorCameraRuntime
 
 
 @dataclass
@@ -65,15 +68,19 @@ class IsaacTiledInteractiveRuntime:
     initial_joint_positions: dict[str, np.ndarray]
     initial_joint_velocities: dict[str, np.ndarray]
     target_positions: dict[str, np.ndarray]
-    initial_object_states: dict[str, dict[str, np.ndarray]]
+    initial_object_states: dict[str, dict[str, object]]
     command_adapters: dict[str, TiledCommandAdapter]
     ik_solvers: dict[str, _WorldFrameBatchedIKSolver]
     tcp_positions_world: dict[str, np.ndarray]
     tcp_orientations_wxyz: dict[str, np.ndarray]
     trajectory_buffer: TiledTrajectoryBuffer
     planner_manager: TiledPlannerManager
+    sensor_cameras: tuple[SensorCameraRuntime, ...]
+    camera_output: CameraOutputHandle | None
     quit_event: threading.Event
+    object_pose_views: dict[str, object] = field(default_factory=dict)
     step: int = 0
+    _closed: bool = False
 
     @classmethod
     def create(
@@ -93,7 +100,15 @@ class IsaacTiledInteractiveRuntime:
         from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
         from linkerbot_sim.app.runtime.simulation_session import create_simulation_session
         from linkerbot_sim.configs.profiles import load_default_controller_profiles
+        from linkerbot_sim.sensors.camera_observer import start_camera_output
+        from linkerbot_sim.sensors.camera_runtime import (
+            create_sensor_camera_runtimes,
+            initialize_sensor_camera_runtimes,
+        )
+        from linkerbot_sim.tiled.cameras import tiled_sensor_camera_settings
         from linkerbot_sim.tiled.scene import build_isaac_tiled_scene, finalize_tiled_articulation_views
+        from linkerbot_sim.tiled.scene.utils import _print_status
+        from linkerbot_sim.utils.paths import repo_path
 
         tiled_config = TiledEnvConfig.from_env_config(env_config)
         runtime_settings = EnvRuntimeSettings.from_env_config(env_config)
@@ -106,9 +121,29 @@ class IsaacTiledInteractiveRuntime:
             controller_profiles=load_default_controller_profiles(),
             status_prefix="TILED_INTERACTIVE",
         )
+        sensor_settings = tiled_sensor_camera_settings(
+            runtime_settings.sensors,
+            tiled_config=scene.config,
+        )
+        sensor_cameras = create_sensor_camera_runtimes(
+            stage=session.stage,
+            sensors=sensor_settings,
+        )
+        camera_output = start_camera_output(
+            sensor_cameras,
+            path_resolver=repo_path,
+        )
         session.world.reset()
         session.world.get_physics_context().set_gravity(runtime_settings.gravity_z)
         scene = finalize_tiled_articulation_views(scene)
+        initialize_sensor_camera_runtimes(sensor_cameras)
+        for sensor_camera in sensor_cameras:
+            _print_status(
+                "TILED_INTERACTIVE",
+                "SENSOR_CAMERA "
+                f"name={sensor_camera.name} prim_path={sensor_camera.prim_path} "
+                f"modalities={','.join(sensor_camera.settings.modalities)}",
+            )
         if gui:
             _refresh_gui_view_after_scene_build(session, runtime_settings)
         selected = _selected_robot_names(scene.articulation_views, None)
@@ -146,6 +181,7 @@ class IsaacTiledInteractiveRuntime:
             tcp_positions[name], tcp_orientations[name] = ik_solvers[
                 name
             ].command_tcp_world_poses(targets[name])
+        object_pose_views = _create_tiled_object_pose_views(scene)
         planner_backend_obj = _create_tiled_planner_backend(
             planner_backend,
             scene=scene,
@@ -156,13 +192,14 @@ class IsaacTiledInteractiveRuntime:
             object_prim_paths=scene.object_prim_paths,
             env_origins=scene.env_origins,
             env_ids=np.arange(scene.config.num_envs, dtype=int),
+            object_pose_views=object_pose_views,
         )
         return cls(
             env_name=env_name,
             env_config=env_config,
             session=session,
             scene=scene,
-            render=bool(gui),
+            render=bool(gui) or camera_output is not None,
             default_decimation=max(1, int(default_decimation)),
             robot_names=selected,
             episode_steps=np.zeros(scene.config.num_envs, dtype=int),
@@ -182,7 +219,10 @@ class IsaacTiledInteractiveRuntime:
                 max_pending_requests=max_pending_requests,
                 max_completed_results=max_completed_results,
             ),
+            sensor_cameras=sensor_cameras,
+            camera_output=camera_output,
             quit_event=threading.Event(),
+            object_pose_views=object_pose_views,
         )
 
     @property
@@ -206,9 +246,6 @@ class IsaacTiledInteractiveRuntime:
             "env_roots": list(self.scene.env_root_paths),
             "env_origins": self.scene.env_origins.tolist(),
             "runtime": {
-                "use_batched_articulation_view": bool(
-                    self.scene.config.runtime.use_batched_articulation_view
-                ),
                 "inspect_env_ids": list(self.scene.config.runtime.inspect_env_ids),
             },
             "robots": {
@@ -219,6 +256,16 @@ class IsaacTiledInteractiveRuntime:
                     "ik_tcp_frame": self._command_adapter(name).tcp_frame_name,
                 }
                 for name, runtime in self._selected_runtime_items(None)
+            },
+            "sensors": {
+                "cameras": [
+                    {
+                        "name": camera.name,
+                        "prim_path": camera.prim_path,
+                        "modalities": list(camera.settings.modalities),
+                    }
+                    for camera in self.sensor_cameras
+                ],
             },
         }
 
@@ -236,11 +283,22 @@ class IsaacTiledInteractiveRuntime:
                 self.target_positions[name],
                 joint_indices=runtime.command_joint_indices,
             )
-        self.session.world.step(render=self.render)
-        self.step += 1
-        self.episode_steps[:] += 1
+        self._step_world(phase="idle")
         for name, _runtime in self._selected_runtime_items(None):
             self._refresh_tcp_state(name)
+
+    def _step_world(self, *, phase: str) -> None:
+        """推进一次 world，并在主线程采样 tiled sensor camera。"""
+
+        self.session.world.step(render=self.render)
+        if self.camera_output is not None:
+            self.camera_output.observer.observe(
+                self.session.world,
+                step=self.step,
+                phase=phase,
+            )
+        self.step += 1
+        self.episode_steps[:] += 1
 
     @property
     def idle_period_s(self) -> float:
@@ -283,6 +341,8 @@ class IsaacTiledInteractiveRuntime:
             object_prim_paths=self.scene.object_prim_paths,
             snapshot=self.initial_object_states,
             env_ids=selected,
+            env_origins=self.scene.env_origins,
+            object_pose_views=self.object_pose_views,
         )
         self.trajectory_buffer.clear(env_ids=selected)
         self.planner_manager.cancel_matching(env_ids=selected)
@@ -398,9 +458,7 @@ class IsaacTiledInteractiveRuntime:
                     tick_targets,
                     joint_indices=joint_indices,
                 )
-            self.session.world.step(render=self.render)
-            self.step += 1
-            self.episode_steps[:] += 1
+            self._step_world(phase="action")
         for name, _ in selected_robots:
             self._refresh_tcp_state(name, env_ids=selected)
         return {
@@ -573,9 +631,7 @@ class IsaacTiledInteractiveRuntime:
                     joint_indices=runtime.command_joint_indices,
                 )
                 last_results[name] = result.to_json()
-            self.session.world.step(render=self.render)
-            self.step += 1
-            self.episode_steps[:] += 1
+            self._step_world(phase="trajectory")
             for name, _ in selected_robots:
                 self._refresh_tcp_state(name, env_ids=selected)
         return {
@@ -768,8 +824,15 @@ class IsaacTiledInteractiveRuntime:
 
         from linkerbot_sim.app.runtime.simulation_app_lifecycle import close_simulation_app
 
-        self.planner_manager.shutdown()
-        close_simulation_app(self.session.app)
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            if self.camera_output is not None:
+                self.camera_output.close()
+        finally:
+            self.planner_manager.shutdown()
+            close_simulation_app(self.session.app)
 
     def _command_adapter(self, robot_name: str) -> TiledCommandAdapter:
         """返回机器人对应的 command adapter。"""
@@ -871,6 +934,7 @@ class IsaacTiledInteractiveRuntime:
             object_prim_paths=self.scene.object_prim_paths,
             env_origins=self.scene.env_origins,
             env_ids=env_ids,
+            object_pose_views=self.object_pose_views,
         )
 
     def _selected_runtime_items(
@@ -933,6 +997,144 @@ class IsaacTiledInteractiveRuntime:
         results = self.planner_manager.collect_ready(timeout_s=timeout_s)
         loaded = load_ready_planning_results(self.trajectory_buffer, results)
         return results, loaded
+
+
+def _create_tiled_object_pose_views(scene: object) -> dict[str, object]:
+    """为 dynamic tiled objects 创建 batched rigid view，用于 reset/get_state 同步 PhysX。"""
+
+    object_paths = getattr(scene, "object_prim_paths", {}) or {}
+    rigid_objects: list[tuple[str, tuple[str, ...]]] = []
+    chain_objects: list[
+        tuple[str, tuple[str, ...], tuple[str, ...], tuple[tuple[str, ...], ...]]
+    ] = []
+    for handle in getattr(scene, "object_handles", ()) or ():
+        kind = str(getattr(handle, "kind", ""))
+        model = getattr(handle, "model", None)
+        name = str(getattr(handle, "name", ""))
+        paths = tuple(str(path) for path in (object_paths.get(name) or ()))
+        if not name or not paths:
+            continue
+        if kind == "rigid":
+            if bool(getattr(model, "static", False)):
+                continue
+            rigid_objects.append((name, paths))
+        elif kind == "dynamic_chain":
+            body_names, body_suffixes = _dynamic_chain_body_suffixes(
+                name=name,
+                model=model,
+                env_zero_root_path=paths[0],
+            )
+            body_paths_by_env = tuple(
+                tuple(_join_prim_path_suffix(root_path, suffix) for suffix in body_suffixes)
+                for root_path in paths
+            )
+            chain_objects.append((name, paths, body_names, body_paths_by_env))
+    if not rigid_objects and not chain_objects:
+        return {}
+    try:
+        from isaacsim.core.prims import RigidPrim
+    except Exception as exc:
+        raise RuntimeError(
+            "isaacsim.core.prims.RigidPrim is required for tiled dynamic object state sync"
+        ) from exc
+
+    result: dict[str, object] = {}
+    for name, paths in rigid_objects:
+        try:
+            view = RigidPrim(
+                prim_paths_expr=list(paths),
+                name=f"tiled_object_{_identifier_suffix(name)}",
+                reset_xform_properties=False,
+            )
+            initialize = getattr(view, "initialize", None)
+            if callable(initialize):
+                initialize()
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to create tiled object rigid view for {name!r}"
+            ) from exc
+        result[name] = view
+    for name, _, body_names, body_paths_by_env in chain_objects:
+        flat_body_paths = [
+            body_path
+            for env_body_paths in body_paths_by_env
+            for body_path in env_body_paths
+        ]
+        try:
+            view = RigidPrim(
+                prim_paths_expr=flat_body_paths,
+                name=f"tiled_object_{_identifier_suffix(name)}_bodies",
+                reset_xform_properties=False,
+            )
+            initialize = getattr(view, "initialize", None)
+            if callable(initialize):
+                initialize()
+        except Exception as exc:
+            raise RuntimeError(
+                f"failed to create tiled dynamic-chain object rigid view for {name!r}"
+            ) from exc
+        result[name] = TiledDynamicChainObjectPoseView(
+            view=view,
+            body_names=body_names,
+            body_paths_by_env=body_paths_by_env,
+        )
+    return result
+
+
+def _dynamic_chain_body_suffixes(
+    *,
+    name: str,
+    model: object,
+    env_zero_root_path: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """从 env_0 dynamic_chain model 推导每个 child rigid body 的 root-relative suffix。"""
+
+    bodies = []
+    if isinstance(model, Mapping):
+        bodies = list(model.get("bodies", ()) or ())
+    else:
+        bodies = list(getattr(model, "bodies", ()) or ())
+    body_names: list[str] = []
+    body_suffixes: list[str] = []
+    for body in bodies:
+        path_getter = getattr(body, "GetPath", None)
+        body_path = str(path_getter() if callable(path_getter) else body)
+        body_suffix = _prim_path_suffix(env_zero_root_path, body_path)
+        name_getter = getattr(body, "GetName", None)
+        body_name = str(name_getter() if callable(name_getter) else body_path.rsplit("/", 1)[-1])
+        body_names.append(body_name)
+        body_suffixes.append(body_suffix)
+    if not body_suffixes:
+        raise RuntimeError(
+            f"tiled dynamic-chain object {name!r} has no child rigid bodies for state sync"
+        )
+    return tuple(body_names), tuple(body_suffixes)
+
+
+def _prim_path_suffix(root_path: str, child_path: str) -> str:
+    """返回 child path 相对 root path 的 slash-prefixed suffix。"""
+
+    root = str(root_path).rstrip("/")
+    child = str(child_path)
+    if child == root:
+        return ""
+    prefix = f"{root}/"
+    if not child.startswith(prefix):
+        raise RuntimeError(f"dynamic-chain body path {child!r} is not under {root!r}")
+    return child[len(root) :]
+
+
+def _join_prim_path_suffix(root_path: str, suffix: str) -> str:
+    """把 tiled env 中的 object root 和 env_0 body suffix 拼回 child path。"""
+
+    return f"{str(root_path).rstrip('/')}{suffix}"
+
+
+def _identifier_suffix(value: str) -> str:
+    """生成 Isaac view name 可用的保守后缀。"""
+
+    suffix = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in str(value))
+    return suffix or "object"
 
 
 def _create_tiled_planner_backend(

@@ -17,7 +17,7 @@ Supported:
 - Batched articulation views for joint state read/write.
 - Per-env `reset`, `get_state`, `set_state`, and target updates.
 - `load_trajectory` and `step_trajectory` playback for batched joint trajectories.
-- `plan`, `plan_queue`, `moves`, `planner_status`, and `cancel_plan` for async planning.
+- `plan`, `planner_status`, and `cancel_plan` for async planning.
 - `before`, `sync`, and `after` hand overlays on loaded trajectories and ready planner results.
 - `hand` / `dual_hand` as hand-only motions in the selected robot/env trajectory playback queue.
 - stdin JSONL and TCP JSONL command transports.
@@ -76,9 +76,11 @@ configs/envs/scene3_tiled/
     env_003.yaml
 ```
 
-`base.yaml` stores shared env settings: world, visuals, robots, objects, and tiled topology.
+`base.yaml` stores shared env settings: world, visuals, robots, objects, shared
+`sensors.cameras` parameters, and tiled topology.
 
-Per-env files store differences, usually same-name object `root_pose` overrides:
+Per-env files store differences: same-name object `root_pose` overrides and same-name
+camera `pose` overrides:
 
 ```yaml
 env_id: 1
@@ -87,7 +89,17 @@ objects:
     root_pose:
       xyz: [0.12, 0.04, -0.4]
       rpy: [0.0, 1.5707, 0.18]
+cameras:
+  world_rgbd:
+    pose:
+      xyz: [0.08, 0.0, 0.08]
+      rpy: [0.0, 1.1, 0.0]
 ```
+
+The tiled runtime creates one camera per env, such as
+`/World/envs/env_0/WorldRGBD`. Offline save directories and Foxglove topic prefixes
+get an `env_000` suffix so multiple envs do not write to the same frame files or
+topics.
 
 Important tiled fields:
 
@@ -100,10 +112,8 @@ tiled:
   spacing: 2.0
   per_env_config_dir: envs
   clone:
-    use_grid_cloner: true
     filter_collisions: true
   runtime:
-    use_batched_articulation_view: true
     inspect_env_ids: [0]
 ```
 
@@ -176,12 +186,16 @@ Trajectory playback:
 Async planning:
 
 ```json
-{"type":"plan","robot":"left","env_ids":[0],"goal_joint_positions":[[0.2,0,0,0,0,0,0]],"duration_s":0.5}
+{"type":"plan","kind":"joint_position_target","robot":"left","env_ids":[0],"joint_positions":[[0.2,0,0,0,0,0,0]],"duration_s":0.5}
+{"type":"plan","kind":"joint_delta_pos","robot":"left","env_ids":[0],"joint_deltas":[[0.01,0,0,0,0,0,0]],"duration_s":0.5}
+{"type":"plan","kind":"task_space_line","robot":"left","env_ids":[0],"target_offset":[0,0,0.05],"duration_s":1.0}
 {"type":"planner_status","wait_timeout_s":0.1}
 {"type":"cancel_plan","request_id":"plan-123"}
 ```
 
-Use `--planner-backend linear` for joint-space targets and joint MoveSpec queues. Use `--planner-backend cumotion` for task-space line/arc and specified path support.
+All tiled planning requests use `type:"plan"` and put the motion type in `kind`. The tiled protocol no longer accepts old top-level motion messages such as `cspace_goal`, `cspace_delta`, `task_space_line`, `task_space_arc`, `specified_path`, `plan_queue`, top-level `moves`, `move_type`, or the `side` robot alias. Use `robot` or `robots`.
+
+Use `--planner-backend linear` for single-segment joint-space targets. Use `--planner-backend cumotion` for task-space line/arc and specified path support.
 
 ## Hand Overlay
 

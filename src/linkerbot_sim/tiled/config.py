@@ -23,12 +23,14 @@ class TiledPerEnvConfig:
     """单个 tiled env 的差异配置。
 
     tiled runtime 第一阶段要求所有 env 拥有相同机器人和物体集合；这里仅允许按 env
-    覆盖已有物体的 ``root_pose``。这样仍然可以使用 ``GridCloner`` 复制同构 stage，
-    再在 clone 后把每个 env 的对象移动到自己的局部位置。
+    覆盖已有物体的 ``root_pose`` 和已有相机的 ``pose``。这样仍然可以使用
+    ``GridCloner`` 复制同构 stage，再在 clone 后把每个 env 的对象和传感器移动到自己
+    的局部位置。
     """
 
     env_id: int
     object_root_poses: dict[str, RootPoseConfig] = field(default_factory=dict)
+    camera_poses: dict[str, RootPoseConfig] = field(default_factory=dict)
     metadata: Mapping[str, object] | None = None
 
     @classmethod
@@ -40,14 +42,18 @@ class TiledPerEnvConfig:
         支持的 YAML 形态:
 
         ``objects.<object_name>.root_pose``:
-            推荐写法，直接按对象名覆盖位姿。
-        ``objects.overrides.<object_name>.root_pose``:
-            兼容更显式的 override 分组写法。
+            按对象名覆盖位姿。
+        ``cameras.<camera_name>.pose``:
+            按相机名覆盖该 env 中传感器相机的局部位姿。
         """
 
         if not isinstance(data, Mapping):
             raise ValueError(f"tiled.per_env[{index}] must be a mapping")
-        _reject_keys(data, {"env_id", "objects", "metadata"}, f"tiled.per_env[{index}]")
+        _reject_keys(
+            data,
+            {"env_id", "objects", "cameras", "metadata"},
+            f"tiled.per_env[{index}]",
+        )
         if "env_id" not in data:
             raise ValueError(f"tiled.per_env[{index}].env_id is required")
         env_id = int(data["env_id"])
@@ -59,6 +65,9 @@ class TiledPerEnvConfig:
             object_root_poses=_parse_object_root_pose_overrides(
                 data.get("objects"), label=f"tiled.per_env[{index}].objects"
             ),
+            camera_poses=_parse_camera_pose_overrides(
+                data.get("cameras"), label=f"tiled.per_env[{index}].cameras"
+            ),
             metadata=metadata,
         )
 
@@ -66,13 +75,10 @@ class TiledPerEnvConfig:
 class TiledCloneConfig:
     """控制 USD/PhysX 克隆行为的配置。
 
-    这些字段对应未来 scene builder 使用 ``GridCloner`` 时需要的选项。这里不直接
-    import Isaac API，只保存“应该如何 clone”的意图。
+    tiled scene builder 固定使用 Isaac ``GridCloner``；这里仅保留实际可配置的
+    clone 参数。
     """
 
-    # 是否优先使用 Isaac Sim 原生 GridCloner。保留开关是为了将来遇到资产兼容问题时，
-    # 可以临时切换到较慢但更容易诊断的手工 clone 路径。
-    use_grid_cloner: bool = True
     # replicate_physics 让 PhysX 复用克隆环境的物理结构，是 256+ env 性能路径的关键。
     replicate_physics: bool = True
     # copy_from_source=false 表示 clone 可以继承 source prim，减少 USD stage 冗余。
@@ -101,7 +107,6 @@ class TiledCloneConfig:
         _reject_keys(
             data,
             {
-                "use_grid_cloner",
                 "replicate_physics",
                 "copy_from_source",
                 "enable_env_ids",
@@ -111,9 +116,6 @@ class TiledCloneConfig:
             "tiled.clone",
         )
         config = cls(
-            use_grid_cloner=_optional_bool(
-                data, "use_grid_cloner", cls.use_grid_cloner, "tiled.clone"
-            ),
             replicate_physics=_optional_bool(
                 data, "replicate_physics", cls.replicate_physics, "tiled.clone"
             ),
@@ -139,11 +141,6 @@ class TiledCloneConfig:
     def validate(self) -> None:
         """校验 clone 配置中和 USD stage 相关的字段。"""
 
-        if not self.use_grid_cloner:
-            raise ValueError(
-                "tiled.clone.use_grid_cloner=false is not implemented; "
-                "the current tiled scene builder always uses Isaac GridCloner"
-            )
         _require_absolute_usd_path(
             self.collision_root_path, "tiled.clone.collision_root_path"
         )
@@ -156,8 +153,6 @@ class TiledRuntimeConfig:
     这些选项影响 view/controller/state 这些运行时包装层，不影响 USD scene 的拓扑。
     """
 
-    # 目标实现必须用 batched articulation view 读写状态；当前没有 per-env view fallback。
-    use_batched_articulation_view: bool = True
     # GUI/telemetry 调试时通常只需要看少数 env。这里记录想重点观察的 env id，
     # 不为每个 env 创建 viewport，也不减少物理或渲染开销。
     inspect_env_ids: tuple[int, ...] = (0,)
@@ -174,16 +169,10 @@ class TiledRuntimeConfig:
             raise ValueError("tiled.runtime must be a mapping")
         _reject_keys(
             data,
-            {"use_batched_articulation_view", "inspect_env_ids"},
+            {"inspect_env_ids"},
             "tiled.runtime",
         )
         return cls(
-            use_batched_articulation_view=_optional_bool(
-                data,
-                "use_batched_articulation_view",
-                cls.use_batched_articulation_view,
-                "tiled.runtime",
-            ),
             inspect_env_ids=_optional_int_tuple(
                 data, "inspect_env_ids", cls.inspect_env_ids, "tiled.runtime"
             ),
@@ -192,11 +181,6 @@ class TiledRuntimeConfig:
     def validate(self, *, num_envs: int) -> None:
         """校验 runtime 配置是否和 ``num_envs`` 匹配。"""
 
-        if not self.use_batched_articulation_view:
-            raise ValueError(
-                "tiled.runtime.use_batched_articulation_view=false is not implemented; "
-                "the current tiled runtime always uses batched articulation views"
-            )
         if any(env_id < 0 or env_id >= num_envs for env_id in self.inspect_env_ids):
             raise ValueError("tiled.runtime.inspect_env_ids contains out-of-range env id")
 
@@ -453,13 +437,6 @@ def _parse_object_root_pose_overrides(
         return {}
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be a mapping")
-    if "overrides" in value:
-        if set(value) != {"overrides"}:
-            raise ValueError(f"{label} cannot mix overrides with direct object keys")
-        overrides = value["overrides"]
-        if not isinstance(overrides, Mapping):
-            raise ValueError(f"{label}.overrides must be a mapping")
-        value = overrides
 
     result: dict[str, RootPoseConfig] = {}
     for object_name, override in value.items():
@@ -475,6 +452,38 @@ def _parse_object_root_pose_overrides(
         pose_data = override["root_pose"]
         if not isinstance(pose_data, Mapping):
             raise ValueError(f"{item_label}.root_pose must be a mapping")
+        result[name] = RootPoseConfig.from_mapping(pose_data)
+    return result
+
+
+def _parse_camera_pose_overrides(
+    value: object,
+    *,
+    label: str,
+) -> dict[str, RootPoseConfig]:
+    """解析 per-env 相机位姿覆盖。"""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be a mapping")
+
+    result: dict[str, RootPoseConfig] = {}
+    for camera_name, override in value.items():
+        name = str(camera_name)
+        if not name:
+            raise ValueError(f"{label} contains an empty camera name")
+        if "/" in name or "\\" in name:
+            raise ValueError(f"{label}.{name} name must not contain path separators")
+        item_label = f"{label}.{name}"
+        if not isinstance(override, Mapping):
+            raise ValueError(f"{item_label} must be a mapping")
+        _reject_keys(override, {"pose"}, item_label)
+        if "pose" not in override:
+            raise ValueError(f"{item_label}.pose is required")
+        pose_data = override["pose"]
+        if not isinstance(pose_data, Mapping):
+            raise ValueError(f"{item_label}.pose must be a mapping")
         result[name] = RootPoseConfig.from_mapping(pose_data)
     return result
 

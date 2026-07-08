@@ -78,6 +78,11 @@ Fields:
 
 The camera live port is configured by the env profile. It is not the same as the interactive state-stream `--foxglove-live-port`.
 
+In tiled envs, `sensors.cameras` keeps shared camera settings. Each child env can
+override the camera position with `cameras.<name>.pose` in `envs/env_XXX.yaml`.
+The runtime creates one camera per env and appends an `env_000` suffix to local
+output directories and Foxglove topic prefixes.
+
 ## Output
 
 Local output example:

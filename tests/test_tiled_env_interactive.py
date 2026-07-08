@@ -5,13 +5,14 @@ import queue
 import sys
 import threading
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
 
 from linkerbot_sim.app.interactive import tiled as tiled_interactive
 from linkerbot_sim.app.interactive.tiled import command_utils as tiled_command_utils
+from linkerbot_sim.app.interactive.tiled.isaac_runtime import IsaacTiledInteractiveRuntime
 from linkerbot_sim.app.interactive.tiled import isaac_ik_solver as tiled_isaac_ik_solver
 from linkerbot_sim.app.interactive.tiled import telemetry_publish as tiled_telemetry_publish
 from linkerbot_sim.app.interactive.tiled import transport as tiled_transport
@@ -72,6 +73,59 @@ def make_runtime(*, fail_env_ids=frozenset()):
         tcp_frame_name="tcp",
         ik_solver=DebugBatchedIKSolver(fail_env_ids=frozenset(fail_env_ids)),
     )
+
+
+def test_isaac_tiled_step_world_samples_camera_output() -> None:
+    class FakeWorld:
+        def __init__(self) -> None:
+            self.render_calls: list[bool] = []
+
+        def step(self, *, render: bool) -> None:
+            self.render_calls.append(bool(render))
+
+        def get_physics_dt(self) -> float:
+            return 0.1
+
+    class FakeObserver:
+        def __init__(self) -> None:
+            self.calls: list[tuple[object, int, str | None]] = []
+
+        def observe(self, world, *, step: int, phase: str | None = None) -> None:
+            self.calls.append((world, step, phase))
+
+    world = FakeWorld()
+    observer = FakeObserver()
+    runtime = IsaacTiledInteractiveRuntime(
+        env_name="unit",
+        env_config={},
+        session=SimpleNamespace(world=world, app=None),
+        scene=SimpleNamespace(config=SimpleNamespace(num_envs=2)),
+        render=True,
+        default_decimation=1,
+        robot_names=(),
+        episode_steps=np.zeros(2, dtype=int),
+        episode_ids=np.zeros(2, dtype=int),
+        initial_joint_positions={},
+        initial_joint_velocities={},
+        target_positions={},
+        initial_object_states={},
+        command_adapters={},
+        ik_solvers={},
+        tcp_positions_world={},
+        tcp_orientations_wxyz={},
+        trajectory_buffer=TiledTrajectoryBuffer(num_envs=2),
+        planner_manager=SimpleNamespace(),
+        sensor_cameras=(),
+        camera_output=SimpleNamespace(observer=observer),
+        quit_event=threading.Event(),
+    )
+
+    runtime._step_world(phase="action")
+
+    assert world.render_calls == [True]
+    assert observer.calls == [(world, 0, "action")]
+    assert runtime.step == 1
+    assert runtime.episode_steps.tolist() == [1, 1]
 
 
 def test_parse_tiled_joint_action_from_interactive_message() -> None:
@@ -307,6 +361,24 @@ def test_step_message_rejects_removed_robot_names_input_alias() -> None:
     assert response["event"] == "rejected"
 
 
+def test_tiled_message_rejects_removed_side_alias() -> None:
+    module = load_tiled_interactive_module()
+    runtime = make_runtime()
+
+    response = module.handle_tiled_interactive_message(
+        {
+            "type": "step",
+            "kind": "joint_delta_pos",
+            "values": [0.1, 0.0, 0.0],
+            "side": "left",
+        },
+        runtime,
+    )
+
+    assert response["event"] == "rejected"
+    assert "side is not supported" in response["error"]
+
+
 def test_runtime_ee_delta_reports_ik_mask_and_fallback() -> None:
     module = load_tiled_interactive_module()
     runtime = make_runtime(fail_env_ids={1})
@@ -536,6 +608,474 @@ def test_restore_tiled_object_pose_snapshot_uses_selected_env_paths(monkeypatch)
             [0.0, 0.0, 0.0, 1.0],
         )
     ]
+
+
+def test_read_tiled_object_states_prefers_rigid_view_world_pose() -> None:
+    from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
+
+    class FakeRigidView:
+        def get_world_poses(self, *, indices):
+            assert np.asarray(indices, dtype=int).tolist() == [1]
+            return (
+                np.asarray([[3.2, 0.1, -0.4]], dtype=float),
+                np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=float),
+            )
+
+    state = _read_tiled_object_states(
+        stage=object(),
+        object_prim_paths={
+            "Tblock": (
+                "/World/envs/env_0/TBlock",
+                "/World/envs/env_1/TBlock",
+            )
+        },
+        env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+        env_ids=np.asarray([1], dtype=int),
+        object_pose_views={"Tblock": FakeRigidView()},
+    )
+
+    assert state == {
+        "Tblock": {
+            "env_ids": [1],
+            "positions_world": [[3.2, 0.1, -0.4]],
+            "positions_local": [[0.20000000000000018, 0.1, -0.4]],
+            "orientations_wxyz": [[1.0, 0.0, 0.0, 0.0]],
+        }
+    }
+
+
+def test_restore_tiled_object_pose_snapshot_uses_rigid_view_when_available(monkeypatch) -> None:
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        _restore_tiled_object_pose_snapshot,
+    )
+
+    usd_calls = []
+    view_calls = []
+
+    def fake_apply(stage, prim_path, position, orientation):
+        usd_calls.append((prim_path, position, orientation))
+        return True
+
+    class FakeRigidView:
+        def set_world_poses(self, *, positions, orientations, indices):
+            view_calls.append(
+                (
+                    "poses",
+                    np.asarray(positions, dtype=float).tolist(),
+                    np.asarray(orientations, dtype=float).tolist(),
+                    np.asarray(indices, dtype=int).tolist(),
+                )
+            )
+
+        def set_velocities(self, velocities, *, indices):
+            view_calls.append(
+                (
+                    "velocities",
+                    np.asarray(velocities, dtype=float).tolist(),
+                    np.asarray(indices, dtype=int).tolist(),
+                )
+            )
+
+    monkeypatch.setattr(
+        "linkerbot_sim.app.interactive.tiled.object_states._apply_prim_local_pose_and_zero_velocity",
+        fake_apply,
+    )
+
+    restored = _restore_tiled_object_pose_snapshot(
+        stage=object(),
+        object_prim_paths={
+            "Tblock": (
+                "/World/envs/env_0/TBlock",
+                "/World/envs/env_1/TBlock",
+            )
+        },
+        snapshot={
+            "Tblock": {
+                "env_ids": np.asarray([0, 1], dtype=int),
+                "positions_local": np.asarray(
+                    [[0.1, 0.0, -0.4], [0.2, 0.1, -0.4]],
+                    dtype=float,
+                ),
+                "orientations_wxyz": np.asarray(
+                    [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+                    dtype=float,
+                ),
+            }
+        },
+        env_ids=np.asarray([1], dtype=int),
+        env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+        object_pose_views={"Tblock": FakeRigidView()},
+    )
+
+    assert restored == 1
+    assert usd_calls == []
+    assert view_calls == [
+        (
+            "poses",
+            [[3.2, 0.1, -0.4]],
+            [[0.0, 0.0, 0.0, 1.0]],
+            [1],
+        ),
+        ("velocities", [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], [1]),
+    ]
+
+
+def test_read_tiled_object_states_raises_when_rigid_view_fails() -> None:
+    from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
+
+    class FailingRigidView:
+        def get_world_poses(self, *, indices):
+            raise RuntimeError("view read failed")
+
+    with pytest.raises(RuntimeError, match="failed to read tiled object 'Tblock'"):
+        _read_tiled_object_states(
+            stage=object(),
+            object_prim_paths={
+                "Tblock": (
+                    "/World/envs/env_0/TBlock",
+                    "/World/envs/env_1/TBlock",
+                )
+            },
+            env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+            env_ids=np.asarray([1], dtype=int),
+            object_pose_views={"Tblock": FailingRigidView()},
+        )
+
+
+def test_restore_tiled_object_pose_snapshot_raises_when_rigid_view_fails(monkeypatch) -> None:
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        _restore_tiled_object_pose_snapshot,
+    )
+
+    usd_calls = []
+
+    def fake_apply(stage, prim_path, position, orientation):
+        usd_calls.append((prim_path, position, orientation))
+        return True
+
+    class FailingRigidView:
+        def set_world_poses(self, *, positions, orientations, indices):
+            raise RuntimeError("view write failed")
+
+        def set_velocities(self, velocities, *, indices):
+            raise AssertionError("velocity reset should not run after pose failure")
+
+    monkeypatch.setattr(
+        "linkerbot_sim.app.interactive.tiled.object_states._apply_prim_local_pose_and_zero_velocity",
+        fake_apply,
+    )
+
+    with pytest.raises(RuntimeError, match="failed to restore tiled object 'Tblock'"):
+        _restore_tiled_object_pose_snapshot(
+            stage=object(),
+            object_prim_paths={
+                "Tblock": (
+                    "/World/envs/env_0/TBlock",
+                    "/World/envs/env_1/TBlock",
+                )
+            },
+            snapshot={
+                "Tblock": {
+                    "env_ids": np.asarray([0, 1], dtype=int),
+                    "positions_local": np.asarray(
+                        [[0.1, 0.0, -0.4], [0.2, 0.1, -0.4]],
+                        dtype=float,
+                    ),
+                    "orientations_wxyz": np.asarray(
+                        [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+                        dtype=float,
+                    ),
+                }
+            },
+            env_ids=np.asarray([1], dtype=int),
+            env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+            object_pose_views={"Tblock": FailingRigidView()},
+        )
+
+    assert usd_calls == []
+
+
+def test_tiled_dynamic_chain_object_view_captures_and_restores_child_bodies(
+    monkeypatch,
+) -> None:
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        TiledDynamicChainObjectPoseView,
+        _capture_tiled_object_pose_snapshot,
+        _restore_tiled_object_pose_snapshot,
+    )
+
+    usd_calls = []
+    view_calls = []
+
+    def fake_apply(stage, prim_path, position, orientation):
+        usd_calls.append((prim_path, position, orientation))
+        return True
+
+    class FakeRigidBodyView:
+        def get_world_poses(self, *, indices):
+            assert np.asarray(indices, dtype=int).tolist() == [0, 1, 2, 3]
+            return (
+                np.asarray(
+                    [
+                        [0.0, 0.0, -0.1],
+                        [0.2, 0.0, -0.1],
+                        [3.0, 0.1, -0.1],
+                        [3.2, 0.1, -0.1],
+                    ],
+                    dtype=float,
+                ),
+                np.asarray(
+                    [
+                        [1.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                        [1.0, 0.0, 0.0, 0.0],
+                        [0.0, 0.0, 0.0, 1.0],
+                    ],
+                    dtype=float,
+                ),
+            )
+
+        def set_world_poses(self, *, positions, orientations, indices):
+            view_calls.append(
+                (
+                    "poses",
+                    np.asarray(positions, dtype=float).tolist(),
+                    np.asarray(orientations, dtype=float).tolist(),
+                    np.asarray(indices, dtype=int).tolist(),
+                )
+            )
+
+        def set_velocities(self, velocities, *, indices):
+            view_calls.append(
+                (
+                    "velocities",
+                    np.asarray(velocities, dtype=float).tolist(),
+                    np.asarray(indices, dtype=int).tolist(),
+                )
+            )
+
+    monkeypatch.setattr(
+        "linkerbot_sim.app.interactive.tiled.object_states._apply_prim_local_pose_and_zero_velocity",
+        fake_apply,
+    )
+
+    object_view = TiledDynamicChainObjectPoseView(
+        view=FakeRigidBodyView(),
+        body_names=("endpoint_0", "segment_0"),
+        body_paths_by_env=(
+            (
+                "/World/envs/env_0/CapsuleRope/endpoint_0",
+                "/World/envs/env_0/CapsuleRope/segment_0",
+            ),
+            (
+                "/World/envs/env_1/CapsuleRope/endpoint_0",
+                "/World/envs/env_1/CapsuleRope/segment_0",
+            ),
+        ),
+    )
+
+    snapshot = _capture_tiled_object_pose_snapshot(
+        stage=object(),
+        object_prim_paths={
+            "rope": (
+                "/World/envs/env_0/CapsuleRope",
+                "/World/envs/env_1/CapsuleRope",
+            )
+        },
+        env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+        env_ids=np.asarray([0, 1], dtype=int),
+        object_pose_views={"rope": object_view},
+    )
+
+    assert snapshot["rope"]["body_names"] == ("endpoint_0", "segment_0")
+    np.testing.assert_allclose(
+        snapshot["rope"]["positions_local"],
+        np.asarray([[0.1, 0.0, -0.1], [0.1, 0.1, -0.1]], dtype=float),
+    )
+    np.testing.assert_allclose(
+        snapshot["rope"]["body_positions_local"],
+        np.asarray(
+            [
+                [[0.0, 0.0, -0.1], [0.2, 0.0, -0.1]],
+                [[0.0, 0.1, -0.1], [0.2, 0.1, -0.1]],
+            ],
+            dtype=float,
+        ),
+    )
+
+    restored = _restore_tiled_object_pose_snapshot(
+        stage=object(),
+        object_prim_paths={
+            "rope": (
+                "/World/envs/env_0/CapsuleRope",
+                "/World/envs/env_1/CapsuleRope",
+            )
+        },
+        snapshot=snapshot,
+        env_ids=np.asarray([1], dtype=int),
+        env_origins=np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=float),
+        object_pose_views={"rope": object_view},
+    )
+
+    assert restored == 1
+    assert usd_calls == []
+    assert view_calls == [
+        (
+            "poses",
+            [[3.0, 0.1, -0.1], [3.2, 0.1, -0.1]],
+            [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+            [2, 3],
+        ),
+        (
+            "velocities",
+            [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]],
+            [2, 3],
+        ),
+    ]
+
+
+def test_create_tiled_object_pose_views_raises_when_dynamic_view_fails(monkeypatch) -> None:
+    from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
+        _create_tiled_object_pose_views,
+    )
+
+    isaacsim_module = ModuleType("isaacsim")
+    core_module = ModuleType("isaacsim.core")
+    prims_module = ModuleType("isaacsim.core.prims")
+
+    class FailingRigidPrim:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("view create failed")
+
+    prims_module.RigidPrim = FailingRigidPrim
+    monkeypatch.setitem(sys.modules, "isaacsim", isaacsim_module)
+    monkeypatch.setitem(sys.modules, "isaacsim.core", core_module)
+    monkeypatch.setitem(sys.modules, "isaacsim.core.prims", prims_module)
+
+    scene = SimpleNamespace(
+        object_prim_paths={"Tblock": ("/World/envs/env_0/TBlock",)},
+        object_handles=(
+            SimpleNamespace(name="Tblock", kind="rigid", model=SimpleNamespace(static=False)),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="failed to create tiled object rigid view"):
+        _create_tiled_object_pose_views(scene)
+
+
+def test_create_tiled_object_pose_views_creates_dynamic_chain_body_view(monkeypatch) -> None:
+    from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
+        _create_tiled_object_pose_views,
+    )
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        TiledDynamicChainObjectPoseView,
+    )
+
+    created = []
+
+    isaacsim_module = ModuleType("isaacsim")
+    core_module = ModuleType("isaacsim.core")
+    prims_module = ModuleType("isaacsim.core.prims")
+
+    class FakeRigidPrim:
+        def __init__(self, *, prim_paths_expr, name, reset_xform_properties):
+            created.append(
+                {
+                    "prim_paths_expr": tuple(prim_paths_expr),
+                    "name": name,
+                    "reset_xform_properties": reset_xform_properties,
+                }
+            )
+
+        def initialize(self):
+            created[-1]["initialized"] = True
+
+    class FakePrim:
+        def __init__(self, path, name):
+            self._path = path
+            self._name = name
+
+        def GetPath(self):
+            return self._path
+
+        def GetName(self):
+            return self._name
+
+    prims_module.RigidPrim = FakeRigidPrim
+    monkeypatch.setitem(sys.modules, "isaacsim", isaacsim_module)
+    monkeypatch.setitem(sys.modules, "isaacsim.core", core_module)
+    monkeypatch.setitem(sys.modules, "isaacsim.core.prims", prims_module)
+
+    scene = SimpleNamespace(
+        object_prim_paths={
+            "rope": (
+                "/World/envs/env_0/CapsuleRope",
+                "/World/envs/env_1/CapsuleRope",
+            )
+        },
+        object_handles=(
+            SimpleNamespace(
+                name="rope",
+                kind="dynamic_chain",
+                model={
+                    "bodies": (
+                        FakePrim(
+                            "/World/envs/env_0/CapsuleRope/endpoint_0",
+                            "endpoint_0",
+                        ),
+                        FakePrim(
+                            "/World/envs/env_0/CapsuleRope/segment_0",
+                            "segment_0",
+                        ),
+                    )
+                },
+            ),
+        ),
+    )
+
+    result = _create_tiled_object_pose_views(scene)
+
+    assert isinstance(result["rope"], TiledDynamicChainObjectPoseView)
+    assert result["rope"].body_names == ("endpoint_0", "segment_0")
+    assert result["rope"].body_paths_by_env == (
+        (
+            "/World/envs/env_0/CapsuleRope/endpoint_0",
+            "/World/envs/env_0/CapsuleRope/segment_0",
+        ),
+        (
+            "/World/envs/env_1/CapsuleRope/endpoint_0",
+            "/World/envs/env_1/CapsuleRope/segment_0",
+        ),
+    )
+    assert created == [
+        {
+            "prim_paths_expr": (
+                "/World/envs/env_0/CapsuleRope/endpoint_0",
+                "/World/envs/env_0/CapsuleRope/segment_0",
+                "/World/envs/env_1/CapsuleRope/endpoint_0",
+                "/World/envs/env_1/CapsuleRope/segment_0",
+            ),
+            "name": "tiled_object_rope_bodies",
+            "reset_xform_properties": False,
+            "initialized": True,
+        }
+    ]
+
+
+def test_create_tiled_object_pose_views_raises_when_dynamic_chain_has_no_bodies() -> None:
+    from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
+        _create_tiled_object_pose_views,
+    )
+
+    scene = SimpleNamespace(
+        object_prim_paths={"rope": ("/World/envs/env_0/CapsuleRope",)},
+        object_handles=(
+            SimpleNamespace(name="rope", kind="dynamic_chain", model={"bodies": ()}),
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="has no child rigid bodies"):
+        _create_tiled_object_pose_views(scene)
 
 
 def test_apply_tiled_object_pose_reuses_double_precision_xform_ops() -> None:
@@ -873,7 +1413,8 @@ def test_plan_status_loads_ready_trajectory_and_step_replays_it() -> None:
             "request_id": "plan-1",
             "duration_s": 0.1,
             "sample_dt_s": 0.05,
-            "goal_joint_positions": [
+            "kind": "joint_position_target",
+            "joint_positions": [
                 [1.0, 0.5, -0.5],
                 [2.0, 1.0, -1.0],
             ],
@@ -916,7 +1457,8 @@ def test_async_plan_sync_hand_overlay_is_loaded_with_ready_result() -> None:
             "request_id": "plan-overlay",
             "duration_s": 0.1,
             "sample_dt_s": 0.05,
-            "goal_joint_positions": [1.0, 0.0, 0.0],
+            "kind": "joint_position_target",
+            "joint_positions": [1.0, 0.0, 0.0],
             "overlays": [
                 {
                     "timing": "sync",
@@ -996,7 +1538,8 @@ def test_clear_completed_planner_results_from_interactive_message() -> None:
             "request_id": "plan-clear",
             "duration_s": 0.1,
             "sample_dt_s": 0.05,
-            "goal_joint_positions": [1.0, 0.5, -0.5],
+            "kind": "joint_position_target",
+            "joint_positions": [1.0, 0.5, -0.5],
         },
         runtime,
     )
@@ -1029,6 +1572,7 @@ def test_plan_joint_delta_uses_current_snapshot() -> None:
             "request_id": "plan-delta",
             "duration_s": 0.1,
             "sample_dt_s": 0.1,
+            "kind": "joint_delta_pos",
             "joint_deltas": [[0.5, -0.5]],
         },
         runtime,
@@ -1046,14 +1590,15 @@ def test_plan_joint_delta_uses_current_snapshot() -> None:
     np.testing.assert_allclose(runtime.current_positions[1], [2.5, 1.5, 2.0])
 
 
-def test_old_task_space_line_message_submits_async_plan() -> None:
+def test_plan_task_space_line_submits_async_plan() -> None:
     module = load_tiled_interactive_module()
     runtime = make_runtime()
 
     response = module.handle_tiled_interactive_message(
         {
-            "type": "task_space_line",
-            "side": "left",
+            "type": "plan",
+            "kind": "task_space_line",
+            "robot": "left",
             "target_offset": [0.0, 0.0, 0.1],
             "duration_s": 1.0,
         },
@@ -1071,11 +1616,29 @@ def test_old_task_space_line_message_submits_async_plan() -> None:
     assert status["ready"][0]["status"] == "UNSUPPORTED"
 
 
-def test_plan_queue_accepts_old_cspace_move_specs_and_replays_concatenated_path() -> None:
+def test_old_task_space_line_message_is_rejected() -> None:
     module = load_tiled_interactive_module()
     runtime = make_runtime()
 
-    submitted = module.handle_tiled_interactive_message(
+    response = module.handle_tiled_interactive_message(
+        {
+            "type": "task_space_line",
+            "side": "left",
+            "target_offset": [0.0, 0.0, 0.1],
+            "duration_s": 1.0,
+        },
+        runtime,
+    )
+
+    assert response["event"] == "rejected"
+    assert "unsupported tiled action" in response["error"]
+
+
+def test_plan_queue_old_cspace_move_specs_are_rejected() -> None:
+    module = load_tiled_interactive_module()
+    runtime = make_runtime()
+
+    response = module.handle_tiled_interactive_message(
         {
             "type": "plan_queue",
             "robot": "left",
@@ -1097,22 +1660,9 @@ def test_plan_queue_accepts_old_cspace_move_specs_and_replays_concatenated_path(
         },
         runtime,
     )
-    status = module.handle_tiled_interactive_message(
-        {"type": "planner_status", "wait_timeout_s": 1.0},
-        runtime,
-    )
-    stepped = module.handle_tiled_interactive_message(
-        {"type": "step_trajectory", "robot": "left", "decimation": 10},
-        runtime,
-    )
 
-    assert submitted["event"] == "plan_submitted"
-    assert submitted["segments"] == ["joint_delta_pos", "joint_position_target"]
-    assert status["loaded"] == [
-        {"request_id": "queue-1", "robot": "left", "env_ids": [0, 1]}
-    ]
-    assert stepped["event"] == "trajectory_step"
-    np.testing.assert_allclose(runtime.current_positions, [[1.0, 2.0, 0.0], [1.0, 2.0, 0.0]])
+    assert response["event"] == "rejected"
+    assert "unsupported tiled action" in response["error"]
 
 
 def test_filter_isaac_state_fields_supports_nested_robot_paths() -> None:
@@ -1280,7 +1830,6 @@ def test_isaac_runtime_joint_action_applies_interpolated_tick_targets(
             config=SimpleNamespace(
                 num_envs=2,
                 runtime=SimpleNamespace(
-                    use_batched_articulation_view=True,
                     inspect_env_ids=(0,),
                 ),
             ),
@@ -1316,6 +1865,8 @@ def test_isaac_runtime_joint_action_applies_interpolated_tick_targets(
         tcp_orientations_wxyz={},
         trajectory_buffer=TiledTrajectoryBuffer(num_envs=2),
         planner_manager=TiledPlannerManager(max_workers=1),
+        sensor_cameras=(),
+        camera_output=None,
         quit_event=SimpleNamespace(is_set=lambda: False, set=lambda: None),
     )
     try:

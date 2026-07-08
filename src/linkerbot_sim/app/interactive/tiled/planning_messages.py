@@ -262,40 +262,20 @@ def _planning_segments_from_payload(
     default_sample_dt_s: float,
     default_tcp_frame_name: str | None,
 ) -> tuple[TiledPlanningSegment, ...]:
-    """把单条 plan 或 ``moves`` 队列转换成 tiled planning segments。"""
+    """把单条 ``plan`` 转换成 tiled planning segment。"""
 
-    if "moves" in payload:
-        raw_moves = payload["moves"]
-        if not isinstance(raw_moves, Sequence) or isinstance(raw_moves, (str, bytes)):
-            raise ValueError("plan.moves must be a list")
-        moves = tuple(_expect_mapping(item, "plan.moves[]") for item in raw_moves)
-        if not moves:
-            raise ValueError("plan.moves cannot be empty")
-        if any("overlays" in move for move in moves):
-            raise ValueError(
-                "tiled plan_queue segment overlays are not supported; "
-                "put sync overlays at the plan_queue top level"
-            )
-    else:
-        moves = (payload,)
     cursor = np.asarray(current_positions, dtype=float).copy()
-    cursor_known = True
-    segments: list[TiledPlanningSegment] = []
-    for index, move in enumerate(moves):
-        segment, next_cursor, next_cursor_known = _planning_segment_from_payload(
-            move,
-            current_positions=cursor,
-            current_positions_known=cursor_known,
-            command_joint_names=command_joint_names,
-            default_duration_s=default_duration_s,
-            default_sample_dt_s=default_sample_dt_s,
-            default_tcp_frame_name=default_tcp_frame_name,
-            label=f"plan.moves[{index}]" if len(moves) > 1 else "plan",
-        )
-        segments.append(segment)
-        cursor = next_cursor
-        cursor_known = next_cursor_known
-    return tuple(segments)
+    segment, _, _ = _planning_segment_from_payload(
+        payload,
+        current_positions=cursor,
+        current_positions_known=True,
+        command_joint_names=command_joint_names,
+        default_duration_s=default_duration_s,
+        default_sample_dt_s=default_sample_dt_s,
+        default_tcp_frame_name=default_tcp_frame_name,
+        label="plan",
+    )
+    return (segment,)
 
 
 def _planning_segment_from_payload(
@@ -309,7 +289,7 @@ def _planning_segment_from_payload(
     default_tcp_frame_name: str | None,
     label: str,
 ) -> tuple[TiledPlanningSegment, np.ndarray, bool]:
-    """解析单个 MoveSpec-like payload。"""
+    """解析单个 tiled plan payload。"""
 
     kind = _planning_kind(payload)
     duration_s = float(payload.get("duration_s", default_duration_s))
@@ -319,6 +299,7 @@ def _planning_segment_from_payload(
             raise ValueError(f"{label} joint delta cannot follow a path segment")
         goal = _planning_goal_positions(
             payload,
+            kind=kind,
             current_positions=current_positions,
             command_joint_names=command_joint_names,
         )
@@ -343,7 +324,7 @@ def _planning_segment_from_payload(
         raise ValueError(
             f"{label} unsupported tiled planning kind {kind!r}; "
             "supported kinds are joint_position_target, joint_delta_pos, "
-            "cspace_goal, cspace_delta, task_space_line, task_space_arc, specified_path"
+            "task_space_line, task_space_arc, specified_path"
         )
     return (
         TiledPlanningSegment(
@@ -360,20 +341,25 @@ def _planning_segment_from_payload(
 
 
 def _planning_kind(payload: Mapping[str, object]) -> str:
-    """解析 plan/move 的 kind，兼容旧 runtime 的 ``type`` 字段。"""
+    """解析 tiled plan 的 kind。"""
 
-    kind = str(payload.get("kind", payload.get("move_type", ""))).strip()
+    if "move_type" in payload:
+        raise ValueError("plan.move_type is not supported; use plan.kind")
     message_type = str(payload.get("type", "")).strip()
-    if not kind and message_type not in {"", "plan", "plan_queue"}:
-        kind = message_type
+    if message_type and message_type != "plan":
+        raise ValueError("tiled planning messages must use type='plan' and kind")
+    kind = str(payload.get("kind", "")).strip()
     if not kind:
-        if any(key in payload for key in ("joint_deltas", "goal_joint_deltas", "deltas")):
+        if "joint_deltas" in payload:
             return "joint_delta_pos"
-        return "joint_position_target"
-    if kind == "cspace_goal":
-        return "joint_position_target"
-    if kind == "cspace_delta":
-        return "joint_delta_pos"
+        if any(key in payload for key in ("joint_positions", "values")):
+            return "joint_position_target"
+        raise ValueError("plan.kind is required")
+    if kind in {"cspace_goal", "cspace_delta"}:
+        raise ValueError(
+            "tiled plan no longer accepts cspace_goal/cspace_delta; "
+            "use kind joint_position_target or joint_delta_pos"
+        )
     return kind
 
 
@@ -381,45 +367,28 @@ def _is_joint_planning_kind(kind: str, payload: Mapping[str, object]) -> bool:
     """判断 payload 是否为关节空间规划段。"""
 
     return kind in {"joint_position_target", "joint_delta_pos"} or any(
-        key in payload
-        for key in (
-            "goal_joint_positions",
-            "joint_positions",
-            "goal_positions",
-            "positions",
-            "goal_joint_deltas",
-            "joint_deltas",
-            "deltas",
-        )
+        key in payload for key in ("joint_positions", "joint_deltas", "values")
     )
 
 
 def _has_delta_goal(payload: Mapping[str, object], kind: str) -> bool:
     """判断关节规划段是否使用相对增量。"""
 
-    return kind == "joint_delta_pos" or any(
-        key in payload for key in ("goal_joint_deltas", "joint_deltas", "deltas")
-    )
+    return kind == "joint_delta_pos" or "joint_deltas" in payload
 
 
 def _planning_goal_positions(
     payload: Mapping[str, object],
     *,
+    kind: str,
     current_positions: np.ndarray,
     command_joint_names: tuple[str, ...],
 ) -> np.ndarray:
     """解析 plan 目标，支持绝对关节目标和关节增量目标。"""
 
     joint_names = _optional_str_tuple(payload.get("joint_names"))
-    kind = str(payload.get("kind", "")).strip()
-    absolute_values = _first_present(
-        payload,
-        ("goal_joint_positions", "joint_positions", "goal_positions", "positions"),
-    )
-    delta_values = _first_present(
-        payload,
-        ("goal_joint_deltas", "joint_deltas", "deltas"),
-    )
+    absolute_values = _first_present(payload, ("joint_positions",))
+    delta_values = _first_present(payload, ("joint_deltas",))
     if absolute_values is None and kind == "joint_position_target" and "values" in payload:
         absolute_values = payload["values"]
     if delta_values is None and kind == "joint_delta_pos" and "values" in payload:
@@ -433,7 +402,7 @@ def _planning_goal_positions(
             command_joint_names=command_joint_names,
             joint_names=joint_names,
             base="current",
-            label="plan.goal_joint_positions",
+            label="plan.joint_positions",
         )
     if delta_values is not None:
         delta = _command_rows_for_selected(
@@ -445,7 +414,7 @@ def _planning_goal_positions(
             label="plan.joint_deltas",
         )
         return np.asarray(current_positions, dtype=float) + delta
-    raise ValueError("plan requires goal_joint_positions or joint_deltas")
+    raise ValueError("plan requires joint_positions or joint_deltas")
 
 
 def _tcp_line_segment_from_payload(payload: Mapping[str, object]) -> TcpLineSegment:
@@ -488,9 +457,9 @@ def _specified_path_from_payload(
         return CSpaceWaypointPath(
             waypoints=tuple(waypoints[index].copy() for index in range(waypoints.shape[0]))
         )
-    if path_type in {"task_space_line", "line"}:
+    if path_type == "task_space_line":
         return TaskSpacePath(segments=(_tcp_line_segment_from_payload(path_payload),))
-    if path_type in {"task_space_arc", "arc"}:
+    if path_type == "task_space_arc":
         return TaskSpacePath(segments=(_tcp_arc_segment_from_payload(path_payload),))
     if path_type in {"task_space_segments", "task_space"}:
         raw_segments = path_payload.get("segments")
@@ -505,13 +474,14 @@ def _specified_path_from_payload(
             segment_type = str(
                 segment_payload.get("type", segment_payload.get("kind", ""))
             ).strip()
-            if segment_type in {"task_space_line", "line"}:
+            if segment_type == "task_space_line":
                 segments.append(_tcp_line_segment_from_payload(segment_payload))
-            elif segment_type in {"task_space_arc", "arc"}:
+            elif segment_type == "task_space_arc":
                 segments.append(_tcp_arc_segment_from_payload(segment_payload))
             else:
                 raise ValueError(
-                    "specified_path task_space segment type must be line or arc"
+                    "specified_path task_space segment type must be "
+                    "task_space_line or task_space_arc"
                 )
         if not segments:
             raise ValueError("specified_path.path.segments cannot be empty")

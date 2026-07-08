@@ -25,6 +25,7 @@ def test_load_profile_yaml_accepts_directory_env_profile() -> None:
     )
     assert [item.env_id for item in tiled.per_env] == [0, 1, 2, 3]
     assert tiled.per_env[1].object_root_poses["Tblock"].xyz == (0.12, 0.04, -0.4)
+    assert tiled.per_env[1].camera_poses["world_rgbd"].xyz == (0.08, 0.0, 0.08)
 
 
 def test_load_env_profile_directory_merges_per_env_yaml(tmp_path: Path) -> None:
@@ -60,6 +61,11 @@ objects:
     root_pose:
       xyz: [0.3, 0.0, -0.4]
       rpy: [0.0, 1.0, 0.0]
+cameras:
+  world_rgbd:
+    pose:
+      xyz: [0.1, 0.2, 0.3]
+      rpy: [0.0, 1.0, 0.0]
 metadata:
   replay_id: case_003
 """,
@@ -72,4 +78,5 @@ metadata:
     assert tiled.num_envs == 4
     assert [item.env_id for item in tiled.per_env] == [3]
     assert tiled.per_env[0].object_root_poses["block"].xyz == (0.3, 0.0, -0.4)
+    assert tiled.per_env[0].camera_poses["world_rgbd"].xyz == (0.1, 0.2, 0.3)
     assert tiled.per_env[0].metadata == {"replay_id": "case_003"}

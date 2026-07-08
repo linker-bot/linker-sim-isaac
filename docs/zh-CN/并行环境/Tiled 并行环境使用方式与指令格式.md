@@ -15,7 +15,7 @@ tiled 模式的定位是“单个 Isaac/PhysX scene 中并行运行多个同构 
 - batched `Articulation` view 读写多个 env 的机器人关节状态。
 - `env_ids` 局部 reset、局部 get/set state、局部 action target 更新。
 - `load_trajectory` / `step_trajectory` 回放已规划好的 batched 关节轨迹。
-- `plan` / `plan_queue` / `moves` / `planner_status` / `cancel_plan` 提交后台规划，并把 ready result 写入轨迹缓冲。默认 `linear` backend 支持关节空间目标和关节 MoveSpec 队列；`--planner-backend cumotion` 可接入 task-space line/arc 和 specified path。
+- `plan` / `planner_status` / `cancel_plan` 提交后台规划，并把 ready result 写入轨迹缓冲。默认 `linear` backend 支持单段关节空间目标；`--planner-backend cumotion` 可接入 task-space line/arc 和 specified path。
 - `load_trajectory` 和 async planner ready result 支持 `before` / `sync` / `after` 手部 overlay；overlay 只通过显式 `joint_positions` mapping 覆盖 command-space 中存在的手部关节列。
 - `hand` / `dual_hand` 可作为独立 hand-only motion 默认追加到 selected robot/env 的 trajectory playback queue。
 - 交互脚本通过 stdin JSONL 或 TCP JSONL 接收指令。
@@ -80,9 +80,11 @@ configs/envs/scene3_tiled/
 - `visuals`: 视角、灯光。
 - `robots`: 单臂或双臂机器人集合。
 - `objects`: 所有 env 都有的同构物体集合。
+- `sensors.cameras`: 所有 env 共用的相机参数，例如分辨率、模态和输出端口。
 - `tiled`: tiled 拓扑和 clone/runtime 选项。
 
-`envs/env_XXX.yaml` 只保存单个 env 的差异，当前主要是同名对象的 `root_pose` 覆盖:
+`envs/env_XXX.yaml` 只保存单个 env 的差异，当前支持同名对象的 `root_pose`
+覆盖，以及同名相机的 `pose` 覆盖:
 
 ```yaml
 env_id: 1
@@ -91,9 +93,18 @@ objects:
     root_pose:
       xyz: [0.12, 0.04, -0.4]
       rpy: [0.0, 1.5707, 0.18]
+cameras:
+  world_rgbd:
+    pose:
+      xyz: [0.08, 0.0, 0.08]
+      rpy: [0.0, 1.1, 0.0]
 metadata:
   replay_id: scene3_tiled_001
 ```
+
+tiled runtime 会为每个 env 创建一份相机，例如
+`/World/envs/env_0/WorldRGBD`。离线输出目录会自动追加 `env_000` 这类后缀，
+Foxglove topic prefix 也会追加同样的 env 后缀，避免多个 env 写到同一帧文件或 topic。
 
 关键 `tiled` 字段:
 
@@ -106,14 +117,12 @@ tiled:
   spacing: 2.0
   per_env_config_dir: envs
   clone:
-    use_grid_cloner: true
     replicate_physics: false
     copy_from_source: false
     enable_env_ids: false
     filter_collisions: true
     collision_root_path: /World/collisions
   runtime:
-    use_batched_articulation_view: true
     inspect_env_ids: [0]
 ```
 
@@ -123,9 +132,7 @@ tiled:
 - `base_env_path` 和 `env_prefix` 决定 env root，例如 `/World/envs/env_0`。
 - `spacing` 决定 env root 的网格间距，需要足够大以避免可视和物理重叠。
 - `filter_collisions: true` 用于关闭 env 间碰撞。
-- `replicate_physics: true` 是未来大规模性能路径，但部分 MJCF fixed-base 场景可能不兼容；当前 `scene3_tiled` 默认关闭以保证机器人 root pose 正确。
-- `use_grid_cloner` 当前必须为 `true`；手工 clone 路径未实现，配置为 `false` 会在解析阶段报错。
-- `use_batched_articulation_view` 当前必须为 `true`；tiled runtime 没有 per-env articulation fallback。
+- `replicate_physics: true` 会请求 PhysX replication 性能路径；如果 scene builder 检测到 MJCF fixed-base root joint 不兼容，会在构建时自动关闭 replication。
 - `inspect_env_ids` 只表示 GUI/telemetry 调试时重点关注哪些 env，并会出现在 `status.runtime.inspect_env_ids`；它不是物理或渲染性能过滤开关。
 
 ## 4. 交互脚本 CLI 参数
@@ -252,7 +259,7 @@ TCP server 每行 request 返回一行 response。多个 TCP 客户端可以连�
 {"type":"set_state","env_ids":[1],"state":{...}}
 {"type":"load_trajectory","robot":"left","env_ids":[0],"times":[0.0,0.5],"positions":[[0,0,0],[0.2,0,0]]}
 {"type":"step_trajectory","robot":"left","decimation":4}
-{"type":"plan","robot":"left","env_ids":[0],"goal_joint_positions":[[0.2,0,0]],"duration_s":0.5}
+{"type":"plan","kind":"joint_position_target","robot":"left","env_ids":[0],"joint_positions":[[0.2,0,0]],"duration_s":0.5}
 {"type":"planner_status","wait_timeout_s":0.1}
 {"type":"cancel_plan","request_id":"plan-123"}
 {"type":"quit"}
@@ -688,7 +695,9 @@ shape 规则:
 
 `plan` 是 tiled async planner 的入口。主线程只复制 selected env 当前 command target、robot/env 选择和路径参数；真正规划在 planner worker 中完成。`planner_status` 或后续 `step_trajectory` 会收集 ready result，并把成功结果写入 trajectory buffer。
 
-默认 `--planner-backend linear` 只支持关节空间目标和关节 MoveSpec 队列。需要 `task_space_line`、`task_space_arc` 或 `specified_path` 时，用 `--planner-backend cumotion` 启动；cuMotion backend 会把这些段转换成 `MotionRequest` 或 `SpecifiedPathRequest`，最后仍输出统一的 `times + positions(E,T,D)` 关节轨迹。
+所有 tiled 规划请求都使用 `type:"plan"`，运动类型写在 `kind`。旧 motion runtime 的顶层 `cspace_goal` / `cspace_delta` / `task_space_line` / `task_space_arc` / `specified_path` 消息、`plan_queue`、顶层 `moves` 队列、`move_type` 字段和 `side` 别名都不再是 tiled command 协议的一部分；tiled 里请选择 `robot` 或 `robots`。
+
+默认 `--planner-backend linear` 只支持单段关节空间目标。需要 `task_space_line`、`task_space_arc` 或 `specified_path` 时，用 `--planner-backend cumotion` 启动；cuMotion backend 会把路径请求转换成 `MotionRequest` 或 `SpecifiedPathRequest`，最后仍输出统一的 `times + positions(E,T,D)` 关节轨迹。
 
 绝对关节目标:
 
@@ -700,7 +709,8 @@ shape 规则:
   "request_id": "plan-001",
   "duration_s": 0.5,
   "sample_dt_s": 0.02,
-  "goal_joint_positions": [[0.2,0.0,0.0]]
+  "kind": "joint_position_target",
+  "joint_positions": [[0.2,0.0,0.0]]
 }
 ```
 
@@ -712,22 +722,17 @@ shape 规则:
   "robot": "left",
   "env_ids": [1],
   "duration_s": 0.5,
+  "kind": "joint_delta_pos",
   "joint_deltas": [[0.05,-0.02,0.0]]
 }
 ```
 
-旧 motion runtime 的单条 C-space 消息也可以直接作为 tiled async plan 使用:
-
-```json
-{"type":"cspace_goal","robot":"left","env_ids":[0],"duration_s":0.5,"joint_positions":[0.2,0.0,0.0]}
-{"type":"cspace_delta","robot":"left","env_ids":[1],"duration_s":0.5,"joint_deltas":[0.05,-0.02,0.0]}
-```
-
-Task-space line/arc 会提交 specified-path planning segment。`side` 可作为旧协议兼容字段，等价于 `robot`，但推荐新客户端使用 `robot`:
+Task-space line/arc 会提交 specified-path planning segment:
 
 ```json
 {
-  "type": "task_space_line",
+  "type": "plan",
+  "kind": "task_space_line",
   "robot": "left",
   "env_ids": [0,1],
   "request_id": "line-001",
@@ -739,7 +744,8 @@ Task-space line/arc 会提交 specified-path planning segment。`side` 可作为
 
 ```json
 {
-  "type": "task_space_arc",
+  "type": "plan",
+  "kind": "task_space_arc",
   "robot": "right",
   "env_ids": [0],
   "duration_s": 1.2,
@@ -754,7 +760,8 @@ Task-space line/arc 会提交 specified-path planning segment。`side` 可作为
 
 ```json
 {
-  "type": "specified_path",
+  "type": "plan",
+  "kind": "specified_path",
   "robot": "left",
   "duration_s": 1.0,
   "path": {
@@ -766,42 +773,27 @@ Task-space line/arc 会提交 specified-path planning segment。`side` 可作为
 
 ```json
 {
-  "type": "specified_path",
+  "type": "plan",
+  "kind": "specified_path",
   "robot": "left",
   "duration_s": 1.0,
   "path": {
     "type": "task_space_segments",
     "segments": [
-      {"type":"line","target_offset":[0.0,0.0,0.05],"orientation_mode":"none"},
-      {"type":"arc","target_offset":[0.0,0.04,0.0],"intermediate_offset":[0.0,0.02,0.02]}
+      {"type":"task_space_line","target_offset":[0.0,0.0,0.05],"orientation_mode":"none"},
+      {"type":"task_space_arc","target_offset":[0.0,0.04,0.0],"intermediate_offset":[0.0,0.02,0.02]}
     ]
   }
 }
 ```
 
-MoveSpec 队列使用 `plan_queue` 或顶层 `moves`。它不会恢复旧 runtime 的 motion queue；而是在一个 async planner request 内把多个 segment 拼成一条轨迹，ready 后一次性载入 trajectory buffer:
-
-```json
-{
-  "type": "plan_queue",
-  "robot": "left",
-  "request_id": "queue-001",
-  "moves": [
-    {"type":"cspace_delta","duration_s":0.4,"joint_deltas":[0.05,0.0,0.0]},
-    {"type":"task_space_line","duration_s":0.8,"target_offset":[0.0,0.0,0.06],"orientation_mode":"none"},
-    {"type":"cspace_goal","duration_s":0.4,"joint_positions":[0.1,0.2,0.0]}
-  ]
-}
-```
-
 规则:
 
-- `goal_joint_positions` 是绝对目标；`joint_deltas` 基于提交 plan 时的状态快照。
+- `joint_positions` 是绝对目标；`joint_deltas` 基于提交 plan 时的状态快照。
 - 第一维为 1 时广播到 selected env。
 - `joint_names` 可选；传入后按名称映射，未指定关节保持当前 target 或零增量。
 - `duration_s` 必须为正；`sample_dt_s` 默认使用 physics dt。
 - `load_on_success` 默认 `true`，ready 后自动载入 trajectory buffer；设为 `false` 时只保留 planner result 摘要。
-- `moves` 中的 `cspace_delta` 只能接在解析阶段已知终点的段之后；如果前面是 task-space/specified-path 段，后续相对 delta 会被拒绝。后续绝对 `cspace_goal` 可以接在 path 段后面。
 - `task_space_line` / `task_space_arc` 的 `target_offset` 和 `intermediate_offset` 是相对路径起点的偏移，最适合 tiled 多 env 广播；绝对 `target_position` 由 cuMotion specified-path backend 按机器人 base/frame 语义解释。
 
 ### 10.5 planner_status / cancel_plan
@@ -871,7 +863,7 @@ IK 失败的 env 会保持 seed/current target，并通过 `ik_success` mask 标
 - `env_ids contains out-of-range env id`: env id 越界。
 - `env_ids cannot contain duplicates`: env id 重复。
 - `values must have shape ...`: action/state 数组 shape 不符合要求。
-- `plan requires goal_joint_positions or joint_deltas`: `plan` 没有给目标。
+- `plan requires joint_positions or joint_deltas`: `plan` 没有给目标。
 - `linear planner only supports joint-space segments`: 默认 linear backend 收到了 task-space/specified-path segment；用 `--planner-backend cumotion` 或改用 `load_trajectory`。
 - `unknown plan joint_names`: `plan` 中的关节名不属于 selected robot command joints。
 - `requires a batched IK solver`: 创建 cuMotion batch IK solver 失败，或当前机器人没有可用 TCP/IK 配置。
@@ -970,7 +962,7 @@ tiled interactive 面向 batched step-control 和外部 trajectory/planner 调�
 - 每条 action 必须在进入 physics tick 前变成整批关节 target。
 - 一个 command step 只允许固定 `decimation` 个 physics ticks。
 - 关节空间和指定路径规划通过 async planner manager 生成 ready trajectory，再由 `step_trajectory` 同步回放。
-- 旧 `moves`/MoveSpec 队列会被合并成单个 async planning request；不恢复旧 motion runtime 的 running/pending 执行队列、`cancel_current`、`estop` 或每 env 不同步推进。
+- tiled command 协议不接收旧 `moves`/MoveSpec 队列；旧 motion runtime 的 running/pending 执行队列、`cancel_current`、`estop` 或每 env 不同步推进语义不进入 tiled 热路径。
 - `env_ids` 只裁剪 target/state/reset，不能让 env 的仿真时间不同步。
 - 末端 `ee_*` 通过 batched cuMotion IK 执行；日常连通性检查建议使用 `status`、`get_state`、`hold` 或一条小幅 `joint_delta_pos`，避免把启动检查和 IK 依赖检查混在一起。
 
