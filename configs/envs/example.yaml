@@ -80,6 +80,12 @@ sensors:
       frequency: 30.0
       modalities: [rgb, depth]
       clipping_range: [0.01, 5.0]
+      # 可选：显式 pinhole 内参，单位为像素。
+      # intrinsics:
+      #   fx: 615.0
+      #   fy: 615.0
+      #   cx: 320.0
+      #   cy: 240.0
       output:
         save_dir: logs/cameras/wrist_rgbd
         foxglove_topic_prefix: /cameras/wrist_rgbd

@@ -17,16 +17,21 @@ solver:
 sensors:
   cameras:
     world_rgbd:
-      enabled: true
+      enabled: false
       parent_prim_path: /World
       prim_path: /World/WorldRGBD
       pose:
         xyz: [0.08, 0.0, 0.08]
         rpy: [0.0, 1.1, 0.0]
-      resolution: [640, 480]
-      frequency: 30.0
+      resolution: [120, 120]
+      frequency: 10.0
       modalities: [rgb, depth]
       clipping_range: [0.01, 5.0]
+      intrinsics:
+        fx: 615.0
+        fy: 615.0
+        cx: 320.0
+        cy: 240.0
       output:
         save_dir: logs/cameras/world_rgbd
         foxglove_topic_prefix: /cameras/world_rgbd
@@ -78,7 +83,7 @@ objects:
 
 tiled:
   enabled: true
-  num_envs: 8
+  num_envs: 4
   base_env_path: /World/envs
   env_prefix: env
   spacing: 3.0
@@ -89,7 +94,7 @@ tiled:
     replicate_physics: true
     copy_from_source: true
     enable_env_ids: true
-    filter_collisions: true
+    filter_collisions: false
     collision_root_path: /World/collisions
   runtime:
     inspect_env_ids: [0]

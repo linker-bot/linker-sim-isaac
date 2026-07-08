@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from math import isfinite
 
 
 Vec2i = tuple[int, int]
@@ -21,6 +22,42 @@ DEFAULT_CAMERA_CLIPPING_RANGE: Vec2 = (0.01, 5.0)
 SUPPORTED_CAMERA_MODALITIES = frozenset(
     {"rgb", "depth", "semantic_segmentation", "instance_segmentation"}
 )
+
+
+@dataclass(frozen=True)
+class SensorCameraIntrinsicsSettings:
+    """Pinhole camera intrinsics in pixel units."""
+
+    fx: float
+    fy: float
+    cx: float
+    cy: float
+
+    @classmethod
+    def from_mapping(
+        cls, data: Mapping[str, object] | None, *, label: str
+    ) -> "SensorCameraIntrinsicsSettings | None":
+        """Parse optional camera intrinsics."""
+
+        if data is None:
+            return None
+        if not isinstance(data, Mapping):
+            raise ValueError(f"{label} must be a mapping")
+        return cls(
+            fx=_required_positive_finite_float(data, "fx", label=label),
+            fy=_required_positive_finite_float(data, "fy", label=label),
+            cx=_required_finite_float(data, "cx", label=label),
+            cy=_required_finite_float(data, "cy", label=label),
+        )
+
+    def matrix(self) -> tuple[tuple[float, float, float], ...]:
+        """Return the 3x3 camera matrix."""
+
+        return (
+            (self.fx, 0.0, self.cx),
+            (0.0, self.fy, self.cy),
+            (0.0, 0.0, 1.0),
+        )
 
 
 @dataclass(frozen=True)
@@ -74,6 +111,7 @@ class SensorCameraSettings:
     frequency: float = DEFAULT_CAMERA_FREQUENCY
     modalities: tuple[str, ...] = DEFAULT_CAMERA_MODALITIES
     clipping_range: Vec2 = DEFAULT_CAMERA_CLIPPING_RANGE
+    intrinsics: SensorCameraIntrinsicsSettings | None = None
     output: SensorCameraOutputSettings = field(
         default_factory=SensorCameraOutputSettings
     )
@@ -131,6 +169,9 @@ class SensorCameraSettings:
                 "clipping_range",
                 DEFAULT_CAMERA_CLIPPING_RANGE,
                 label=camera_label,
+            ),
+            intrinsics=SensorCameraIntrinsicsSettings.from_mapping(
+                data.get("intrinsics"), label=f"{camera_label}.intrinsics"
             ),
             output=SensorCameraOutputSettings.from_mapping(
                 data.get("output"), label=f"{camera_label}.output"
@@ -268,6 +309,30 @@ def _positive_float(value: object, *, label: str) -> float:
     parsed = float(value)
     if parsed <= 0.0:
         raise ValueError(f"{label} must be positive")
+    return parsed
+
+
+def _required_finite_float(
+    data: Mapping[str, object], key: str, *, label: str
+) -> float:
+    """读取必填有限浮点数。"""
+
+    if key not in data:
+        raise ValueError(f"{label}.{key} is required")
+    parsed = float(data[key])
+    if not isfinite(parsed):
+        raise ValueError(f"{label}.{key} must be finite")
+    return parsed
+
+
+def _required_positive_finite_float(
+    data: Mapping[str, object], key: str, *, label: str
+) -> float:
+    """读取必填正有限浮点数。"""
+
+    parsed = _required_finite_float(data, key, label=label)
+    if parsed <= 0.0:
+        raise ValueError(f"{label}.{key} must be positive")
     return parsed
 
 

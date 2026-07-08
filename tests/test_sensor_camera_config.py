@@ -20,6 +20,12 @@ def test_scene_sensor_settings_parse_camera_values() -> None:
                         "frequency": 30.0,
                         "modalities": ["rgb", "depth"],
                         "clipping_range": [0.01, 5.0],
+                        "intrinsics": {
+                            "fx": 615.0,
+                            "fy": 616.0,
+                            "cx": 320.0,
+                            "cy": 240.0,
+                        },
                         "output": {
                             "save_dir": "logs/cameras/wrist_rgbd",
                             "foxglove_topic_prefix": "/cameras/wrist_rgbd",
@@ -46,6 +52,16 @@ def test_scene_sensor_settings_parse_camera_values() -> None:
     assert camera.frequency == 30.0
     assert camera.modalities == ("rgb", "depth")
     assert camera.clipping_range == (0.01, 5.0)
+    assert camera.intrinsics is not None
+    assert camera.intrinsics.fx == 615.0
+    assert camera.intrinsics.fy == 616.0
+    assert camera.intrinsics.cx == 320.0
+    assert camera.intrinsics.cy == 240.0
+    assert camera.intrinsics.matrix() == (
+        (615.0, 0.0, 320.0),
+        (0.0, 616.0, 240.0),
+        (0.0, 0.0, 1.0),
+    )
     assert camera.output.save_dir == "logs/cameras/wrist_rgbd"
     assert camera.output.foxglove_topic_prefix == "/cameras/wrist_rgbd"
     assert camera.output.foxglove_live_host == "0.0.0.0"
@@ -130,6 +146,37 @@ def test_scene_sensor_settings_reject_invalid_camera_values() -> None:
                 }
             },
             "must be under parent_prim_path",
+        ),
+        (
+            {
+                "sensors": {
+                    "cameras": {
+                        "bad": {
+                            "prim_path": "/World/Camera",
+                            "intrinsics": {"fx": 600.0, "fy": 600.0, "cx": 320.0},
+                        }
+                    }
+                }
+            },
+            "sensors.cameras.bad.intrinsics.cy is required",
+        ),
+        (
+            {
+                "sensors": {
+                    "cameras": {
+                        "bad": {
+                            "prim_path": "/World/Camera",
+                            "intrinsics": {
+                                "fx": 0.0,
+                                "fy": 600.0,
+                                "cx": 320.0,
+                                "cy": 240.0,
+                            },
+                        }
+                    }
+                }
+            },
+            "sensors.cameras.bad.intrinsics.fx must be positive",
         ),
     ]
 

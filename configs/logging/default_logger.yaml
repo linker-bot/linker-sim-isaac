@@ -6,7 +6,7 @@
 # - 各布尔字段控制是否写对应列，关闭昂贵列可以减少仿真循环开销。
 logging:
   # 是否启用 CSV 写入；false 时仍会构造 logger，但不会打开文件。
-  enabled: true
+  enabled: false
 
   # 关节跟踪 CSV 输出路径；相对路径以仓库根目录为基准。
   joint_tracking_path: logs/joint_tracking/pinch_grasp.csv

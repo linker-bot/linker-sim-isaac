@@ -6,7 +6,7 @@ env:
   name: scene2_tiled
   description: dual arm rope tiled replay scene
   gravity_z: -9.81
-  add_ground: ture
+  add_ground: true
   ground_height: -1.3
   physics_frequency: 240.0
   render_frequency: 60.0
@@ -14,6 +14,30 @@ env:
 solver:
   type: PGS
 
+sensors:
+  cameras:
+    world_rgbd:
+      enabled: false
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      pose:
+        xyz: [0.08, 0.0, 0.08]
+        rpy: [0.0, 1.1, 0.0]
+      resolution: [120, 120]
+      frequency: 10.0
+      modalities: [rgb, depth]
+      clipping_range: [0.01, 5.0]
+      intrinsics:
+        fx: 615.0
+        fy: 615.0
+        cx: 320.0
+        cy: 240.0
+      output:
+        save_dir: logs/cameras/world_rgbd
+        foxglove_topic_prefix: /cameras/world_rgbd
+        foxglove_live_host: 127.0.0.1
+        foxglove_live_port: 8770
+        
 visuals:
   viewport:
     enabled: true
@@ -70,7 +94,7 @@ tiled:
     replicate_physics: true
     copy_from_source: true
     enable_env_ids: true
-    filter_collisions: true
+    filter_collisions: false
     collision_root_path: /World/collisions
   runtime:
     inspect_env_ids: [0]

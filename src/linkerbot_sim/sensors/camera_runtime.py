@@ -12,6 +12,7 @@ from typing import Any
 
 from linkerbot_sim.sensors.camera_config import (
     SceneSensorSettings,
+    SensorCameraIntrinsicsSettings,
     SensorCameraSettings,
 )
 
@@ -66,6 +67,8 @@ class SensorCameraRuntime:
     def get_intrinsics_matrix(self, *, device: str | None = None) -> object:
         """读取相机内参矩阵。"""
 
+        if self.settings.intrinsics is not None:
+            return self.settings.intrinsics.matrix()
         return self.camera.get_intrinsics_matrix(device=device)
 
     def _require_modality(self, modality: str) -> None:
@@ -132,11 +135,80 @@ def initialize_sensor_camera_runtimes(
     for runtime in cameras:
         camera = runtime.camera
         camera.initialize()
+        _apply_camera_intrinsics(camera=camera, settings=runtime.settings)
         near, far = runtime.settings.clipping_range
         camera.set_clipping_range(near_distance=near, far_distance=far)
         for modality in runtime.settings.modalities:
             attach_method_name = _MODALITY_ATTACH_METHODS[modality]
             getattr(camera, attach_method_name)()
+
+
+def _apply_camera_intrinsics(*, camera: object, settings: SensorCameraSettings) -> None:
+    """Apply explicit pinhole intrinsics to the Isaac camera wrapper."""
+
+    intrinsics = settings.intrinsics
+    if intrinsics is None:
+        return
+    _apply_aperture_intrinsics(
+        camera=camera,
+        intrinsics=intrinsics,
+        resolution=settings.resolution,
+        camera_name=settings.name,
+    )
+    _required_camera_method(
+        camera,
+        "set_opencv_pinhole_properties",
+        camera_name=settings.name,
+    )(
+        cx=intrinsics.cx,
+        cy=intrinsics.cy,
+        fx=intrinsics.fx,
+        fy=intrinsics.fy,
+    )
+
+
+def _apply_aperture_intrinsics(
+    *,
+    camera: object,
+    intrinsics: SensorCameraIntrinsicsSettings,
+    resolution: tuple[int, int],
+    camera_name: str,
+) -> None:
+    """Set focal/aperture ratios so Isaac's native intrinsics match pixels."""
+
+    width, height = resolution
+    focal_length = 1.0
+    horizontal_aperture = focal_length * float(width) / intrinsics.fx
+    vertical_aperture = focal_length * float(height) / intrinsics.fy
+
+    _required_camera_method(
+        camera, "set_focal_length", camera_name=camera_name
+    )(focal_length)
+    _required_camera_method(
+        camera, "set_horizontal_aperture", camera_name=camera_name
+    )(
+        horizontal_aperture,
+        maintain_square_pixels=False,
+    )
+    _required_camera_method(
+        camera, "set_vertical_aperture", camera_name=camera_name
+    )(
+        vertical_aperture,
+        maintain_square_pixels=False,
+    )
+
+
+def _required_camera_method(
+    camera: object, name: str, *, camera_name: str
+) -> Callable[..., Any]:
+    """Return a camera method required by explicit intrinsics."""
+
+    method = getattr(camera, name, None)
+    if not callable(method):
+        raise RuntimeError(
+            f"sensors.cameras.{camera_name}.intrinsics requires Camera.{name}"
+        )
+    return method
 
 
 def _load_camera_dependencies() -> tuple[type, ArrayFactory, QuatFactory]:

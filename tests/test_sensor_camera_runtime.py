@@ -37,6 +37,39 @@ class FakeCamera:
     ) -> None:
         self.calls.append(("set_clipping_range", (near_distance, far_distance)))
 
+    def set_focal_length(self, focal_length: float) -> None:
+        self.calls.append(("set_focal_length", focal_length))
+
+    def set_horizontal_aperture(
+        self, horizontal_aperture: float, *, maintain_square_pixels: bool = True
+    ) -> None:
+        self.calls.append(
+            (
+                "set_horizontal_aperture",
+                (horizontal_aperture, maintain_square_pixels),
+            )
+        )
+
+    def set_vertical_aperture(
+        self, vertical_aperture: float, *, maintain_square_pixels: bool = True
+    ) -> None:
+        self.calls.append(
+            (
+                "set_vertical_aperture",
+                (vertical_aperture, maintain_square_pixels),
+            )
+        )
+
+    def set_opencv_pinhole_properties(
+        self, *, cx: float, cy: float, fx: float, fy: float
+    ) -> None:
+        self.calls.append(
+            (
+                "set_opencv_pinhole_properties",
+                {"cx": cx, "cy": cy, "fx": fx, "fy": fy},
+            )
+        )
+
     def add_rgb_to_frame(self) -> None:
         self.calls.append(("add_rgb_to_frame", None))
 
@@ -66,6 +99,12 @@ def test_create_sensor_camera_runtime_initializes_camera_wrapper() -> None:
                         "frequency": 20.0,
                         "modalities": ["rgb", "depth"],
                         "clipping_range": [0.02, 4.0],
+                        "intrinsics": {
+                            "fx": 320.0,
+                            "fy": 240.0,
+                            "cx": 160.0,
+                            "cy": 120.0,
+                        },
                     }
                 }
             }
@@ -95,12 +134,24 @@ def test_create_sensor_camera_runtime_initializes_camera_wrapper() -> None:
 
     assert runtime.camera.calls == [
         ("initialize", None),
+        ("set_focal_length", 1.0),
+        ("set_horizontal_aperture", (1.0, False)),
+        ("set_vertical_aperture", (1.0, False)),
+        (
+            "set_opencv_pinhole_properties",
+            {"cx": 160.0, "cy": 120.0, "fx": 320.0, "fy": 240.0},
+        ),
         ("set_clipping_range", (0.02, 4.0)),
         ("add_rgb_to_frame", None),
         ("add_distance_to_image_plane_to_frame", None),
     ]
     assert runtime.get_rgb(device="cpu") == "rgb:cpu"
     assert runtime.get_depth(device="cpu") == "depth:cpu"
+    assert runtime.get_intrinsics_matrix() == (
+        (320.0, 0.0, 160.0),
+        (0.0, 240.0, 120.0),
+        (0.0, 0.0, 1.0),
+    )
 
 
 def test_create_sensor_camera_runtimes_skips_disabled_cameras() -> None:

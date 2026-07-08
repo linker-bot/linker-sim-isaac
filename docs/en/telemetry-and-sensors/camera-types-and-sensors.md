@@ -53,6 +53,11 @@ sensors:
       frequency: 30.0
       modalities: [rgb, depth]
       clipping_range: [0.01, 5.0]
+      intrinsics:
+        fx: 615.0
+        fy: 615.0
+        cx: 320.0
+        cy: 240.0
       output:
         save_dir: logs/cameras/world_rgbd
         foxglove_topic_prefix: /cameras/world_rgbd
@@ -72,6 +77,9 @@ Fields:
 | `resolution` | Image width and height. |
 | `frequency` | Sampling frequency in Hz. |
 | `modalities` | Output types, for example `rgb` and `depth`. |
+| `clipping_range` | Near/far clipping planes, m. |
+| `intrinsics.fx` / `intrinsics.fy` | Optional explicit pinhole focal lengths in pixels; applied to the Isaac Camera. |
+| `intrinsics.cx` / `intrinsics.cy` | Optional explicit pinhole principal point in pixels; configure together with `fx/fy`. |
 | `output.save_dir` | Optional local output directory. |
 | `output.foxglove_live_port` | Optional Foxglove live port. Camera ports should start at `8770`. |
 | `output.foxglove_mcap_path` | Optional Foxglove MCAP output path. |
