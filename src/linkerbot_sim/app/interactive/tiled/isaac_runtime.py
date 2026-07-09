@@ -24,7 +24,10 @@ from linkerbot_sim.app.interactive.tiled.planning_messages import (
     load_ready_planning_results,
     planning_request_from_message,
 )
-from linkerbot_sim.app.interactive.tiled.protocol import RobotSelection, _selected_robot_names
+from linkerbot_sim.app.interactive.tiled.protocol import (
+    RobotSelection,
+    _selected_robot_names,
+)
 from linkerbot_sim.app.interactive.tiled.command_utils import (
     _action_decimation,
     _action_for_selected_envs,
@@ -103,7 +106,9 @@ class IsaacTiledInteractiveRuntime:
         """创建真实 Isaac tiled scene，并完成第一次 world reset/finalize。"""
 
         from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
-        from linkerbot_sim.app.runtime.simulation_session import create_simulation_session
+        from linkerbot_sim.app.runtime.simulation_session import (
+            create_simulation_session,
+        )
         from linkerbot_sim.configs.profiles import load_default_controller_profiles
         from linkerbot_sim.sensors.camera_observer import start_camera_output
         from linkerbot_sim.sensors.camera_runtime import (
@@ -111,7 +116,10 @@ class IsaacTiledInteractiveRuntime:
             initialize_sensor_camera_runtimes,
         )
         from linkerbot_sim.tiled.cameras import tiled_sensor_camera_settings
-        from linkerbot_sim.tiled.scene import build_isaac_tiled_scene, finalize_tiled_articulation_views
+        from linkerbot_sim.tiled.scene import (
+            build_isaac_tiled_scene,
+            finalize_tiled_articulation_views,
+        )
         from linkerbot_sim.tiled.scene.utils import _print_status
         from linkerbot_sim.utils.paths import repo_path
 
@@ -334,13 +342,16 @@ class IsaacTiledInteractiveRuntime:
 
         selected = _normalize_env_ids(env_ids, self.scene.config.num_envs)
         for name, runtime in self._selected_runtime_items(None):
-            runtime.view.set_joint_positions(self.initial_joint_positions[name][selected], indices=selected)
-            runtime.view.set_joint_velocities(
-                np.zeros_like(self.initial_joint_velocities[name][selected]), indices=selected
+            runtime.view.set_joint_positions(
+                self.initial_joint_positions[name][selected], indices=selected
             )
-            self.target_positions[name][selected, :] = self.initial_joint_positions[name][selected][
-                :, runtime.command_joint_indices
-            ]
+            runtime.view.set_joint_velocities(
+                np.zeros_like(self.initial_joint_velocities[name][selected]),
+                indices=selected,
+            )
+            self.target_positions[name][selected, :] = self.initial_joint_positions[
+                name
+            ][selected][:, runtime.command_joint_indices]
             self._command_adapter(name).reset()
             self._refresh_tcp_state(name, env_ids=selected)
         objects_reset = _restore_tiled_object_pose_snapshot(
@@ -378,7 +389,9 @@ class IsaacTiledInteractiveRuntime:
         selected = _normalize_env_ids(env_ids, self.scene.config.num_envs)
         ticks = _action_decimation(action, default_decimation=self.default_decimation)
         info: dict[str, object] = {}
-        selected_robots = self._selected_runtime_items(robot_names, require_explicit=True)
+        selected_robots = self._selected_runtime_items(
+            robot_names, require_explicit=True
+        )
         trajectories: dict[str, tuple[object, np.ndarray, np.ndarray]] = {}
         for name, runtime in selected_robots:
             command_indices = runtime.command_joint_indices
@@ -388,7 +401,9 @@ class IsaacTiledInteractiveRuntime:
             )
             previous_target = self.target_positions[name].copy()
             if action.kind.startswith("ee_"):
-                robot_action = self._action_for_robot_reference(action, robot_name=name, env_ids=selected)
+                robot_action = self._action_for_robot_reference(
+                    action, robot_name=name, env_ids=selected
+                )
                 robot_action = _action_for_selected_envs(
                     action=robot_action,
                     env_ids=selected,
@@ -497,15 +512,21 @@ class IsaacTiledInteractiveRuntime:
             robots[name] = {
                 "joint_names": list(runtime.command_joint_names),
                 "joint_positions": np.asarray(
-                    runtime.view.get_joint_positions(indices=selected, joint_indices=command_indices),
+                    runtime.view.get_joint_positions(
+                        indices=selected, joint_indices=command_indices
+                    ),
                     dtype=float,
                 ).tolist(),
                 "joint_velocities": np.asarray(
-                    runtime.view.get_joint_velocities(indices=selected, joint_indices=command_indices),
+                    runtime.view.get_joint_velocities(
+                        indices=selected, joint_indices=command_indices
+                    ),
                     dtype=float,
                 ).tolist(),
                 "tcp_positions_world": self._tcp_positions(name)[selected].tolist(),
-                "tcp_orientations_wxyz": self._tcp_orientations(name)[selected].tolist(),
+                "tcp_orientations_wxyz": self._tcp_orientations(name)[
+                    selected
+                ].tolist(),
             }
         payload = {
             "robots": robots,
@@ -549,7 +570,9 @@ class IsaacTiledInteractiveRuntime:
                     command_indices.size,
                     f"robots.{name}.joint_positions",
                 )
-                runtime.view.set_joint_positions(q, indices=selected, joint_indices=command_indices)
+                runtime.view.set_joint_positions(
+                    q, indices=selected, joint_indices=command_indices
+                )
                 self.target_positions[name][selected, :] = q
                 self._refresh_tcp_state(name, env_ids=selected)
             if "joint_velocities" in robot_state:
@@ -559,7 +582,9 @@ class IsaacTiledInteractiveRuntime:
                     command_indices.size,
                     f"robots.{name}.joint_velocities",
                 )
-                runtime.view.set_joint_velocities(dq, indices=selected, joint_indices=command_indices)
+                runtime.view.set_joint_velocities(
+                    dq, indices=selected, joint_indices=command_indices
+                )
             self._command_adapter(name).reset()
         if "episode_steps" in state:
             self.episode_steps[selected] = _selected_int_rows(
@@ -695,8 +720,12 @@ class IsaacTiledInteractiveRuntime:
 
         planner_results, planner_loaded = self._collect_planner_results()
         selected = _normalize_env_ids(env_ids, self.scene.config.num_envs)
-        selected_robots = self._selected_runtime_items(robot_names, require_explicit=True)
-        ticks = _positive_decimation(decimation, default_decimation=self.default_decimation)
+        selected_robots = self._selected_runtime_items(
+            robot_names, require_explicit=True
+        )
+        ticks = _positive_decimation(
+            decimation, default_decimation=self.default_decimation
+        )
         last_results: dict[str, object] = {}
         for _ in range(ticks):
             for name, runtime in selected_robots:
@@ -837,11 +866,15 @@ class IsaacTiledInteractiveRuntime:
     ) -> dict[str, object]:
         """取消 Isaac 后台规划请求。"""
 
-        robot = None if robot_name is None else self._single_selected_robot_name(robot_name)
+        robot = (
+            None if robot_name is None else self._single_selected_robot_name(robot_name)
+        )
         if request_id is not None:
             result: object = self.planner_manager.cancel(request_id)
         else:
-            result = self.planner_manager.cancel_matching(robot_name=robot, env_ids=env_ids)
+            result = self.planner_manager.cancel_matching(
+                robot_name=robot, env_ids=env_ids
+            )
         return {
             "event": "plan_cancelled",
             "accepted": True,
@@ -871,14 +904,18 @@ class IsaacTiledInteractiveRuntime:
     ) -> dict[str, object]:
         """返回 Isaac 轨迹缓冲状态。"""
 
-        robot = None if robot_name is None else self._single_selected_robot_name(robot_name)
+        robot = (
+            None if robot_name is None else self._single_selected_robot_name(robot_name)
+        )
         return {
             "event": "trajectory_status",
             "accepted": True,
             "backend": "isaac",
             "step": self.step,
             "time_s": self.time_s,
-            "trajectory": self.trajectory_buffer.status(robot_name=robot, env_ids=env_ids),
+            "trajectory": self.trajectory_buffer.status(
+                robot_name=robot, env_ids=env_ids
+            ),
         }
 
     def clear_trajectory(
@@ -889,8 +926,14 @@ class IsaacTiledInteractiveRuntime:
     ) -> dict[str, object]:
         """清理 Isaac 轨迹缓冲。"""
 
-        selected = None if env_ids is None else _normalize_env_ids(env_ids, self.scene.config.num_envs)
-        robot = None if robot_name is None else self._single_selected_robot_name(robot_name)
+        selected = (
+            None
+            if env_ids is None
+            else _normalize_env_ids(env_ids, self.scene.config.num_envs)
+        )
+        robot = (
+            None if robot_name is None else self._single_selected_robot_name(robot_name)
+        )
         cleared = self.trajectory_buffer.clear(robot_name=robot, env_ids=selected)
         return {
             "event": "trajectory_cleared",
@@ -904,7 +947,9 @@ class IsaacTiledInteractiveRuntime:
     def close(self) -> None:
         """关闭 Isaac SimulationApp。"""
 
-        from linkerbot_sim.app.runtime.simulation_app_lifecycle import close_simulation_app
+        from linkerbot_sim.app.runtime.simulation_app_lifecycle import (
+            close_simulation_app,
+        )
 
         if self._closed:
             return
@@ -929,7 +974,9 @@ class IsaacTiledInteractiveRuntime:
         """返回机器人对应的 world-frame IK solver。"""
 
         if robot_name not in self.ik_solvers:
-            raise RuntimeError(f"robot {robot_name!r} has no tiled BatchedCuMotionIKSolver")
+            raise RuntimeError(
+                f"robot {robot_name!r} has no tiled BatchedCuMotionIKSolver"
+            )
         return self.ik_solvers[robot_name]
 
     def _tcp_positions(self, robot_name: str) -> np.ndarray:
@@ -969,7 +1016,9 @@ class IsaacTiledInteractiveRuntime:
             env_ids=selected,
         )
         if robot_name not in self.tcp_positions_world:
-            self.tcp_positions_world[robot_name] = np.zeros((self.scene.config.num_envs, 3), dtype=float)
+            self.tcp_positions_world[robot_name] = np.zeros(
+                (self.scene.config.num_envs, 3), dtype=float
+            )
         if robot_name not in self.tcp_orientations_wxyz:
             self.tcp_orientations_wxyz[robot_name] = np.tile(
                 np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=float),
@@ -989,12 +1038,16 @@ class IsaacTiledInteractiveRuntime:
 
         if action.kind != "ee_pose_target" or action.pose_reference_frame != "base":
             return action
-        selected_values = _selected_action_rows(action.values, env_ids.size, 7, action.kind)
+        selected_values = _selected_action_rows(
+            action.values, env_ids.size, 7, action.kind
+        )
         solver = self._ik_solver(robot_name)
         roots = solver.root_positions_world[env_ids]
         rotations = solver.root_rotations_world_from_base[env_ids]
         root_quats = solver.root_quats_world_wxyz[env_ids]
-        world_positions = roots + np.einsum("nij,nj->ni", rotations, selected_values[:, :3])
+        world_positions = roots + np.einsum(
+            "nij,nj->ni", rotations, selected_values[:, :3]
+        )
         world_orientations = _quat_multiply_rows(
             root_quats,
             _normalize_quaternions(selected_values[:, 3:7]),
@@ -1027,9 +1080,13 @@ class IsaacTiledInteractiveRuntime:
     ) -> tuple[tuple[str, object], ...]:
         """返回选中的 articulation runtime items。"""
 
-        available = {name: self.scene.articulation_views[name] for name in self.robot_names}
+        available = {
+            name: self.scene.articulation_views[name] for name in self.robot_names
+        }
         if robot_names is None and require_explicit and len(self.robot_names) != 1:
-            raise ValueError("robots is required when multiple tiled robots are available")
+            raise ValueError(
+                "robots is required when multiple tiled robots are available"
+            )
         selected = _selected_robot_names(available, robot_names)
         return tuple((name, self.scene.articulation_views[name]) for name in selected)
 
@@ -1038,7 +1095,9 @@ class IsaacTiledInteractiveRuntime:
 
         if robot_name is None:
             if len(self.robot_names) != 1:
-                raise ValueError("robot is required when multiple tiled robots are selected")
+                raise ValueError(
+                    "robot is required when multiple tiled robots are selected"
+                )
             return self.robot_names[0]
         selected = _selected_robot_names(
             {name: self.scene.articulation_views[name] for name in self.robot_names},
@@ -1113,7 +1172,10 @@ def _create_tiled_object_pose_views(scene: object) -> dict[str, object]:
                 env_zero_root_path=paths[0],
             )
             body_paths_by_env = tuple(
-                tuple(_join_prim_path_suffix(root_path, suffix) for suffix in body_suffixes)
+                tuple(
+                    _join_prim_path_suffix(root_path, suffix)
+                    for suffix in body_suffixes
+                )
                 for root_path in paths
             )
             chain_objects.append((name, paths, body_names, body_paths_by_env))
@@ -1189,7 +1251,9 @@ def _dynamic_chain_body_suffixes(
         body_path = str(path_getter() if callable(path_getter) else body)
         body_suffix = _prim_path_suffix(env_zero_root_path, body_path)
         name_getter = getattr(body, "GetName", None)
-        body_name = str(name_getter() if callable(name_getter) else body_path.rsplit("/", 1)[-1])
+        body_name = str(
+            name_getter() if callable(name_getter) else body_path.rsplit("/", 1)[-1]
+        )
         body_names.append(body_name)
         body_suffixes.append(body_suffix)
     if not body_suffixes:
@@ -1286,7 +1350,9 @@ class _TiledCuMotionPlannerFacade:
         self._planner_type = planner_type
         self._specified_path_request_type = specified_path_request_type
         self._specified_path_config_fn = specified_path_config_fn
-        self._base_config = getattr(getattr(context, "config", None), "motion_planner", None)
+        self._base_config = getattr(
+            getattr(context, "config", None), "motion_planner", None
+        )
 
     def joint_names(self) -> list[str]:
         """返回 planner C-space joint names。"""
@@ -1299,7 +1365,9 @@ class _TiledCuMotionPlannerFacade:
         tcp_frame_name = getattr(request, "tcp_frame_name", None) or self.tcp_frame_name
         config = self._base_config
         if isinstance(request, self._specified_path_request_type):
-            config = self._specified_path_config_fn(self._base_config, path=request.path)
+            config = self._specified_path_config_fn(
+                self._base_config, path=request.path
+            )
         return self._planner_type(
             self.context,
             tcp_frame_name=tcp_frame_name,
@@ -1307,7 +1375,9 @@ class _TiledCuMotionPlannerFacade:
         ).plan(request)
 
 
-def _refresh_gui_view_after_scene_build(session: object, runtime_settings: object) -> None:
+def _refresh_gui_view_after_scene_build(
+    session: object, runtime_settings: object
+) -> None:
     """场景加载完成后重新应用 GUI 视角，并 pump 几帧 Kit。
 
     ``create_simulation_session`` 会在空 stage 上创建灯光和设置 viewport；tiled scene

@@ -48,16 +48,18 @@ class TiledPlanningSegment:
         if self.goal_positions is not None:
             goal = np.asarray(self.goal_positions, dtype=float)
             if goal.ndim != 2:
-                raise ValueError("planning segment goal_positions must have shape (E, D)")
+                raise ValueError(
+                    "planning segment goal_positions must have shape (E, D)"
+                )
         tcp_frame_name = (
-            None
-            if self.tcp_frame_name is None
-            else str(self.tcp_frame_name).strip()
+            None if self.tcp_frame_name is None else str(self.tcp_frame_name).strip()
         )
         if tcp_frame_name == "":
             raise ValueError("planning segment tcp_frame_name cannot be empty")
         object.__setattr__(self, "kind", kind)
-        object.__setattr__(self, "goal_positions", None if goal is None else goal.copy())
+        object.__setattr__(
+            self, "goal_positions", None if goal is None else goal.copy()
+        )
         object.__setattr__(self, "tcp_frame_name", tcp_frame_name)
         object.__setattr__(self, "metadata", dict(self.metadata))
 
@@ -108,21 +110,32 @@ class TiledPlanningRequest:
             raise ValueError("duration_s must be positive")
         if float(self.sample_dt_s) <= 0.0:
             raise ValueError("sample_dt_s must be positive")
-        goal = None if self.goal_positions is None else np.asarray(self.goal_positions, dtype=float)
+        goal = (
+            None
+            if self.goal_positions is None
+            else np.asarray(self.goal_positions, dtype=float)
+        )
         segments = tuple(self.segments)
         if not segments and goal is None:
             raise ValueError("planning request requires goal_positions or segments")
         if goal is not None and goal.shape != current.shape:
             raise ValueError("goal_positions must match current_positions shape")
         for index, segment in enumerate(segments):
-            if segment.goal_positions is not None and segment.goal_positions.shape != current.shape:
+            if (
+                segment.goal_positions is not None
+                and segment.goal_positions.shape != current.shape
+            ):
                 raise ValueError(
                     f"segments[{index}].goal_positions must match current_positions shape"
                 )
         object.__setattr__(self, "env_ids", env_ids)
         object.__setattr__(self, "current_positions", current.copy())
-        object.__setattr__(self, "goal_positions", None if goal is None else goal.copy())
-        object.__setattr__(self, "joint_names", tuple(str(name) for name in self.joint_names))
+        object.__setattr__(
+            self, "goal_positions", None if goal is None else goal.copy()
+        )
+        object.__setattr__(
+            self, "joint_names", tuple(str(name) for name in self.joint_names)
+        )
         object.__setattr__(self, "segments", segments)
         object.__setattr__(self, "trajectory_overlays", tuple(self.trajectory_overlays))
         object.__setattr__(self, "metadata", dict(self.metadata))
@@ -162,10 +175,14 @@ class TiledPlanningResult:
                 raise ValueError("positions sample dimension must match times")
             if positions.shape[2] != len(self.joint_names):
                 raise ValueError("joint_names length must match positions width")
-        object.__setattr__(self, "env_ids", tuple(int(env_id) for env_id in self.env_ids))
+        object.__setattr__(
+            self, "env_ids", tuple(int(env_id) for env_id in self.env_ids)
+        )
         object.__setattr__(self, "times", times)
         object.__setattr__(self, "positions", positions)
-        object.__setattr__(self, "joint_names", tuple(str(name) for name in self.joint_names))
+        object.__setattr__(
+            self, "joint_names", tuple(str(name) for name in self.joint_names)
+        )
         object.__setattr__(self, "trajectory_overlays", tuple(self.trajectory_overlays))
 
     @classmethod
@@ -237,7 +254,9 @@ class LinearJointPlannerBackend:
                 status="UNSUPPORTED",
                 message="linear planner requires joint-space goal_positions",
             )
-        steps = max(1, int(np.ceil(float(request.duration_s) / float(request.sample_dt_s))))
+        steps = max(
+            1, int(np.ceil(float(request.duration_s) / float(request.sample_dt_s)))
+        )
         times = np.linspace(0.0, float(request.duration_s), steps + 1)
         alpha = (times / float(request.duration_s)).reshape(1, -1, 1)
         positions = (
@@ -333,7 +352,9 @@ def _segment_duration_s(
 ) -> float:
     """返回单段有效 duration。"""
 
-    return float(request.duration_s if segment.duration_s is None else segment.duration_s)
+    return float(
+        request.duration_s if segment.duration_s is None else segment.duration_s
+    )
 
 
 def _segment_sample_dt_s(
@@ -342,7 +363,9 @@ def _segment_sample_dt_s(
 ) -> float:
     """返回单段有效采样间隔。"""
 
-    return float(request.sample_dt_s if segment.sample_dt_s is None else segment.sample_dt_s)
+    return float(
+        request.sample_dt_s if segment.sample_dt_s is None else segment.sample_dt_s
+    )
 
 
 class TiledPlannerManager:
@@ -399,7 +422,9 @@ class TiledPlannerManager:
         self._requests[request_id] = request
         return request_id
 
-    def collect_ready(self, *, timeout_s: float = 0.0) -> tuple[TiledPlanningResult, ...]:
+    def collect_ready(
+        self, *, timeout_s: float = 0.0
+    ) -> tuple[TiledPlanningResult, ...]:
         """收集已经完成的 planner results。"""
 
         if timeout_s > 0.0 and self._futures:
@@ -504,8 +529,7 @@ class TiledPlannerManager:
             "max_pending_requests": self.max_pending_requests,
             "max_completed_results": self.max_completed_results,
             "completed": [
-                result.to_json()
-                for _, result in sorted(self._completed.items())
+                result.to_json() for _, result in sorted(self._completed.items())
             ],
         }
 

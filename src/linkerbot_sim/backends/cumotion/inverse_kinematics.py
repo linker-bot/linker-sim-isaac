@@ -118,9 +118,11 @@ class CuMotionInverseKinematics:
         validate_cumotion_frame(self.context, frame_name, label="tcp_frame_name")
         # warm-start IK C-space seed 是否匹配当前 C-space 宽度。
         if request.warm_start_ik_cspace_seed is not None:
-            size = np.asarray(
-                request.warm_start_ik_cspace_seed, dtype=float
-            ).reshape(-1).size
+            size = (
+                np.asarray(request.warm_start_ik_cspace_seed, dtype=float)
+                .reshape(-1)
+                .size
+            )
             if size != self.context.expected_cspace_width:
                 raise ValueError(
                     "warm_start_ik_cspace_seed expected "
@@ -215,9 +217,7 @@ class CuMotionInverseKinematics:
         else:
             orientation = (
                 self.cumotion.CollisionFreeIkSolver.OrientationConstraint.target(
-                    rotation_from_quat_wxyz(
-                        self.cumotion, request.target_orientation
-                    ),
+                    rotation_from_quat_wxyz(self.cumotion, request.target_orientation),
                     float(request.orientation_tolerance),
                 )
             )

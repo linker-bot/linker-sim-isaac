@@ -120,10 +120,9 @@ def solve_side_ik_goal(
     current = np.asarray(current_q, dtype=float).reshape(-1)
     fk = context.make_forward_kinematics()
     current_pose = fk.compute_pose(current, tcp_frame_name)
-    target_position = (
-        np.asarray(current_pose.position, dtype=float).reshape(3)
-        + np.asarray(offset, dtype=float).reshape(3)
-    )
+    target_position = np.asarray(current_pose.position, dtype=float).reshape(
+        3
+    ) + np.asarray(offset, dtype=float).reshape(3)
     target_orientation_value = _target_orientation_for_mode(
         mode=orientation_mode,
         current_orientation=current_pose.orientation,
@@ -289,6 +288,8 @@ def _target_orientation_for_mode(
         return np.asarray(current_orientation, dtype=float).reshape(4)
     if mode == "target":
         if target_orientation is None:
-            raise ValueError("target_orientation is required for orientation_mode='target'")
+            raise ValueError(
+                "target_orientation is required for orientation_mode='target'"
+            )
         return np.asarray(target_orientation, dtype=float).reshape(4)
     raise ValueError("orientation_mode must be one of: current, target, none")

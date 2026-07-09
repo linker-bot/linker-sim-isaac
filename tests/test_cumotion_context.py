@@ -133,6 +133,7 @@ class _FakeCumotion(ModuleType):
     def create_obstacle(self, obstacle_type):
         return _FakeObstacle(obstacle_type)
 
+
 def _context(monkeypatch) -> CuMotionContext:
     fake_cumotion = _FakeCumotion()
     monkeypatch.setitem(sys.modules, "cumotion", fake_cumotion)
@@ -283,9 +284,7 @@ def test_context_materializes_multiple_custom_tcps(monkeypatch, tmp_path) -> Non
     assert {"left_pinch_tcp", "right_pinch_tcp"} <= link_names
 
 
-def test_context_rejects_existing_custom_tcp_frame(
-    monkeypatch, tmp_path
-) -> None:
+def test_context_rejects_existing_custom_tcp_frame(monkeypatch, tmp_path) -> None:
     fake_cumotion = _FakeCumotion()
     monkeypatch.setitem(sys.modules, "cumotion", fake_cumotion)
     base_urdf = _write_urdf(tmp_path / "robot.urdf", link_names=("flange", "tool"))

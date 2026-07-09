@@ -134,8 +134,7 @@ def test_tiled_object_prim_paths_follow_env_roots() -> None:
     )
 
     assert object_paths["Tblock"] == tuple(
-        f"/World/envs/env_{index}/TBlock"
-        for index in range(tiled_config.num_envs)
+        f"/World/envs/env_{index}/TBlock" for index in range(tiled_config.num_envs)
     )
 
 
@@ -340,7 +339,9 @@ def test_collision_filter_uses_filtered_pairs_instead_of_collision_groups() -> N
     assert applied is True
     assert not stage.GetPrimAtPath("/World/collisions").IsValid()
 
-    body_api = UsdPhysics.FilteredPairsAPI.Get(stage, Sdf.Path("/World/envs/env_0/Body"))
+    body_api = UsdPhysics.FilteredPairsAPI.Get(
+        stage, Sdf.Path("/World/envs/env_0/Body")
+    )
     body_targets = body_api.GetFilteredPairsRel().GetTargets()
     assert Sdf.Path("/World/envs/env_1/Body") in body_targets
     assert Sdf.Path("/World/envs/env_1/StaticCollider") in body_targets
@@ -378,5 +379,7 @@ def test_collision_filter_disabled_does_not_author_filtered_pairs() -> None:
     )
 
     assert applied is False
-    body_api = UsdPhysics.FilteredPairsAPI.Get(stage, Sdf.Path("/World/envs/env_0/Body"))
+    body_api = UsdPhysics.FilteredPairsAPI.Get(
+        stage, Sdf.Path("/World/envs/env_0/Body")
+    )
     assert not body_api

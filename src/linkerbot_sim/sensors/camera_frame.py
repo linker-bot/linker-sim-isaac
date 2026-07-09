@@ -140,7 +140,9 @@ def _optional_array(callable_obj) -> np.ndarray | None:
         return None
 
 
-def _optional_world_pose(camera: Any) -> tuple[
+def _optional_world_pose(
+    camera: Any,
+) -> tuple[
     tuple[float, float, float] | None,
     tuple[float, float, float, float] | None,
 ]:

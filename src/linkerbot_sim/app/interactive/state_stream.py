@@ -37,9 +37,8 @@ class InteractiveStateStreamConfig:
     def enabled(self) -> bool:
         """返回是否需要启动状态流。"""
 
-        return (
-            self.rate_hz > 0.0
-            and (self.foxglove_live_port is not None or self.foxglove_mcap_path is not None)
+        return self.rate_hz > 0.0 and (
+            self.foxglove_live_port is not None or self.foxglove_mcap_path is not None
         )
 
 

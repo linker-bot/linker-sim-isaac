@@ -181,7 +181,9 @@ def load_interactive_hand_motion(
     duration_s = _required_hand_duration_s(hand_payload, parent)
     current = np.asarray(current_positions, dtype=float)
     if current.ndim != 2 or current.shape != (selected.size, len(command_joint_names)):
-        raise ValueError("current_positions must match selected envs and command joints")
+        raise ValueError(
+            "current_positions must match selected envs and command joints"
+        )
     overlay = _hand_overlay_from_payload(
         hand_payload,
         current_positions=current,
@@ -204,8 +206,12 @@ def load_interactive_hand_motion(
         times=times,
         positions=positions,
         joint_names=command_joint_names,
-        request_id=_optional_str(hand_payload.get("request_id", parent.get("request_id"))),
-        source=str(hand_payload.get("source", parent.get("source", "interactive_hand"))),
+        request_id=_optional_str(
+            hand_payload.get("request_id", parent.get("request_id"))
+        ),
+        source=str(
+            hand_payload.get("source", parent.get("source", "interactive_hand"))
+        ),
         replace=replace,
         overlays=(overlay,),
         append=append,
@@ -389,12 +395,18 @@ def _planning_goal_positions(
     joint_names = _optional_str_tuple(payload.get("joint_names"))
     absolute_values = _first_present(payload, ("joint_positions",))
     delta_values = _first_present(payload, ("joint_deltas",))
-    if absolute_values is None and kind == "joint_position_target" and "values" in payload:
+    if (
+        absolute_values is None
+        and kind == "joint_position_target"
+        and "values" in payload
+    ):
         absolute_values = payload["values"]
     if delta_values is None and kind == "joint_delta_pos" and "values" in payload:
         delta_values = payload["values"]
     if absolute_values is not None and delta_values is not None:
-        raise ValueError("plan must specify either absolute joint target or joint delta")
+        raise ValueError(
+            "plan must specify either absolute joint target or joint delta"
+        )
     if absolute_values is not None:
         return _command_rows_for_selected(
             absolute_values,
@@ -455,7 +467,9 @@ def _specified_path_from_payload(
         if waypoints.ndim != 2 or waypoints.shape[0] < 2 or waypoints.shape[1] < 1:
             raise ValueError("specified_path waypoints must have shape (T,D), T>=2")
         return CSpaceWaypointPath(
-            waypoints=tuple(waypoints[index].copy() for index in range(waypoints.shape[0]))
+            waypoints=tuple(
+                waypoints[index].copy() for index in range(waypoints.shape[0])
+            )
         )
     if path_type == "task_space_line":
         return TaskSpacePath(segments=(_tcp_line_segment_from_payload(path_payload),))
@@ -463,7 +477,9 @@ def _specified_path_from_payload(
         return TaskSpacePath(segments=(_tcp_arc_segment_from_payload(path_payload),))
     if path_type in {"task_space_segments", "task_space"}:
         raw_segments = path_payload.get("segments")
-        if not isinstance(raw_segments, Sequence) or isinstance(raw_segments, (str, bytes)):
+        if not isinstance(raw_segments, Sequence) or isinstance(
+            raw_segments, (str, bytes)
+        ):
             raise ValueError("specified_path.path.segments must be a list")
         segments = []
         for index, raw_segment in enumerate(raw_segments):
@@ -604,7 +620,9 @@ def _selected_variable_width_rows(
     return array.astype(float, copy=True)
 
 
-def _first_present(payload: Mapping[str, object], keys: tuple[str, ...]) -> object | None:
+def _first_present(
+    payload: Mapping[str, object], keys: tuple[str, ...]
+) -> object | None:
     """返回第一个存在的字段值。"""
 
     for key in keys:
@@ -646,7 +664,9 @@ def _trajectory_positions_for_command_space(
     current = np.asarray(current_positions, dtype=float)
     command_names = tuple(str(name) for name in command_joint_names)
     if current.ndim != 2 or current.shape != (selected.size, len(command_names)):
-        raise ValueError("current_positions must match selected envs and command joints")
+        raise ValueError(
+            "current_positions must match selected envs and command joints"
+        )
     positions = _trajectory_position_batch(
         raw_positions,
         env_count=selected.size,
@@ -701,7 +721,9 @@ def _trajectory_position_batch(
         if array.shape[0] == 1 and int(env_count) != 1:
             array = np.repeat(array, int(env_count), axis=0)
         if array.shape[0] != int(env_count):
-            raise ValueError("trajectory.positions env dimension must be 1 or len(env_ids)")
+            raise ValueError(
+                "trajectory.positions env dimension must be 1 or len(env_ids)"
+            )
     else:
         raise ValueError("trajectory.positions must have shape (T,D) or (E,T,D)")
     if array.shape[2] < 1:

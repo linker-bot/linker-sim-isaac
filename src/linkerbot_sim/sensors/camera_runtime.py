@@ -183,18 +183,14 @@ def _apply_aperture_intrinsics(
     horizontal_aperture = focal_length * float(width) / intrinsics.fx
     vertical_aperture = focal_length * float(height) / intrinsics.fy
 
-    _required_camera_method(
-        camera, "set_focal_length", camera_name=camera_name
-    )(focal_length)
-    _required_camera_method(
-        camera, "set_horizontal_aperture", camera_name=camera_name
-    )(
+    _required_camera_method(camera, "set_focal_length", camera_name=camera_name)(
+        focal_length
+    )
+    _required_camera_method(camera, "set_horizontal_aperture", camera_name=camera_name)(
         horizontal_aperture,
         maintain_square_pixels=False,
     )
-    _required_camera_method(
-        camera, "set_vertical_aperture", camera_name=camera_name
-    )(
+    _required_camera_method(camera, "set_vertical_aperture", camera_name=camera_name)(
         vertical_aperture,
         maintain_square_pixels=False,
     )
@@ -228,7 +224,9 @@ def _load_camera_dependencies() -> tuple[type, ArrayFactory, QuatFactory]:
     def quat_from_rpy(rpy: tuple[float, float, float]) -> object:
         """把配置中的 XYZ RPY 转成 Isaac 使用的四元数。"""
 
-        return rot_utils.euler_angles_to_quats(np.array(rpy, dtype=float), degrees=False)
+        return rot_utils.euler_angles_to_quats(
+            np.array(rpy, dtype=float), degrees=False
+        )
 
     return Camera, array_factory, quat_from_rpy
 

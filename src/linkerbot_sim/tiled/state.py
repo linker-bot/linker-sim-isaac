@@ -90,9 +90,7 @@ class TiledObjectState:
     def __post_init__(self) -> None:
         """校验 object pose 的 env 维度一致。"""
 
-        positions_world = _shape_array(
-            self.positions_world, (-1, 3), "positions_world"
-        )
+        positions_world = _shape_array(self.positions_world, (-1, 3), "positions_world")
         orientations = _shape_array(
             self.orientations_wxyz, (positions_world.shape[0], 4), "orientations_wxyz"
         )

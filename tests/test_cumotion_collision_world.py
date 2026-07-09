@@ -158,7 +158,11 @@ def test_collision_world_sync_updates_disables_and_removes_obstacles() -> None:
     np.testing.assert_allclose(table_handle.pose.translation, [1.0, 2.0, 3.0])
 
     collision_world.sync(
-        (CollisionObject("table", "cuboid", moved_pose, (1.0, 1.0, 0.1), enabled=False),)
+        (
+            CollisionObject(
+                "table", "cuboid", moved_pose, (1.0, 1.0, 0.1), enabled=False
+            ),
+        )
     )
 
     assert table_handle in cumotion.world.disabled

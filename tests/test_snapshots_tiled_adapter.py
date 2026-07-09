@@ -7,7 +7,6 @@ from linkerbot_sim.app.interactive.tiled.object_states import (
     _restore_tiled_object_pose_snapshot,
 )
 from linkerbot_sim.snapshots import (
-    clone_tiled_env_state,
     get_tiled_snapshot,
     set_tiled_snapshot,
 )

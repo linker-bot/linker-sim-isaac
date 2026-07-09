@@ -149,7 +149,9 @@ class InteractiveMotionQueue:
         )
         return queued
 
-    def next_pending(self, *, timeout_s: float | None = None) -> QueuedMotionCommand | None:
+    def next_pending(
+        self, *, timeout_s: float | None = None
+    ) -> QueuedMotionCommand | None:
         """阻塞等待下一个 pending 命令，并原子地把它切换为 running。"""
 
         with self._condition:
@@ -421,7 +423,9 @@ class InteractiveMotionQueue:
     def should_stop_current(self) -> bool:
         """返回当前执行命令是否应停止；执行 stepper 会周期性轮询该函数。"""
 
-        return self._cancel_current.is_set() or self._estop.is_set() or self._quit.is_set()
+        return (
+            self._cancel_current.is_set() or self._estop.is_set() or self._quit.is_set()
+        )
 
     def estop_requested(self) -> bool:
         """返回是否已收到急停请求。"""
@@ -446,8 +450,7 @@ class InteractiveMotionQueue:
             return {
                 "event": "status",
                 "commands": [
-                    self._commands[command_id].snapshot()
-                    for command_id in self._order
+                    self._commands[command_id].snapshot() for command_id in self._order
                 ],
                 "current_id": self._current_id,
                 "estop": self._estop.is_set(),

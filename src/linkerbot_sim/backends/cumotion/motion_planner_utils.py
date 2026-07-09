@@ -14,7 +14,11 @@ import numpy as np
 
 
 def apply_config_params(
-    target, params: Mapping[str, Any], param_value_type, *, setter_name: str = "set_param"
+    target,
+    params: Mapping[str, Any],
+    param_value_type,
+    *,
+    setter_name: str = "set_param",
 ) -> None:
     """把项目参数 mapping 写入 cuMotion config/generator。
 

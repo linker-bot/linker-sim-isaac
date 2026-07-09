@@ -11,7 +11,9 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from linkerbot_sim.app.interactive.tiled.protocol import handle_tiled_interactive_message
+from linkerbot_sim.app.interactive.tiled.protocol import (
+    handle_tiled_interactive_message,
+)
 from linkerbot_sim.app.interactive.tiled.telemetry_publish import (
     _publish_response_telemetry,
     _publish_state_telemetry,
@@ -82,7 +84,9 @@ def run_interactive_loop(
     telemetry_period_s = _telemetry_period_s(telemetry, telemetry_rate_hz)
     idle_period_s = _runtime_idle_period_s(runtime, telemetry_period_s, hold=hold)
     now = time.monotonic()
-    next_telemetry_at = now + telemetry_period_s if telemetry_period_s is not None else now
+    next_telemetry_at = (
+        now + telemetry_period_s if telemetry_period_s is not None else now
+    )
     next_idle_at = now + idle_period_s if idle_period_s is not None else now
     _publish_state_telemetry(telemetry, runtime, event="state")
     while runtime.quit_event is None or not runtime.quit_event.is_set():

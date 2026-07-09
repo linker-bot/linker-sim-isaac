@@ -84,7 +84,9 @@ class TiledDynamicChainObjectPoseView:
             "body_positions_world": body_positions.tolist(),
             # body local position 按目标 env origin 归一化，后续 set_snapshot 到其它 env 时
             # 再加回目标 env origin，就能得到正确的 world pose。
-            "body_positions_local": (body_positions - origins[selected, None, :]).tolist(),
+            "body_positions_local": (
+                body_positions - origins[selected, None, :]
+            ).tolist(),
             "body_orientations_wxyz": body_orientations.tolist(),
         }
 
@@ -103,7 +105,9 @@ class TiledDynamicChainObjectPoseView:
         把局部位姿还原成 PhysX 需要的 world pose。
         """
 
-        snapshot_env_ids = np.asarray(object_state.get("env_ids", ()), dtype=int).reshape(-1)
+        snapshot_env_ids = np.asarray(
+            object_state.get("env_ids", ()), dtype=int
+        ).reshape(-1)
         rows = [
             row
             for row, env_id in enumerate(snapshot_env_ids)
@@ -145,7 +149,9 @@ class TiledDynamicChainObjectPoseView:
         env_index = np.asarray([int(snapshot_env_ids[row]) for row in rows], dtype=int)
         indices = self._flat_indices(env_index)
         if body_positions_world is not None:
-            positions = np.asarray(body_positions_world[rows], dtype=float).reshape(-1, 3)
+            positions = np.asarray(body_positions_world[rows], dtype=float).reshape(
+                -1, 3
+            )
         else:
             if env_origins is None:
                 raise RuntimeError(
@@ -190,7 +196,9 @@ class TiledDynamicChainObjectPoseView:
         if self.body_count < 1:
             raise RuntimeError("dynamic-chain object view has no rigid bodies")
         if np.any(selected < 0) or np.any(selected >= self.env_count):
-            raise ValueError("env_ids contains out-of-range dynamic-chain object env id")
+            raise ValueError(
+                "env_ids contains out-of-range dynamic-chain object env id"
+            )
         offsets = selected[:, None] * self.body_count
         body_offsets = np.arange(self.body_count, dtype=int)[None, :]
         return (offsets + body_offsets).reshape(-1)
@@ -215,7 +223,9 @@ def _read_tiled_object_states(
     objects: dict[str, object] = {}
     for object_name, prim_paths in object_prim_paths.items():
         view_state = _read_object_view_state(
-            object_pose_views.get(str(object_name)) if object_pose_views is not None else None,
+            object_pose_views.get(str(object_name))
+            if object_pose_views is not None
+            else None,
             object_name=str(object_name),
             env_ids=selected,
             env_origins=origins,
@@ -275,7 +285,9 @@ def _capture_tiled_object_pose_snapshot(
         if not isinstance(object_state, Mapping):
             continue
         entry: dict[str, object] = {
-            "env_ids": np.asarray(object_state.get("env_ids", ()), dtype=int).reshape(-1),
+            "env_ids": np.asarray(object_state.get("env_ids", ()), dtype=int).reshape(
+                -1
+            ),
             "positions_world": np.asarray(
                 object_state.get("positions_world", ()), dtype=float
             ).reshape(-1, 3),
@@ -287,7 +299,9 @@ def _capture_tiled_object_pose_snapshot(
             ).reshape(-1, 4),
         }
         if "body_names" in object_state:
-            entry["body_names"] = tuple(str(name) for name in object_state["body_names"])
+            entry["body_names"] = tuple(
+                str(name) for name in object_state["body_names"]
+            )
         if "body_positions_world" in object_state:
             entry["body_positions_world"] = np.asarray(
                 object_state.get("body_positions_world", ()), dtype=float
@@ -325,15 +339,25 @@ def _restore_tiled_object_pose_snapshot(
         paths = object_prim_paths.get(str(object_name))
         if paths is None:
             continue
-        snapshot_env_ids = np.asarray(object_state.get("env_ids", ()), dtype=int).reshape(-1)
+        snapshot_env_ids = np.asarray(
+            object_state.get("env_ids", ()), dtype=int
+        ).reshape(-1)
         world_positions = np.asarray(
             object_state.get("positions_world", ()), dtype=float
         ).reshape(-1, 3)
-        positions = np.asarray(object_state.get("positions_local", ()), dtype=float).reshape(-1, 3)
-        orientations = np.asarray(object_state.get("orientations_wxyz", ()), dtype=float).reshape(-1, 4)
-        row_count = min(snapshot_env_ids.size, positions.shape[0], orientations.shape[0])
+        positions = np.asarray(
+            object_state.get("positions_local", ()), dtype=float
+        ).reshape(-1, 3)
+        orientations = np.asarray(
+            object_state.get("orientations_wxyz", ()), dtype=float
+        ).reshape(-1, 4)
+        row_count = min(
+            snapshot_env_ids.size, positions.shape[0], orientations.shape[0]
+        )
         object_view = (
-            object_pose_views.get(str(object_name)) if object_pose_views is not None else None
+            object_pose_views.get(str(object_name))
+            if object_pose_views is not None
+            else None
         )
         view_restore = getattr(object_view, "restore_object_state", None)
         if callable(view_restore):
@@ -444,7 +468,9 @@ def _restore_object_view_state(
         return None
     rows = [
         row
-        for row, env_id in enumerate(np.asarray(snapshot_env_ids, dtype=int).reshape(-1))
+        for row, env_id in enumerate(
+            np.asarray(snapshot_env_ids, dtype=int).reshape(-1)
+        )
         if int(env_id) in selected_env_ids
     ]
     if not rows:
@@ -459,9 +485,10 @@ def _restore_object_view_state(
             )
         origins = np.asarray(env_origins, dtype=float).reshape(-1, 3)
         # local -> world 使用目标 env origin，保证 env 间复制不会保留 source env 的偏移。
-        world_positions = np.asarray(positions_local[rows], dtype=float).reshape(-1, 3) + origins[
-            env_index
-        ]
+        world_positions = (
+            np.asarray(positions_local[rows], dtype=float).reshape(-1, 3)
+            + origins[env_index]
+        )
     orientations = np.asarray(orientations_wxyz[rows], dtype=float).reshape(-1, 4)
     set_world_poses = getattr(view, "set_world_poses", None)
     if not callable(set_world_poses):
@@ -482,7 +509,9 @@ def _restore_object_view_state(
     return len(rows)
 
 
-def _zero_object_view_velocities(view: object, *, row_count: int, indices: np.ndarray) -> None:
+def _zero_object_view_velocities(
+    view: object, *, row_count: int, indices: np.ndarray
+) -> None:
     """清零 rigid view 线速度和角速度，兼容 Isaac 新旧 API。"""
 
     set_velocities = getattr(view, "set_velocities", None)
@@ -514,7 +543,9 @@ def _to_numpy_array(value: object) -> np.ndarray:
     return np.asarray(candidate, dtype=float)
 
 
-def _read_prim_world_pose(stage: object, prim_path: str) -> tuple[np.ndarray, np.ndarray] | None:
+def _read_prim_world_pose(
+    stage: object, prim_path: str
+) -> tuple[np.ndarray, np.ndarray] | None:
     """读取 USD prim 的世界位姿；只能在仿真主线程调用。"""
 
     from pxr import Sdf, UsdGeom
@@ -525,7 +556,9 @@ def _read_prim_world_pose(stage: object, prim_path: str) -> tuple[np.ndarray, np
     matrix = UsdGeom.XformCache().GetLocalToWorldTransform(prim)
     translation = matrix.ExtractTranslation()
     position = np.asarray([translation[0], translation[1], translation[2]], dtype=float)
-    return position, matrix_to_quat_wxyz(_matrix3_to_numpy(matrix.ExtractRotationMatrix()))
+    return position, matrix_to_quat_wxyz(
+        _matrix3_to_numpy(matrix.ExtractRotationMatrix())
+    )
 
 
 def _apply_prim_local_pose_and_zero_velocity(
@@ -536,7 +569,7 @@ def _apply_prim_local_pose_and_zero_velocity(
 ) -> bool:
     """写回 prim local pose，并对 prim 树中已有 RigidBodyAPI 尽量清零速度。"""
 
-    from pxr import Gf, Sdf, UsdGeom
+    from pxr import Sdf, UsdGeom
 
     prim = stage.GetPrimAtPath(Sdf.Path(prim_path))
     if not prim.IsValid():

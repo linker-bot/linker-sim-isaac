@@ -20,9 +20,7 @@ class ObjectSceneInstanceConfig:
     runtime_handle: str | None = None
 
     @classmethod
-    def from_mapping(
-        cls, data: object, *, index: int
-    ) -> "ObjectSceneInstanceConfig":
+    def from_mapping(cls, data: object, *, index: int) -> "ObjectSceneInstanceConfig":
         """解析 env.objects[index]，只允许 scene 层字段。"""
 
         if not isinstance(data, Mapping):
@@ -124,7 +122,9 @@ class ObjectProfileConfig:
             )
         for key in ("kind", "source", "asset_path", "prim_path"):
             if key not in object_cfg:
-                raise ValueError(f"Object profile {profile_name!r} missing object.{key}")
+                raise ValueError(
+                    f"Object profile {profile_name!r} missing object.{key}"
+                )
         kind = str(object_cfg["kind"]).lower()
         allowed_kinds = {"rigid", "dynamic_chain"}
         if kind not in allowed_kinds:
@@ -145,7 +145,9 @@ class ObjectProfileConfig:
                 f"Object profile {profile_name!r} object.prim_path must be absolute"
             )
         root_path = (
-            None if object_cfg.get("root_path") is None else str(object_cfg["root_path"])
+            None
+            if object_cfg.get("root_path") is None
+            else str(object_cfg["root_path"])
         )
         if root_path is not None and not root_path.startswith("/"):
             raise ValueError(

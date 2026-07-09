@@ -230,7 +230,9 @@ class DualRobotStateSampler:
         )
         commanded = measured = applied = None
         if self.include_efforts:
-            commanded = _commanded_efforts(side_runtime.joint_controller, positions.size)
+            commanded = _commanded_efforts(
+                side_runtime.joint_controller, positions.size
+            )
             efforts = read_joint_efforts(robot, None, measured=True, applied=True)
             measured = efforts.measured
             applied = efforts.applied
@@ -503,7 +505,9 @@ def _runtime_object_prim_path(handle: object) -> str | None:
     return None
 
 
-def _read_prim_world_pose(stage, prim_path: str) -> tuple[np.ndarray, np.ndarray] | None:
+def _read_prim_world_pose(
+    stage, prim_path: str
+) -> tuple[np.ndarray, np.ndarray] | None:
     """读取 USD prim 的世界位姿；只能在仿真主线程调用。"""
 
     from pxr import Sdf, UsdGeom
@@ -513,9 +517,7 @@ def _read_prim_world_pose(stage, prim_path: str) -> tuple[np.ndarray, np.ndarray
         return None
     matrix = UsdGeom.XformCache().GetLocalToWorldTransform(prim)
     translation = matrix.ExtractTranslation()
-    position = np.asarray(
-        [translation[0], translation[1], translation[2]], dtype=float
-    )
+    position = np.asarray([translation[0], translation[1], translation[2]], dtype=float)
     rotation_matrix = _matrix3_to_numpy(matrix.ExtractRotationMatrix())
     return position, matrix_to_quat_wxyz(rotation_matrix)
 

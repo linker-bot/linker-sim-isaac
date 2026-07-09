@@ -71,6 +71,7 @@ class TiledPerEnvConfig:
             metadata=metadata,
         )
 
+
 @dataclass(frozen=True)
 class TiledCloneConfig:
     """控制 USD/PhysX 克隆行为的配置。
@@ -91,9 +92,7 @@ class TiledCloneConfig:
     collision_root_path: str = "/World/collisions"
 
     @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None
-    ) -> "TiledCloneConfig":
+    def from_mapping(cls, data: Mapping[str, object] | None) -> "TiledCloneConfig":
         """从 ``tiled.clone`` mapping 解析配置。
 
         未提供该分组时使用适合性能路径的默认值。未知 key 会被拒绝，避免 YAML
@@ -158,9 +157,7 @@ class TiledRuntimeConfig:
     inspect_env_ids: tuple[int, ...] = (0,)
 
     @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None
-    ) -> "TiledRuntimeConfig":
+    def from_mapping(cls, data: Mapping[str, object] | None) -> "TiledRuntimeConfig":
         """从 ``tiled.runtime`` mapping 解析配置。"""
 
         if data is None:
@@ -182,7 +179,9 @@ class TiledRuntimeConfig:
         """校验 runtime 配置是否和 ``num_envs`` 匹配。"""
 
         if any(env_id < 0 or env_id >= num_envs for env_id in self.inspect_env_ids):
-            raise ValueError("tiled.runtime.inspect_env_ids contains out-of-range env id")
+            raise ValueError(
+                "tiled.runtime.inspect_env_ids contains out-of-range env id"
+            )
 
 
 @dataclass(frozen=True)
@@ -258,9 +257,7 @@ class TiledEnvConfig:
                 data, "env_prefix", cls.env_prefix, "tiled"
             ),
             spacing=float(data.get("spacing", cls.spacing)),
-            num_per_row=_optional_positive_int_or_none(
-                data, "num_per_row", "tiled"
-            ),
+            num_per_row=_optional_positive_int_or_none(data, "num_per_row", "tiled"),
             per_env_config_dir=_optional_relative_dir_or_none(
                 data, "per_env_config_dir", "tiled"
             ),
@@ -269,9 +266,7 @@ class TiledEnvConfig:
                 num_envs=num_envs,
             ),
             clone=TiledCloneConfig.from_mapping(_optional_mapping(data, "clone")),
-            runtime=TiledRuntimeConfig.from_mapping(
-                _optional_mapping(data, "runtime")
-            ),
+            runtime=TiledRuntimeConfig.from_mapping(_optional_mapping(data, "runtime")),
         )
         config.validate()
         return config

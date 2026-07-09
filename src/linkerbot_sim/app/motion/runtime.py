@@ -55,7 +55,9 @@ class MotionPlanningFailed(RuntimeError):
 def current_command_from_runtime(runtime) -> np.ndarray:
     """读取 articulation 当前关节位置，并投影到 controller command-space。"""
 
-    positions = np.asarray(runtime.articulation.get_joint_positions(), dtype=float).reshape(-1)
+    positions = np.asarray(
+        runtime.articulation.get_joint_positions(), dtype=float
+    ).reshape(-1)
     return positions[np.asarray(runtime.joint_controller.command_indices, dtype=int)]
 
 
@@ -113,7 +115,9 @@ def command_indices_for_cspace_joints(
         str(name): index for index, name in enumerate(command_joint_names)
     }
     missing = [
-        str(name) for name in cspace_joint_names if str(name) not in command_index_by_name
+        str(name)
+        for name in cspace_joint_names
+        if str(name) not in command_index_by_name
     ]
     if missing:
         raise ValueError(

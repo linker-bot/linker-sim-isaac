@@ -153,7 +153,10 @@ class CameraFramePublisher:
             except Exception as exc:
                 self.last_error = exc
                 self.stop_event.set()
-                print(f"CAMERA_FRAME_PUBLISHER_FAILED {type(exc).__name__}: {exc}", flush=True)
+                print(
+                    f"CAMERA_FRAME_PUBLISHER_FAILED {type(exc).__name__}: {exc}",
+                    flush=True,
+                )
 
 
 def _write_frame_payload(save_dir: Path, frame: CameraFrame) -> str:

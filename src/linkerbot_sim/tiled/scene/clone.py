@@ -137,7 +137,9 @@ def _filter_env_collisions(
     return filtered_pair_count > 0
 
 
-def _collision_filter_participant_paths(*, stage: object, env_root: str) -> tuple[str, ...]:
+def _collision_filter_participant_paths(
+    *, stage: object, env_root: str
+) -> tuple[str, ...]:
     """收集一个 env 下可用于 ``FilteredPairsAPI`` 的 physics prim path。"""
 
     from pxr import UsdPhysics
@@ -171,7 +173,9 @@ def _is_collision_filter_participant(prim: object, usd_physics: object) -> bool:
     )
 
 
-def _apply_env_pair_filters(stage: object, participant_paths: Sequence[Sequence[str]]) -> int:
+def _apply_env_pair_filters(
+    stage: object, participant_paths: Sequence[Sequence[str]]
+) -> int:
     """给不同 env 的 participant author pairwise collision filters。"""
 
     from pxr import Sdf, UsdPhysics

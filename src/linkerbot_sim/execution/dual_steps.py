@@ -165,9 +165,7 @@ def execute_dual_smooth_command_position_target(
             alpha = (local_step + 1) / steps
             smooth = alpha * alpha * (3.0 - 2.0 * alpha)
             smooth_rate = (
-                (6.0 * alpha * (1.0 - alpha) / float(duration))
-                if duration > 0
-                else 0.0
+                (6.0 * alpha * (1.0 - alpha) / float(duration)) if duration > 0 else 0.0
             )
             left_targets = _targets_from_smooth_plan(left_plan, smooth, smooth_rate)
             right_targets = _targets_from_smooth_plan(right_plan, smooth, smooth_rate)
@@ -432,7 +430,9 @@ def _current_command_positions(side_runtime: RobotSideRuntime) -> np.ndarray:
     positions = np.asarray(
         side_runtime.articulation.get_joint_positions(), dtype=float
     ).reshape(-1)
-    return positions[np.asarray(side_runtime.joint_controller.command_indices, dtype=int)]
+    return positions[
+        np.asarray(side_runtime.joint_controller.command_indices, dtype=int)
+    ]
 
 
 def _side_base_positions(

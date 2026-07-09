@@ -108,7 +108,9 @@ class RobotSnapshot:
         if len(set(joint_names)) != len(joint_names):
             raise ValueError("RobotSnapshot.joint_names contains duplicates")
         positions = _vector(self.joint_positions, len(joint_names), "joint_positions")
-        velocities = _vector(self.joint_velocities, len(joint_names), "joint_velocities")
+        velocities = _vector(
+            self.joint_velocities, len(joint_names), "joint_velocities"
+        )
         command_names = _string_tuple(self.command_joint_names, "command_joint_names")
         if len(set(command_names)) != len(command_names):
             raise ValueError("RobotSnapshot.command_joint_names contains duplicates")
@@ -262,9 +264,7 @@ class ObjectSnapshot:
             angular_velocities=_optional_array(data.get("angular_velocities")),
             body_names=tuple(str(item) for item in data.get("body_names", ())),
             body_positions_local=_optional_array(data.get("body_positions_local")),
-            body_orientations_wxyz=_optional_array(
-                data.get("body_orientations_wxyz")
-            ),
+            body_orientations_wxyz=_optional_array(data.get("body_orientations_wxyz")),
             body_linear_velocities=_optional_array(data.get("body_linear_velocities")),
             body_angular_velocities=_optional_array(
                 data.get("body_angular_velocities")
@@ -324,7 +324,9 @@ class SimulationSnapshot:
         """
 
         if str(self.schema_version) != SCHEMA_VERSION:
-            raise ValueError(f"unsupported snapshot schema_version: {self.schema_version!r}")
+            raise ValueError(
+                f"unsupported snapshot schema_version: {self.schema_version!r}"
+            )
         robots = _robot_mapping(self.robots)
         objects = _object_mapping(self.objects)
         object.__setattr__(self, "robots", robots)
@@ -419,7 +421,9 @@ def _robot_mapping(values: Mapping[str, RobotSnapshot]) -> dict[str, RobotSnapsh
             raise ValueError("SimulationSnapshot.robots values must be RobotSnapshot")
         key = str(role)
         if key != robot.role:
-            raise ValueError(f"robot mapping key {key!r} does not match role {robot.role!r}")
+            raise ValueError(
+                f"robot mapping key {key!r} does not match role {robot.role!r}"
+            )
         result[key] = robot
     return result
 
@@ -439,7 +443,9 @@ def _object_mapping(values: Mapping[str, ObjectSnapshot]) -> dict[str, ObjectSna
             raise ValueError("SimulationSnapshot.objects values must be ObjectSnapshot")
         key = str(name)
         if key != obj.name:
-            raise ValueError(f"object mapping key {key!r} does not match name {obj.name!r}")
+            raise ValueError(
+                f"object mapping key {key!r} does not match name {obj.name!r}"
+            )
         result[key] = obj
     return result
 
@@ -489,7 +495,9 @@ def _vector(values: object, width: int, label: str) -> np.ndarray:
     return array.astype(float, copy=True)
 
 
-def _optional_vector(values: object | None, width: int, label: str) -> np.ndarray | None:
+def _optional_vector(
+    values: object | None, width: int, label: str
+) -> np.ndarray | None:
     """读取可选固定长度向量；字段缺失时保留 ``None``。"""
 
     if values is None:

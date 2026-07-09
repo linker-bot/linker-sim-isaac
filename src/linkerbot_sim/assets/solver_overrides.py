@@ -39,7 +39,9 @@ class SolverIterationConfig:
     hand_velocity_iterations: int | None = None
 
 
-def scene_solver_settings(env_config: Mapping[str, object]) -> SolverIterationConfig | None:
+def scene_solver_settings(
+    env_config: Mapping[str, object],
+) -> SolverIterationConfig | None:
     """从环境配置构造 scene 级 PhysX solver 覆盖设置。
 
     env YAML 只允许声明 ``solver.type``，因为它写到 physics scene。机器人刚体 iteration
@@ -55,11 +57,11 @@ def scene_solver_settings(env_config: Mapping[str, object]) -> SolverIterationCo
         solver,
         {"type"},
         "solver",
-        extra_message=(
-            "arm/hand solver iterations belong under robot.physics.solver"
-        ),
+        extra_message=("arm/hand solver iterations belong under robot.physics.solver"),
     )
-    config = SolverIterationConfig(solver_type=_optional_string(solver, "type", "solver"))
+    config = SolverIterationConfig(
+        solver_type=_optional_string(solver, "type", "solver")
+    )
     return config if _has_overrides(config) else None
 
 
@@ -220,8 +222,7 @@ def _has_iteration_overrides(config: SolverIterationConfig) -> bool:
     """判断配置是否包含 arm/hand position/velocity iteration 覆盖。"""
 
     return any(
-        getattr(config, field_name) is not None
-        for field_name in _ITERATION_FIELD_NAMES
+        getattr(config, field_name) is not None for field_name in _ITERATION_FIELD_NAMES
     )
 
 

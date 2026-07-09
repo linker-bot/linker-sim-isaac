@@ -14,7 +14,10 @@ from linkerbot_sim.app.runtime.objects import (
 )
 from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
 from linkerbot_sim.app.runtime.simulation_app_lifecycle import close_simulation_app
-from linkerbot_sim.app.runtime.simulation_session import SimulationSession, create_simulation_session
+from linkerbot_sim.app.runtime.simulation_session import (
+    SimulationSession,
+    create_simulation_session,
+)
 from linkerbot_sim.assets.robot_loader import (
     DualRobotExecutionConfig,
     dual_robot_scene_instances_from_env_config,
@@ -127,8 +130,7 @@ def load_dual_robot_runtime_config(
             left=side_robot_configs["left"],
             right=side_robot_configs["right"],
             root_poses={
-                name: instance.root_pose
-                for name, instance in robot_instances.items()
+                name: instance.root_pose for name, instance in robot_instances.items()
             },
         ),
         env_config=env_config,

@@ -158,7 +158,9 @@ def _motion_result(
     )
     joint_path = stack_path(path_samples)
     # path_found 为真但没有实际 path 时仍视为失败，避免上层拿到 success=True 却没有可执行数据。
-    success = bool(attr(results, "path_found", default=False)) and joint_path is not None
+    success = (
+        bool(attr(results, "path_found", default=False)) and joint_path is not None
+    )
     trajectory = None
     if success:
         # 项目侧现在把 trajectory generation 作为 graph_search 成功结果的强约束：

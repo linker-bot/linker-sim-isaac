@@ -192,9 +192,7 @@ def _add_rigid_object(stage, config: RigidObjectConfig) -> AddedRigidObject:
         stage,
         imported_path,
         config.physics,
-        freeze_rigid_bodies=not (
-            config.asset_type == "urdf" and config.physics.static
-        ),
+        freeze_rigid_bodies=not (config.asset_type == "urdf" and config.physics.static),
     )
     return AddedRigidObject(
         name=config.name,
@@ -218,7 +216,9 @@ def _add_usd_reference(stage, config: RigidObjectConfig, asset_path: Path) -> st
     return str(prim_path)
 
 
-def _import_urdf_rigid_object(stage, config: RigidObjectConfig, asset_path: Path) -> str:
+def _import_urdf_rigid_object(
+    stage, config: RigidObjectConfig, asset_path: Path
+) -> str:
     """通过 Isaac URDF importer 导入 rigid object，并移动到目标 prim_path。"""
 
     imported_path = configure_urdf_import(

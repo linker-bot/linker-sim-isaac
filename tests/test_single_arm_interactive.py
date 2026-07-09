@@ -18,8 +18,12 @@ from linkerbot_sim.app.motion.single_arm import (
 from linkerbot_sim.app.motion.specs import CSpaceDeltaPlanMoveSpec, HandMoveSpec
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "single_arm_interactive.py"
-DUAL_SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "dual_arm_interactive.py"
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "scripts" / "single_arm_interactive.py"
+)
+DUAL_SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "scripts" / "dual_arm_interactive.py"
+)
 
 
 def test_single_arm_script_wrapper_imports_entrypoint() -> None:
@@ -83,7 +87,9 @@ def test_single_arm_run_interactive_mode_passes_hold_app(monkeypatch) -> None:
 
 
 def test_dual_arm_script_wrapper_imports_entrypoint() -> None:
-    spec = importlib.util.spec_from_file_location("dual_arm_interactive", DUAL_SCRIPT_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "dual_arm_interactive", DUAL_SCRIPT_PATH
+    )
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)

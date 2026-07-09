@@ -14,9 +14,10 @@ def test_load_profile_yaml_accepts_directory_env_profile() -> None:
     config = load_profile_yaml("env", "scene3_tiled")
     tiled = TiledEnvConfig.from_env_config(config)
 
-    assert profile_path("env", "scene3_tiled") == Path(
-        "configs/envs/scene3_tiled/base.yaml"
-    ).resolve()
+    assert (
+        profile_path("env", "scene3_tiled")
+        == Path("configs/envs/scene3_tiled/base.yaml").resolve()
+    )
     assert config["env"]["name"] == "scene3_tiled"
     assert tiled.enabled is True
     assert tiled.num_envs == int(config["tiled"]["num_envs"])

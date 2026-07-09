@@ -37,3 +37,6 @@ testpaths = ["tests"]
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E402"]
+"tests/test_pinch_grasp_motion_planning.py" = ["E402"]
+"tests/test_system_configs.py" = ["E402"]
+"tools/object_assets/*/*/build_asset.py" = ["E402"]

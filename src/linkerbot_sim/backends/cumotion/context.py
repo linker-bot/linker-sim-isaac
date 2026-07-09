@@ -180,7 +180,9 @@ class CuMotionConfig:
     # 从 YAML custom_tcps 解析得到的 fixed TCP frames。创建 context 前会 materialize 到派生 URDF。
     custom_tcp_frames: tuple[TcpFrame, ...] = ()
     # FK/IK 相关参数
-    kinematics: CuMotionKinematicsConfig = field(default_factory=CuMotionKinematicsConfig)
+    kinematics: CuMotionKinematicsConfig = field(
+        default_factory=CuMotionKinematicsConfig
+    )
     # motion-planner facade 的分组配置；为 None 时 context 会用上面的默认参数构造配置
     motion_planner: MotionPlannerBackendConfig | None = None
 
@@ -202,11 +204,7 @@ class CuMotionConfig:
             raise ValueError("cuMotion config must be a mapping")
 
         # xrdf_path, urdf_path 是必须的；单臂入口默认还要求 flange_frame。
-        missing = [
-            key
-            for key in ("xrdf_path", "urdf_path")
-            if not settings.get(key)
-        ]
+        missing = [key for key in ("xrdf_path", "urdf_path") if not settings.get(key)]
         if require_flange_frame and not settings.get("flange_frame"):
             missing.append("flange_frame")
         if missing:
@@ -370,16 +368,22 @@ def _validate_unique_tcp_frames(frames: Sequence[TcpFrame]) -> None:
             raise ValueError(f"Duplicate custom TCP frame: {frame.frame_name}")
         names.add(frame.frame_name)
         if not frame.parent_frame:
-            raise ValueError(f"custom TCP {frame.frame_name!r} parent_frame cannot be empty")
+            raise ValueError(
+                f"custom TCP {frame.frame_name!r} parent_frame cannot be empty"
+            )
 
 
 def _kinematics_config_from_settings(
-    settings: Mapping[str, Any]
+    settings: Mapping[str, Any],
 ) -> CuMotionKinematicsConfig:
     """解析 ``kinematics`` 分组。"""
 
-    kinematics_settings = dict(_mapping_or_empty(settings.get("kinematics"), "kinematics"))
-    ik_settings = dict(_mapping_or_empty(kinematics_settings.get("ik"), "kinematics.ik"))
+    kinematics_settings = dict(
+        _mapping_or_empty(settings.get("kinematics"), "kinematics")
+    )
+    ik_settings = dict(
+        _mapping_or_empty(kinematics_settings.get("ik"), "kinematics.ik")
+    )
     fk_settings = _mapping_or_empty(kinematics_settings.get("fk"), "kinematics.fk")
     return CuMotionKinematicsConfig(
         ik=CuMotionIkConfig.from_mapping(ik_settings),
@@ -487,7 +491,9 @@ def resolve_tcp_frame_name(
         or (default_tcp_frame_name_from_config(config) if config is not None else None)
     )
     if frame_name is None:
-        raise ValueError(f"{label} is required because this cuMotion config has no default frame")
+        raise ValueError(
+            f"{label} is required because this cuMotion config has no default frame"
+        )
     frame = str(frame_name)
     validate_cumotion_frame(context, frame, label=label)
     return frame
@@ -496,13 +502,14 @@ def resolve_tcp_frame_name(
 def default_tcp_frame_name_from_config(config: object) -> str | None:
     """从 CuMotionConfig-like 对象读取默认 frame。"""
 
-    return (
-        getattr(config, "default_tcp_frame", None)
-        or getattr(config, "flange_frame", None)
+    return getattr(config, "default_tcp_frame", None) or getattr(
+        config, "flange_frame", None
     )
 
 
-def validate_cumotion_frame(context: object, frame_name: str, *, label: str = "frame") -> None:
+def validate_cumotion_frame(
+    context: object, frame_name: str, *, label: str = "frame"
+) -> None:
     """校验 frame 名非空，且在支持查询的 context 中必须存在。"""
 
     if not str(frame_name):
@@ -620,9 +627,7 @@ class CuMotionContext:
             return self.sync_collision_world(())
         return self._collision_world
 
-    def sync_collision_world(
-        self, collision_objects: Sequence[CollisionObject] = ()
-    ):
+    def sync_collision_world(self, collision_objects: Sequence[CollisionObject] = ()):
         """用最新环境对象同步 context 持有的 cuMotion collision world。
 
         ``collision_objects`` 是当前环境快照，按名称增量同步到同一个后端 ``World``：

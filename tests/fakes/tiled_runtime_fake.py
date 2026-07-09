@@ -127,7 +127,9 @@ class DebugTiledInteractiveRuntime:
         env_section = env_config.get("env", {})
         physics_frequency = 240.0
         if isinstance(env_section, Mapping):
-            physics_frequency = float(env_section.get("physics_frequency", physics_frequency))
+            physics_frequency = float(
+                env_section.get("physics_frequency", physics_frequency)
+            )
         origins = env_origins(tiled_config)
         adapter = TiledCommandAdapter(
             num_envs=tiled_config.num_envs,
@@ -141,7 +143,9 @@ class DebugTiledInteractiveRuntime:
             config=tiled_config,
             adapter=adapter,
             physics_dt=1.0 / max(float(physics_frequency), 1.0e-6),
-            current_positions=np.zeros((tiled_config.num_envs, int(command_dim)), dtype=float),
+            current_positions=np.zeros(
+                (tiled_config.num_envs, int(command_dim)), dtype=float
+            ),
             current_tcp_positions=origins.copy(),
             current_tcp_orientations_wxyz=np.tile(
                 np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=float),
@@ -236,7 +240,9 @@ class DebugTiledInteractiveRuntime:
         )
         target_positions = start.copy()
         target_positions[selected, :] = target.joint_positions[selected, :]
-        trajectory = self.adapter.interpolate_to(target_positions, start=start, action=action)
+        trajectory = self.adapter.interpolate_to(
+            target_positions, start=start, action=action
+        )
         for tick_target in trajectory:
             self.current_positions = tick_target.copy()
             self.step += 1
@@ -267,7 +273,9 @@ class DebugTiledInteractiveRuntime:
         payload = {
             "joint_positions": self.current_positions[selected].tolist(),
             "tcp_positions_world": self.current_tcp_positions[selected].tolist(),
-            "tcp_orientations_wxyz": self.current_tcp_orientations_wxyz[selected].tolist(),
+            "tcp_orientations_wxyz": self.current_tcp_orientations_wxyz[
+                selected
+            ].tolist(),
             "episode_steps": self.episode_steps[selected].tolist(),
             "episode_ids": self.episode_ids[selected].tolist(),
         }
@@ -293,7 +301,10 @@ class DebugTiledInteractiveRuntime:
         selected = _normalize_env_ids(env_ids, self.config.num_envs)
         if "joint_positions" in state:
             self.current_positions[selected, :] = _selected_rows(
-                state["joint_positions"], selected.size, self.adapter.command_dim, "joint_positions"
+                state["joint_positions"],
+                selected.size,
+                self.adapter.command_dim,
+                "joint_positions",
             )
         if "tcp_positions_world" in state:
             self.current_tcp_positions[selected, :] = _selected_rows(
@@ -302,7 +313,10 @@ class DebugTiledInteractiveRuntime:
         if "tcp_orientations_wxyz" in state:
             self.current_tcp_orientations_wxyz[selected, :] = _normalize_quaternions(
                 _selected_rows(
-                    state["tcp_orientations_wxyz"], selected.size, 4, "tcp_orientations_wxyz"
+                    state["tcp_orientations_wxyz"],
+                    selected.size,
+                    4,
+                    "tcp_orientations_wxyz",
                 )
             )
         if "episode_steps" in state:
@@ -415,7 +429,9 @@ class DebugTiledInteractiveRuntime:
             env_ids=selected,
             robot_name=robot,
             current_positions=self.current_positions[selected],
-            command_joint_names=tuple(f"joint_{index}" for index in range(self.adapter.command_dim)),
+            command_joint_names=tuple(
+                f"joint_{index}" for index in range(self.adapter.command_dim)
+            ),
         )
         return {
             "event": "trajectory_loaded",
@@ -437,8 +453,12 @@ class DebugTiledInteractiveRuntime:
 
         planner_results, planner_loaded = self._collect_planner_results()
         selected = _normalize_env_ids(env_ids, self.config.num_envs)
-        robot = single_trajectory_robot_name(robot_names, default=DEBUG_TRAJECTORY_ROBOT)
-        ticks = _positive_decimation(decimation, default_decimation=self.adapter.default_decimation)
+        robot = single_trajectory_robot_name(
+            robot_names, default=DEBUG_TRAJECTORY_ROBOT
+        )
+        ticks = _positive_decimation(
+            decimation, default_decimation=self.adapter.default_decimation
+        )
         result = None
         for _ in range(ticks):
             result = self.trajectory_buffer.step(
@@ -481,7 +501,9 @@ class DebugTiledInteractiveRuntime:
             robot_name=robot,
             env_ids=selected,
             current_positions=self.current_positions[selected],
-            command_joint_names=tuple(f"joint_{index}" for index in range(self.adapter.command_dim)),
+            command_joint_names=tuple(
+                f"joint_{index}" for index in range(self.adapter.command_dim)
+            ),
             default_sample_dt_s=self.physics_dt,
             default_tcp_frame_name=self.adapter.tcp_frame_name,
         )
@@ -593,7 +615,9 @@ class DebugTiledInteractiveRuntime:
         if request_id is not None:
             result: object = self.planner_manager.cancel(request_id)
         else:
-            result = self.planner_manager.cancel_matching(robot_name=robot_name, env_ids=env_ids)
+            result = self.planner_manager.cancel_matching(
+                robot_name=robot_name, env_ids=env_ids
+            )
         return {
             "event": "plan_cancelled",
             "accepted": True,
@@ -629,7 +653,9 @@ class DebugTiledInteractiveRuntime:
             "backend": "debug",
             "step": self.step,
             "time_s": self.time_s,
-            "trajectory": self.trajectory_buffer.status(robot_name=robot_name, env_ids=env_ids),
+            "trajectory": self.trajectory_buffer.status(
+                robot_name=robot_name, env_ids=env_ids
+            ),
         }
 
     def clear_trajectory(
@@ -640,7 +666,11 @@ class DebugTiledInteractiveRuntime:
     ) -> dict[str, object]:
         """清理 debug 轨迹缓冲。"""
 
-        selected = None if env_ids is None else _normalize_env_ids(env_ids, self.config.num_envs)
+        selected = (
+            None
+            if env_ids is None
+            else _normalize_env_ids(env_ids, self.config.num_envs)
+        )
         cleared = self.trajectory_buffer.clear(robot_name=robot_name, env_ids=selected)
         return {
             "event": "trajectory_cleared",

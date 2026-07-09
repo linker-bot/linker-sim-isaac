@@ -360,7 +360,13 @@ def add_angular_drive(joint_prim, axis: str, stiffness: float, damping: float) -
 
 
 def create_d6_rope_joint(
-    stage, path: str, body0, body1, local_pos0, local_pos1, config: CapsuleRopeAssetConfig
+    stage,
+    path: str,
+    body0,
+    body1,
+    local_pos0,
+    local_pos1,
+    config: CapsuleRopeAssetConfig,
 ):
     """在两个绳体刚体之间创建一个 D6 风格关节。
 

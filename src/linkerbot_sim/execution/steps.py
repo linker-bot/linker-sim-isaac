@@ -329,7 +329,9 @@ def execute_command_position_trajectory(
     下发和记录日志。
     """
 
-    full_position = np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
+    full_position = np.asarray(articulation.get_joint_positions(), dtype=float).reshape(
+        -1
+    )
     targets: ControlTargets | None = None
     for sample_index in range(len(trajectory)):
         if simulation_app is not None and not simulation_app.is_running():
@@ -445,7 +447,9 @@ def _observe_state(state_observer, simulation_world, *, step: int, phase: str) -
     observe(simulation_world, step=step, phase=phase)
 
 
-def _observe_cameras(camera_observer, simulation_world, *, step: int, phase: str) -> None:
+def _observe_cameras(
+    camera_observer, simulation_world, *, step: int, phase: str
+) -> None:
     """执行一帧后的可选 camera 采样；observer 自身负责频率和输出策略。"""
 
     if camera_observer is None:

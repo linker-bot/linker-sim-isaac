@@ -159,8 +159,12 @@ class SnapshotCompatibilityResult:
 
     compatible: bool
     issues: tuple[str, ...]
-    robot_mappings: Mapping[str, RobotCompatibilityMapping] = field(default_factory=dict)
-    object_mappings: Mapping[str, ObjectCompatibilityMapping] = field(default_factory=dict)
+    robot_mappings: Mapping[str, RobotCompatibilityMapping] = field(
+        default_factory=dict
+    )
+    object_mappings: Mapping[str, ObjectCompatibilityMapping] = field(
+        default_factory=dict
+    )
     partial: bool = False
 
 
@@ -308,16 +312,14 @@ def _resolve_robot_map(
                 issues.append(f"robot_map source role {source!r} is not in snapshot")
                 continue
             if target_role_str not in target.robots:
-                issues.append(f"robot_map target role {target_role_str!r} is not in target")
+                issues.append(
+                    f"robot_map target role {target_role_str!r} is not in target"
+                )
                 continue
             resolved[source] = target_role_str
         return resolved
     # 常规情况优先按同名 role 匹配，例如 tiled 的同名机器人或 dual 的 left/right。
-    exact = {
-        role: role
-        for role in snapshot.robots
-        if role in target.robots
-    }
+    exact = {role: role for role in snapshot.robots if role in target.robots}
     if exact:
         return exact
     # 单机器人 snapshot 和单机器人目标之间允许自动映射，避免用户为 single <-> tiled
@@ -363,8 +365,12 @@ def _name_mapping(
         issues.append(f"{label} has no common names")
         return None
     return JointMapping(
-        source_indices=np.asarray([source_index[name] for name in common_names], dtype=int),
-        target_indices=np.asarray([target_index[name] for name in common_names], dtype=int),
+        source_indices=np.asarray(
+            [source_index[name] for name in common_names], dtype=int
+        ),
+        target_indices=np.asarray(
+            [target_index[name] for name in common_names], dtype=int
+        ),
         names=common_names,
     )
 

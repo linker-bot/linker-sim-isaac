@@ -219,7 +219,9 @@ def _robot_root_world_frames(
 
     robot = scene.robots[robot_name]
     local_pose = robot.execution.root_pose
-    origins = np.asarray(scene.env_origins, dtype=float).reshape(scene.config.num_envs, 3)
+    origins = np.asarray(scene.env_origins, dtype=float).reshape(
+        scene.config.num_envs, 3
+    )
     root_position = np.asarray(local_pose.xyz, dtype=float).reshape(1, 3) + origins
     rotation = rpy_xyz_to_matrix(local_pose.rpy)
     quat = rpy_xyz_to_quat_wxyz(local_pose.rpy)

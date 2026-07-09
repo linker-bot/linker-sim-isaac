@@ -45,7 +45,9 @@ def test_build_world_passes_ground_height_to_default_ground(monkeypatch) -> None
 
     monkeypatch.setitem(sys.modules, "isaacsim", ModuleType("isaacsim"))
     monkeypatch.setitem(sys.modules, "isaacsim.core", ModuleType("isaacsim.core"))
-    monkeypatch.setitem(sys.modules, "isaacsim.core.api", ModuleType("isaacsim.core.api"))
+    monkeypatch.setitem(
+        sys.modules, "isaacsim.core.api", ModuleType("isaacsim.core.api")
+    )
     monkeypatch.setitem(sys.modules, "isaacsim.core.api.world", world_module)
 
     world = build_world(

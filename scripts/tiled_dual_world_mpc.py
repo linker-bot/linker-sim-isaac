@@ -133,7 +133,9 @@ class RuntimeWorker:
                 break
             self._ensure_alive()
         if not isinstance(response, dict):
-            raise WorkerError(f"{self.role} returned non-dict response for {label}: {response!r}")
+            raise WorkerError(
+                f"{self.role} returned non-dict response for {label}: {response!r}"
+            )
         if not response.get("ok", False):
             error = response.get("error", "unknown worker error")
             tb = response.get("traceback", "")
@@ -147,7 +149,9 @@ class RuntimeWorker:
         if self._process.is_alive():
             return
         exitcode = self._process.exitcode
-        raise WorkerError(f"{self.role} worker exited unexpectedly, exitcode={exitcode}")
+        raise WorkerError(
+            f"{self.role} worker exited unexpectedly, exitcode={exitcode}"
+        )
 
 
 def main() -> None:
@@ -405,7 +409,9 @@ def _load_worker_env_config(
     return config, config_source
 
 
-def _handle_worker_command(runtime: object, message: dict[str, object]) -> dict[str, object]:
+def _handle_worker_command(
+    runtime: object, message: dict[str, object]
+) -> dict[str, object]:
     """执行主进程发来的单条 worker 命令。"""
 
     command = str(message.get("cmd", ""))
@@ -457,7 +463,9 @@ def _set_initial_exec_pose(runtime: object) -> dict[str, object]:
     positions: dict[str, np.ndarray] = {}
     for robot_name, arm_target in (("left", INITIAL_LEFT), ("right", INITIAL_RIGHT)):
         view_runtime = runtime.scene.articulation_views[robot_name]
-        command_indices = np.asarray(view_runtime.command_joint_indices, dtype=int).reshape(-1)
+        command_indices = np.asarray(
+            view_runtime.command_joint_indices, dtype=int
+        ).reshape(-1)
         if command_indices.size < ARM_WIDTH:
             raise ValueError(
                 f"{robot_name} command width {command_indices.size} is smaller than {ARM_WIDTH}"
@@ -540,7 +548,10 @@ def _run_ee_delta_sequence(
             env_ids=env_ids,
         )
         completed_steps = step_index + 1
-        if completed_steps % PROGRESS_LOG_INTERVAL == 0 or completed_steps == high_level_steps:
+        if (
+            completed_steps % PROGRESS_LOG_INTERVAL == 0
+            or completed_steps == high_level_steps
+        ):
             print(
                 "MPC_WORKER_SEQUENCE_PROGRESS "
                 f"phase={phase}{label_suffix} "
@@ -672,14 +683,18 @@ def _score_tblock_pose(runtime: object, *, env_ids: np.ndarray) -> dict[str, obj
     selected = np.asarray(env_ids, dtype=int).reshape(-1)
     object_states = runtime._object_states(selected)
     object_name, object_state = _select_object_state(object_states, TBLOCK_OBJECT_NAME)
-    object_env_ids = np.asarray(object_state.get("env_ids", selected), dtype=int).reshape(-1)
+    object_env_ids = np.asarray(
+        object_state.get("env_ids", selected), dtype=int
+    ).reshape(-1)
     positions_local = np.asarray(
         object_state.get("positions_local", ()), dtype=float
     ).reshape(-1, 3)
     orientations = np.asarray(
         object_state.get("orientations_wxyz", ()), dtype=float
     ).reshape(-1, 4)
-    row_count = min(object_env_ids.size, positions_local.shape[0], orientations.shape[0])
+    row_count = min(
+        object_env_ids.size, positions_local.shape[0], orientations.shape[0]
+    )
     if row_count < 1:
         raise RuntimeError(f"object {object_name!r} has no pose rows for scoring")
     object_env_ids = object_env_ids[:row_count]
@@ -687,9 +702,7 @@ def _score_tblock_pose(runtime: object, *, env_ids: np.ndarray) -> dict[str, obj
     orientations = orientations[:row_count]
 
     yaw = _yaw_from_quat_wxyz(orientations)
-    pose_xy_yaw = np.column_stack(
-        (positions_local[:, 0], positions_local[:, 1], yaw)
-    )
+    pose_xy_yaw = np.column_stack((positions_local[:, 0], positions_local[:, 1], yaw))
     error_xy_yaw = pose_xy_yaw - TARGET_TBLOCK_XY_YAW.reshape(1, 3)
     error_xy_yaw[:, 2] = _wrap_angle(error_xy_yaw[:, 2])
     costs = np.sum(error_xy_yaw * error_xy_yaw, axis=1)
@@ -723,7 +736,9 @@ def _select_object_state(
         if str(name).lower() == lowered and isinstance(state, Mapping):
             return str(name), state
     available = ", ".join(str(name) for name in object_states)
-    raise RuntimeError(f"object {object_name!r} not found; available objects: {available}")
+    raise RuntimeError(
+        f"object {object_name!r} not found; available objects: {available}"
+    )
 
 
 def _yaw_from_quat_wxyz(quaternions: np.ndarray) -> np.ndarray:
@@ -782,10 +797,14 @@ def _validate_runtime(runtime: object, *, role: str, expected_num_envs: int) -> 
         raise ValueError(f"{role} expected {expected_num_envs} envs, got {num_envs}")
     robot_names = set(getattr(runtime, "robot_names", ()))
     if {"left", "right"} - robot_names:
-        raise ValueError(f"{role} runtime must contain left and right robots, got {robot_names}")
+        raise ValueError(
+            f"{role} runtime must contain left and right robots, got {robot_names}"
+        )
     for robot_name in ("left", "right"):
         view_runtime = runtime.scene.articulation_views[robot_name]
-        command_width = int(np.asarray(view_runtime.command_joint_indices).reshape(-1).size)
+        command_width = int(
+            np.asarray(view_runtime.command_joint_indices).reshape(-1).size
+        )
         if command_width < ARM_WIDTH:
             raise ValueError(
                 f"{role}.{robot_name} command width {command_width} is smaller than {ARM_WIDTH}"

@@ -87,7 +87,9 @@ def runtime_object_handles_by_name(
         if handle.runtime_handle is None:
             continue
         if handle.runtime_handle in result:
-            raise ValueError(f"Duplicate runtime object handle: {handle.runtime_handle}")
+            raise ValueError(
+                f"Duplicate runtime object handle: {handle.runtime_handle}"
+            )
         result[handle.runtime_handle] = handle
     return result
 

@@ -62,7 +62,9 @@ class CuMotionJointMapping:
         return cls(
             cspace_joint_names=cspace_names,
             command_joint_names=command_names,
-            command_indices_for_cspace=tuple(index_by_name[name] for name in cspace_names),
+            command_indices_for_cspace=tuple(
+                index_by_name[name] for name in cspace_names
+            ),
         )
 
     @property
@@ -96,15 +98,11 @@ class CuMotionJointMapping:
         """把 C-space IK 解写回 command-space，未参与 IK 的列保留 base command。"""
 
         cspace = _require_2d(cspace_positions, "cspace_positions")
-        base_command = _require_2d(
-            base_command_positions, "base_command_positions"
-        )
+        base_command = _require_2d(base_command_positions, "base_command_positions")
         if cspace.shape[1] != self.cspace_width:
             raise ValueError("cspace_positions width must match cuMotion C-space")
         if base_command.shape[1] != self.command_width:
-            raise ValueError(
-                "base_command_positions width must match command-space"
-            )
+            raise ValueError("base_command_positions width must match command-space")
         if cspace.shape[0] != base_command.shape[0]:
             raise ValueError("cspace_positions and base command must have same N")
         command = base_command.copy()
@@ -234,9 +232,13 @@ class BatchedCuMotionIKSolver:
         orientations: list[np.ndarray] = []
         for row in cspace_positions:
             positions.append(
-                np.asarray(self.kinematics.position(row, frame_name), dtype=float).reshape(3)
+                np.asarray(
+                    self.kinematics.position(row, frame_name), dtype=float
+                ).reshape(3)
             )
-            orientations.append(_rotation_to_quat_wxyz(self.kinematics.orientation(row, frame_name)))
+            orientations.append(
+                _rotation_to_quat_wxyz(self.kinematics.orientation(row, frame_name))
+            )
         return np.vstack(positions), np.vstack(orientations)
 
     def _solve_batch_api(
@@ -383,7 +385,9 @@ class BatchedCuMotionIKSolver:
             )
             solver = self.cumotion.create_collision_free_ik_solver(config)
         except Exception as exc:
-            raise RuntimeError(f"failed to create cuMotion batch IK solver: {exc}") from exc
+            raise RuntimeError(
+                f"failed to create cuMotion batch IK solver: {exc}"
+            ) from exc
         if not hasattr(solver, "solve_array"):
             raise RuntimeError("CollisionFreeIkSolver.solve_array is required")
         self._batch_solvers[frame_name] = solver
@@ -415,7 +419,9 @@ class BatchedCuMotionIKSolver:
                 )
             return solver_type.TaskSpaceTargetArray(translation, orientation)
         except Exception as exc:
-            raise RuntimeError(f"failed to build cuMotion TaskSpaceTargetArray: {exc}") from exc
+            raise RuntimeError(
+                f"failed to build cuMotion TaskSpaceTargetArray: {exc}"
+            ) from exc
 
     def _position_error(
         self,

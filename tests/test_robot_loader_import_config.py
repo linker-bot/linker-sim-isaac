@@ -107,7 +107,9 @@ class FakeCommands:
 
 
 def _install_fake_omni_commands(monkeypatch, mode: str):
-    created_config = FakeMJCFImportConfig() if mode == "mjcf" else FakeURDFImportConfig()
+    created_config = (
+        FakeMJCFImportConfig() if mode == "mjcf" else FakeURDFImportConfig()
+    )
     commands = FakeCommands(mode, created_config)
     omni_module = types.ModuleType("omni")
     kit_module = types.ModuleType("omni.kit")

@@ -284,7 +284,9 @@ def _run_websocket_server(
             "error=websockets_package_not_installed",
             flush=True,
         )
-        raise RuntimeError("websockets package is required for WebSocket transport") from exc
+        raise RuntimeError(
+            "websockets package is required for WebSocket transport"
+        ) from exc
 
     async def handler(websocket) -> None:
         """服务单个 WebSocket 客户端，并把队列事件转发给该连接。"""

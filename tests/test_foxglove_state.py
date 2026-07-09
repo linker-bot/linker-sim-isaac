@@ -82,9 +82,7 @@ def test_foxglove_state_sink_publishes_joint_state_and_full_json() -> None:
     assert state_json["phase"] == "push"
     assert state_json["objects"]["Tblock"]["prim_path"] == "/World/TBlock"
     assert time_s == 0.8
-    np.testing.assert_allclose(
-        logger.scene_spheres[0]["positions"], [[0.1, 0.2, 0.3]]
-    )
+    np.testing.assert_allclose(logger.scene_spheres[0]["positions"], [[0.1, 0.2, 0.3]])
 
 
 def test_foxglove_state_sink_can_omit_joint_effort_field() -> None:

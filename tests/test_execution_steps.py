@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from linkerbot_sim.controllers.types import ComponentControlSettings, JointControlSettings
+from linkerbot_sim.controllers.types import (
+    ComponentControlSettings,
+    JointControlSettings,
+)
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.execution.steps import (
     CommandPositionTrajectoryStep,
@@ -160,7 +163,9 @@ def test_execute_command_position_trajectory_expands_command_space_targets() -> 
 
     assert step == 2
     assert world.step_calls == [False, False]
-    np.testing.assert_allclose(controller.applied_targets[-1].positions, [1.5, 0.2, 2.5])
+    np.testing.assert_allclose(
+        controller.applied_targets[-1].positions, [1.5, 0.2, 2.5]
+    )
     assert logger.rows[-1]["phase"] == "b"
 
 
@@ -200,4 +205,6 @@ def test_command_position_steps_use_command_space_controller() -> None:
 
     assert step == 4
     assert len(controller.build_calls) == 4
-    np.testing.assert_allclose(controller.applied_targets[-1].positions, [1.5, 0.2, 2.5])
+    np.testing.assert_allclose(
+        controller.applied_targets[-1].positions, [1.5, 0.2, 2.5]
+    )

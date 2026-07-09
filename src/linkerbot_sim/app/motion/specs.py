@@ -73,8 +73,7 @@ class DualHandMoveSpec:
                 raise ValueError("DualHandMoveSpec.right must use side='right'")
         _validate_duration(self.duration_s)
         if self.duration_s is None and all(
-            hand is None or hand.duration_s is None
-            for hand in (self.left, self.right)
+            hand is None or hand.duration_s is None for hand in (self.left, self.right)
         ):
             raise ValueError("DualHandMoveSpec requires duration_s")
 
@@ -107,7 +106,10 @@ class RawJointSequenceMoveSpec:
             raise ValueError("RawJointSequenceMoveSpec requires at least one side")
         if isinstance(self.step_interval, bool):
             raise ValueError("step_interval must be a positive integer")
-        if int(self.step_interval) != self.step_interval or int(self.step_interval) <= 0:
+        if (
+            int(self.step_interval) != self.step_interval
+            or int(self.step_interval) <= 0
+        ):
             raise ValueError("step_interval must be a positive integer")
         if self.left is not None:
             self.left.validate()
@@ -190,11 +192,11 @@ class IkOffsetMoveSpec:
             raise ValueError("tcp_frame_name cannot be empty")
         np.asarray(self.tcp_offset, dtype=float).reshape(3)
         if self.orientation_mode not in {"current", "target", "none"}:
-            raise ValueError(
-                "orientation_mode must be one of: current, target, none"
-            )
+            raise ValueError("orientation_mode must be one of: current, target, none")
         if self.orientation_mode == "target" and self.target_orientation is None:
-            raise ValueError("target_orientation is required when orientation_mode='target'")
+            raise ValueError(
+                "target_orientation is required when orientation_mode='target'"
+            )
         if self.target_orientation is not None:
             np.asarray(self.target_orientation, dtype=float).reshape(4)
         _validate_duration(self.duration_s)
@@ -430,7 +432,9 @@ def _validate_raw_joint_sequence_side(
                 raise ValueError("raw joint sequence mapping sample counts must match")
         return
     if isinstance(joint_positions, (str, bytes)):
-        raise ValueError("raw joint sequence joint_positions must be a mapping or matrix")
+        raise ValueError(
+            "raw joint sequence joint_positions must be a mapping or matrix"
+        )
     matrix = np.asarray(joint_positions, dtype=float)
     if matrix.ndim != 2:
         raise ValueError("raw joint sequence matrix must have shape (N, dof)")

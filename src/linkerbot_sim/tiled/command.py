@@ -70,9 +70,7 @@ class TiledCommandAction:
         if self.decimation is not None and int(self.decimation) < 1:
             raise ValueError("TiledCommandAction.decimation must be positive")
         if self.interpolation not in SUPPORTED_INTERPOLATIONS:
-            raise ValueError(
-                f"Unsupported interpolation mode: {self.interpolation!r}"
-            )
+            raise ValueError(f"Unsupported interpolation mode: {self.interpolation!r}")
         if self.pose_reference_frame not in SUPPORTED_POSE_REFERENCE_FRAMES:
             raise ValueError(
                 f"Unsupported pose_reference_frame: {self.pose_reference_frame!r}"
@@ -174,7 +172,9 @@ class TiledCommandAdapter:
         info: dict[str, np.ndarray] = {}
         if action.kind == "hold":
             # hold 优先保持上一帧 target；若还没有 target，则保持当前关节位置。
-            target = self.last_target.copy() if self.last_target is not None else current
+            target = (
+                self.last_target.copy() if self.last_target is not None else current
+            )
         elif action.kind == "joint_position_target":
             # 绝对关节目标，通常由 MPC 候选或上层控制器直接给出。
             target = _required_action_values(

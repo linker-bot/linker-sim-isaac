@@ -184,7 +184,11 @@ def _action_for_selected_envs(
         return _replace_action_values(action, full)
     if action.kind == "ee_delta_pose":
         value_array = np.asarray(values, dtype=float)
-        width = int(value_array.shape[1]) if value_array.ndim == 2 else int(value_array.size)
+        width = (
+            int(value_array.shape[1])
+            if value_array.ndim == 2
+            else int(value_array.size)
+        )
         if width not in (6, 7):
             raise ValueError("ee_delta_pose.values must have width 6 or 7")
         selected_values = _selected_action_rows(
@@ -295,7 +299,9 @@ def _repeat_or_validate_rows(
     if array.shape == expected_single and int(row_count) != 1:
         return np.repeat(array, int(row_count), axis=0)
     if array.shape != expected_batch:
-        raise ValueError(f"{label} must have shape {expected_single} or {expected_batch}")
+        raise ValueError(
+            f"{label} must have shape {expected_single} or {expected_batch}"
+        )
     return array
 
 

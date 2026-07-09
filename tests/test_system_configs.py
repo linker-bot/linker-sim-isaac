@@ -531,8 +531,7 @@ def test_workstation_uses_primitive_collisions() -> None:
             == 1
         )
         assert (
-            collisions["armbase_top_flange"].find("./origin").get("rpy")
-            == "1.5708 0 0"
+            collisions["armbase_top_flange"].find("./origin").get("rpy") == "1.5708 0 0"
         )
 
     offset = (-0.03, 0.0, 0.5)
@@ -554,7 +553,9 @@ def _workstation_collision_mapping(root: ET.Element) -> dict[str, ET.Element]:
 
 
 def _origin_xyz(collision: ET.Element) -> tuple[float, float, float]:
-    return tuple(float(value) for value in collision.find("./origin").get("xyz").split())
+    return tuple(
+        float(value) for value in collision.find("./origin").get("xyz").split()
+    )
 
 
 def test_robot_asset_mesh_references_exist() -> None:
@@ -656,7 +657,9 @@ def test_tblock_asset_generation_config_lives_under_tools() -> None:
 def test_scene1_places_rope_from_env_root_pose() -> None:
     env_config = load_yaml("configs/envs/scene1.yaml")
     runtime_objects = runtime_objects_from_env_config(env_config)
-    rope_object = next(item for item in runtime_objects if item.runtime_handle == "rope")
+    rope_object = next(
+        item for item in runtime_objects if item.runtime_handle == "rope"
+    )
     object_profile = CapsuleRopeConfig.from_mapping(
         load_yaml(f"configs/objects/{rope_object.object_profile}.yaml")
     )
@@ -835,9 +838,7 @@ def test_env_profiles_define_robot_scene_instances() -> None:
         assert robots
         if "single" in robots:
             assert set(robots["single"]) <= allowed_keys
-            instance = RobotSceneInstanceConfig.from_mapping(
-                "single", robots["single"]
-            )
+            instance = RobotSceneInstanceConfig.from_mapping("single", robots["single"])
             assert instance.robot_profile
             assert len(instance.root_pose.xyz) == 3
             assert len(instance.root_pose.rpy) == 3
@@ -846,9 +847,7 @@ def test_env_profiles_define_robot_scene_instances() -> None:
             assert set(robots["dual"]) == {"left", "right"}
             for side, item in robots["dual"].items():
                 assert set(item) <= allowed_keys
-                instance = RobotSceneInstanceConfig.from_mapping(
-                    f"dual.{side}", item
-                )
+                instance = RobotSceneInstanceConfig.from_mapping(f"dual.{side}", item)
                 assert instance.robot_profile
                 assert len(instance.root_pose.xyz) == 3
                 assert len(instance.root_pose.rpy) == 3
@@ -864,9 +863,7 @@ def test_env_scene_robot_profiles_match_runtime_shapes() -> None:
     assert "robots" not in single_config
 
     dual_env_config = load_yaml("configs/envs/scene2.yaml")
-    dual_instances = dual_robot_scene_instances_from_env_config(
-        dual_env_config
-    )
+    dual_instances = dual_robot_scene_instances_from_env_config(dual_env_config)
     assert dual_instances["left"].robot_profile != dual_instances["right"].robot_profile
     for instance in dual_instances.values():
         side_config = load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
@@ -1199,19 +1196,24 @@ def test_solver_settings_keep_scene_and_robot_layers_separate() -> None:
     )
     assert arm_velocity_only is not None
     assert arm_velocity_only.solver_type is None
-    assert solver_iterations_for_prim_name(
-        "AR5V2_L_arm_link1", arm_velocity_only
-    ) == (None, 6, "arm")
-    assert solver_iterations_for_prim_name(
-        "L6V1_L_hand_base_link", arm_velocity_only
-    ) is None
+    assert solver_iterations_for_prim_name("AR5V2_L_arm_link1", arm_velocity_only) == (
+        None,
+        6,
+        "arm",
+    )
+    assert (
+        solver_iterations_for_prim_name("L6V1_L_hand_base_link", arm_velocity_only)
+        is None
+    )
 
 
 def test_env_solver_rejects_robot_iteration_fields() -> None:
     from linkerbot_sim.assets.solver_overrides import scene_solver_settings
 
     try:
-        scene_solver_settings({"solver": {"type": "TGS", "hand_position_iterations": 48}})
+        scene_solver_settings(
+            {"solver": {"type": "TGS", "hand_position_iterations": 48}}
+        )
     except ValueError as exc:
         assert "robot.physics.solver" in str(exc)
     else:

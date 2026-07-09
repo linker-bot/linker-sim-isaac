@@ -94,7 +94,9 @@ class CapsuleRopeConfig:
         """从 ``configs/objects/*.yaml`` 映射构造绳体运行时对象配置。"""
 
         if "object" not in data:
-            raise ValueError("Capsule rope config must contain top-level object section")
+            raise ValueError(
+                "Capsule rope config must contain top-level object section"
+            )
         if not isinstance(data["object"], Mapping):
             raise ValueError("object section must be a mapping")
         if "rope" in data:

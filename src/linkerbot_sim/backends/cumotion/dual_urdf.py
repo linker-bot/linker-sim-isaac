@@ -70,12 +70,8 @@ class DualUrdfGenerationConfig:
             parent_link=str(data.get("parent_link", cls.parent_link)),
             left_base_link=str(data.get("left_base_link", cls.left_base_link)),
             right_base_link=str(data.get("right_base_link", cls.right_base_link)),
-            left_mount_joint=str(
-                data.get("left_mount_joint", cls.left_mount_joint)
-            ),
-            right_mount_joint=str(
-                data.get("right_mount_joint", cls.right_mount_joint)
-            ),
+            left_mount_joint=str(data.get("left_mount_joint", cls.left_mount_joint)),
+            right_mount_joint=str(data.get("right_mount_joint", cls.right_mount_joint)),
         )
 
 
@@ -136,11 +132,13 @@ def prepare_cumotion_config_from_robot_config(
             output_path=generated_xrdf_path,
         )
     else:
-        generated_xrdf_path = repo_path(_required_value(
-            settings,
-            "xrdf_path",
-            section="cumotion",
-        ))
+        generated_xrdf_path = repo_path(
+            _required_value(
+                settings,
+                "xrdf_path",
+                section="cumotion",
+            )
+        )
 
     settings["xrdf_path"] = str(generated_xrdf_path)
     settings["urdf_path"] = str(generated_path)
@@ -213,7 +211,7 @@ def _required_root_pose(
 
 
 def dual_urdf_generation_config_from_robot_config(
-    robot_config: Mapping[str, object]
+    robot_config: Mapping[str, object],
 ) -> DualUrdfGenerationConfig | None:
     """从合并后的 robot config 中提取双臂 URDF/XRDF 生成配置。"""
 
@@ -238,7 +236,9 @@ def build_dual_arm_urdf_from_root_poses(
 
     _require_file(config.left_urdf_path, label="URDF")
     _require_file(config.right_urdf_path, label="URDF")
-    output_path = _cached_output_path(config, left_pose=left_pose, right_pose=right_pose)
+    output_path = _cached_output_path(
+        config, left_pose=left_pose, right_pose=right_pose
+    )
     if output_path.is_file():
         return output_path
 
@@ -501,7 +501,9 @@ def _dual_generation_config_from_side_mappings(
         right_urdf_path=repo_path(_side_required_value(right, "right", "urdf_path")),
         output_dir=repo_path(cumotion.get("output_dir", ".cache/cumotion")),
         robot_name=str(cumotion.get("robot_name", DualUrdfGenerationConfig.robot_name)),
-        parent_link=str(cumotion.get("parent_link", DualUrdfGenerationConfig.parent_link)),
+        parent_link=str(
+            cumotion.get("parent_link", DualUrdfGenerationConfig.parent_link)
+        ),
         left_base_link=str(
             cumotion.get("left_base_link", DualUrdfGenerationConfig.left_base_link)
         ),
@@ -512,7 +514,9 @@ def _dual_generation_config_from_side_mappings(
             cumotion.get("left_mount_joint", DualUrdfGenerationConfig.left_mount_joint)
         ),
         right_mount_joint=str(
-            cumotion.get("right_mount_joint", DualUrdfGenerationConfig.right_mount_joint)
+            cumotion.get(
+                "right_mount_joint", DualUrdfGenerationConfig.right_mount_joint
+            )
         ),
     )
 
@@ -640,9 +644,7 @@ def _merge_xrdf_documents(
 
     combined: dict[str, object] = {
         "format": left.get("format", right.get("format", "xrdf")),
-        "format_version": left.get(
-            "format_version", right.get("format_version", 2.0)
-        ),
+        "format_version": left.get("format_version", right.get("format_version", 2.0)),
         "default_joint_positions": _merge_default_joint_positions(left, right),
         "cspace": _merge_xrdf_cspace(left_cspace, right_cspace),
     }
@@ -775,9 +777,7 @@ def _merge_unique_sequences(left: list[object], right: list[object]) -> list[obj
     return merged
 
 
-def _side_required_value(
-    data: Mapping[str, object], side: str, key: str
-) -> object:
+def _side_required_value(data: Mapping[str, object], side: str, key: str) -> object:
     """读取 cumotion.<side> 下的必填字段。"""
 
     value = data.get(key)
@@ -786,9 +786,7 @@ def _side_required_value(
     return value
 
 
-def _required_value(
-    data: Mapping[str, object], key: str, *, section: str
-) -> object:
+def _required_value(data: Mapping[str, object], key: str, *, section: str) -> object:
     """读取必填字段，并把错误定位到 section.key。"""
 
     value = data.get(key)

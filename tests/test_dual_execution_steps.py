@@ -140,12 +140,10 @@ def test_dual_raw_command_sequence_repeats_targets_by_step_interval() -> None:
     assert step == 14
     assert runtime.simulation_world.step_calls == 4
     left_positions = [
-        targets.positions.tolist()
-        for targets in runtime.left.joint_controller.applied
+        targets.positions.tolist() for targets in runtime.left.joint_controller.applied
     ]
     right_positions = [
-        targets.positions.tolist()
-        for targets in runtime.right.joint_controller.applied
+        targets.positions.tolist() for targets in runtime.right.joint_controller.applied
     ]
     assert left_positions == [[0.1, 0.2], [0.1, 0.2], [0.3, 0.4], [0.3, 0.4]]
     assert right_positions == [[5.0, 6.0], [5.0, 6.0], [5.0, 6.0], [5.0, 6.0]]

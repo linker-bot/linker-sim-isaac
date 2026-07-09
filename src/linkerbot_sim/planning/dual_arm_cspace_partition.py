@@ -86,9 +86,7 @@ def split_dual_arm_trajectory_to_commands(
 ) -> tuple[JointTrajectory, JointTrajectory]:
     """把融合 14-DOF arm 轨迹拆成左右 controller command-space 轨迹。"""
 
-    left_arm = _arm_subtrajectory(
-        dual_arm_trajectory, partitions.left_indices, "left"
-    )
+    left_arm = _arm_subtrajectory(dual_arm_trajectory, partitions.left_indices, "left")
     right_arm = _arm_subtrajectory(
         dual_arm_trajectory, partitions.right_indices, "right"
     )

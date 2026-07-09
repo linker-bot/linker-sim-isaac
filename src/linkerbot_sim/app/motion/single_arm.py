@@ -50,7 +50,11 @@ from linkerbot_sim.execution.steps import (
     HoldCommandPositionTargetStep,
     SmoothCommandPositionTargetStep,
 )
-from linkerbot_sim.planning.requests import IKRequest, MotionRequest, SpecifiedPathRequest
+from linkerbot_sim.planning.requests import (
+    IKRequest,
+    MotionRequest,
+    SpecifiedPathRequest,
+)
 from linkerbot_sim.robots.classification import component_for_name
 from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
@@ -563,7 +567,9 @@ def _hand_target_command(
     """把手部目标写入单臂 command 向量，支持按关节名或按手部顺序输入。"""
 
     target = np.asarray(start_command, dtype=float).reshape(-1).copy()
-    command_names = tuple(str(name) for name in runtime.joint_controller.command_joint_names)
+    command_names = tuple(
+        str(name) for name in runtime.joint_controller.command_joint_names
+    )
     if target.size != len(command_names):
         raise ValueError(
             f"single command shape mismatch: {len(command_names)} names, "
@@ -616,7 +622,9 @@ def _raw_sequence_side_matrix(
 ) -> np.ndarray:
     """把单侧 raw sequence 展开成完整 command-space 矩阵。"""
 
-    command_names = tuple(str(name) for name in runtime.joint_controller.command_joint_names)
+    command_names = tuple(
+        str(name) for name in runtime.joint_controller.command_joint_names
+    )
     base = np.asarray(current_command, dtype=float).reshape(-1)
     if base.size != len(command_names):
         raise ValueError(
@@ -654,9 +662,7 @@ def _raw_mapping_sequence_matrix(
 
     if not positions:
         raise ValueError("single raw joint sequence mapping cannot be empty")
-    index_by_name = {
-        str(name): index for index, name in enumerate(command_joint_names)
-    }
+    index_by_name = {str(name): index for index, name in enumerate(command_joint_names)}
     sample_count: int | None = None
     columns: dict[int, np.ndarray] = {}
     for name, values in positions.items():

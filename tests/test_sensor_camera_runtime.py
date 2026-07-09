@@ -32,9 +32,7 @@ class FakeCamera:
     def initialize(self) -> None:
         self.calls.append(("initialize", None))
 
-    def set_clipping_range(
-        self, *, near_distance: float, far_distance: float
-    ) -> None:
+    def set_clipping_range(self, *, near_distance: float, far_distance: float) -> None:
         self.calls.append(("set_clipping_range", (near_distance, far_distance)))
 
     def set_focal_length(self, focal_length: float) -> None:

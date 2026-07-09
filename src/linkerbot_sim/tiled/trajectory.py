@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -42,7 +42,9 @@ class TiledTrajectoryOverlay:
         if any(index < 0 for index in indices):
             raise ValueError("overlay joint_indices cannot be negative")
         start = _overlay_matrix(self.start_positions, len(indices), "start_positions")
-        target = _overlay_matrix(self.target_positions, len(indices), "target_positions")
+        target = _overlay_matrix(
+            self.target_positions, len(indices), "target_positions"
+        )
         if start.shape[0] not in {1, target.shape[0]} and target.shape[0] != 1:
             raise ValueError("overlay start/target env dimensions are incompatible")
         if self.duration_s is not None and float(self.duration_s) < 0.0:
@@ -119,14 +121,14 @@ class _PlaybackOverlay:
             else np.asarray(start_positions, dtype=float).reshape(-1)
         )
         domain_duration = max(0.0, float(upper_s) - float(lower_s))
-        durations = np.where(np.isnan(self.durations_s), domain_duration, self.durations_s)
+        durations = np.where(
+            np.isnan(self.durations_s), domain_duration, self.durations_s
+        )
         elapsed = max(0.0, float(elapsed_s) - float(lower_s))
         alpha = np.ones_like(durations, dtype=float)
         positive = durations > 0.0
         alpha[positive] = np.clip(elapsed / durations[positive], 0.0, 1.0)
-        result[self.joint_indices] = (
-            start + alpha * (self.target_positions - start)
-        )
+        result[self.joint_indices] = start + alpha * (self.target_positions - start)
         return result
 
 
@@ -204,7 +206,9 @@ class _Playback:
 
         lower, upper = self.trajectory.domain()
         duration = max(0.0, float(upper) - float(lower))
-        progress = 1.0 if duration <= 0.0 else (self.elapsed_s - float(lower)) / duration
+        progress = (
+            1.0 if duration <= 0.0 else (self.elapsed_s - float(lower)) / duration
+        )
         return {
             "env_id": int(env_id),
             "request_id": self.request_id,
@@ -305,7 +309,9 @@ class TiledTrajectoryBuffer:
             if not sequence:
                 raise ValueError("trajectory playback sequence cannot be empty")
             if bool(append) and not bool(replace):
-                existing_queue = _drop_completed_tail(robot_playbacks.get(int(env_id), []))
+                existing_queue = _drop_completed_tail(
+                    robot_playbacks.get(int(env_id), [])
+                )
                 robot_playbacks[int(env_id)] = existing_queue + sequence
             else:
                 robot_playbacks[int(env_id)] = sequence
@@ -320,14 +326,10 @@ class TiledTrajectoryBuffer:
         """清理轨迹缓冲，返回每个机器人实际清理的 env id。"""
 
         selected = (
-            None
-            if env_ids is None
-            else _normalize_env_ids(env_ids, self.num_envs)
+            None if env_ids is None else _normalize_env_ids(env_ids, self.num_envs)
         )
         robots = (
-            tuple(self._playbacks)
-            if robot_name is None
-            else (_robot_name(robot_name),)
+            tuple(self._playbacks) if robot_name is None else (_robot_name(robot_name),)
         )
         cleared: dict[str, list[int]] = {}
         for robot in robots:
@@ -337,7 +339,9 @@ class TiledTrajectoryBuffer:
             clear_ids = (
                 tuple(playbacks)
                 if selected is None
-                else tuple(int(env_id) for env_id in selected if int(env_id) in playbacks)
+                else tuple(
+                    int(env_id) for env_id in selected if int(env_id) in playbacks
+                )
             )
             for env_id in clear_ids:
                 playbacks.pop(int(env_id), None)
@@ -416,12 +420,12 @@ class TiledTrajectoryBuffer:
         selected = (
             None
             if env_ids is None
-            else set(int(env_id) for env_id in _normalize_env_ids(env_ids, self.num_envs))
+            else set(
+                int(env_id) for env_id in _normalize_env_ids(env_ids, self.num_envs)
+            )
         )
         robots = (
-            tuple(self._playbacks)
-            if robot_name is None
-            else (_robot_name(robot_name),)
+            tuple(self._playbacks) if robot_name is None else (_robot_name(robot_name),)
         )
         payload: dict[str, object] = {
             "num_envs": self.num_envs,
@@ -468,7 +472,9 @@ def _robot_name(value: str) -> str:
     return name
 
 
-def _normalize_env_ids(env_ids: Sequence[int] | np.ndarray, num_envs: int) -> np.ndarray:
+def _normalize_env_ids(
+    env_ids: Sequence[int] | np.ndarray, num_envs: int
+) -> np.ndarray:
     """把 env_ids 规范化为一维唯一 int 数组。"""
 
     array = np.asarray(env_ids, dtype=int)
@@ -697,7 +703,9 @@ def _stage_playback(
     )
     if overlay is None:
         return None
-    duration_s = float(np.nanmax(overlay.durations_s)) if overlay.durations_s.size else 0.0
+    duration_s = (
+        float(np.nanmax(overlay.durations_s)) if overlay.durations_s.size else 0.0
+    )
     if not np.isfinite(duration_s) or duration_s <= 0.0:
         times = np.asarray([0.0], dtype=float)
         positions = cursor.reshape(1, -1)
@@ -742,7 +750,9 @@ def _playback_overlay_for_timing(
         indices = tuple(int(index) for index in overlay.joint_indices)
         duplicate = [index for index in indices if index in seen]
         if duplicate:
-            raise ValueError(f"overlay joint_indices duplicated across overlays: {duplicate}")
+            raise ValueError(
+                f"overlay joint_indices duplicated across overlays: {duplicate}"
+            )
         seen.update(indices)
         target = _overlay_rows(overlay.target_positions, env_count, "target_positions")
         merged_indices.extend(indices)

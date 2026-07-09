@@ -363,11 +363,7 @@ class RobotPhysxOverrides:
             label,
         )
         common = RobotPhysxComponentOverride.from_mapping(
-            {
-                key: data[key]
-                for key in ("material", "rigid_body")
-                if key in data
-            },
+            {key: data[key] for key in ("material", "rigid_body") if key in data},
             label=label,
         )
         default = common
@@ -599,7 +595,9 @@ def _controlled_joints_from_mapping(data: Mapping[str, object]) -> tuple[str, ..
     return joints
 
 
-def _vec3_from_mapping(data: Mapping[str, object], key: str) -> tuple[float, float, float]:
+def _vec3_from_mapping(
+    data: Mapping[str, object], key: str
+) -> tuple[float, float, float]:
     """从 mapping 中读取三维向量字段；缺省为零向量。"""
 
     value = data.get(key, (0.0, 0.0, 0.0))
@@ -753,9 +751,7 @@ def apply_mjcf_fixed_root_joint_pose(
     _apply_root_pose_to_mjcf_fixed_root_joints(stage, root_path, pose)
 
 
-def mjcf_fixed_root_joint_paths_without_body0(
-    stage, root_path: str
-) -> tuple[str, ...]:
+def mjcf_fixed_root_joint_paths_without_body0(stage, root_path: str) -> tuple[str, ...]:
     """返回 MJCF fixed-base world anchor joints。
 
     这类 joint 的 ``physics:body0`` 为空，单 env 下可以代表“固定到 world”。但 PhysX
@@ -805,6 +801,7 @@ def _apply_root_pose_to_mjcf_fixed_root_joints(
         joint = UsdPhysics.Joint(prim)
         joint.CreateLocalPos0Attr().Set(world_anchor_pos)
         joint.CreateLocalRot0Attr().Set(world_anchor_rot)
+
 
 def configure_mjcf_import(
     mjcf_path: Path,

@@ -41,7 +41,10 @@ class CuMotionJointPlannerBackend:
         """逐 env 调用独立 cuMotion planner，并重采样到共同时间网格。"""
 
         try:
-            from linkerbot_sim.planning.requests import MotionRequest, SpecifiedPathRequest
+            from linkerbot_sim.planning.requests import (
+                MotionRequest,
+                SpecifiedPathRequest,
+            )
         except Exception as exc:  # pragma: no cover - 只有缺依赖环境会进入
             return TiledPlanningResult.failed(
                 request,
@@ -225,7 +228,9 @@ def _plan_env_segments(
             row_times.append(elapsed_s + local_times)
             row_positions.append(local_positions)
         elapsed_s += segment.duration_s
-        current_q = np.asarray(trajectory.eval(float(local_times[-1])), dtype=float).reshape(-1)
+        current_q = np.asarray(
+            trajectory.eval(float(local_times[-1])), dtype=float
+        ).reshape(-1)
     return np.concatenate(row_times, axis=0), np.concatenate(row_positions, axis=0)
 
 

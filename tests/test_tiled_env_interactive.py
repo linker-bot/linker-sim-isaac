@@ -12,9 +12,13 @@ import pytest
 
 from linkerbot_sim.app.interactive import tiled as tiled_interactive
 from linkerbot_sim.app.interactive.tiled import command_utils as tiled_command_utils
-from linkerbot_sim.app.interactive.tiled.isaac_runtime import IsaacTiledInteractiveRuntime
+from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
+    IsaacTiledInteractiveRuntime,
+)
 from linkerbot_sim.app.interactive.tiled import isaac_ik_solver as tiled_isaac_ik_solver
-from linkerbot_sim.app.interactive.tiled import telemetry_publish as tiled_telemetry_publish
+from linkerbot_sim.app.interactive.tiled import (
+    telemetry_publish as tiled_telemetry_publish,
+)
 from linkerbot_sim.app.interactive.tiled import transport as tiled_transport
 from tests.fakes.tiled_runtime_fake import (
     DebugBatchedIKSolver,
@@ -30,7 +34,9 @@ from linkerbot_sim.tiled import TiledTrajectoryBuffer
 from linkerbot_sim.utils.rotations import matrix_to_quat_wxyz
 
 
-SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "tiled_env_interactive.py"
+SCRIPT_PATH = (
+    Path(__file__).resolve().parents[1] / "scripts" / "tiled_env_interactive.py"
+)
 
 
 def load_tiled_interactive_module():
@@ -515,37 +521,51 @@ def test_interactive_loop_does_not_idle_gui_runtime_without_hold() -> None:
 
 
 def test_stdin_eof_quit_policy_keeps_tcp_and_telemetry_alive() -> None:
-    assert tiled_transport._quit_on_stdin_eof(
-        hold=False,
-        tcp_jsonl_port=None,
-        telemetry=None,
-    ) is True
-    assert tiled_transport._quit_on_stdin_eof(
-        hold=True,
-        tcp_jsonl_port=None,
-        telemetry=None,
-    ) is False
-    assert tiled_transport._quit_on_stdin_eof(
-        hold=False,
-        tcp_jsonl_port=8765,
-        telemetry=None,
-    ) is False
-    assert tiled_transport._quit_on_stdin_eof(
-        hold=False,
-        tcp_jsonl_port=None,
-        telemetry=object(),
-    ) is False
+    assert (
+        tiled_transport._quit_on_stdin_eof(
+            hold=False,
+            tcp_jsonl_port=None,
+            telemetry=None,
+        )
+        is True
+    )
+    assert (
+        tiled_transport._quit_on_stdin_eof(
+            hold=True,
+            tcp_jsonl_port=None,
+            telemetry=None,
+        )
+        is False
+    )
+    assert (
+        tiled_transport._quit_on_stdin_eof(
+            hold=False,
+            tcp_jsonl_port=8765,
+            telemetry=None,
+        )
+        is False
+    )
+    assert (
+        tiled_transport._quit_on_stdin_eof(
+            hold=False,
+            tcp_jsonl_port=None,
+            telemetry=object(),
+        )
+        is False
+    )
 
 
 def test_publish_state_telemetry_samples_selected_envs() -> None:
-    module = load_tiled_interactive_module()
+    load_tiled_interactive_module()
     runtime = make_runtime()
     published = []
 
     class FakeTelemetry:
         config = SimpleNamespace(selected_env_ids=(1,))
 
-        def publish_interactive_state(self, state_response, *, event, trigger_response=None):
+        def publish_interactive_state(
+            self, state_response, *, event, trigger_response=None
+        ):
             published.append(
                 {
                     "state_response": state_response,
@@ -564,7 +584,7 @@ def test_publish_state_telemetry_samples_selected_envs() -> None:
 
 
 def test_publish_response_telemetry_resamples_configured_envs() -> None:
-    module = load_tiled_interactive_module()
+    load_tiled_interactive_module()
     runtime = make_runtime()
     runtime.current_positions[:] = [[1.0, 0.0, 0.0], [9.0, 0.0, 0.0]]
     published = []
@@ -572,7 +592,9 @@ def test_publish_response_telemetry_resamples_configured_envs() -> None:
     class FakeTelemetry:
         config = SimpleNamespace(selected_env_ids=(0,))
 
-        def publish_interactive_state(self, state_response, *, event, trigger_response=None):
+        def publish_interactive_state(
+            self, state_response, *, event, trigger_response=None
+        ):
             published.append(
                 {
                     "state_response": state_response,
@@ -598,7 +620,9 @@ def test_publish_response_telemetry_resamples_configured_envs() -> None:
     ]
 
 
-def test_restore_tiled_object_pose_snapshot_uses_selected_env_paths(monkeypatch) -> None:
+def test_restore_tiled_object_pose_snapshot_uses_selected_env_paths(
+    monkeypatch,
+) -> None:
     from linkerbot_sim.app.interactive.tiled.object_states import (
         _restore_tiled_object_pose_snapshot,
     )
@@ -606,7 +630,9 @@ def test_restore_tiled_object_pose_snapshot_uses_selected_env_paths(monkeypatch)
     calls = []
 
     def fake_apply(stage, prim_path, position, orientation):
-        calls.append((prim_path, np.asarray(position).tolist(), np.asarray(orientation).tolist()))
+        calls.append(
+            (prim_path, np.asarray(position).tolist(), np.asarray(orientation).tolist())
+        )
         return True
 
     monkeypatch.setattr(
@@ -649,7 +675,9 @@ def test_restore_tiled_object_pose_snapshot_uses_selected_env_paths(monkeypatch)
 
 
 def test_read_tiled_object_states_prefers_rigid_view_world_pose() -> None:
-    from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        _read_tiled_object_states,
+    )
 
     class FakeRigidView:
         def get_world_poses(self, *, indices):
@@ -682,7 +710,9 @@ def test_read_tiled_object_states_prefers_rigid_view_world_pose() -> None:
     }
 
 
-def test_restore_tiled_object_pose_snapshot_uses_rigid_view_when_available(monkeypatch) -> None:
+def test_restore_tiled_object_pose_snapshot_uses_rigid_view_when_available(
+    monkeypatch,
+) -> None:
     from linkerbot_sim.app.interactive.tiled.object_states import (
         _restore_tiled_object_pose_snapshot,
     )
@@ -759,7 +789,9 @@ def test_restore_tiled_object_pose_snapshot_uses_rigid_view_when_available(monke
 
 
 def test_read_tiled_object_states_raises_when_rigid_view_fails() -> None:
-    from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        _read_tiled_object_states,
+    )
 
     class FailingRigidView:
         def get_world_poses(self, *, indices):
@@ -780,7 +812,9 @@ def test_read_tiled_object_states_raises_when_rigid_view_fails() -> None:
         )
 
 
-def test_restore_tiled_object_pose_snapshot_raises_when_rigid_view_fails(monkeypatch) -> None:
+def test_restore_tiled_object_pose_snapshot_raises_when_rigid_view_fails(
+    monkeypatch,
+) -> None:
     from linkerbot_sim.app.interactive.tiled.object_states import (
         _restore_tiled_object_pose_snapshot,
     )
@@ -972,7 +1006,9 @@ def test_tiled_dynamic_chain_object_view_captures_and_restores_child_bodies(
     ]
 
 
-def test_create_tiled_object_pose_views_raises_when_dynamic_view_fails(monkeypatch) -> None:
+def test_create_tiled_object_pose_views_raises_when_dynamic_view_fails(
+    monkeypatch,
+) -> None:
     from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
         _create_tiled_object_pose_views,
     )
@@ -993,7 +1029,9 @@ def test_create_tiled_object_pose_views_raises_when_dynamic_view_fails(monkeypat
     scene = SimpleNamespace(
         object_prim_paths={"Tblock": ("/World/envs/env_0/TBlock",)},
         object_handles=(
-            SimpleNamespace(name="Tblock", kind="rigid", model=SimpleNamespace(static=False)),
+            SimpleNamespace(
+                name="Tblock", kind="rigid", model=SimpleNamespace(static=False)
+            ),
         ),
     )
 
@@ -1001,7 +1039,9 @@ def test_create_tiled_object_pose_views_raises_when_dynamic_view_fails(monkeypat
         _create_tiled_object_pose_views(scene)
 
 
-def test_create_tiled_object_pose_views_creates_dynamic_chain_body_view(monkeypatch) -> None:
+def test_create_tiled_object_pose_views_creates_dynamic_chain_body_view(
+    monkeypatch,
+) -> None:
     from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
         _create_tiled_object_pose_views,
     )
@@ -1100,7 +1140,9 @@ def test_create_tiled_object_pose_views_creates_dynamic_chain_body_view(monkeypa
     ]
 
 
-def test_create_tiled_object_pose_views_raises_when_dynamic_chain_has_no_bodies() -> None:
+def test_create_tiled_object_pose_views_raises_when_dynamic_chain_has_no_bodies() -> (
+    None
+):
     from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
         _create_tiled_object_pose_views,
     )
@@ -1389,31 +1431,31 @@ def test_load_trajectory_accepts_before_and_after_hand_overlays() -> None:
             "env_ids": [0, 1],
             "times": [0.0, 0.1],
             "positions": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
-                "joint_names": ["joint_0", "joint_1", "joint_2"],
-                "overlays": [
-                    {
-                        "timing": "before",
-                        "left_hand": {
-                            "duration_s": 0.1,
-                            "joint_positions": {"joint_2": 0.2},
-                        },
+            "joint_names": ["joint_0", "joint_1", "joint_2"],
+            "overlays": [
+                {
+                    "timing": "before",
+                    "left_hand": {
+                        "duration_s": 0.1,
+                        "joint_positions": {"joint_2": 0.2},
                     },
-                    {
-                        "timing": "sync",
-                        "left_hand": {
-                            "duration_s": 0.1,
-                            "joint_positions": {"joint_2": 0.8},
-                        },
+                },
+                {
+                    "timing": "sync",
+                    "left_hand": {
+                        "duration_s": 0.1,
+                        "joint_positions": {"joint_2": 0.8},
                     },
-                    {
-                        "timing": "after",
-                        "left_hand": {
-                            "duration_s": 0.1,
-                            "joint_positions": {"joint_2": 0.0},
-                        },
+                },
+                {
+                    "timing": "after",
+                    "left_hand": {
+                        "duration_s": 0.1,
+                        "joint_positions": {"joint_2": 0.0},
                     },
-                ],
-            },
+                },
+            ],
+        },
         runtime,
     )
     before = module.handle_tiled_interactive_message(
@@ -1870,12 +1912,20 @@ def test_isaac_runtime_joint_action_applies_interpolated_tick_targets(
 
         def get_joint_positions(self, *, indices=None, joint_indices=None):
             rows = np.arange(2) if indices is None else np.asarray(indices, dtype=int)
-            cols = np.arange(2) if joint_indices is None else np.asarray(joint_indices, dtype=int)
+            cols = (
+                np.arange(2)
+                if joint_indices is None
+                else np.asarray(joint_indices, dtype=int)
+            )
             return self.positions[np.ix_(rows, cols)]
 
         def get_joint_velocities(self, *, indices=None, joint_indices=None):
             rows = np.arange(2) if indices is None else np.asarray(indices, dtype=int)
-            cols = np.arange(2) if joint_indices is None else np.asarray(joint_indices, dtype=int)
+            cols = (
+                np.arange(2)
+                if joint_indices is None
+                else np.asarray(joint_indices, dtype=int)
+            )
             return self.velocities[np.ix_(rows, cols)]
 
     class FakeWorld:
@@ -1974,7 +2024,9 @@ def test_isaac_runtime_joint_action_applies_interpolated_tick_targets(
     np.testing.assert_allclose(applied[1], [[1.0, 2.0], [7.0, 8.0]])
 
 
-def test_isaac_runtime_requires_message_robot_selection_for_multi_robot_actions() -> None:
+def test_isaac_runtime_requires_message_robot_selection_for_multi_robot_actions() -> (
+    None
+):
     module = load_tiled_interactive_module()
     from linkerbot_sim.app.interactive.tiled.protocol import ALL_ROBOTS
 

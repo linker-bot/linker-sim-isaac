@@ -74,8 +74,8 @@ class _FakeTrajectory:
 class _FakeOptimizerResults:
     def __init__(self, *, status="SUCCESS", trajectory=None, target_index=0) -> None:
         self._status = status
-        self._trajectory = trajectory if trajectory is not None else _FakeTrajectory(
-            "optimizer"
+        self._trajectory = (
+            trajectory if trajectory is not None else _FakeTrajectory("optimizer")
         )
         self._target_index = target_index
 
@@ -418,9 +418,7 @@ class _FakeCumotion:
     def create_default_trajectory_optimizer_config(
         self, robot_description, frame_name, world_view
     ):
-        self.optimizer_config_calls.append(
-            (robot_description, frame_name, world_view)
-        )
+        self.optimizer_config_calls.append((robot_description, frame_name, world_view))
         return _FakeOptimizerConfig(frame_name=frame_name, world_view=world_view)
 
     def create_trajectory_optimizer_config_from_file(
@@ -653,10 +651,10 @@ def test_trajectory_optimizer_failure_returns_failure_directly() -> None:
     optimizer = _FakeOptimizer(
         _FakeOptimizerResults(status="TRAJECTORY_OPTIMIZATION_FAILURE")
     )
-    graph_planner = _FakeGraphPlanner(
-        _FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]])
+    graph_planner = _FakeGraphPlanner(_FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]]))
+    context = _FakeContext(
+        _FakeCumotion(graph_planner=graph_planner, optimizer=optimizer)
     )
-    context = _FakeContext(_FakeCumotion(graph_planner=graph_planner, optimizer=optimizer))
 
     planner = CuMotionMotionPlanner(context)
     result = planner.plan(
@@ -736,7 +734,9 @@ def test_graph_search_uses_graph_config_and_trajectory_generation() -> None:
     assert fake_planner.config.params == [("step_size", 0.05)]
     np.testing.assert_allclose(fake_cumotion.generated_waypoints[-1], [1.0, 1.0])
     assert fake_cumotion.generated_interpolation_mode == "cubic"
-    np.testing.assert_allclose(fake_cumotion.trajectory_position_limits[0], [-1.0, -2.0])
+    np.testing.assert_allclose(
+        fake_cumotion.trajectory_position_limits[0], [-1.0, -2.0]
+    )
     np.testing.assert_allclose(fake_cumotion.trajectory_position_limits[1], [1.0, 2.0])
     np.testing.assert_allclose(fake_cumotion.trajectory_velocity_limits, [0.5, 0.6])
     np.testing.assert_allclose(fake_cumotion.trajectory_acceleration_limits, [1.5, 1.6])
@@ -751,9 +751,7 @@ def test_graph_search_uses_graph_config_and_trajectory_generation() -> None:
 
 
 def test_graph_search_can_ignore_environment_obstacles() -> None:
-    fake_planner = _FakeGraphPlanner(
-        _FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]])
-    )
+    fake_planner = _FakeGraphPlanner(_FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]]))
     fake_cumotion = _FakeCumotion(graph_planner=fake_planner)
     context = _FakeContext(fake_cumotion)
     config = _graph_config(
@@ -776,9 +774,7 @@ def test_graph_search_can_ignore_environment_obstacles() -> None:
 
 
 def test_graph_search_plans_to_translation_and_pose_targets() -> None:
-    fake_planner = _FakeGraphPlanner(
-        _FakeGraphResults(path=[[0.0, 0.0], [0.1, 0.2]])
-    )
+    fake_planner = _FakeGraphPlanner(_FakeGraphResults(path=[[0.0, 0.0], [0.1, 0.2]]))
     context = _FakeContext(_FakeCumotion(graph_planner=fake_planner))
     planner = CuMotionMotionPlanner(context, config=_graph_config())
 
@@ -791,9 +787,7 @@ def test_graph_search_plans_to_translation_and_pose_targets() -> None:
     )
 
     assert result.success
-    current, translation, generate_interpolated_path = (
-        fake_planner.translation_calls[0]
-    )
+    current, translation, generate_interpolated_path = fake_planner.translation_calls[0]
     np.testing.assert_allclose(current, [0.0, 0.0])
     np.testing.assert_allclose(translation, [0.1, 0.2, 0.3])
     assert generate_interpolated_path is True
@@ -845,9 +839,7 @@ def test_trajectory_generation_enabled_field_is_rejected() -> None:
 
 
 def test_trajectory_generation_rejects_unknown_limit_keys() -> None:
-    fake_planner = _FakeGraphPlanner(
-        _FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]])
-    )
+    fake_planner = _FakeGraphPlanner(_FakeGraphResults(path=[[0.0, 0.0], [1.0, 1.0]]))
     context = _FakeContext(_FakeCumotion(graph_planner=fake_planner))
     config = _graph_config(
         trajectory_generation=TrajectoryGenerationConfig(

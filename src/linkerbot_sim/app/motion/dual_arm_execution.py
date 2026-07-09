@@ -676,9 +676,7 @@ def _raw_mapping_sequence_matrix(
 
     if not positions:
         raise ValueError(f"{label} raw joint sequence mapping cannot be empty")
-    index_by_name = {
-        str(name): index for index, name in enumerate(command_joint_names)
-    }
+    index_by_name = {str(name): index for index, name in enumerate(command_joint_names)}
     sample_count: int | None = None
     columns: dict[int, np.ndarray] = {}
     for name, values in positions.items():

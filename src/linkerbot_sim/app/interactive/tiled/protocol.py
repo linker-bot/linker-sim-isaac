@@ -6,7 +6,10 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from linkerbot_sim.app.interactive.tiled.command_utils import _optional_int, _optional_str
+from linkerbot_sim.app.interactive.tiled.command_utils import (
+    _optional_int,
+    _optional_str,
+)
 from linkerbot_sim.tiled import SUPPORTED_COMMAND_KINDS, TiledCommandAction
 
 
@@ -379,7 +382,9 @@ def _action_message(message: Mapping[str, object]) -> Mapping[str, object]:
         if action is None and isinstance(message.get("kind"), str):
             return message
         if not isinstance(action, Mapping):
-            raise ValueError("step.action must be a JSON object or step.kind must be set")
+            raise ValueError(
+                "step.action must be a JSON object or step.kind must be set"
+            )
         return action
     if message_type in SUPPORTED_COMMAND_KINDS:
         return {**dict(message), "kind": message_type}
@@ -456,13 +461,17 @@ def _delta_pose_values(message: Mapping[str, object]) -> np.ndarray:
         raise ValueError("ee_delta_pose.offset must have shape (N, 3)")
     if "target_orientation_quat_wxyz" in message:
         orientation = np.asarray(message["target_orientation_quat_wxyz"], dtype=float)
-        orientation = orientation.reshape(1, -1) if orientation.ndim == 1 else orientation
+        orientation = (
+            orientation.reshape(1, -1) if orientation.ndim == 1 else orientation
+        )
         if orientation.ndim != 2 or orientation.shape[1] != 4:
             raise ValueError("target_orientation_quat_wxyz must have shape (N, 4)")
         if orientation.shape[0] == 1 and offset.shape[0] != 1:
             orientation = np.repeat(orientation, offset.shape[0], axis=0)
         if orientation.shape[0] != offset.shape[0]:
-            raise ValueError("offset and target orientation first dimensions must match")
+            raise ValueError(
+                "offset and target orientation first dimensions must match"
+            )
         return np.concatenate([offset, orientation], axis=1)
     if "delta_rotvec" in message:
         rotvec = np.asarray(message["delta_rotvec"], dtype=float)

@@ -45,7 +45,9 @@ class BatchedIKResult:
             raise ValueError("BatchedIKResult.position_error must have shape (N,)")
         orientation_error = None
         if self.orientation_error is not None:
-            orientation_error = np.asarray(self.orientation_error, dtype=float).reshape(-1)
+            orientation_error = np.asarray(self.orientation_error, dtype=float).reshape(
+                -1
+            )
             if orientation_error.shape != (q.shape[0],):
                 raise ValueError(
                     "BatchedIKResult.orientation_error must have shape (N,)"
@@ -88,7 +90,5 @@ def apply_ik_failure_fallback(
 
     fallback = np.asarray(fallback_joint_positions, dtype=float)
     if fallback.shape != result.joint_positions.shape:
-        raise ValueError(
-            "fallback_joint_positions must match IK joint_positions shape"
-        )
+        raise ValueError("fallback_joint_positions must match IK joint_positions shape")
     return np.where(result.success[:, None], result.joint_positions, fallback)

@@ -86,7 +86,9 @@ def write_tcp_urdf_with_frames(
             )
         joint_name = f"{tcp.frame_name}_joint"
         if joint_name in joint_names:
-            raise ValueError(f"TCP joint {joint_name!r} already exists in {source_path}")
+            raise ValueError(
+                f"TCP joint {joint_name!r} already exists in {source_path}"
+            )
         ET.SubElement(root, "link", {"name": tcp.frame_name})
         tcp_joint = ET.SubElement(root, "joint", {"name": joint_name, "type": "fixed"})
         ET.SubElement(tcp_joint, "parent", {"link": tcp.parent_frame})

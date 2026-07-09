@@ -7,7 +7,11 @@ import numpy as np
 
 import linkerbot_sim.tiled as tiled
 from linkerbot_sim.backends.cumotion import CuMotionJointPlannerBackend
-from linkerbot_sim.planning.requests import SpecifiedPathRequest, TaskSpacePath, TcpLineSegment
+from linkerbot_sim.planning.requests import (
+    SpecifiedPathRequest,
+    TaskSpacePath,
+    TcpLineSegment,
+)
 from linkerbot_sim.planning.results import MotionResult
 from linkerbot_sim.tiled.planner_manager import (
     LinearJointPlannerBackend,
@@ -188,7 +192,9 @@ def test_cumotion_tiled_backend_accepts_specified_path_segments() -> None:
             TiledPlanningSegment(
                 kind="task_space_line",
                 path=TaskSpacePath(
-                    segments=(TcpLineSegment(target_offset=np.asarray([0.0, 0.0, 0.1])),)
+                    segments=(
+                        TcpLineSegment(target_offset=np.asarray([0.0, 0.0, 0.1])),
+                    )
                 ),
                 tcp_frame_name="tool",
                 duration_s=0.1,
@@ -218,4 +224,6 @@ def test_removed_tiled_interactive_planning_import_path_is_not_available() -> No
         importlib.import_module("linkerbot_sim.tiled.interactive_planning")
     except ModuleNotFoundError:
         return
-    raise AssertionError("old tiled.interactive_planning import path is still available")
+    raise AssertionError(
+        "old tiled.interactive_planning import path is still available"
+    )

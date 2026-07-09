@@ -71,7 +71,9 @@ def load_env_profile_directory(profile_dir: Path) -> dict[str, Any]:
 
     base_path = profile_dir / "base.yaml"
     if not base_path.is_file():
-        raise FileNotFoundError(f"Env profile directory missing base.yaml: {profile_dir}")
+        raise FileNotFoundError(
+            f"Env profile directory missing base.yaml: {profile_dir}"
+        )
     base = load_yaml(base_path)
     tiled = base.get("tiled")
     if not isinstance(tiled, dict):
@@ -98,7 +100,9 @@ def load_env_profile_directory(profile_dir: Path) -> dict[str, Any]:
         "per_env": sorted(per_env_items, key=lambda item: int(item["env_id"])),
     }
     if per_env_items and "num_envs" not in tiled:
-        tiled_overlay["num_envs"] = max(int(item["env_id"]) for item in per_env_items) + 1
+        tiled_overlay["num_envs"] = (
+            max(int(item["env_id"]) for item in per_env_items) + 1
+        )
     return deep_merge(base, {"tiled": tiled_overlay})
 
 
@@ -138,7 +142,11 @@ def _relative_dir_name(value: object, *, label: str) -> str:
         raise ValueError(f"{label} must be a non-empty string")
     normalized = value.replace("\\", "/")
     parts = tuple(part for part in normalized.split("/") if part)
-    if normalized.startswith("/") or not parts or any(part in {".", ".."} for part in parts):
+    if (
+        normalized.startswith("/")
+        or not parts
+        or any(part in {".", ".."} for part in parts)
+    ):
         raise ValueError(f"{label} must be a relative directory")
     return "/".join(parts)
 

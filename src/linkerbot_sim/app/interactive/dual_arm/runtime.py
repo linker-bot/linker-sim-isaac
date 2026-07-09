@@ -151,7 +151,9 @@ def run_interactive_dual_arm_motion(
                             break
                     session.step = step
                     continue
-                print(f"DUAL_ARM_INTERACTIVE_RUNNING id={queued.command_id}", flush=True)
+                print(
+                    f"DUAL_ARM_INTERACTIVE_RUNNING id={queued.command_id}", flush=True
+                )
                 try:
                     if queued.moves:
                         step = session.execute_moves(

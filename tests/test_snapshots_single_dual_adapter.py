@@ -132,8 +132,12 @@ def test_dual_snapshot_roundtrip_restores_both_sides() -> None:
 
     assert result.accepted
     assert result.robots == ("left", "right")
-    np.testing.assert_allclose(target.execution.left.articulation.positions, [0.1, 9.0, 0.2])
-    np.testing.assert_allclose(target.execution.right.articulation.positions, [0.4, 8.0, 0.5])
+    np.testing.assert_allclose(
+        target.execution.left.articulation.positions, [0.1, 9.0, 0.2]
+    )
+    np.testing.assert_allclose(
+        target.execution.right.articulation.positions, [0.4, 8.0, 0.5]
+    )
 
 
 def test_dual_side_snapshot_can_restore_single_with_robot_map() -> None:

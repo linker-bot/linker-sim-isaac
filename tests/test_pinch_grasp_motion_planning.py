@@ -154,7 +154,9 @@ def test_build_planned_joint_motion_trajectory_uses_cumotion_time_parameterizati
     )
     midpoint = len(trajectory) // 2
     time_s = trajectory.times[midpoint]
-    np.testing.assert_allclose(trajectory.positions[midpoint, [0, 2]], [time_s, -time_s])
+    np.testing.assert_allclose(
+        trajectory.positions[midpoint, [0, 2]], [time_s, -time_s]
+    )
     np.testing.assert_allclose(trajectory.positions[midpoint, 1], 2.0 + 2.0 * time_s)
     # 轨迹时长由 cuMotion 自身决定，项目侧不再按 requested duration 缩放导数。
     np.testing.assert_allclose(trajectory.velocities[midpoint, [0, 2]], [1.0, -1.0])
@@ -196,9 +198,7 @@ def test_build_specified_tcp_line_trajectory_uses_task_space_request() -> None:
     np.testing.assert_allclose(
         request.path.segments[0].target_position, [0.1, 0.2, 0.3]
     )
-    np.testing.assert_allclose(
-        trajectory.positions[-1, [0, 2]], planner.path[-1]
-    )
+    np.testing.assert_allclose(trajectory.positions[-1, [0, 2]], planner.path[-1])
     np.testing.assert_allclose(trajectory.positions[:, 1], 9.0)
     np.testing.assert_allclose(trajectory.times[[0, -1]], [0.01, 1.0])
     assert trajectory.phases == ("approach_box",) * len(trajectory)

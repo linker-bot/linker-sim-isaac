@@ -37,9 +37,7 @@ def test_parse_interactive_ik_pose_with_hand_overlay() -> None:
                 {
                     "timing": "sync",
                     "left_hand": {
-                        "joint_positions": {
-                            "L6V1_L_hand_index_mcp_pitch": 0.7
-                        }
+                        "joint_positions": {"L6V1_L_hand_index_mcp_pitch": 0.7}
                     },
                 }
             ],

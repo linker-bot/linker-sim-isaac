@@ -7,8 +7,13 @@ import queue
 import socketserver
 import sys
 
-from linkerbot_sim.app.interactive.tiled.isaac_runtime import IsaacTiledInteractiveRuntime
-from linkerbot_sim.app.interactive.tiled.telemetry_publish import _create_telemetry, _runtime_num_envs
+from linkerbot_sim.app.interactive.tiled.isaac_runtime import (
+    IsaacTiledInteractiveRuntime,
+)
+from linkerbot_sim.app.interactive.tiled.telemetry_publish import (
+    _create_telemetry,
+    _runtime_num_envs,
+)
 from linkerbot_sim.app.interactive.tiled.transport import (
     _InteractiveControl,
     _InteractiveRequest,
@@ -139,7 +144,9 @@ def main() -> None:
         max_completed_results=args.max_completed_results,
     )
     telemetry = _create_telemetry(args, num_envs=_runtime_num_envs(runtime))
-    request_queue: queue.Queue[_InteractiveRequest | _InteractiveControl] = queue.Queue()
+    request_queue: queue.Queue[_InteractiveRequest | _InteractiveControl] = (
+        queue.Queue()
+    )
     server: socketserver.ThreadingTCPServer | None = None
     try:
         if args.tcp_jsonl_port is not None:

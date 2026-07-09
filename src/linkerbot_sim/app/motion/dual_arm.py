@@ -78,7 +78,11 @@ from linkerbot_sim.planning.dual_arm_cspace_partition import (
     DualArmJointPartitions,
     selected_side_goal,
 )
-from linkerbot_sim.planning.requests import IKRequest, MotionRequest, SpecifiedPathRequest
+from linkerbot_sim.planning.requests import (
+    IKRequest,
+    MotionRequest,
+    SpecifiedPathRequest,
+)
 
 
 DEFAULT_HOLD_REFRESH_DURATION_S = 0.25
@@ -170,9 +174,7 @@ class DualArmCuMotionExecutionSession:
         )
         cumotion_config = robot_cumotion_config(
             robot_config,
-            dual_root_poses=dual_robot_root_poses_from_env_config(
-                runtime.env_config
-            ),
+            dual_root_poses=dual_robot_root_poses_from_env_config(runtime.env_config),
         )
         self.motion_planner_config = motion_planner_config_from_profile(
             cumotion_profile_data

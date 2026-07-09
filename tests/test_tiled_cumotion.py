@@ -307,9 +307,7 @@ def test_batched_cumotion_ik_computes_tcp_poses_with_command_mapping() -> None:
         command_joint_names=("hand", "arm1", "arm0"),
     )
 
-    positions, orientations = solver.compute_tcp_poses(
-        np.asarray([[99.0, 20.0, 10.0]])
-    )
+    positions, orientations = solver.compute_tcp_poses(np.asarray([[99.0, 20.0, 10.0]]))
 
     np.testing.assert_allclose(positions, [[10.0, 20.0, 0.0]])
     np.testing.assert_allclose(orientations, [[1.0, 0.0, 0.0, 0.0]])
@@ -345,7 +343,9 @@ def test_batched_cumotion_ik_rejects_wrong_seed_width() -> None:
 
 
 def test_batched_cumotion_ik_requires_batch_api() -> None:
-    solver = BatchedCuMotionIKSolver(_FakeContext(batch_api=False), tcp_frame_name="tool")
+    solver = BatchedCuMotionIKSolver(
+        _FakeContext(batch_api=False), tcp_frame_name="tool"
+    )
 
     with pytest.raises(RuntimeError, match="batch IK API"):
         solver.solve(

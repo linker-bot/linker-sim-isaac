@@ -154,9 +154,7 @@ class MotionPlannerBackendConfig:
         else:
             settings = data
 
-        pipeline = str(
-            settings.get("planning_pipeline", cls.planning_pipeline)
-        ).strip()
+        pipeline = str(settings.get("planning_pipeline", cls.planning_pipeline)).strip()
         if pipeline not in {
             "graph_search",
             "specified_path",
@@ -377,7 +375,9 @@ def _validate_specified_path_settings(config: SpecifiedPathConfig) -> None:
     if "require_start_match" in cspace_settings and not isinstance(
         cspace_settings["require_start_match"], bool
     ):
-        raise ValueError("specified_path.cspace_waypoints.require_start_match must be bool")
+        raise ValueError(
+            "specified_path.cspace_waypoints.require_start_match must be bool"
+        )
     if "start_match_tolerance" in cspace_settings:
         tolerance = float(cspace_settings["start_match_tolerance"])
         if tolerance < 0:
@@ -446,10 +446,7 @@ def _validate_conversion_numeric_ranges(conversion: Mapping[str, Any]) -> None:
         raise ValueError(
             "specified_path.task_space_segments.conversion.max_iterations must be positive"
         )
-    if (
-        "min_position_deviation" in conversion
-        or "max_position_deviation" in conversion
-    ):
+    if "min_position_deviation" in conversion or "max_position_deviation" in conversion:
         min_deviation = float(conversion.get("min_position_deviation", 0.001))
         max_deviation = float(conversion.get("max_position_deviation", 0.003))
         if min_deviation <= 0 or max_deviation <= min_deviation:

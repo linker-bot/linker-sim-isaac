@@ -64,9 +64,7 @@ def generate_cspace_trajectory(
 
     # 用 kinematics 创建 generator 可以继承机器人 C-space 维度和默认限位；随后再应用动作/配置
     # 中的显式覆盖。
-    generator = context.cumotion.create_cspace_trajectory_generator(
-        context.kinematics
-    )
+    generator = context.cumotion.create_cspace_trajectory_generator(context.kinematics)
     configure_trajectory_generator(context.cumotion, generator, config)
     waypoints = [np.asarray(row, dtype=float).reshape(-1) for row in path]
     if config.mode == "time_optimal":

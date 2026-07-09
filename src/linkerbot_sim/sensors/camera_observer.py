@@ -163,7 +163,9 @@ def _start_camera_output(
         )
     if not sinks:
         return None
-    sink: CameraFrameSink = sinks[0] if len(sinks) == 1 else CompositeCameraFrameSink(sinks)
+    sink: CameraFrameSink = (
+        sinks[0] if len(sinks) == 1 else CompositeCameraFrameSink(sinks)
+    )
     publisher = CameraFramePublisher(sink=sink, name="camera-offline-writer")
     observer = CameraFrameObserver(cameras=observed_cameras, publisher=publisher)
     publisher.start()

@@ -297,9 +297,7 @@ class CuMotionWorldInspector:
         """
 
         point = np.asarray(point, dtype=float).reshape(3)
-        result = self.inspector.distances_to(
-            point, bool(compute_distance_gradients)
-        )
+        result = self.inspector.distances_to(point, bool(compute_distance_gradients))
         if result is None:
             return None
         distances, gradients = result
@@ -477,7 +475,9 @@ class CuMotionRobotWorldInspector:
         组合用于调试可视化。
         """
 
-        return [float(radius) for radius in self.inspector.self_collision_sphere_radii()]
+        return [
+            float(radius) for radius in self.inspector.self_collision_sphere_radii()
+        ]
 
 
 def _geometry_signature(obj: CollisionObject) -> tuple[str, tuple[float, ...]]:

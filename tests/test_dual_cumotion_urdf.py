@@ -115,7 +115,9 @@ def test_dual_xrdf_generation_merges_left_and_right_cspace(tmp_path) -> None:
     assert len(data["cspace"]["jerk_limits"]) == 14
 
 
-def test_prepare_cumotion_config_from_robot_config_generates_dual_assets(tmp_path) -> None:
+def test_prepare_cumotion_config_from_robot_config_generates_dual_assets(
+    tmp_path,
+) -> None:
     robot_config = _dual_robot_config()
     env_config = load_yaml("configs/envs/scene2.yaml")
     robot_config["cumotion"]["output_dir"] = str(tmp_path)

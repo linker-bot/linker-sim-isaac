@@ -36,9 +36,7 @@ class ObjectMaterialConfig:
             names = ", ".join(sorted(unsupported))
             raise ValueError(f"{label} contains unsupported keys: {names}")
         config = cls(
-            static_friction=optional_non_negative_float(
-                data, "static_friction", label
-            ),
+            static_friction=optional_non_negative_float(data, "static_friction", label),
             dynamic_friction=optional_non_negative_float(
                 data, "dynamic_friction", label
             ),
@@ -69,7 +67,9 @@ def apply_root_pose_to_prim(stage, prim_path: str, pose: RootPoseConfig) -> None
 
     prim = stage.GetPrimAtPath(Sdf.Path(prim_path))
     if not prim.IsValid():
-        raise RuntimeError(f"Cannot apply root_pose; object prim not found: {prim_path}")
+        raise RuntimeError(
+            f"Cannot apply root_pose; object prim not found: {prim_path}"
+        )
     xform = UsdGeom.Xformable(prim)
     xform.ClearXformOpOrder()
     xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))

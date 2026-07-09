@@ -47,9 +47,7 @@ def test_make_env_local_prim_path_rewrites_world_paths() -> None:
 
 def test_make_env_local_prim_path_does_not_double_namespace() -> None:
     assert (
-        make_env_local_prim_path(
-            "/World/envs/env_0", "/World/envs/env_0/Robot"
-        )
+        make_env_local_prim_path("/World/envs/env_0", "/World/envs/env_0/Robot")
         == "/World/envs/env_0/Robot"
     )
 
@@ -85,12 +83,12 @@ def test_env_origins_use_grid_spacing() -> None:
 
 
 def test_env_local_suffix_round_trip() -> None:
-    suffix = env_local_suffix(
-        "/World/envs/env_0", "/World/envs/env_0/Robot/root"
-    )
+    suffix = env_local_suffix("/World/envs/env_0", "/World/envs/env_0/Robot/root")
 
     assert suffix == "Robot/root"
-    assert prim_paths_from_suffix(("/World/envs/env_0", "/World/envs/env_1"), suffix) == (
+    assert prim_paths_from_suffix(
+        ("/World/envs/env_0", "/World/envs/env_1"), suffix
+    ) == (
         "/World/envs/env_0/Robot/root",
         "/World/envs/env_1/Robot/root",
     )

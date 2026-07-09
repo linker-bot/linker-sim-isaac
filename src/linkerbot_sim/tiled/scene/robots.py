@@ -120,7 +120,9 @@ def _import_env_zero_robots(
             controller_profiles=controller_profiles,
         )
         articulation_suffix = env_local_suffix(env_zero, imported["articulation_path"])
-        imported_root_suffix = env_local_suffix(env_zero, imported["imported_root_path"])
+        imported_root_suffix = env_local_suffix(
+            env_zero, imported["imported_root_path"]
+        )
         tiled_robot = ImportedTiledRobot(
             name=instance.name,
             profile_name=instance.profile_name,

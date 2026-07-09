@@ -385,7 +385,9 @@ def _parse_tcp_arc_segment(message: Mapping[str, object]) -> TcpArcSegment:
     )
 
 
-def _parse_overlays(value: object, *, duration_s: float) -> tuple[CommandOverlaySpec, ...]:
+def _parse_overlays(
+    value: object, *, duration_s: float
+) -> tuple[CommandOverlaySpec, ...]:
     """解析与主臂运动同步或收尾执行的手部 overlay 命令。"""
 
     if value is None:
@@ -551,13 +553,17 @@ def _vector3(message: Mapping[str, object], key: str) -> np.ndarray:
 def _optional_vector3(message: Mapping[str, object], key: str) -> np.ndarray | None:
     """读取可选三维向量；缺失时返回 None。"""
 
-    return None if key not in message else np.asarray(message[key], dtype=float).reshape(3)
+    return (
+        None if key not in message else np.asarray(message[key], dtype=float).reshape(3)
+    )
 
 
 def _optional_vector4(message: Mapping[str, object], key: str) -> np.ndarray | None:
     """读取可选四维向量，通常用于四元数姿态。"""
 
-    return None if key not in message else np.asarray(message[key], dtype=float).reshape(4)
+    return (
+        None if key not in message else np.asarray(message[key], dtype=float).reshape(4)
+    )
 
 
 def _optional_orientation_wxyz(

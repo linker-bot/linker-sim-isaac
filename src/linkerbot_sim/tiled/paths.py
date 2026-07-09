@@ -53,9 +53,7 @@ def make_env_local_prim_path(env_root: str, original_prim_path: str) -> str:
     """
 
     env_root = _normalize_absolute_path(env_root, label="env_root")
-    original = _normalize_absolute_path(
-        original_prim_path, label="original_prim_path"
-    )
+    original = _normalize_absolute_path(original_prim_path, label="original_prim_path")
     if original == "/World":
         raise ValueError("Cannot namespace /World itself as an env-local prim")
     if original == env_root or original.startswith(env_root + "/"):
@@ -110,8 +108,7 @@ def prim_paths_from_suffix(
     if not suffix or suffix.startswith("/"):
         raise ValueError("suffix must be non-empty and relative")
     return tuple(
-        f"{_normalize_absolute_path(root, label='env_root')}/{suffix}"
-        for root in roots
+        f"{_normalize_absolute_path(root, label='env_root')}/{suffix}" for root in roots
     )
 
 

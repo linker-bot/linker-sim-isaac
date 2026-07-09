@@ -447,9 +447,9 @@ def _set_isaac_tiled_snapshot(
         )
         # target_positions 是 tiled command adapter 的控制目标缓存；如果只写 PhysX joint
         # state 而不更新它，下一次 idle/action 会把机器人又推回旧 target。
-        runtime.target_positions[target_role][selected[:, None], mapping.joints.target_indices] = q[
-            :, mapping.joints.target_indices
-        ]
+        runtime.target_positions[target_role][
+            selected[:, None], mapping.joints.target_indices
+        ] = q[:, mapping.joints.target_indices]
         # IK/插值 adapter 内部缓存基于旧 command，恢复后必须重置并刷新 TCP 缓存。
         runtime._command_adapter(target_role).reset()
         runtime._refresh_tcp_state(target_role, env_ids=selected)
@@ -476,7 +476,9 @@ def _get_debug_tiled_snapshot(runtime: object, *, env_id: int) -> SimulationSnap
     # debug tiled runtime 是测试/无 Isaac 场景使用的轻量实现；它也走同一套 schema，
     # 这样协议测试可以覆盖 tiled snapshot 的主要行为。
     selected = int(_single_env_id(env_id, runtime.config.num_envs)[0])
-    joint_names = tuple(f"joint_{index}" for index in range(runtime.adapter.command_dim))
+    joint_names = tuple(
+        f"joint_{index}" for index in range(runtime.adapter.command_dim)
+    )
     return SimulationSnapshot(
         metadata=SnapshotMetadata(
             source_runtime="tiled_debug",
@@ -489,10 +491,14 @@ def _get_debug_tiled_snapshot(runtime: object, *, env_id: int) -> SimulationSnap
             "debug": RobotSnapshot(
                 role="debug",
                 joint_names=joint_names,
-                joint_positions=np.asarray(runtime.current_positions[selected], dtype=float),
+                joint_positions=np.asarray(
+                    runtime.current_positions[selected], dtype=float
+                ),
                 joint_velocities=np.zeros(runtime.adapter.command_dim, dtype=float),
                 command_joint_names=joint_names,
-                command_targets=np.asarray(runtime.current_positions[selected], dtype=float),
+                command_targets=np.asarray(
+                    runtime.current_positions[selected], dtype=float
+                ),
             )
         },
         objects={},
@@ -618,7 +624,9 @@ def _object_snapshots_from_tiled_state(
     for name, state in object_state.items():
         if not isinstance(state, Mapping):
             continue
-        positions = np.asarray(state.get("positions_local", ()), dtype=float).reshape(-1, 3)
+        positions = np.asarray(state.get("positions_local", ()), dtype=float).reshape(
+            -1, 3
+        )
         orientations = np.asarray(
             state.get("orientations_wxyz", ()), dtype=float
         ).reshape(-1, 4)
@@ -670,7 +678,9 @@ def _isaac_tiled_target_descriptor(runtime: object) -> SnapshotTargetDescriptor:
                 None if robot_summary is None else str(robot_summary.asset_path)
             ),
             joint_names=tuple(str(item) for item in view_runtime.command_joint_names),
-            command_joint_names=tuple(str(item) for item in view_runtime.command_joint_names),
+            command_joint_names=tuple(
+                str(item) for item in view_runtime.command_joint_names
+            ),
         )
     object_profiles = _object_profiles_by_name(runtime)
     objects = {}
@@ -695,7 +705,9 @@ def _isaac_tiled_target_descriptor(runtime: object) -> SnapshotTargetDescriptor:
 def _debug_tiled_target_descriptor(runtime: object) -> SnapshotTargetDescriptor:
     """为 debug tiled runtime 构建最小 target descriptor。"""
 
-    joint_names = tuple(f"joint_{index}" for index in range(runtime.adapter.command_dim))
+    joint_names = tuple(
+        f"joint_{index}" for index in range(runtime.adapter.command_dim)
+    )
     return SnapshotTargetDescriptor(
         runtime_kind="tiled_debug",
         robots={
@@ -765,7 +777,9 @@ def _robot_snapshot_from_execution(
     # single/dual articulation API 返回全 DOF；snapshot 只截取 controller 管理的 command
     # joints，保持与 tiled adapter 的语义一致。
     positions = np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
-    velocities = np.asarray(articulation.get_joint_velocities(), dtype=float).reshape(-1)
+    velocities = np.asarray(articulation.get_joint_velocities(), dtype=float).reshape(
+        -1
+    )
     return RobotSnapshot(
         role=role,
         robot_profile=robot_profile,
@@ -791,7 +805,9 @@ def _robot_target_from_execution(
         role=role,
         robot_profile=robot_profile,
         asset_fingerprint=asset_fingerprint,
-        joint_names=_command_joint_names(execution.articulation, execution.joint_controller),
+        joint_names=_command_joint_names(
+            execution.articulation, execution.joint_controller
+        ),
         command_joint_names=_command_joint_names(
             execution.articulation,
             execution.joint_controller,
@@ -815,8 +831,12 @@ def _restore_robot_snapshot_to_execution(
     # mapping.joints.target_indices 是 command-joint 空间的索引；先映射到真实 articulation
     # DOF index，再写入全量 q/dq，避免覆盖非 command DOF。
     target_command_indices = command_indices[mapping.joints.target_indices]
-    q[target_command_indices] = source_robot.joint_positions[mapping.joints.source_indices]
-    dq[target_command_indices] = source_robot.joint_velocities[mapping.joints.source_indices]
+    q[target_command_indices] = source_robot.joint_positions[
+        mapping.joints.source_indices
+    ]
+    dq[target_command_indices] = source_robot.joint_velocities[
+        mapping.joints.source_indices
+    ]
     articulation.set_joint_positions(q)
     articulation.set_joint_velocities(dq)
     if hasattr(controller, "last_commanded_efforts"):
@@ -891,7 +911,9 @@ def _runtime_object_snapshots(
     return result
 
 
-def _runtime_object_targets(handles: Sequence[object]) -> dict[str, ObjectTargetDescriptor]:
+def _runtime_object_targets(
+    handles: Sequence[object],
+) -> dict[str, ObjectTargetDescriptor]:
     """根据 single/dual object handles 构建 object target descriptors。"""
 
     result = {}
@@ -1013,7 +1035,9 @@ def _runtime_object_prim_path(handle: object) -> str | None:
     return None
 
 
-def _runtime_object_body_paths(handle: object) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _runtime_object_body_paths(
+    handle: object,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """读取 dynamic/multi-body object 的 child body 名字和 prim paths。"""
 
     bodies = []
@@ -1028,7 +1052,9 @@ def _runtime_object_body_paths(handle: object) -> tuple[tuple[str, ...], tuple[s
         path_getter = getattr(body, "GetPath", None)
         body_path = str(path_getter() if callable(path_getter) else body)
         name_getter = getattr(body, "GetName", None)
-        body_name = str(name_getter() if callable(name_getter) else body_path.rsplit("/", 1)[-1])
+        body_name = str(
+            name_getter() if callable(name_getter) else body_path.rsplit("/", 1)[-1]
+        )
         names.append(body_name)
         paths.append(body_path)
     return tuple(names), tuple(paths)
@@ -1060,7 +1086,9 @@ def _object_profiles_by_name(runtime: object) -> dict[str, str | None]:
     return result
 
 
-def _snapshot_from_input(snapshot: SimulationSnapshot | Mapping[str, object]) -> SimulationSnapshot:
+def _snapshot_from_input(
+    snapshot: SimulationSnapshot | Mapping[str, object],
+) -> SimulationSnapshot:
     """统一接受 dataclass 或 JSON dict 形式的 snapshot 输入。"""
 
     # 协议层通常传 JSON dict，内部调用/测试可以直接传 dataclass；统一在 adapter 边界解析。
@@ -1094,14 +1122,20 @@ def _looks_like_dual_runtime(runtime: object) -> bool:
     """粗略判断对象是否是 dual-arm runtime。"""
 
     execution = getattr(runtime, "execution", None)
-    return execution is not None and hasattr(execution, "left") and hasattr(execution, "right")
+    return (
+        execution is not None
+        and hasattr(execution, "left")
+        and hasattr(execution, "right")
+    )
 
 
 def _read_tiled_object_states_lazy():
     """惰性导入 tiled object state reader，避免 snapshots 包强依赖 Isaac。"""
 
     # lazy import 避免 snapshots 包导入时强依赖 tiled/Isaac 相关模块。
-    from linkerbot_sim.app.interactive.tiled.object_states import _read_tiled_object_states
+    from linkerbot_sim.app.interactive.tiled.object_states import (
+        _read_tiled_object_states,
+    )
 
     return _read_tiled_object_states
 

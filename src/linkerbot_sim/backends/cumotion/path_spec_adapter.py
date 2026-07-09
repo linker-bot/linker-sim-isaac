@@ -28,7 +28,6 @@ from linkerbot_sim.backends.cumotion.pose_adapter import (
 )
 from linkerbot_sim.planning.requests import (
     CSpaceWaypointPath,
-    CompositePath,
     CompositePathPart,
     TaskSpacePath,
     TcpArcSegment,
@@ -131,9 +130,7 @@ def composite_path_to_joint_path(
     tracked_current = current
     can_validate_cspace_start = True
     for index, part in enumerate(request.path.parts):
-        nested_path, transition_mode = _composite_part_and_transition(
-            part, config
-        )
+        nested_path, transition_mode = _composite_part_and_transition(part, config)
         transition = _transition_mode(context.cumotion, transition_mode)
         if isinstance(nested_path, CSpaceWaypointPath):
             waypoints = _validated_cspace_waypoints(context, nested_path)
@@ -304,9 +301,7 @@ def _add_task_space_segment(context, path_spec, current_pose, segment, label: st
 
     if isinstance(segment, TcpRotationSegment):
         # 原地旋转段只改变 tracked rotation，translation 保持上一个 pose 的位置。
-        target_rotation = rotation_from_quat_wxyz(
-            cumotion, segment.target_orientation
-        )
+        target_rotation = rotation_from_quat_wxyz(cumotion, segment.target_orientation)
         ok = path_spec.add_rotation(target_rotation)
         _ensure_added(ok, label)
         return pose_from_rotation_translation(
@@ -387,9 +382,7 @@ def _joint_path_from_linear_cspace_path(linear_path) -> np.ndarray:
     return np.vstack([waypoint.reshape(1, -1) for waypoint in path])
 
 
-def _task_space_conversion_config(
-    cumotion, config: MotionPlannerBackendConfig
-):
+def _task_space_conversion_config(cumotion, config: MotionPlannerBackendConfig):
     """构造并填充 cuMotion ``TaskSpacePathConversionConfig``。
 
     config 中只接受项目侧白名单字段；字段合法性在 ``motion_planner_config.py`` 中提前校验。
@@ -397,9 +390,7 @@ def _task_space_conversion_config(
     """
 
     conversion_config = cumotion.TaskSpacePathConversionConfig()
-    settings = _mapping(config.specified_path.task_space_segments).get(
-        "conversion", {}
-    )
+    settings = _mapping(config.specified_path.task_space_segments).get("conversion", {})
     for name, value in _mapping(settings).items():
         if name == "max_iterations":
             setattr(conversion_config, str(name), int(value))
@@ -452,9 +443,7 @@ def _transition_mode(cumotion, value: str):
         return enum.FREE
     if value == "linear_task_space":
         return enum.LINEAR_TASK_SPACE
-    raise ValueError(
-        "transition_mode must be one of: skip, free, linear_task_space"
-    )
+    raise ValueError("transition_mode must be one of: skip, free, linear_task_space")
 
 
 def _composite_part_and_transition(
@@ -468,9 +457,7 @@ def _composite_part_and_transition(
     """
 
     default_transition = str(
-        _mapping(config.specified_path.composite).get(
-            "default_transition_mode", "free"
-        )
+        _mapping(config.specified_path.composite).get("default_transition_mode", "free")
     )
     if isinstance(part, CompositePathPart):
         return part.path, str(part.transition_mode or default_transition)
@@ -498,7 +485,9 @@ def _line_target_position(current_pose, segment: TcpLineSegment) -> np.ndarray:
     if segment.target_position is not None:
         return np.asarray(segment.target_position, dtype=float).reshape(3)
     current_translation = _pose_translation(current_pose)
-    return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(3)
+    return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(
+        3
+    )
 
 
 def _arc_target_position(current_pose, segment: TcpArcSegment) -> np.ndarray:
@@ -507,7 +496,9 @@ def _arc_target_position(current_pose, segment: TcpArcSegment) -> np.ndarray:
     if segment.target_position is not None:
         return np.asarray(segment.target_position, dtype=float).reshape(3)
     current_translation = _pose_translation(current_pose)
-    return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(3)
+    return current_translation + np.asarray(segment.target_offset, dtype=float).reshape(
+        3
+    )
 
 
 def _arc_intermediate_position(current_pose, segment: TcpArcSegment) -> np.ndarray:
@@ -521,7 +512,9 @@ def _arc_intermediate_position(current_pose, segment: TcpArcSegment) -> np.ndarr
     ).reshape(3)
 
 
-def _validate_line_start_position(current_pose, segment: TcpLineSegment, label: str) -> None:
+def _validate_line_start_position(
+    current_pose, segment: TcpLineSegment, label: str
+) -> None:
     """如果调用方声明了线段起点，检查它和当前 tracked pose 一致。
 
     start_position 不参与 cuMotion PathSpec 的构造，只作为调用方的防错断言。若它与当前 FK/

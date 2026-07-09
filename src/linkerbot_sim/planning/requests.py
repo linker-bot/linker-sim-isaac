@@ -344,9 +344,7 @@ def _validate_task_space_segment(segment: TaskSpaceSegment, label: str) -> None:
         for pose_index, pose in enumerate(segment.poses):
             np.asarray(pose.position, dtype=float).reshape(3)
             if pose.orientation is None:
-                raise ValueError(
-                    f"{label}.poses[{pose_index}].orientation is required"
-                )
+                raise ValueError(f"{label}.poses[{pose_index}].orientation is required")
             np.asarray(pose.orientation, dtype=float).reshape(4)
         return
     raise ValueError(f"Unsupported task-space segment type: {type(segment).__name__}")
@@ -415,7 +413,9 @@ def _validate_composite_path_part(
         return
     if isinstance(nested, TaskSpacePath):
         if not nested.segments:
-            raise ValueError(f"{label}.path TaskSpacePath requires at least one segment")
+            raise ValueError(
+                f"{label}.path TaskSpacePath requires at least one segment"
+            )
         for segment_index, segment in enumerate(nested.segments):
             _validate_task_space_segment(
                 segment, f"{label}.path.segments[{segment_index}]"
