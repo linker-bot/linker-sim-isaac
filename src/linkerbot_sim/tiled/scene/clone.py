@@ -149,6 +149,8 @@ def _collision_filter_participant_paths(*, stage: object, env_root: str) -> tupl
     result: list[str] = []
 
     def visit(prim: object) -> None:
+        """深度优先收集能参与 collision filtering 的 prim path。"""
+
         if _is_collision_filter_participant(prim, UsdPhysics):
             result.append(str(prim.GetPath()))
             return

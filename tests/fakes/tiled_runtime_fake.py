@@ -36,6 +36,11 @@ from linkerbot_sim.tiled import (
     env_origins,
     env_root_paths,
 )
+from linkerbot_sim.snapshots.adapters import (
+    clone_tiled_env_state,
+    get_tiled_snapshot,
+    set_tiled_snapshot,
+)
 
 
 DEBUG_TRAJECTORY_ROBOT = "debug"
@@ -315,6 +320,80 @@ class DebugTiledInteractiveRuntime:
             "event": "set_state",
             "accepted": True,
             "env_ids": selected.tolist(),
+            "step": self.step,
+            "time_s": self.time_s,
+        }
+
+    def get_snapshot(self, *, env_id: int) -> dict[str, object]:
+        """返回单个 debug env 的 runtime-neutral snapshot。
+
+        fake runtime 使用真实 adapter 读快照，保证协议测试覆盖的 JSON 结构与 Isaac runtime
+        保持一致。
+        """
+
+        snapshot = get_tiled_snapshot(self, env_id=int(env_id))
+        return {
+            "event": "snapshot",
+            "accepted": True,
+            "backend": "debug",
+            "env_id": int(env_id),
+            "step": self.step,
+            "time_s": self.time_s,
+            "snapshot": snapshot.as_dict(),
+        }
+
+    def set_snapshot(
+        self,
+        snapshot: Mapping[str, object],
+        *,
+        env_ids: np.ndarray,
+        robot_map: Mapping[str, str] | None = None,
+        strict: bool = True,
+    ) -> dict[str, object]:
+        """把 runtime-neutral snapshot 写回 selected debug env。
+
+        这里不模拟 PhysX 对象，但仍走兼容性检查和多 env 广播逻辑，用来验证 tiled
+        set_snapshot 协议行为。
+        """
+
+        result = set_tiled_snapshot(
+            self,
+            snapshot,
+            env_ids=env_ids,
+            robot_map=robot_map,
+            strict=bool(strict),
+        )
+        return {
+            **result.as_dict(),
+            "backend": "debug",
+            "step": self.step,
+            "time_s": self.time_s,
+        }
+
+    def clone_state(
+        self,
+        *,
+        source_env_id: int,
+        target_env_ids: np.ndarray,
+        strict: bool = True,
+    ) -> dict[str, object]:
+        """把一个 debug source env 克隆到多个 target env。
+
+        fake clone 与真实 tiled 一样复用 get_snapshot + set_snapshot，避免测试出现专属路径。
+        """
+
+        result = clone_tiled_env_state(
+            self,
+            source_env_id=int(source_env_id),
+            target_env_ids=target_env_ids,
+            strict=bool(strict),
+        )
+        return {
+            **result.as_dict(),
+            "event": "state_cloned",
+            "backend": "debug",
+            "source_env_id": int(source_env_id),
+            "target_env_ids": [int(env_id) for env_id in target_env_ids],
             "step": self.step,
             "time_s": self.time_s,
         }

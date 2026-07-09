@@ -29,6 +29,8 @@ class CameraFrameObserver:
         cameras: Sequence[SensorCameraRuntime],
         publisher: CameraFramePublisher,
     ) -> None:
+        """记录需要观察的 camera，并初始化每个 camera 的采样时间游标。"""
+
         self.cameras = tuple(cameras)
         self.publisher = publisher
         self._next_sample_time: dict[str, float] = {}
@@ -51,6 +53,8 @@ class CameraFrameObserver:
                 self.publisher.publish(frame)
 
     def _should_sample(self, camera: SensorCameraRuntime, time_s: float) -> bool:
+        """按 camera.frequency 判断当前仿真时间是否应该采样。"""
+
         next_time = self._next_sample_time.get(camera.name)
         if next_time is not None and time_s + 1.0e-9 < next_time:
             return False
@@ -72,6 +76,8 @@ class CameraOutputHandle:
     publisher: CameraFramePublisher
 
     def close(self) -> None:
+        """关闭后台 publisher 和其持有的所有输出 sink。"""
+
         self.publisher.close()
 
 

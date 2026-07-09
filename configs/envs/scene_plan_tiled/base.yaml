@@ -83,7 +83,7 @@ objects:
 
 tiled:
   enabled: true
-  num_envs: 256
+  num_envs: 32
   base_env_path: /World/envs
   env_prefix: env
   spacing: 3.0

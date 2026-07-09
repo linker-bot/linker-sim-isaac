@@ -23,6 +23,10 @@ from linkerbot_sim.execution.steps import (
     CommandExecutionInterrupted,
     HoldCommandPositionTargetStep,
 )
+from linkerbot_sim.snapshots import (
+    get_single_robot_snapshot,
+    set_single_robot_snapshot,
+)
 
 
 def run_interactive_single_arm_motion(
@@ -73,6 +77,18 @@ def run_interactive_single_arm_motion(
             while not queue.quit_requested():
                 if _simulation_app_stopped(runtime):
                     break
+                snapshot_request = queue.consume_snapshot_request()
+                if snapshot_request is not None:
+                    # snapshot 会直接读写 articulation/prim 状态，必须在仿真主循环中处理；
+                    # 放在 motion queue 之前消费，能让外部调试端快速读取或恢复当前状态。
+                    try:
+                        queue.mark_snapshot_done(
+                            snapshot_request,
+                            _handle_snapshot_request(runtime, snapshot_request),
+                        )
+                    except Exception as exc:
+                        queue.mark_snapshot_failed(snapshot_request, str(exc))
+                    continue
                 reset_request = queue.consume_reset_request()
                 if reset_request is not None:
                     try:
@@ -235,3 +251,33 @@ def _simulation_app_stopped(runtime: SingleRobotRuntime) -> bool:
 
     app = runtime.execution.simulation_app
     return app is not None and not app.is_running()
+
+
+def _handle_snapshot_request(
+    runtime: SingleRobotRuntime,
+    request,
+) -> dict[str, object]:
+    """在仿真主线程处理 single-arm snapshot 请求。
+
+    ``get_snapshot`` 读取当前 single scene；``set_snapshot`` 会先做兼容性检查，再按
+    ``robot_map``/``strict`` 写回 command joints 和 objects。
+    """
+
+    if request.kind == "get_snapshot":
+        return {
+            "event": "snapshot",
+            "accepted": True,
+            "backend": "single",
+            "snapshot": get_single_robot_snapshot(runtime).as_dict(),
+        }
+    if request.kind == "set_snapshot":
+        if request.snapshot is None:
+            raise ValueError("set_snapshot requires snapshot")
+        result = set_single_robot_snapshot(
+            runtime,
+            request.snapshot,
+            robot_map=request.robot_map,
+            strict=bool(request.strict),
+        )
+        return {**result.as_dict(), "backend": "single"}
+    raise ValueError(f"unsupported snapshot request kind: {request.kind!r}")

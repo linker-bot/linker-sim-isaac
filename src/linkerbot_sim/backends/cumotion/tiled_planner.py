@@ -137,6 +137,8 @@ class _RuntimeSegment:
         path: object | None,
         tcp_frame_name: str | None,
     ) -> None:
+        """保存单段规划运行时参数，供统一采样时间轴使用。"""
+
         self.kind = kind
         self.duration_s = duration_s
         self.sample_dt_s = sample_dt_s

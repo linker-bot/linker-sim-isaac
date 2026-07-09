@@ -23,6 +23,9 @@ CONTROL_MESSAGE_TYPES = frozenset(
         "reset",
         "get_state",
         "set_state",
+        "get_snapshot",
+        "set_snapshot",
+        "clone_state",
         "load_trajectory",
         "step_trajectory",
         "trajectory_status",
@@ -85,6 +88,30 @@ def handle_tiled_interactive_message(
             if not isinstance(state, Mapping):
                 raise ValueError("set_state.state must be a JSON object")
             return runtime.set_state(state, env_ids=_message_env_ids(message))
+        if message_type == "get_snapshot":
+            # get_snapshot 只允许单个 env：返回的是一个可跨 runtime 传递的逻辑快照，
+            # 不是 get_state 那种 batched 状态表。
+            return runtime.get_snapshot(env_id=_message_env_id(message))
+        if message_type == "set_snapshot":
+            snapshot = message.get("snapshot")
+            if not isinstance(snapshot, Mapping):
+                raise ValueError("set_snapshot.snapshot must be a JSON object")
+            # set_snapshot 会把同一份 source snapshot 广播到指定 env_ids。robot_map/strict
+            # 透传给 adapter，用于 single/dual/tiled role 名字不一致时的显式映射。
+            return runtime.set_snapshot(
+                snapshot,
+                env_ids=_message_required_env_ids(message),
+                robot_map=_message_robot_map(message),
+                strict=_message_strict(message),
+            )
+        if message_type == "clone_state":
+            # clone_state 是 tiled 内部快捷入口：先从 source env 读 snapshot，再恢复到
+            # target envs，语义与客户端手动 get_snapshot + set_snapshot 一致。
+            return runtime.clone_state(
+                source_env_id=_message_source_env_id(message),
+                target_env_ids=_message_target_env_ids(message),
+                strict=_message_strict(message),
+            )
         if message_type == "load_trajectory":
             return runtime.load_trajectory(
                 message,
@@ -157,6 +184,74 @@ def _message_env_ids(message: Mapping[str, object]) -> np.ndarray | None:
     if "env_ids" not in message:
         return None
     return np.asarray(message["env_ids"], dtype=int)
+
+
+def _message_required_env_ids(message: Mapping[str, object]) -> np.ndarray:
+    """解析必须存在的 env_ids。"""
+
+    env_ids = _message_env_ids(message)
+    if env_ids is None:
+        raise ValueError("env_ids is required")
+    return env_ids
+
+
+def _message_env_id(message: Mapping[str, object]) -> int:
+    """解析单个 env_id。
+
+    tiled snapshot 读取必须唯一定位 source env；如果用户传 env_ids，也只能包含一个值。
+    """
+
+    if "env_id" in message:
+        return int(message["env_id"])
+    env_ids = _message_env_ids(message)
+    if env_ids is None:
+        raise ValueError("env_id is required")
+    selected = np.asarray(env_ids, dtype=int).reshape(-1)
+    if selected.size != 1:
+        raise ValueError("get_snapshot requires exactly one env id")
+    return int(selected[0])
+
+
+def _message_source_env_id(message: Mapping[str, object]) -> int:
+    """解析 clone_state 的 source env id。"""
+
+    if "source_env_id" not in message:
+        raise ValueError("source_env_id is required")
+    return int(message["source_env_id"])
+
+
+def _message_target_env_ids(message: Mapping[str, object]) -> np.ndarray:
+    """解析 clone_state 的 target env ids。"""
+
+    if "target_env_ids" in message:
+        return np.asarray(message["target_env_ids"], dtype=int)
+    env_ids = _message_env_ids(message)
+    if env_ids is None:
+        raise ValueError("target_env_ids is required")
+    return env_ids
+
+
+def _message_robot_map(message: Mapping[str, object]) -> dict[str, str] | None:
+    """解析 snapshot restore 的 robot_map。
+
+    key 是 snapshot 中的 source role，value 是目标 tiled runtime 的 robot name。
+    """
+
+    if "robot_map" not in message:
+        return None
+    value = message["robot_map"]
+    if not isinstance(value, Mapping):
+        raise ValueError("robot_map must be a JSON object")
+    return {str(source): str(target) for source, target in value.items()}
+
+
+def _message_strict(message: Mapping[str, object]) -> bool:
+    """解析 snapshot restore 的 strict flag。
+
+    True 表示关节/body 名字集合必须完全一致；False 允许只恢复交集，适合手动调试。
+    """
+
+    return bool(message.get("strict", True))
 
 
 def _message_fields(message: Mapping[str, object]) -> tuple[str, ...] | None:

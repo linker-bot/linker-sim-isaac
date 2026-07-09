@@ -42,7 +42,11 @@ class TiledDynamicChainObjectPoseView:
         env_ids: np.ndarray,
         env_origins: np.ndarray,
     ) -> dict[str, object]:
-        """读取 selected env 中所有 child rigid body 的 world/local pose。"""
+        """读取 selected env 中所有 child rigid body 的 world/local pose。
+
+        world pose 用于直接调试 PhysX 状态；local pose 用于 runtime-neutral snapshot，
+        因为不同 tiled env 的 world origin 不同，跨 env 复制时必须保持 env 内局部布局。
+        """
 
         selected = np.asarray(env_ids, dtype=int).reshape(-1)
         indices = self._flat_indices(selected)
@@ -78,6 +82,8 @@ class TiledDynamicChainObjectPoseView:
             "orientations_wxyz": object_orientations.tolist(),
             "body_names": list(self.body_names),
             "body_positions_world": body_positions.tolist(),
+            # body local position 按目标 env origin 归一化，后续 set_snapshot 到其它 env 时
+            # 再加回目标 env origin，就能得到正确的 world pose。
             "body_positions_local": (body_positions - origins[selected, None, :]).tolist(),
             "body_orientations_wxyz": body_orientations.tolist(),
         }
@@ -88,8 +94,14 @@ class TiledDynamicChainObjectPoseView:
         object_name: str,
         object_state: Mapping[str, object],
         selected_env_ids: set[int],
+        env_origins: np.ndarray | None = None,
     ) -> int:
-        """按 snapshot 恢复 selected env 的所有 child rigid body pose。"""
+        """按 snapshot 恢复 selected env 的所有 child rigid body pose。
+
+        优先接受 ``body_positions_world`` 以兼容已有 get_state/cache；如果只有
+        ``body_positions_local``，则必须提供目标 ``env_origins``，用目标 env origin
+        把局部位姿还原成 PhysX 需要的 world pose。
+        """
 
         snapshot_env_ids = np.asarray(object_state.get("env_ids", ()), dtype=int).reshape(-1)
         rows = [
@@ -99,19 +111,30 @@ class TiledDynamicChainObjectPoseView:
         ]
         if not rows:
             return 0
-        missing = [
-            key
-            for key in ("body_positions_world", "body_orientations_wxyz")
-            if key not in object_state
-        ]
+        # 新的 runtime-neutral snapshot 只保证 local body pose；旧的 tiled state/cache 可能
+        # 同时带 world pose。这里两种都接受，保持向后兼容。
+        has_world_positions = "body_positions_world" in object_state
+        has_local_positions = "body_positions_local" in object_state
+        missing = []
+        if not has_world_positions and not has_local_positions:
+            missing.append("body_positions_world or body_positions_local")
+        if "body_orientations_wxyz" not in object_state:
+            missing.append("body_orientations_wxyz")
         if missing:
             raise RuntimeError(
                 f"tiled dynamic-chain object {object_name!r} snapshot missing {missing}"
             )
         try:
-            body_positions = np.asarray(
-                object_state.get("body_positions_world", ()), dtype=float
-            ).reshape(snapshot_env_ids.size, self.body_count, 3)
+            body_positions_world = None
+            if has_world_positions:
+                body_positions_world = np.asarray(
+                    object_state.get("body_positions_world", ()), dtype=float
+                ).reshape(snapshot_env_ids.size, self.body_count, 3)
+            body_positions_local = None
+            if has_local_positions:
+                body_positions_local = np.asarray(
+                    object_state.get("body_positions_local", ()), dtype=float
+                ).reshape(snapshot_env_ids.size, self.body_count, 3)
             body_orientations = np.asarray(
                 object_state.get("body_orientations_wxyz", ()), dtype=float
             ).reshape(snapshot_env_ids.size, self.body_count, 4)
@@ -121,7 +144,22 @@ class TiledDynamicChainObjectPoseView:
             ) from exc
         env_index = np.asarray([int(snapshot_env_ids[row]) for row in rows], dtype=int)
         indices = self._flat_indices(env_index)
-        positions = np.asarray(body_positions[rows], dtype=float).reshape(-1, 3)
+        if body_positions_world is not None:
+            positions = np.asarray(body_positions_world[rows], dtype=float).reshape(-1, 3)
+        else:
+            if env_origins is None:
+                raise RuntimeError(
+                    f"cannot restore tiled dynamic-chain object {object_name!r} "
+                    "without env origins"
+                )
+            origins = np.asarray(env_origins, dtype=float).reshape(-1, 3)
+            assert body_positions_local is not None
+            # 注意这里使用“目标 env”的 origin，而不是 snapshot source env 的 origin；
+            # 这样 env0 的 local 快照才能正确复现在 env1/env2/... 的 world 坐标中。
+            positions = (
+                np.asarray(body_positions_local[rows], dtype=float)
+                + origins[env_index, None, :]
+            ).reshape(-1, 3)
         orientations = np.asarray(body_orientations[rows], dtype=float).reshape(-1, 4)
         set_world_poses = getattr(self.view, "set_world_poses", None)
         if not callable(set_world_poses):
@@ -166,7 +204,11 @@ def _read_tiled_object_states(
     env_ids: np.ndarray,
     object_pose_views: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """读取 selected env 的 object world/local pose，返回 JSON-compatible dict。"""
+    """读取 selected env 的 object world/local pose，返回 JSON-compatible dict。
+
+    返回中同时保留 world/local：world 方便 set_state 原样写回，local 则用于 snapshot
+    跨 env/跨 runtime 传递。
+    """
 
     selected = np.asarray(env_ids, dtype=int).reshape(-1)
     origins = np.asarray(env_origins, dtype=float).reshape(-1, 3)
@@ -216,7 +258,10 @@ def _capture_tiled_object_pose_snapshot(
     env_ids: np.ndarray,
     object_pose_views: Mapping[str, object] | None = None,
 ) -> dict[str, dict[str, object]]:
-    """缓存 tiled objects 的初始 env-local pose。"""
+    """缓存 tiled objects 的初始 env-local pose。
+
+    reset 使用这份缓存恢复对象初始状态；它与新 snapshot restore 共用同一条恢复路径。
+    """
 
     state = _read_tiled_object_states(
         stage=stage,
@@ -268,7 +313,11 @@ def _restore_tiled_object_pose_snapshot(
     env_origins: np.ndarray | None = None,
     object_pose_views: Mapping[str, object] | None = None,
 ) -> int:
-    """按 selected env 恢复 tiled objects 初始 pose，并尽量清零刚体速度。"""
+    """按 selected env 恢复 tiled objects pose，并尽量清零刚体速度。
+
+    ``snapshot`` 可以来自初始化缓存、get_state，也可以由 runtime-neutral
+    ``ObjectSnapshot`` 转换而来。恢复时只处理 ``env_ids`` 选中的 env。
+    """
 
     selected = {int(env_id) for env_id in np.asarray(env_ids, dtype=int).reshape(-1)}
     restored = 0
@@ -288,11 +337,13 @@ def _restore_tiled_object_pose_snapshot(
         )
         view_restore = getattr(object_view, "restore_object_state", None)
         if callable(view_restore):
+            # dynamic-chain wrapper 自己知道 env-major body row 展开规则，优先交给它恢复。
             restored += int(
                 view_restore(
                     object_name=str(object_name),
                     object_state=object_state,
                     selected_env_ids=selected,
+                    env_origins=env_origins,
                 )
             )
             continue
@@ -313,6 +364,7 @@ def _restore_tiled_object_pose_snapshot(
             env_id = int(snapshot_env_ids[row])
             if env_id not in selected or env_id >= len(paths):
                 continue
+            # 没有 rigid view 时退回到直接写 prim pose；这是静态测试和部分简单对象的兜底路径。
             if _apply_prim_local_pose_and_zero_velocity(
                 stage,
                 str(paths[env_id]),
@@ -330,7 +382,10 @@ def _read_object_view_state(
     env_ids: np.ndarray,
     env_origins: np.ndarray,
 ) -> dict[str, object] | None:
-    """优先从 Isaac rigid view 读取 dynamic object pose。"""
+    """优先从 Isaac rigid view 读取 dynamic object pose。
+
+    rigid view 读到的是 world pose；这里同步生成 env-local pose，供 snapshot/clone 使用。
+    """
 
     if view is None:
         return None
@@ -379,7 +434,11 @@ def _restore_object_view_state(
     env_origins: np.ndarray | None,
     selected_env_ids: set[int],
 ) -> int | None:
-    """用 Isaac rigid view 恢复 dynamic object pose；view 存在时失败即报错。"""
+    """用 Isaac rigid view 恢复 dynamic object pose；view 存在时失败即报错。
+
+    对普通 rigid object，indices 就是 env id；对 dynamic-chain，则由上面的 wrapper 处理
+    env-major body indices。
+    """
 
     if view is None:
         return None
@@ -399,6 +458,7 @@ def _restore_object_view_state(
                 f"cannot restore tiled object {object_name!r} rigid view without env origins"
             )
         origins = np.asarray(env_origins, dtype=float).reshape(-1, 3)
+        # local -> world 使用目标 env origin，保证 env 间复制不会保留 source env 的偏移。
         world_positions = np.asarray(positions_local[rows], dtype=float).reshape(-1, 3) + origins[
             env_index
         ]

@@ -132,6 +132,12 @@ class BatchedCuMotionIKSolver:
         position_tolerance: float | None = None,
         orientation_tolerance: float | None = None,
     ) -> None:
+        """创建 tiled IK solver，并建立 command-space 到 cuMotion C-space 的映射。
+
+        当 ``command_joint_names`` 存在时，外部仍按控制器 command joints 输入/输出；
+        内部只把 cuMotion 认识的 C-space 关节切出来求解，再回填到 command-space。
+        """
+
         self.context = context
         self.cumotion = context.cumotion
         self.kinematics = context.kinematics
@@ -451,6 +457,8 @@ class BatchedCuMotionIKSolver:
 
 
 def _require_2d(values: np.ndarray, label: str) -> np.ndarray:
+    """把输入规范化成二维 float 数组；一维输入视为单行 batch。"""
+
     array = np.asarray(values, dtype=float)
     if array.ndim == 1:
         array = array.reshape(1, -1)
@@ -460,6 +468,8 @@ def _require_2d(values: np.ndarray, label: str) -> np.ndarray:
 
 
 def _require_2d_width(values: np.ndarray, width: int, label: str) -> np.ndarray:
+    """校验二维数组列数等于指定 width。"""
+
     array = _require_2d(values, label)
     if array.shape[1] != int(width):
         raise ValueError(f"{label} must have shape (N, {width})")
@@ -472,6 +482,8 @@ def _optional_2d_width(
     width: int,
     label: str,
 ) -> np.ndarray | None:
+    """读取可选 batched 数组，并支持单行广播到 ``num_rows``。"""
+
     if values is None:
         return None
     array = _require_2d_width(values, width, label)

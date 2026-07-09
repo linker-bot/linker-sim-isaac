@@ -20,6 +20,8 @@ class FoxgloveCameraFrameSink:
     """把 camera frames 写到 Foxglove live server 或 MCAP。"""
 
     def __init__(self, sink, *, topic_prefix_by_camera: Mapping[str, str]) -> None:
+        """保存 Foxglove sink，并按需懒创建 image/info channels。"""
+
         self.foxglove, self.messages = _load_foxglove()
         self.channels = _load_foxglove_channels()
         self.sink = sink
@@ -63,6 +65,8 @@ class FoxgloveCameraFrameSink:
         )
 
     def publish(self, frame: CameraFrame) -> None:
+        """把一帧 camera 数据写入对应 Foxglove topic。"""
+
         prefix = self.topic_prefix_by_camera.get(frame.camera_name)
         if prefix is None:
             return
@@ -76,11 +80,15 @@ class FoxgloveCameraFrameSink:
         )
 
     def close(self) -> None:
+        """关闭 live server 或 MCAP writer；测试 fake 没有 close 时静默跳过。"""
+
         close = getattr(self.sink, "close", None)
         if close is not None:
             close()
 
     def _image_channel(self, prefix: str, modality: str):
+        """按 topic 前缀和 modality 获取或创建 RawImage channel。"""
+
         key = (prefix, modality)
         channel = self.image_channels.get(key)
         if channel is None:
@@ -89,6 +97,8 @@ class FoxgloveCameraFrameSink:
         return channel
 
     def _info_channel(self, prefix: str):
+        """获取或创建 camera metadata/info 的 JSON channel。"""
+
         channel = self.info_channels.get(prefix)
         if channel is None:
             channel = self.foxglove.Channel(
@@ -136,4 +146,3 @@ def _topic(prefix: str, suffix: str) -> str:
     """拼接 Foxglove topic。"""
 
     return prefix.rstrip("/") + "/" + suffix.lstrip("/")
-

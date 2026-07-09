@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import time
+from threading import Thread
+
 import numpy as np
 
 from linkerbot_sim.app.motion.specs import (
@@ -268,6 +271,30 @@ def test_parse_interactive_reset_command() -> None:
     assert command.reset_hold_after_reset is False
 
 
+def test_parse_interactive_snapshot_commands() -> None:
+    get_command = parse_interactive_motion_message(
+        {"type": "get_snapshot", "id": "snap-a"},
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+    set_command = parse_interactive_motion_message(
+        {
+            "type": "set_snapshot",
+            "id": "snap-b",
+            "snapshot": {"schema_version": "linkerbot.snapshot.v1", "robots": {}},
+            "robot_map": {"left": "single"},
+            "strict": False,
+        },
+        default_tcp_by_side=DEFAULT_TCP,
+    )
+
+    assert get_command.kind == "get_snapshot"
+    assert get_command.command_id == "snap-a"
+    assert set_command.kind == "set_snapshot"
+    assert set_command.command_id == "snap-b"
+    assert set_command.snapshot_robot_map == {"left": "single"}
+    assert set_command.snapshot_strict is False
+
+
 def test_parse_raw_joint_sequence_matrix_and_mapping() -> None:
     command = parse_interactive_motion_message(
         {
@@ -358,6 +385,50 @@ def test_interactive_queue_reset_cancels_pending_and_tracks_status() -> None:
     assert events[-2]["event"] == "reset_requested"
     assert events[-1]["event"] == "reset_done"
     assert queue.status()["last_reset"]["state"] == "done"
+
+
+def test_transport_snapshot_request_waits_for_simulation_response() -> None:
+    queue = InteractiveMotionQueue()
+    responses = []
+
+    thread = Thread(
+        target=lambda: responses.append(
+            handle_interactive_message(
+                message={"type": "get_snapshot", "id": "snap-a"},
+                queue=queue,
+                default_tcp_by_side=DEFAULT_TCP,
+            )
+        )
+    )
+    thread.start()
+    request = None
+    for _ in range(100):
+        request = queue.consume_snapshot_request()
+        if request is not None:
+            break
+        time.sleep(0.01)
+    assert request is not None
+    assert request.snapshot_id == "snap-a"
+    assert request.kind == "get_snapshot"
+
+    queue.mark_snapshot_done(
+        request,
+        {
+            "event": "snapshot",
+            "accepted": True,
+            "snapshot": {"robots": {}},
+        },
+    )
+    thread.join(timeout=1.0)
+
+    assert responses == [
+        {
+            "event": "snapshot",
+            "accepted": True,
+            "snapshot": {"robots": {}},
+            "id": "snap-a",
+        }
+    ]
 
 
 def test_transport_status_and_cancel_current_responses() -> None:

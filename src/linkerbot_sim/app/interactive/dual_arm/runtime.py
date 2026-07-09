@@ -25,6 +25,10 @@ from linkerbot_sim.execution.dual_steps import (
     DualCommandExecutionInterrupted,
     DualCommandPositionTargetStep,
 )
+from linkerbot_sim.snapshots import (
+    get_dual_robot_snapshot,
+    set_dual_robot_snapshot,
+)
 
 
 def run_interactive_dual_arm_motion(
@@ -73,6 +77,18 @@ def run_interactive_dual_arm_motion(
             while not queue.quit_requested():
                 if _simulation_app_stopped(runtime):
                     break
+                snapshot_request = queue.consume_snapshot_request()
+                if snapshot_request is not None:
+                    # snapshot 读写会触碰左右 execution 的 articulation/prim 状态；放到主循环
+                    # 中处理，避免 transport 线程和 PhysX step 交错。
+                    try:
+                        queue.mark_snapshot_done(
+                            snapshot_request,
+                            _handle_snapshot_request(runtime, snapshot_request),
+                        )
+                    except Exception as exc:
+                        queue.mark_snapshot_failed(snapshot_request, str(exc))
+                    continue
                 reset_request = queue.consume_reset_request()
                 if reset_request is not None:
                     try:
@@ -238,3 +254,33 @@ def _simulation_app_stopped(runtime: DualRobotAppRuntime) -> bool:
 
     app = runtime.execution.simulation_app
     return app is not None and not app.is_running()
+
+
+def _handle_snapshot_request(
+    runtime: DualRobotAppRuntime,
+    request,
+) -> dict[str, object]:
+    """在仿真主线程处理 dual-arm snapshot 请求。
+
+    dual snapshot 默认按 ``left``/``right`` role 恢复；如果来源是 single 或只想恢复某一
+    侧，则由请求里的 ``robot_map`` 指定 source role 到目标侧的映射。
+    """
+
+    if request.kind == "get_snapshot":
+        return {
+            "event": "snapshot",
+            "accepted": True,
+            "backend": "dual",
+            "snapshot": get_dual_robot_snapshot(runtime).as_dict(),
+        }
+    if request.kind == "set_snapshot":
+        if request.snapshot is None:
+            raise ValueError("set_snapshot requires snapshot")
+        result = set_dual_robot_snapshot(
+            runtime,
+            request.snapshot,
+            robot_map=request.robot_map,
+            strict=bool(request.strict),
+        )
+        return {**result.as_dict(), "backend": "dual"}
+    raise ValueError(f"unsupported snapshot request kind: {request.kind!r}")

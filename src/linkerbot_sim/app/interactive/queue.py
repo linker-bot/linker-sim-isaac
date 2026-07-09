@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from threading import Condition, Event, Lock
 from typing import Literal
@@ -12,6 +12,7 @@ from linkerbot_sim.app.interactive.protocol import InteractiveMotionCommand
 
 
 CommandState = Literal["pending", "running", "done", "failed", "cancelled"]
+SnapshotRequestKind = Literal["get_snapshot", "set_snapshot"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,32 @@ class ResetRequest:
             "mode": self.mode,
             "clear_queue": self.clear_queue,
             "hold_after_reset": self.hold_after_reset,
+        }
+
+
+@dataclass
+class SnapshotRequest:
+    """一次待仿真主线程处理的 snapshot 请求。
+
+    transport 线程只负责解析 JSON 和等待结果，不能直接读写 Isaac/PhysX 状态；所以
+    get/set snapshot 都会被封装成这个 request，由 single/dual 的主仿真循环取出执行。
+    """
+
+    snapshot_id: str
+    kind: SnapshotRequestKind
+    snapshot: Mapping[str, object] | None = None
+    robot_map: Mapping[str, str] | None = None
+    strict: bool = True
+    response: dict[str, object] | None = None
+    done: bool = False
+
+    def snapshot_info(self) -> dict[str, object]:
+        """返回可序列化 snapshot 请求摘要，用于事件广播。"""
+
+        return {
+            "id": self.snapshot_id,
+            "kind": self.kind,
+            "strict": bool(self.strict),
         }
 
 
@@ -73,6 +100,8 @@ class InteractiveMotionQueue:
         self._reset_request: ResetRequest | None = None
         self._resetting = False
         self._last_reset: dict[str, object] | None = None
+        self._next_snapshot_id = 1
+        self._snapshot_requests: list[SnapshotRequest] = []
         self._cancel_current = Event()
         self._estop = Event()
         self._quit = Event()
@@ -224,6 +253,93 @@ class InteractiveMotionQueue:
             self.emit({"event": "cancelled", "id": command_id, "state": "cancelled"})
         self.emit({"event": "reset_requested", **request.snapshot()})
         return request
+
+    def request_snapshot(
+        self,
+        *,
+        kind: SnapshotRequestKind,
+        snapshot_id: str | None = None,
+        snapshot: Mapping[str, object] | None = None,
+        robot_map: Mapping[str, str] | None = None,
+        strict: bool = True,
+        timeout_s: float = 30.0,
+    ) -> dict[str, object]:
+        """请求仿真主线程执行 snapshot get/set，并阻塞等待响应。
+
+        这里使用 ``Condition`` 把 transport 线程和仿真主循环串起来：transport 创建请求后
+        等待 ``mark_snapshot_done/failed`` 唤醒；主循环在安全的 physics 边界消费请求。
+        """
+
+        if kind == "set_snapshot" and snapshot is None:
+            raise ValueError("set_snapshot requires snapshot")
+        request = SnapshotRequest(
+            snapshot_id=snapshot_id or self._new_snapshot_id(),
+            kind=kind,
+            snapshot=snapshot,
+            robot_map=robot_map,
+            strict=bool(strict),
+        )
+        with self._condition:
+            # snapshot 请求单独排队，不与 motion command 共用 pending 列表；这样它不会被
+            # 长时间动作队列阻塞，也不会改变 motion command 的状态机。
+            self._snapshot_requests.append(request)
+            self._condition.notify_all()
+        self.emit({"event": "snapshot_requested", **request.snapshot_info()})
+        with self._condition:
+            completed = self._condition.wait_for(
+                lambda: request.done or self._quit.is_set(),
+                timeout=float(timeout_s),
+            )
+            if not completed or request.response is None:
+                return {
+                    "event": "snapshot_timeout",
+                    "accepted": False,
+                    "id": request.snapshot_id,
+                }
+            return dict(request.response)
+
+    def consume_snapshot_request(self) -> SnapshotRequest | None:
+        """取出 pending snapshot 请求；只有仿真主循环应调用。
+
+        返回后请求对象仍由等待中的 transport 持有引用，所以主循环只需要在同一个对象上
+        写入 response/done 并 notify 即可。
+        """
+
+        with self._condition:
+            if not self._snapshot_requests:
+                return None
+            return self._snapshot_requests.pop(0)
+
+    def mark_snapshot_done(
+        self,
+        request: SnapshotRequest,
+        response: Mapping[str, object],
+    ) -> None:
+        """标记 snapshot 请求成功完成并唤醒等待的 transport。"""
+
+        payload = dict(response)
+        payload.setdefault("id", request.snapshot_id)
+        with self._condition:
+            # response 存在 request 对象上，等待方醒来后直接返回这份 JSON-compatible dict。
+            request.response = payload
+            request.done = True
+            self._condition.notify_all()
+        self.emit({"event": "snapshot_done", "id": request.snapshot_id})
+
+    def mark_snapshot_failed(self, request: SnapshotRequest, error: str) -> None:
+        """标记 snapshot 请求失败，并用统一 rejected-like payload 唤醒等待方。"""
+
+        response = {
+            "event": "snapshot_failed",
+            "accepted": False,
+            "id": request.snapshot_id,
+            "error": error,
+        }
+        with self._condition:
+            request.response = response
+            request.done = True
+            self._condition.notify_all()
+        self.emit(response)
 
     def consume_reset_request(self) -> ResetRequest | None:
         """取出 pending reset 请求；只有主循环应调用。"""
@@ -418,3 +534,11 @@ class InteractiveMotionQueue:
             reset_id = f"reset-{self._next_reset_id}"
             self._next_reset_id += 1
             return reset_id
+
+    def _new_snapshot_id(self) -> str:
+        """生成进程内递增的 snapshot 请求 id。"""
+
+        with self._lock:
+            snapshot_id = f"snapshot-{self._next_snapshot_id}"
+            self._next_snapshot_id += 1
+            return snapshot_id

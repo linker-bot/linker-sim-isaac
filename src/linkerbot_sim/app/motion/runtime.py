@@ -40,6 +40,8 @@ class MotionPlanningFailed(RuntimeError):
         tcp_frame_name: str | None = None,
         component: str | None = None,
     ) -> None:
+        """保存规划失败上下文，便于交互层返回结构化错误。"""
+
         super().__init__(message)
         self.phase = phase
         self.status = status

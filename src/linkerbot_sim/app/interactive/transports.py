@@ -158,6 +158,16 @@ def _apply_command(
             hold_after_reset=command.reset_hold_after_reset,
         )
         return {"event": "reset", "accepted": True, **request.snapshot()}
+    if command.kind in {"get_snapshot", "set_snapshot"}:
+        # snapshot 命令需要读写 runtime/PhysX 状态，必须经由 queue 交给仿真主线程；
+        # request_snapshot 会在 transport 线程里等待主线程返回 response。
+        return queue.request_snapshot(
+            kind=command.kind,
+            snapshot_id=command.command_id,
+            snapshot=command.snapshot,
+            robot_map=command.snapshot_robot_map,
+            strict=command.snapshot_strict,
+        )
     if command.kind == "estop":
         queue.request_estop()
         return {"event": "estop", "accepted": True}

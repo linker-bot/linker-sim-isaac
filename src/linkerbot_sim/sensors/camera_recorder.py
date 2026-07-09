@@ -28,13 +28,19 @@ class CompositeCameraFrameSink:
     """把同一帧 camera 数据发布到多个 sink。"""
 
     def __init__(self, sinks: Sequence[CameraFrameSink]) -> None:
+        """保存输出端快照；后续 publish/close 按固定顺序广播。"""
+
         self.sinks = tuple(sinks)
 
     def publish(self, frame: CameraFrame) -> None:
+        """把同一帧依次发布到所有子 sink。"""
+
         for sink in self.sinks:
             sink.publish(frame)
 
     def close(self) -> None:
+        """依次关闭所有子 sink。"""
+
         for sink in self.sinks:
             sink.close()
 
@@ -43,6 +49,8 @@ class OfflineCameraFrameSink:
     """把 camera frame 写成离线文件序列。"""
 
     def __init__(self, *, camera_name: str, save_dir: str | Path) -> None:
+        """创建单 camera 离线输出目录和 metadata.jsonl 文件。"""
+
         self.camera_name = camera_name
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
@@ -50,6 +58,8 @@ class OfflineCameraFrameSink:
         self.metadata_file = self.metadata_path.open("a", encoding="utf-8")
 
     def publish(self, frame: CameraFrame) -> None:
+        """写入匹配 camera 的一帧 payload，并追加一行 metadata。"""
+
         if frame.camera_name != self.camera_name:
             return
         relative_path = _write_frame_payload(self.save_dir, frame)
@@ -64,6 +74,8 @@ class OfflineCameraFrameSink:
         self.metadata_file.flush()
 
     def close(self) -> None:
+        """关闭 metadata 文件句柄。"""
+
         self.metadata_file.close()
 
 
@@ -77,6 +89,11 @@ class CameraFramePublisher:
         name: str = "camera-frame-publisher",
         max_queue_size: int = 128,
     ) -> None:
+        """创建 bounded queue publisher。
+
+        queue 满时会丢弃旧帧保留新帧，避免磁盘或网络输出慢时阻塞仿真主线程。
+        """
+
         self.sink = sink
         self.queue: Queue[CameraFrame | None] = Queue(maxsize=max_queue_size)
         self.name = name
@@ -86,12 +103,16 @@ class CameraFramePublisher:
         self.dropped_frames = 0
 
     def start(self) -> None:
+        """启动后台发布线程；重复调用保持幂等。"""
+
         if self.thread is not None:
             return
         self.thread = Thread(target=self._run, name=self.name, daemon=True)
         self.thread.start()
 
     def publish(self, frame: CameraFrame) -> None:
+        """从仿真线程提交一帧；队列满时尽量丢旧帧保新帧。"""
+
         if self.stop_event.is_set():
             return
         try:
@@ -108,6 +129,8 @@ class CameraFramePublisher:
                 self.dropped_frames += 1
 
     def close(self) -> None:
+        """请求后台线程退出，等待短时间后关闭底层 sink。"""
+
         self.stop_event.set()
         try:
             self.queue.put(None, timeout=2.0)
@@ -119,6 +142,8 @@ class CameraFramePublisher:
         self.sink.close()
 
     def _run(self) -> None:
+        """后台线程主循环：消费队列并把异常记录到 ``last_error``。"""
+
         while True:
             frame = self.queue.get()
             if frame is None:

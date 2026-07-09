@@ -95,6 +95,8 @@ class TiledCommandTarget:
     info: Mapping[str, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        """把 joint target 固定成二维 float 数组，保证 env 维度存在。"""
+
         q = np.asarray(self.joint_positions, dtype=float)
         if q.ndim != 2:
             raise ValueError("TiledCommandTarget.joint_positions must be 2D")

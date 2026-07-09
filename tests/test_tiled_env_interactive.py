@@ -1231,6 +1231,52 @@ def test_get_state_and_set_state_support_selected_envs() -> None:
     }
 
 
+def test_snapshot_protocol_restores_selected_envs() -> None:
+    module = load_tiled_interactive_module()
+    runtime = make_runtime()
+    runtime.current_positions[:] = [[0.1, 0.2, 0.3], [9.0, 9.0, 9.0]]
+
+    snapshot_response = module.handle_tiled_interactive_message(
+        {"type": "get_snapshot", "env_id": 0},
+        runtime,
+    )
+    set_response = module.handle_tiled_interactive_message(
+        {
+            "type": "set_snapshot",
+            "env_ids": [1],
+            "snapshot": snapshot_response["snapshot"],
+        },
+        runtime,
+    )
+
+    assert snapshot_response["event"] == "snapshot"
+    assert set_response["event"] == "snapshot_restored"
+    assert set_response["accepted"] is True
+    assert set_response["env_ids"] == [1]
+    np.testing.assert_allclose(runtime.current_positions[1], [0.1, 0.2, 0.3])
+
+
+def test_clone_state_protocol_copies_source_env() -> None:
+    module = load_tiled_interactive_module()
+    runtime = make_runtime()
+    runtime.current_positions[:] = [[0.1, 0.2, 0.3], [9.0, 9.0, 9.0]]
+
+    response = module.handle_tiled_interactive_message(
+        {
+            "type": "clone_state",
+            "source_env_id": 0,
+            "target_env_ids": [1],
+        },
+        runtime,
+    )
+
+    assert response["event"] == "state_cloned"
+    assert response["accepted"] is True
+    assert response["source_env_id"] == 0
+    assert response["target_env_ids"] == [1]
+    np.testing.assert_allclose(runtime.current_positions[1], [0.1, 0.2, 0.3])
+
+
 def test_load_and_step_trajectory_replays_test_runtime_fake() -> None:
     module = load_tiled_interactive_module()
     runtime = make_runtime()

@@ -360,6 +360,8 @@ def _tcp_frame_from_mapping(
 
 
 def _validate_unique_tcp_frames(frames: Sequence[TcpFrame]) -> None:
+    """校验自定义 TCP frame 名字唯一且 parent frame 非空。"""
+
     names: set[str] = set()
     for frame in frames:
         if not frame.frame_name:

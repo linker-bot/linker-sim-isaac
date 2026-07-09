@@ -48,6 +48,11 @@ from linkerbot_sim.tiled import (
     TiledPlanningResult,
     TiledTrajectoryBuffer,
 )
+from linkerbot_sim.snapshots.adapters import (
+    clone_tiled_env_state,
+    get_tiled_snapshot,
+    set_tiled_snapshot,
+)
 from linkerbot_sim.sensors.camera_observer import CameraOutputHandle
 from linkerbot_sim.sensors.camera_runtime import SensorCameraRuntime
 
@@ -182,6 +187,8 @@ class IsaacTiledInteractiveRuntime:
                 name
             ].command_tcp_world_poses(targets[name])
         object_pose_views = _create_tiled_object_pose_views(scene)
+        # object_pose_views 让动态对象读写走 Isaac RigidPrim batched API。特别是
+        # dynamic_chain，需要按 child rigid body 保存/恢复，否则 root pose 不能代表整条链。
         planner_backend_obj = _create_tiled_planner_backend(
             planner_backend,
             scene=scene,
@@ -569,6 +576,81 @@ class IsaacTiledInteractiveRuntime:
             "accepted": True,
             "backend": "isaac",
             "env_ids": selected.tolist(),
+            "step": self.step,
+            "time_s": self.time_s,
+        }
+
+    def get_snapshot(self, *, env_id: int) -> dict[str, object]:
+        """读取单个 env 的 runtime-neutral snapshot。
+
+        该方法只做协议响应包装；实际读取逻辑在 ``snapshots.adapters`` 中，便于 debug
+        tiled runtime 和真实 Isaac tiled runtime 共用同一套语义。
+        """
+
+        snapshot = get_tiled_snapshot(self, env_id=int(env_id))
+        return {
+            "event": "snapshot",
+            "accepted": True,
+            "backend": "isaac",
+            "env_id": int(env_id),
+            "step": self.step,
+            "time_s": self.time_s,
+            "snapshot": snapshot.as_dict(),
+        }
+
+    def set_snapshot(
+        self,
+        snapshot: Mapping[str, object],
+        *,
+        env_ids: np.ndarray,
+        robot_map: Mapping[str, str] | None = None,
+        strict: bool = True,
+    ) -> dict[str, object]:
+        """把 runtime-neutral snapshot 写回 selected env。
+
+        ``env_ids`` 可以包含多个目标 env；adapter 会广播 source snapshot，并在写回后清理
+        selected env 的 trajectory/planner 缓存。
+        """
+
+        result = set_tiled_snapshot(
+            self,
+            snapshot,
+            env_ids=env_ids,
+            robot_map=robot_map,
+            strict=bool(strict),
+        )
+        return {
+            **result.as_dict(),
+            "backend": "isaac",
+            "step": self.step,
+            "time_s": self.time_s,
+        }
+
+    def clone_state(
+        self,
+        *,
+        source_env_id: int,
+        target_env_ids: np.ndarray,
+        strict: bool = True,
+    ) -> dict[str, object]:
+        """把一个 source env 的 snapshot 克隆到多个 target env。
+
+        clone 不走 get_state/set_state 的 batched 原始状态，而是复用 runtime-neutral
+        snapshot，因此后续 single/dual/tiled 的兼容性逻辑保持一致。
+        """
+
+        result = clone_tiled_env_state(
+            self,
+            source_env_id=int(source_env_id),
+            target_env_ids=target_env_ids,
+            strict=bool(strict),
+        )
+        return {
+            **result.as_dict(),
+            "event": "state_cloned",
+            "backend": "isaac",
+            "source_env_id": int(source_env_id),
+            "target_env_ids": [int(env_id) for env_id in target_env_ids],
             "step": self.step,
             "time_s": self.time_s,
         }
@@ -1000,7 +1082,11 @@ class IsaacTiledInteractiveRuntime:
 
 
 def _create_tiled_object_pose_views(scene: object) -> dict[str, object]:
-    """为 dynamic tiled objects 创建 batched rigid view，用于 reset/get_state 同步 PhysX。"""
+    """为 dynamic tiled objects 创建 batched rigid view，用于 reset/get_state/snapshot。
+
+    普通 rigid object 每个 env 一个 row；dynamic-chain object 会把所有 child bodies 展平为
+    env-major rows，并由 ``TiledDynamicChainObjectPoseView`` 负责局部/世界坐标转换。
+    """
 
     object_paths = getattr(scene, "object_prim_paths", {}) or {}
     rigid_objects: list[tuple[str, tuple[str, ...]]] = []
@@ -1019,6 +1105,8 @@ def _create_tiled_object_pose_views(scene: object) -> dict[str, object]:
                 continue
             rigid_objects.append((name, paths))
         elif kind == "dynamic_chain":
+            # dynamic_chain 的 root prim 往往只是容器，真正可动的是 child rigid bodies；
+            # 因此需要基于 env_0 推导 body suffix，再为所有 env 拼出完整 body path。
             body_names, body_suffixes = _dynamic_chain_body_suffixes(
                 name=name,
                 model=model,
@@ -1162,6 +1250,8 @@ def _create_tiled_planner_backend(
     from linkerbot_sim.planning.requests import SpecifiedPathRequest
 
     def _planner_factory(robot_name: str) -> object:
+        """为指定 tiled robot 创建独立 cuMotion planner facade。"""
+
         robot = scene.robots[str(robot_name)]
         robot_config = load_profile_yaml("robot", robot.profile_name)
         context = CuMotionContext(CuMotionConfig.from_mapping(robot_config))
@@ -1189,6 +1279,8 @@ class _TiledCuMotionPlannerFacade:
         specified_path_request_type: type,
         specified_path_config_fn: Callable[..., object],
     ) -> None:
+        """保存 cuMotion context 和 request 分发所需的 planner 类型。"""
+
         self.context = context
         self.tcp_frame_name = tcp_frame_name
         self._planner_type = planner_type

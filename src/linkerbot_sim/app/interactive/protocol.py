@@ -38,6 +38,8 @@ InteractiveCommandKind = Literal[
     "moves",
     "hold",
     "reset",
+    "get_snapshot",
+    "set_snapshot",
     "status",
     "cancel",
     "cancel_current",
@@ -48,7 +50,11 @@ InteractiveCommandKind = Literal[
 
 @dataclass(frozen=True)
 class InteractiveMotionCommand:
-    """Parsed interactive command."""
+    """解析后的交互命令。
+
+    snapshot 字段只在 ``get_snapshot``/``set_snapshot`` 中使用；它们复用 motion
+    transport，但实际执行会交给仿真主循环中的 snapshot adapter。
+    """
 
     kind: InteractiveCommandKind
     command_id: str | None = None
@@ -60,6 +66,9 @@ class InteractiveMotionCommand:
     reset_mode: str = "runtime"
     reset_clear_queue: bool = True
     reset_hold_after_reset: bool = True
+    snapshot: Mapping[str, object] | None = None
+    snapshot_robot_map: Mapping[str, str] | None = None
+    snapshot_strict: bool = True
 
 
 def parse_interactive_motion_message(
@@ -136,6 +145,29 @@ def parse_interactive_motion_message(
                 message.get("hold_after_reset"),
                 default=True,
                 label="hold_after_reset",
+            ),
+        )
+    if command_type == "get_snapshot":
+        # single/dual runtime 没有 env 维度，因此 get_snapshot 不需要 env_id。
+        return InteractiveMotionCommand(
+            kind="get_snapshot",
+            command_id=_optional_str(message.get("id")),
+        )
+    if command_type == "set_snapshot":
+        snapshot = message.get("snapshot")
+        if not isinstance(snapshot, Mapping):
+            raise ValueError("set_snapshot.snapshot must be a JSON object")
+        # robot_map/strict 直接保留到 command，由主线程调用 snapshot adapter 时再解释。
+        # 这样协议层不需要导入 snapshots 包，也不会提前触碰 runtime 状态。
+        return InteractiveMotionCommand(
+            kind="set_snapshot",
+            command_id=_optional_str(message.get("id")),
+            snapshot=snapshot,
+            snapshot_robot_map=_optional_string_mapping(message.get("robot_map")),
+            snapshot_strict=_optional_bool(
+                message.get("strict"),
+                default=True,
+                label="strict",
             ),
         )
     if command_type == "status":
@@ -459,6 +491,16 @@ def _optional_str(value: object) -> str | None:
         return None
     text = str(value)
     return text if text else None
+
+
+def _optional_string_mapping(value: object) -> dict[str, str] | None:
+    """读取可选字符串到字符串的 mapping。"""
+
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError("robot_map must be a JSON object")
+    return {str(key): str(item) for key, item in value.items()}
 
 
 def _required_float(message: Mapping[str, object], key: str) -> float:

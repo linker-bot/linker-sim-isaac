@@ -44,6 +44,8 @@ def start_stdin_jsonl_reader(
     """启动 stdin JSONL reader 线程。"""
 
     def _reader() -> None:
+        """循环读取 stdin，每行封装成 tiled interactive request。"""
+
         while True:
             line = sys.stdin.readline()
             if line == "":

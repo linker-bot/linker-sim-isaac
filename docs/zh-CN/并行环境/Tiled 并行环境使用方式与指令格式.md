@@ -421,7 +421,38 @@ action 消息支持两种外形。
 - `joint_positions` / `joint_velocities` 宽度必须等于该 robot 的 command joint 数。
 - set_state 后建议下一条 action 明确给目标，避免旧 hold target 语义干扰。
 
-### 8.5 quit
+### 8.5 get_snapshot / set_snapshot / clone_state
+
+`get_snapshot` 读取单个 env 的 runtime-neutral 逻辑快照，快照使用 env-local 对象位姿，便于写回其它 env：
+
+```json
+{"type":"get_snapshot","env_id":0}
+```
+
+返回中的 `snapshot` 可写回 tiled 的一个或多个 env：
+
+```json
+{
+  "type": "set_snapshot",
+  "env_ids": [1,2,3],
+  "snapshot": { "...": "..." }
+}
+```
+
+常用的 env 内克隆可以直接用 `clone_state`：
+
+```json
+{"type":"clone_state","source_env_id":0,"target_env_ids":[1,2,3]}
+```
+
+说明:
+
+- snapshot restore 会按 `joint_names` 对齐 robot command joints，而不是依赖数组顺序。
+- 对象位姿按 env-local 保存，写入目标 env 时会转换到目标 env 的 world pose。
+- 恢复后会清理 selected env 的 trajectory buffer 和 planner pending request，并重置 command adapter 的 hold target。
+- 默认 `strict:true`，robot/object profile、joint/body name 不兼容时会拒绝；需要跨 role 写入时可传 `robot_map`。
+
+### 8.6 quit
 
 请求:
 

@@ -72,6 +72,8 @@ class SensorCameraRuntime:
         return self.camera.get_intrinsics_matrix(device=device)
 
     def _require_modality(self, modality: str) -> None:
+        """确认 camera 配置中启用了指定 modality。"""
+
         if modality not in self.settings.modalities:
             raise ValueError(
                 f"camera {self.name!r} was not configured with modality {modality!r}"
@@ -219,9 +221,13 @@ def _load_camera_dependencies() -> tuple[type, ArrayFactory, QuatFactory]:
     from isaacsim.sensors.camera import Camera
 
     def array_factory(values: tuple[float, ...]) -> object:
+        """把配置中的 tuple 转成 Isaac Camera 需要的 numpy 向量。"""
+
         return np.array(values, dtype=float)
 
     def quat_from_rpy(rpy: tuple[float, float, float]) -> object:
+        """把配置中的 XYZ RPY 转成 Isaac 使用的四元数。"""
+
         return rot_utils.euler_angles_to_quats(np.array(rpy, dtype=float), degrees=False)
 
     return Camera, array_factory, quat_from_rpy
