@@ -1,9 +1,14 @@
-"""运行时无关的逻辑仿真快照 schema。
+"""运行时无关的 canonical simulation snapshot schema。
 
-这个模块只描述“要保存什么状态”，不绑定 Isaac tiled、single-arm 或
-dual-arm 的具体 runtime 对象。外层 adapter 负责把各 runtime 的真实状态翻译
-成这里的 dataclass；这样同一份 snapshot 才能在兼容的 tiled/single/dual 之间
-传递和恢复。
+机器人使用 array，且每个 entry 同时携带会话级 ``robot_id`` 和稳定 ``label``。
+schema 不绑定 SingleSceneRuntime 或 TiledSceneRuntime 的具体 Isaac 对象。所有数值数组在
+构造时统一转为有限 ``float`` 的 numpy 副本，避免调用方后续修改输入数组而悄悄改变已校验
+快照。
+
+坐标与 shape 约定如下：单对象根位姿为 ``(3,)`` 和 ``(4,)``，四元数顺序固定为
+``wxyz``；多刚体字段为 ``(body_count, 3)`` / ``(body_count, 4)``。对象位置保存于
+metadata 指定的 local frame，adapter 负责在 runtime 边界转换，schema 本身不猜测
+world offset。
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-SCHEMA_VERSION = "linkerbot.snapshot.v1"
+SNAPSHOT_SCHEMA = "linkerbot.snapshot"
 
 
 @dataclass(frozen=True)
@@ -22,8 +27,8 @@ class SnapshotMetadata:
     """描述 snapshot 来源的元数据。
 
     ``coordinate_frame`` 记录位姿数组使用的坐标约定：tiled env 通常保存
-    ``env-local``，single/dual runtime 保存 ``scene-local``。恢复时 adapter 会
-    根据目标 runtime 再转换成需要的 world/env 坐标。
+    ``env-local``，SingleSceneRuntime 保存 ``scene-local``。恢复时 adapter 会根据目标 runtime
+    再转换成需要的 world/env 坐标。
     """
 
     source_runtime: str = ""
@@ -33,12 +38,23 @@ class SnapshotMetadata:
     coordinate_frame: str = "local"
     info: Mapping[str, object] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """直接构造与 JSON 解析使用同一有限数值约束。"""
+
+        source_env_id = _optional_int(self.source_env_id, "source_env_id")
+        step = _optional_int(self.step, "step")
+        time_s = _optional_float(self.time_s, "time_s")
+        object.__setattr__(self, "source_env_id", source_env_id)
+        object.__setattr__(self, "step", step)
+        object.__setattr__(self, "time_s", time_s)
+        object.__setattr__(self, "info", dict(self.info))
+
     @classmethod
     def from_mapping(cls, data: Mapping[str, object] | None) -> "SnapshotMetadata":
         """从 JSON-compatible mapping 解析元数据。
 
-        客户端可以不传 metadata；此时使用空来源信息，避免旧快照或手写快照因为
-        缺少可选字段而无法恢复。
+        当前协议允许客户端省略 metadata；此时使用空来源信息。该字段只提供诊断上下文，
+        不参与机器人/对象兼容性匹配，因此缺失不应阻止恢复。
         """
 
         if data is None:
@@ -73,17 +89,19 @@ class SnapshotMetadata:
 
 @dataclass(frozen=True)
 class RobotSnapshot:
-    """单个机器人角色的逻辑关节状态。
+    """单个机器人的逻辑关节状态。
 
-    ``role`` 是 snapshot 内部的逻辑角色，例如 ``single``、``left``、
-    ``right`` 或 tiled 中的机器人名。恢复到不同 runtime 时不要求 role 完全相同，
-    但需要通过兼容性检查或 ``robot_map`` 明确映射。
+    ``joint_names`` 决定 ``joint_positions`` 和 ``joint_velocities`` 的一维 shape 与元素
+    顺序；两者都必须是 ``(len(joint_names),)``。这里刻意只保存 command joints：它们
+    是交互控制实际会写入的关节集合，也能避开不同 URDF/USD 中非受控 DOF 的差异。
 
-    这里刻意只保存 command joints：它们是交互控制实际会写入的关节集合，也能避开
-    不同 URDF/USD 中非受控 DOF 的差异。
+    ``command_targets`` 是可选控制缓存而非观测状态。提供时必须同时给出
+    ``command_joint_names``，并保持同样的一一对应顺序；恢复器据此避免“物理位置已恢复，
+    下一控制步却被旧 target 拉回”的跳变。
     """
 
-    role: str
+    label: str
+    robot_id: int
     joint_names: tuple[str, ...]
     joint_positions: np.ndarray
     joint_velocities: np.ndarray
@@ -99,9 +117,10 @@ class RobotSnapshot:
         这里提前失败能让错误出现在最靠近输入的地方。
         """
 
-        role = str(self.role)
-        if not role:
-            raise ValueError("RobotSnapshot.role cannot be empty")
+        label = str(self.label)
+        if not label:
+            raise ValueError("RobotSnapshot.label cannot be empty")
+        robot_id = _required_nonnegative_int(self.robot_id, "RobotSnapshot.robot_id")
         joint_names = _string_tuple(self.joint_names, "joint_names")
         if not joint_names:
             raise ValueError("RobotSnapshot.joint_names cannot be empty")
@@ -123,7 +142,8 @@ class RobotSnapshot:
                 len(command_names),
                 "command_targets",
             )
-        object.__setattr__(self, "role", role)
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "robot_id", robot_id)
         object.__setattr__(self, "joint_names", joint_names)
         object.__setattr__(self, "joint_positions", positions)
         object.__setattr__(self, "joint_velocities", velocities)
@@ -136,8 +156,24 @@ class RobotSnapshot:
 
         if not isinstance(data, Mapping):
             raise ValueError("robot snapshot must be a JSON object")
+        _reject_unknown_keys(
+            data,
+            {
+                "label",
+                "robot_id",
+                "robot_profile",
+                "asset_fingerprint",
+                "joint_names",
+                "joint_positions",
+                "joint_velocities",
+                "command_joint_names",
+                "command_targets",
+            },
+            "robot snapshot",
+        )
         return cls(
-            role=str(data.get("role", "")),
+            label=_required_str(data.get("label"), "label"),
+            robot_id=_required_nonnegative_int(data.get("robot_id"), "robot_id"),
             robot_profile=_optional_str(data.get("robot_profile")),
             asset_fingerprint=_optional_str(data.get("asset_fingerprint")),
             joint_names=tuple(str(item) for item in data.get("joint_names", ())),
@@ -160,7 +196,8 @@ class RobotSnapshot:
         """
 
         result: dict[str, object] = {
-            "role": self.role,
+            "label": self.label,
+            "robot_id": int(self.robot_id),
             "joint_names": list(self.joint_names),
             "joint_positions": self.joint_positions.astype(float).tolist(),
             "joint_velocities": self.joint_velocities.astype(float).tolist(),
@@ -179,7 +216,8 @@ class RobotSnapshot:
 class ObjectSnapshot:
     """单个 runtime object 的逻辑位姿状态。
 
-    根对象位姿使用 local frame 保存；dynamic-chain 一类对象还会保存每个 child
+    根对象位姿分别使用 ``(3,)`` 的 local-frame 平移和 ``(4,)`` 的 ``wxyz`` 单位四元数；
+    线/角速度若存在也都是 ``(3,)``。dynamic-chain 一类对象还会保存每个 child
     rigid body 的位姿。这样恢复绳子、链条等多刚体对象时，不会只恢复 root 而丢失
     PhysX 中每段刚体的真实状态。
     """
@@ -199,8 +237,10 @@ class ObjectSnapshot:
     def __post_init__(self) -> None:
         """校验并标准化对象位姿数组。
 
-        四元数会归一化；如果保存了 ``body_names``，则 body pose 必须同时存在，
-        否则恢复 dynamic-chain 时无法知道每段刚体应该写回到哪里。
+        四元数会逐个归一化；如果保存了 ``body_names``，则 body pose 必须同时存在且
+        shape 分别为 ``(body_count, 3)``、``(body_count, 4)``，否则恢复 dynamic-chain
+        时无法知道每段刚体应该写回到哪里。所有数组都会复制，确保 frozen dataclass 的
+        逻辑不可变性不被外部 numpy 引用绕过。
         """
 
         name = str(self.name)
@@ -307,25 +347,24 @@ class ObjectSnapshot:
 class SimulationSnapshot:
     """一个 scene/env 实例的完整逻辑快照。
 
-    tiled 下通常表示某一个 env；single/dual 下表示当前 scene。这个对象是跨 runtime
-    交换的唯一数据结构，所有 get/set/clone API 都应以它或它的 JSON dict 为边界。
+    tiled 下表示某一个 env，SingleSceneRuntime 下表示当前 scene。这个对象是跨 runtime 交换的
+    唯一数据结构，所有 get/set/clone API 都应以它或它的 JSON dict 为边界。外层 mapping
+    key 与内部稳定 label/name 必须一致；机器人 ``robot_id`` 也必须唯一，防止兼容性映射
+    在恢复目标选择上出现歧义。
     """
 
     robots: Mapping[str, RobotSnapshot]
     objects: Mapping[str, ObjectSnapshot] = field(default_factory=dict)
     metadata: SnapshotMetadata = field(default_factory=SnapshotMetadata)
-    schema_version: str = SCHEMA_VERSION
+    schema: str = SNAPSHOT_SCHEMA
 
     def __post_init__(self) -> None:
-        """校验 schema 版本，并保证 mapping key 与对象内部名字一致。
+        """校验 schema discriminator，并保证 mapping key 与稳定 label 一致。"""
 
-        这个约束能防止 ``robots["left"]`` 里实际塞了 ``role="right"`` 这种隐蔽
-        数据错误，后续 robot_map 才能只关注“来源角色 -> 目标角色”的映射。
-        """
-
-        if str(self.schema_version) != SCHEMA_VERSION:
+        if str(self.schema) != SNAPSHOT_SCHEMA:
             raise ValueError(
-                f"unsupported snapshot schema_version: {self.schema_version!r}"
+                f"unsupported snapshot schema: {self.schema!r}; "
+                f"expected {SNAPSHOT_SCHEMA!r}"
             )
         robots = _robot_mapping(self.robots)
         objects = _object_mapping(self.objects)
@@ -334,30 +373,44 @@ class SimulationSnapshot:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "SimulationSnapshot":
-        """从 JSON-compatible mapping 解析完整快照。
-
-        ``robots``/``objects`` 的 key 会作为默认 role/name 注入，兼容较简洁的客户端
-        payload：客户端只需要在外层 map 里写名字，不必每个子对象重复写一遍。
-        """
+        """从 canonical JSON-compatible mapping 解析完整快照。"""
 
         if not isinstance(data, Mapping):
             raise ValueError("simulation snapshot must be a JSON object")
+        _reject_unknown_keys(
+            data,
+            {"schema", "metadata", "robots", "objects"},
+            "simulation snapshot",
+        )
+        if "schema" not in data:
+            raise ValueError("snapshot.schema is required")
+        schema = str(data["schema"])
+        if schema != SNAPSHOT_SCHEMA:
+            raise ValueError(
+                f"unsupported snapshot schema: {schema!r}; expected {SNAPSHOT_SCHEMA!r}"
+            )
         robots_data = data.get("robots", {})
         objects_data = data.get("objects", {})
-        if not isinstance(robots_data, Mapping):
-            raise ValueError("snapshot.robots must be a JSON object")
+        if isinstance(robots_data, Mapping):
+            raise ValueError("snapshot.robots must be an array")
+        if not isinstance(robots_data, (list, tuple)):
+            raise ValueError("snapshot.robots must be an array")
         if not isinstance(objects_data, Mapping):
             raise ValueError("snapshot.objects must be a JSON object")
-        robots = {
-            str(role): RobotSnapshot.from_mapping(_with_default_role(role, value))
-            for role, value in robots_data.items()
-        }
+        robots = {}
+        for index, value in enumerate(robots_data):
+            if not isinstance(value, Mapping):
+                raise ValueError(f"snapshot.robots[{index}] must be an object")
+            robot = RobotSnapshot.from_mapping(value)
+            if robot.label in robots:
+                raise ValueError(f"duplicate snapshot robot label: {robot.label!r}")
+            robots[robot.label] = robot
         objects = {
             str(name): ObjectSnapshot.from_mapping(_with_default_name(name, value))
             for name, value in objects_data.items()
         }
         return cls(
-            schema_version=str(data.get("schema_version", SCHEMA_VERSION)),
+            schema=schema,
             metadata=SnapshotMetadata.from_mapping(data.get("metadata")),
             robots=robots,
             objects=objects,
@@ -367,9 +420,9 @@ class SimulationSnapshot:
         """转换成 JSON-compatible dict，作为交互协议中的标准 snapshot payload。"""
 
         return {
-            "schema_version": self.schema_version,
+            "schema": self.schema,
             "metadata": self.metadata.as_dict(),
-            "robots": {role: robot.as_dict() for role, robot in self.robots.items()},
+            "robots": [robot.as_dict() for robot in self.robots.values()],
             "objects": {name: obj.as_dict() for name, obj in self.objects.items()},
         }
 
@@ -409,22 +462,29 @@ class SnapshotRestoreResult:
 def _robot_mapping(values: Mapping[str, RobotSnapshot]) -> dict[str, RobotSnapshot]:
     """校验 ``SimulationSnapshot.robots``，并返回普通 dict 副本。
 
-    key 必须与 ``RobotSnapshot.role`` 一致，避免外层映射名和内部角色名不一致导致恢复时
-    robot_map 解析到错误机器人。
+    key 必须与 ``RobotSnapshot.label`` 一致，避免恢复时把状态写入错误机器人。
     """
 
     if not isinstance(values, Mapping):
         raise ValueError("SimulationSnapshot.robots must be a mapping")
     result = {}
-    for role, robot in values.items():
+    robot_ids: set[int] = set()
+    labels: set[str] = set()
+    for label, robot in values.items():
         if not isinstance(robot, RobotSnapshot):
             raise ValueError("SimulationSnapshot.robots values must be RobotSnapshot")
-        key = str(role)
-        if key != robot.role:
+        key = str(label)
+        if key != robot.label:
             raise ValueError(
-                f"robot mapping key {key!r} does not match role {robot.role!r}"
+                f"robot mapping key {key!r} does not match label {robot.label!r}"
             )
         result[key] = robot
+        if robot.robot_id in robot_ids:
+            raise ValueError(f"duplicate snapshot robot_id: {robot.robot_id}")
+        robot_ids.add(robot.robot_id)
+        if robot.label in labels:
+            raise ValueError(f"duplicate snapshot robot label: {robot.label!r}")
+        labels.add(robot.label)
     return result
 
 
@@ -450,22 +510,8 @@ def _object_mapping(values: Mapping[str, ObjectSnapshot]) -> dict[str, ObjectSna
     return result
 
 
-def _with_default_role(role: object, value: object) -> Mapping[str, object]:
-    """给 robot 子 payload 补默认 ``role``。
-
-    交互协议里常见写法是 ``robots: {single: {...}}``，该 helper 让子对象可以省略重复
-    role 字段，同时仍支持显式传 role 做一致性校验。
-    """
-
-    if not isinstance(value, Mapping):
-        raise ValueError(f"snapshot.robots.{role} must be a JSON object")
-    result = dict(value)
-    result.setdefault("role", str(role))
-    return result
-
-
 def _with_default_name(name: object, value: object) -> Mapping[str, object]:
-    """给 object 子 payload 补默认 ``name``，语义同 ``_with_default_role``。"""
+    """给 object 子 payload 补默认 ``name``。"""
 
     if not isinstance(value, Mapping):
         raise ValueError(f"snapshot.objects.{name} must be a JSON object")
@@ -487,11 +533,13 @@ def _string_tuple(values: object, label: str) -> tuple[str, ...]:
 
 
 def _vector(values: object, width: int, label: str) -> np.ndarray:
-    """把输入校验为固定长度一维 float 向量。"""
+    """把输入校验为固定长度一维有限 float 向量，并返回独立副本。"""
 
     array = np.asarray(values, dtype=float).reshape(-1)
     if array.size != int(width):
         raise ValueError(f"{label} must have shape ({int(width)},)")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{label} must contain finite values")
     return array.astype(float, copy=True)
 
 
@@ -524,6 +572,8 @@ def _optional_matrix(
     array = np.asarray(values, dtype=float)
     if array.shape != shape:
         raise ValueError(f"{label} must have shape {shape}")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{label} must contain finite values")
     return array.astype(float, copy=True)
 
 
@@ -544,7 +594,7 @@ def _optional_quat_matrix(
     *,
     required: bool = False,
 ) -> np.ndarray | None:
-    """读取并逐行归一化可选 wxyz 四元数矩阵。"""
+    """读取并逐行归一化 ``(body_count, 4)`` 的可选 wxyz 四元数矩阵。"""
 
     if values is None:
         if required:
@@ -553,6 +603,8 @@ def _optional_quat_matrix(
     array = np.asarray(values, dtype=float)
     if array.shape != (int(body_count), 4):
         raise ValueError(f"{label} must have shape ({int(body_count)}, 4)")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{label} must contain finite values")
     norms = np.linalg.norm(array, axis=1)
     if np.any(norms <= 0.0):
         raise ValueError(f"{label} contains a zero quaternion")
@@ -589,15 +641,36 @@ def _optional_int(value: object, label: str) -> int | None:
         raise ValueError(f"{label} must be an integer") from exc
 
 
+def _required_nonnegative_int(value: object, label: str) -> int:
+    """读取必填非负整数，拒绝 bool 和隐式缺失。"""
+
+    if value is None:
+        raise ValueError(f"{label} is required")
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a non-negative integer")
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a non-negative integer") from exc
+    if isinstance(value, (float, np.floating)) and not float(value).is_integer():
+        raise ValueError(f"{label} must be a non-negative integer")
+    if result < 0:
+        raise ValueError(f"{label} must be a non-negative integer")
+    return result
+
+
 def _optional_float(value: object, label: str) -> float | None:
     """读取可选浮点字段，并把类型错误转成带字段名的 ``ValueError``。"""
 
     if value is None:
         return None
     try:
-        return float(value)
+        result = float(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{label} must be a number") from exc
+    if not np.isfinite(result):
+        raise ValueError(f"{label} must be finite")
+    return result
 
 
 def _optional_str(value: object | None) -> str | None:
@@ -606,6 +679,26 @@ def _optional_str(value: object | None) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _required_str(value: object | None, label: str) -> str:
+    """读取必填非空字符串。"""
+
+    if value is None or not str(value):
+        raise ValueError(f"{label} is required")
+    return str(value)
+
+
+def _reject_unknown_keys(
+    data: Mapping[str, object],
+    allowed: set[str],
+    label: str,
+) -> None:
+    """拒绝 canonical schema 之外的字段，而不是静默忽略。"""
+
+    unknown = sorted(str(key) for key in data if str(key) not in allowed)
+    if unknown:
+        raise ValueError(f"{label} has unsupported fields: {unknown}")
 
 
 def _mapping_or_empty(value: object, label: str) -> Mapping[str, object]:

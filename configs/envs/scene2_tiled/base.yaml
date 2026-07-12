@@ -1,49 +1,81 @@
-# scene2_tiled: scene2 双臂 rope 场景的 tiled envs 版本。
+# scene2_tiled：scene2 双臂绳体场景的 Tiled Scene 环境 profile。
 #
-# base.yaml 保存所有 env 共用的设置：World/PhysX、灯光、视角、机器人和对象集合。
-# 每个 env 的 rope 初始位姿差异写在同目录 envs/env_XXX.yaml 里。
+# 本文件是目录型 profile 的共享基线，定义一个 source env 的 World 参数、solver、
+# 传感器模板、视觉设置以及同构的机器人/对象集合。加载器随后读取
+# tiled.per_env_config_dir 指向的 envs/env_XXX.yaml，按 env_id 排序并应用允许的差异项。
+# 未出现在逐环境文件中的字段和未提供逐环境文件的 env，均继承这里的设置。
+#
+# 坐标与单位约定：
+# - xyz / eye / target / spacing / clipping_range 使用米（m）。
+# - rpy 使用 XYZ 欧拉角 [roll, pitch, yaw]，角度单位为弧度（rad）。
+# - physics_frequency、render_frequency 和相机 frequency 使用赫兹（Hz）。
+# - base 中 robot/object root_pose 是 env-local 位姿；runtime 会再叠加各 clone 的
+#   world origin。逐环境覆盖也必须使用同一 env-local 坐标系。
+# - 所有 prim path 都是绝对 USD path；机器人和对象路径会被放入各自 env namespace。
+
 env:
+  # name 是必填语义标识，description 仅供人工阅读；目录名才是 profile selector。
   name: scene2_tiled
   description: dual arm rope tiled replay scene
+  # World 重力的 z 分量，单位 m/s^2；项目约定 z 轴向上。
   gravity_z: -9.81
+  # 创建 Isaac 默认地面，并把地面放在下述 world z 高度。
   add_ground: true
   ground_height: -1.3
+  # 物理步长为 1 / physics_frequency；渲染频率只控制需要渲染的运行路径。
   physics_frequency: 240.0
   render_frequency: 60.0
 
 solver:
+  # 整个 PhysicsScene 共用的 solver 类型，只接受 PGS 或 TGS；机器人关节迭代参数
+  # 归 robot profile 管理，不在这里覆盖。
   type: PGS
 
 sensors:
+  # Tiled Scene 中这里声明共享 camera 模板；env_ids 决定实际在哪些 clone 中展开。
+  # 逐环境文件只能覆盖已声明相机的 pose，不能改变分辨率、模态或输出设置。
   cameras:
     world_rgbd:
+      # false 表示当前 profile 不创建该相机；其余字段仍保留为可启用的完整模板。
       enabled: false
+      # Tiled camera 只为所选 env 创建 prim、annotator 和输出 channel；ID 必须唯一且
+      # 位于 [0, tiled.num_envs) 内。该选择与 diagnostics.inspect_env_ids 无关。
+      env_ids: [0]
+      # /World 会在展开时映射为目标 env root；prim_path 必须位于 parent 下。
       parent_prim_path: /World
       prim_path: /World/WorldRGBD
+      # 相对于展开后 parent prim 的位姿：xyz 单位 m，rpy 单位 rad。
       pose:
         xyz: [0.08, 0.0, 0.08]
         rpy: [0.0, 1.1, 0.0]
+      # 图像尺寸为 [width, height] 像素；采样频率单位 Hz。
       resolution: [120, 120]
       frequency: 10.0
+      # 输出 RGB 与深度；裁剪范围为 [near, far]，单位 m。
       modalities: [rgb, depth]
       clipping_range: [0.01, 5.0]
+      # 针孔模型内参 fx/fy/cx/cy 均以像素为单位。
       intrinsics:
         fx: 615.0
         fy: 615.0
         cx: 320.0
         cy: 240.0
+      # 各 env 展开后，输出目录和 topic 会自动追加 env_XXX，避免相互覆盖；
+      # live host 只允许 loopback 地址，port 为正整数。
       output:
         save_dir: logs/cameras/world_rgbd
         foxglove_topic_prefix: /cameras/world_rgbd
         foxglove_live_host: 127.0.0.1
         foxglove_live_port: 8770
-        
+
 visuals:
+  # 视觉配置只影响 GUI/成像，不改变动力学。viewport 坐标位于 world frame。
   viewport:
     enabled: true
     eye: [1.35, -1.65, 1.05]
     target: [0.0, -0.1, 0.42]
     prim_path: /OmniverseKit_Persp
+  # 灯光 path 必须唯一；intensity 为渲染强度，angle 单位 rad。
   lights:
     key:
       enabled: true
@@ -56,45 +88,61 @@ visuals:
       intensity: 250.0
 
 robots:
-  dual:
-    left:
-      robot_profile: ar5v2_l6v1_l
-      root_pose:
-        xyz: [0.0, 0.09, 0.0]
-        rpy: [-1.5707, 0.0, 0.0]
-    right:
-      robot_profile: ar5v2_l6v1_r
-      root_pose:
-        xyz: [0.0, -0.09, 0.0]
-        rpy: [1.5707, 0.0, 0.0]
+  # base 定义每个 env 都必须拥有的同构机器人集合。label 是逐环境覆盖、控制与快照
+  # 使用的稳定唯一键；robot_profile 引用 configs/robots，root_pose 为 env-local 位姿。
+  - label: ar5v2_l6v1_0
+    robot_profile: ar5v2_l6v1_l
+    root_pose:
+      xyz: [0.0, 0.09, 0.0]
+      rpy: [-1.5707, 0.0, 0.0]
+  - label: ar5v2_l6v1_1
+    robot_profile: ar5v2_l6v1_r
+    root_pose:
+      xyz: [0.0, -0.09, 0.0]
+      rpy: [1.5707, 0.0, 0.0]
 
 objects:
+  # 对象集合也必须在所有 env 中同构。name 是 per-env override 的引用键，
+  # object_profile 提供资产与物理属性，base 只负责实例路径和 env-local 初始位姿。
   - name: workstation_armbase
     object_profile: workstation_armbase
+    prim_path: /World/WorkstationArmBase
     root_pose:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
   - name: rope
     object_profile: capsule_rope
+    prim_path: /World/CapsuleRope
+    # runtime_handle 是脚本查找动态对象的会话内语义句柄。
     runtime_handle: rope
     root_pose:
       xyz: [0.3, -0.02, 0.1]
       rpy: [0.0, 0.0, 0]
 
 tiled:
+  # 启用 Tiled Scene 拓扑。num_envs 是唯一的 clone 数量来源，合法 env_id 为 0..7。
   enabled: true
   num_envs: 8
+  # env root 生成规则为 /World/envs/env_<id>；spacing 是 XY 网格相邻中心距，单位 m。
   base_env_path: /World/envs
   env_prefix: env
   spacing: 3.0
+  # 相对于本 base.yaml 所在目录的安全相对路径。目录内 fragment 只能声明 env_id、
+  # robot/object/camera 位姿覆盖和 JSON-compatible metadata，不能新增实例或相机。
   per_env_config_dir: envs
   clone:
-    # 先请求 PhysX replication 性能路径；如果检测到 MJCF fixed-base root joint
-    # 不兼容，tiled scene builder 会在构建时自动关闭 replication。
+    # 请求 PhysX 复用 clone 的物理结构；若 MJCF fixed-base world joint 无 body0，
+    # replication 无法正确更新其位姿，构建器会在当前 session 关闭该请求并报告原因。
     replicate_physics: true
+    # true 为每个 clone 复制 source prim，而不是通过 USD 继承复用 source。
     copy_from_source: true
+    # 请求 GridCloner 写入 PhysX env ID，供 clone 的物理隔离/识别机制使用。
     enable_env_ids: true
+    # false 表示不写 env 间碰撞过滤关系；当前场景依靠 spacing 避免跨 env 接触。
     filter_collisions: false
+    # 碰撞过滤 authoring 的绝对根路径；filter_collisions=false 时不会使用该路径。
     collision_root_path: /World/collisions
-  runtime:
+  diagnostics:
+    # 仅选择 status/debug 重点展示的 env；ID 必须位于 [0, num_envs)，不会改变
+    # 相机 scope、物理计算、规划 batch 或逐环境覆盖的应用范围。
     inspect_env_ids: [0]

@@ -21,6 +21,7 @@ if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
 from linkerbot_sim.app.launch import launch_simulation_app
+from linkerbot_sim.configs.runtime import SimulationAppSettings
 from linkerbot_sim.utils.config import load_yaml
 from linkerbot_sim.utils.paths import repo_path
 from tools.object_assets.rigid.tblock.builder import (
@@ -47,7 +48,7 @@ def main() -> None:
 
     args = parse_args()
     config = TBlockAssetConfig.from_mapping(load_yaml(args.config))
-    simulation_app = launch_simulation_app(gui=False)
+    simulation_app = launch_simulation_app(SimulationAppSettings(gui=False))
     try:
         output = write_tblock_asset(
             config, repo_path(args.output) if args.output is not None else None

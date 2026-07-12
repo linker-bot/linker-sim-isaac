@@ -5,6 +5,7 @@ import numpy as np
 from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
+from linkerbot_sim.utils.timing import differentiate_samples
 
 
 def test_joint_trajectory_from_positions_differentiates_samples() -> None:
@@ -22,3 +23,12 @@ def test_joint_trajectory_from_positions_differentiates_samples() -> None:
     assert sample.position.shape == (1,)
     assert sample.velocity.shape == (1,)
     assert trajectory.phases == ("sampled", "sampled", "sampled")
+
+
+def test_differentiate_samples_vectorizes_multiple_columns() -> None:
+    differentiated = differentiate_samples(
+        np.asarray([[0.0, 0.0], [1.0, 2.0], [3.0, 6.0]]),
+        np.asarray([0.0, 0.5, 1.0]),
+    )
+
+    np.testing.assert_allclose(differentiated, [[0.0, 0.0], [2.0, 4.0], [4.0, 8.0]])

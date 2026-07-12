@@ -1,25 +1,31 @@
-"""Top-level Isaac/PhysX tiled scene construction flow."""
+"""Isaac/PhysX tiled scene 的顶层构建顺序与资源装配流程。"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
-from linkerbot_sim.app.runtime.objects import add_runtime_objects
-from linkerbot_sim.configs.profiles import load_default_controller_profiles
-from linkerbot_sim.controllers.config import ControllerProfiles
+from linkerbot_sim.objects.runtime import add_runtime_objects
+from linkerbot_sim.configs.instance_paths import validate_disjoint_instance_prim_paths
+from linkerbot_sim.controllers.config import (
+    ControllerProfiles,
+    load_controller_bundle,
+)
 from linkerbot_sim.tiled.config import TiledEnvConfig
-from linkerbot_sim.tiled.paths import env_root_paths
+from linkerbot_sim.tiled.scene.paths import env_root_paths, make_env_local_prim_path
 from linkerbot_sim.tiled.scene.clone import (
     _clone_config_compatible_with_robots,
     _clone_envs,
-    _filter_env_collisions,
 )
+from linkerbot_sim.tiled.scene.collision_filter import _filter_env_collisions
 from linkerbot_sim.tiled.scene.objects import (
     _apply_per_env_object_pose_overrides,
     _tiled_object_prim_paths,
     env_local_runtime_object_configs,
 )
-from linkerbot_sim.tiled.scene.robots import _import_env_zero_robots
+from linkerbot_sim.tiled.scene.robots import (
+    _import_env_zero_robots,
+    tiled_robot_instances_from_env_config,
+)
 from linkerbot_sim.tiled.scene.root_pose import _apply_per_env_robot_root_pose_overrides
 from linkerbot_sim.tiled.scene.types import IsaacTiledScene
 from linkerbot_sim.tiled.scene.utils import _print_status
@@ -32,7 +38,10 @@ def build_isaac_tiled_scene(
     stage: object,
     env_config: Mapping[str, object],
     tiled_config: TiledEnvConfig,
-    controller_profiles: ControllerProfiles | None = None,
+    controller_bundle: str = "default",
+    controller_bundle_loader: Callable[[str], ControllerProfiles] = (
+        load_controller_bundle
+    ),
     status_prefix: str | None = None,
 ) -> IsaacTiledScene:
     """在当前 Isaac stage 中构建 tiled scene。
@@ -44,10 +53,19 @@ def build_isaac_tiled_scene(
 
     if tiled_config.num_envs < 1:
         raise ValueError("tiled_config.num_envs must be positive")
-    controller_profiles = controller_profiles or load_default_controller_profiles()
     roots = env_root_paths(tiled_config)
     env_zero = roots[0]
     object_configs = env_local_runtime_object_configs(env_config, env_root=env_zero)
+    robot_instances = tiled_robot_instances_from_env_config(env_config)
+    validate_disjoint_instance_prim_paths(
+        robot_paths={
+            instance.label: make_env_local_prim_path(
+                env_zero, instance.scene_instance.effective_prim_path
+            )
+            for instance in robot_instances
+        },
+        object_paths={item.name: item.prim_path for item in object_configs},
+    )
 
     _print_status(
         status_prefix,
@@ -65,9 +83,11 @@ def build_isaac_tiled_scene(
         stage=stage,
         env_config=env_config,
         tiled_config=tiled_config,
-        controller_profiles=controller_profiles,
+        controller_bundle=controller_bundle,
+        controller_bundle_loader=controller_bundle_loader,
         env_roots=roots,
         status_prefix=status_prefix,
+        robot_instances=robot_instances,
     )
     _print_status(status_prefix, f"ROBOTS_IMPORTED count={len(robots)}")
     effective_tiled_config = _clone_config_compatible_with_robots(
@@ -82,6 +102,7 @@ def build_isaac_tiled_scene(
     _print_status(status_prefix, f"CLONED positions={clone_positions.tolist()}")
     robot_root_pose_overrides_applied = _apply_per_env_robot_root_pose_overrides(
         stage=stage,
+        config=effective_tiled_config,
         robots=robots,
         env_origins=clone_positions,
         status_prefix=status_prefix,

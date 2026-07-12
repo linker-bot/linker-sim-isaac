@@ -1,14 +1,31 @@
-# env_000 使用 base.yaml 中同一组对象，只覆盖 TBlock 的局部初始位姿。
+# scene3_tiled 的 env_000 差异片段：覆盖已有 robot、Tblock 与 world_rgbd 的 env-local 位姿。
+# World、solver、visual、实例集合、资产/物理、相机输出和 clone 拓扑均继承 base.yaml；
+# fragment 只能替换已有条目的位姿，不能新增 robot/object/camera。env_id 在本 profile 内
+# 必须唯一，并位于 [0, base.yaml:tiled.num_envs) 内。
 env_id: 0
+robots:
+  # key 必须匹配 base.yaml 中 robots[].label。root_pose 是完整替换；项目同时写出
+  # xyz/rpy，避免任一缺项使用零向量而不是继承 base 的对应轴。
+  ar5v2_l6v1_0:
+    root_pose:
+      # env-local 平移单位 m；rpy 为 XYZ 欧拉角，单位 rad。
+      xyz: [0.0, 0.09, 0.0]
+      rpy: [-1.5707, 0.0, 0.0]
 objects:
+  # key 必须匹配 base.yaml 中 objects[].name；不能在 fragment 中新增对象。
   Tblock:
     root_pose:
+      # 完整 env-local 位姿：xyz 单位 m，rpy 为 XYZ 欧拉角且单位 rad。
       xyz: [0.15, 0.0, -0.4]
       rpy: [0.0, 1.5707, 0.0]
 cameras:
+  # 相机名必须引用 base.yaml 的同名模板，并且本 env_id 必须列在模板 env_ids 中。
   world_rgbd:
     pose:
+      # 相对于该 env 内展开后 parent prim 的完整局部位姿；xyz 单位 m，rpy 单位 rad。
+      # resolution、frequency、modalities、intrinsics 与 output 继续继承 base。
       xyz: [0.08, 0.0, 0.08]
       rpy: [0.0, 1.1, 0.0]
 metadata:
+  # JSON-compatible opaque 数据，仅供 status/snapshot/evaluator 使用，不改变运行行为。
   replay_id: scene3_tiled_000

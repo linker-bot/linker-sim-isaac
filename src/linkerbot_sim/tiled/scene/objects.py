@@ -1,17 +1,17 @@
-"""Object import/path helpers for tiled Isaac scenes."""
+"""tiled Isaac scene 的 object 导入、clone path 与 per-env override 辅助函数。"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
-from linkerbot_sim.app.runtime.objects import (
+from linkerbot_sim.objects.runtime import (
     RuntimeObjectConfig,
     runtime_objects_from_env_config,
 )
 from linkerbot_sim.objects.physics import apply_root_pose_to_prim
 from linkerbot_sim.tiled.config import TiledEnvConfig
-from linkerbot_sim.tiled.paths import (
+from linkerbot_sim.tiled.scene.paths import (
     env_local_suffix,
     make_env_local_prim_path,
     prim_paths_from_suffix,
@@ -24,28 +24,25 @@ def env_local_runtime_object_configs(
     *,
     env_root: str,
 ) -> tuple[RuntimeObjectConfig, ...]:
-    """把 env objects[] 的 profile prim path 改写到 env root 下。"""
+    """解析 instance path 后把 runtime prim path 改写到 env root 下。"""
 
-    result: list[RuntimeObjectConfig] = []
-    for config in runtime_objects_from_env_config(env_config):
-        root_path = config.profile.root_path
-        result.append(
-            replace(
-                config,
-                profile=replace(
-                    config.profile,
-                    prim_path=make_env_local_prim_path(
-                        env_root, config.profile.prim_path
-                    ),
-                    root_path=(
-                        None
-                        if root_path is None
-                        else make_env_local_prim_path(env_root, root_path)
-                    ),
-                ),
-            )
+    result = tuple(
+        replace(
+            config,
+            prim_path=make_env_local_prim_path(env_root, config.prim_path),
         )
-    return tuple(result)
+        for config in runtime_objects_from_env_config(env_config)
+    )
+    prim_paths: dict[str, str] = {}
+    for config in result:
+        previous_name = prim_paths.get(config.prim_path)
+        if previous_name is not None:
+            raise ValueError(
+                f"Duplicate tiled object prim path {config.prim_path!r} after "
+                f"namespacing objects {previous_name!r} and {config.name!r}"
+            )
+        prim_paths[config.prim_path] = config.name
+    return result
 
 
 def _tiled_object_prim_paths(
@@ -64,7 +61,7 @@ def _tiled_object_prim_paths(
     for config in object_configs:
         if config.name in result:
             raise ValueError(f"Duplicate tiled object name: {config.name}")
-        suffix = env_local_suffix(env_zero, config.profile.prim_path)
+        suffix = env_local_suffix(env_zero, config.prim_path)
         result[config.name] = prim_paths_from_suffix(env_roots, suffix)
     return result
 

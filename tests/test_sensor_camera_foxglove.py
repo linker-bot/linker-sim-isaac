@@ -1,11 +1,43 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from pathlib import Path
 
 import numpy as np
 
-from linkerbot_sim.sensors.camera_foxglove import FoxgloveCameraFrameSink
-from linkerbot_sim.sensors.camera_frame import CameraFrame
+from linkerbot_sim.sensors.camera.foxglove import FoxgloveCameraFrameSink
+from linkerbot_sim.sensors.camera.frame import CameraFrame
+
+
+def test_camera_mcap_sink_does_not_overwrite_by_default(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[tuple[Path, bool]] = []
+    fake_foxglove = SimpleNamespace(
+        open_mcap=lambda path, *, allow_overwrite: (
+            calls.append((Path(path), allow_overwrite)) or object()
+        )
+    )
+    import linkerbot_sim.sensors.camera.foxglove as camera_foxglove
+
+    monkeypatch.setattr(
+        camera_foxglove,
+        "_load_foxglove",
+        lambda: (fake_foxglove, SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        camera_foxglove,
+        "_load_foxglove_channels",
+        lambda: SimpleNamespace(),
+    )
+
+    FoxgloveCameraFrameSink.open_mcap(
+        tmp_path / "nested" / "camera.mcap",
+        topic_prefix_by_camera={"camera": "/camera"},
+    )
+
+    assert calls == [(tmp_path / "nested" / "camera.mcap", False)]
 
 
 def test_foxglove_camera_sink_logs_raw_image_and_info(monkeypatch) -> None:
@@ -44,7 +76,7 @@ def test_foxglove_camera_sink_logs_raw_image_and_info(monkeypatch) -> None:
     fake_messages = SimpleNamespace(RawImage=RawImage, Timestamp=Timestamp)
     fake_channels = SimpleNamespace(RawImageChannel=RawImageChannel)
 
-    import linkerbot_sim.sensors.camera_foxglove as camera_foxglove
+    import linkerbot_sim.sensors.camera.foxglove as camera_foxglove
 
     monkeypatch.setattr(
         camera_foxglove,

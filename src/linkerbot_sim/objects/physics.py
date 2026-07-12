@@ -1,16 +1,18 @@
-"""Shared object runtime physics helpers."""
+"""object runtime 共享的 PhysX material、root pose 与严格配置辅助函数。"""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
+from numbers import Integral, Real
 
-from linkerbot_sim.assets.robot_loader import RootPoseConfig
+from linkerbot_sim.assets.root_pose import RootPoseConfig
 
 
 @dataclass(frozen=True)
 class ObjectMaterialConfig:
-    """Optional object contact material overrides."""
+    """object 的可选 contact material overrides；None 表示保留资产原值。"""
 
     static_friction: float | None = None
     dynamic_friction: float | None = None
@@ -33,8 +35,8 @@ class ObjectMaterialConfig:
         }
         unsupported = set(data) - allowed
         if unsupported:
-            names = ", ".join(sorted(unsupported))
-            raise ValueError(f"{label} contains unsupported keys: {names}")
+            paths = ", ".join(f"{label}.{key}" for key in sorted(unsupported))
+            raise ValueError(f"unsupported configuration field(s): {paths}")
         config = cls(
             static_friction=optional_non_negative_float(data, "static_friction", label),
             dynamic_friction=optional_non_negative_float(
@@ -43,6 +45,8 @@ class ObjectMaterialConfig:
             restitution=optional_non_negative_float(data, "restitution", label),
             friction_combine_mode=optional_friction_combine_mode(data, label),
         )
+        if config.restitution is not None and config.restitution > 1.0:
+            raise ValueError(f"{label}.restitution must be between 0 and 1")
         return config if config.has_overrides() else None
 
     def has_overrides(self) -> bool:
@@ -60,7 +64,7 @@ class ObjectMaterialConfig:
 
 
 def apply_root_pose_to_prim(stage, prim_path: str, pose: RootPoseConfig) -> None:
-    """Apply a scene root pose to an existing USD prim."""
+    """清除现有 xform op order，并把 scene root pose 写入指定 USD prim。"""
 
     from pxr import Gf, Sdf, UsdGeom
     import numpy as np
@@ -96,9 +100,12 @@ def optional_non_negative_float(
 
     if key not in data:
         return None
-    value = float(data[key])
-    if value < 0.0:
-        raise ValueError(f"{parent_label}.{key} cannot be negative")
+    raw = data[key]
+    if isinstance(raw, bool) or not isinstance(raw, Real):
+        raise ValueError(f"{parent_label}.{key} must be a number")
+    value = float(raw)
+    if not math.isfinite(value) or value < 0.0:
+        raise ValueError(f"{parent_label}.{key} must be finite and non-negative")
     return value
 
 
@@ -109,7 +116,10 @@ def optional_positive_int(
 
     if key not in data:
         return None
-    value = int(data[key])
+    raw = data[key]
+    if isinstance(raw, bool) or not isinstance(raw, Integral):
+        raise ValueError(f"{parent_label}.{key} must be an integer")
+    value = int(raw)
     if value <= 0:
         raise ValueError(f"{parent_label}.{key} must be positive")
     return value
@@ -122,7 +132,10 @@ def optional_non_negative_int(
 
     if key not in data:
         return None
-    value = int(data[key])
+    raw = data[key]
+    if isinstance(raw, bool) or not isinstance(raw, Integral):
+        raise ValueError(f"{parent_label}.{key} must be an integer")
+    value = int(raw)
     if value < 0:
         raise ValueError(f"{parent_label}.{key} cannot be negative")
     return value
@@ -135,7 +148,10 @@ def optional_friction_combine_mode(
 
     if "friction_combine_mode" not in data:
         return None
-    value = str(data["friction_combine_mode"]).lower()
+    raw = data["friction_combine_mode"]
+    if not isinstance(raw, str):
+        raise ValueError(f"{parent_label}.friction_combine_mode must be a string")
+    value = raw.lower()
     allowed = {"average", "min", "multiply", "max"}
     if value not in allowed:
         raise ValueError(

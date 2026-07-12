@@ -31,7 +31,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-env_isaaclab/
 
 # Tool and test caches
 .pytest_cache/
@@ -50,13 +49,16 @@ cover/
 
 # Build/runtime logs and generated outputs
 logs/
-test/outputs/
+tests/outputs/
 tem-file/
 *.log
 pip-log.txt
 pip-delete-this-directory.txt
 docs/tem
 design_plan/
+
+# usd material
+usd-material/
 
 # Jupyter / docs / local app data
 .ipynb_checkpoints/
@@ -79,6 +81,9 @@ Thumbs.db
 # Local agent/tool state
 .agents/
 .codex/
+
+# CI workflows are local-only.
+.gitea/workflows/
 
 # Misc Python project managers
 .pdm.toml

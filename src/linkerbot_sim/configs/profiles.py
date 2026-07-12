@@ -5,16 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from linkerbot_sim.controllers.config import load_controller_profiles
+from linkerbot_sim.controllers.config import load_controller_bundle
 from linkerbot_sim.utils.config import deep_merge, load_yaml
 from linkerbot_sim.utils.paths import CONFIGS_ROOT
 
 
 PROFILE_GROUP_DIRS = {
+    "runtime": CONFIGS_ROOT / "runtime",
     "robot": CONFIGS_ROOT / "robots",
     "env": CONFIGS_ROOT / "envs",
     "object": CONFIGS_ROOT / "objects",
-    "cumotion": CONFIGS_ROOT / "cumotion",
+    "curobo": CONFIGS_ROOT / "curobo",
     "logging": CONFIGS_ROOT / "logging",
 }
 
@@ -38,11 +39,29 @@ def load_profile_yaml(group: str, name: str) -> dict[str, Any]:
 
     if group == "env":
         return load_env_profile_yaml(name)
-    return load_yaml(profile_path(group, name))
+    path = profile_path(group, name)
+    if group == "robot":
+        from linkerbot_sim.assets.robot_config import load_robot_profile
+
+        return load_robot_profile(path)
+    if group == "object":
+        from linkerbot_sim.objects.config import load_object_profile
+
+        return load_object_profile(path)
+    if group == "curobo":
+        from linkerbot_sim.backends.curobo.profile_merge import load_curobo_profile
+
+        return load_curobo_profile(path)
+    data = load_yaml(path)
+    if group == "logging":
+        from linkerbot_sim.logging.config import joint_logging_config_from_mapping
+
+        joint_logging_config_from_mapping(data, source_path=path)
+    return data
 
 
 def load_env_profile_yaml(name: str) -> dict[str, Any]:
-    """读取 env profile，兼容 ``scene.yaml`` 和目录型 ``scene/base.yaml``。
+    """读取 ``scene.yaml`` 或目录型 ``scene/base.yaml`` env profile。
 
     目录型 env profile 用于 tiled envs:
 
@@ -56,13 +75,15 @@ def load_env_profile_yaml(name: str) -> dict[str, Any]:
     env_root = PROFILE_GROUP_DIRS["env"]
     yaml_path = env_root / f"{name}.yaml"
     if yaml_path.is_file():
-        return load_yaml(yaml_path)
+        from linkerbot_sim.envs.config import validate_env_profile
+
+        return validate_env_profile(load_yaml(yaml_path), source_path=yaml_path)
 
     profile_dir = env_root / name
     if profile_dir.is_dir():
         return load_env_profile_directory(profile_dir)
 
-    # 保持旧错误形态：普通文件不存在时由 load_yaml 抛 FileNotFoundError。
+    # 单文件 profile 直接交给 YAML loader，使缺失路径保留标准 FileNotFoundError 细节。
     return load_yaml(yaml_path)
 
 
@@ -90,8 +111,7 @@ def load_env_profile_directory(profile_dir: Path) -> dict[str, Any]:
         per_env_items: list[dict[str, Any]] = []
     else:
         per_env_items = [
-            _load_per_env_yaml(path, index=index)
-            for index, path in enumerate(sorted(per_env_dir.glob("*.yaml")))
+            _load_per_env_yaml(path) for path in sorted(per_env_dir.glob("*.yaml"))
         ]
 
     tiled_overlay: dict[str, Any] = {
@@ -103,35 +123,27 @@ def load_env_profile_directory(profile_dir: Path) -> dict[str, Any]:
         tiled_overlay["num_envs"] = (
             max(int(item["env_id"]) for item in per_env_items) + 1
         )
-    return deep_merge(base, {"tiled": tiled_overlay})
+    merged = deep_merge(base, {"tiled": tiled_overlay})
+    from linkerbot_sim.envs.config import validate_env_profile
+
+    return validate_env_profile(merged, source_path=base_path)
 
 
 def load_default_controller_profiles():
     """读取项目默认 controller 配置集合。"""
 
-    return load_controller_profiles(CONFIGS_ROOT / "controllers")
+    return load_controller_bundle("default")
 
 
-def _load_per_env_yaml(path: Path, *, index: int) -> dict[str, Any]:
-    """读取单个 per-env YAML；缺省 env_id 时从文件名推导。"""
+def _load_per_env_yaml(path: Path) -> dict[str, Any]:
+    """读取并严格校验单个 per-env YAML。"""
 
     data = load_yaml(path)
-    if "env_id" not in data:
-        data["env_id"] = _env_id_from_stem(path.stem, index=index)
-    return data
+    from linkerbot_sim.envs.config import validate_per_env_fragment
 
-
-def _env_id_from_stem(stem: str, *, index: int) -> int:
-    """从 ``env_000`` / ``000`` 文件名推导 env id。"""
-
-    token = stem
-    if token.startswith("env_"):
-        token = token.removeprefix("env_")
-    if token.isdigit():
-        return int(token)
-    raise ValueError(
-        f"per-env YAML missing env_id and file name does not encode one: {stem!r} "
-        f"(index {index})"
+    return validate_per_env_fragment(
+        data,
+        source_path=path,
     )
 
 

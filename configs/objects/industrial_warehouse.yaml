@@ -1,0 +1,18 @@
+# NVIDIA Industrial Assets 中空仓库的米制环境 profile。
+#
+# 上游 Warehouse01 采用 Z-up、厘米制，项目包装层负责缩放到米，并只为仓库地板补充
+# 静态碰撞。原始模型与纹理仍保留在 usd-material/extracted 中，不复制进项目 assets。
+
+object:
+  name: industrial_warehouse
+  kind: rigid
+  source: usd
+  asset_path: assets/rigid_env_objects/industrial_warehouse_meters/industrial_warehouse_meters.usda
+
+  physics:
+    static: true
+    material:
+      static_friction: 0.7
+      dynamic_friction: 0.6
+      restitution: 0.0
+      friction_combine_mode: average

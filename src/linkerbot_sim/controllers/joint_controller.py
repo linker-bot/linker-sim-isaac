@@ -28,15 +28,15 @@ from linkerbot_sim.controllers.types import (
     ControlMode,
     ControlTargets,
     JointControlSettings,
+    resolve_joint_parameter,
 )
-from linkerbot_sim.robots.classification import component_for_name
+from linkerbot_sim.robots.classification import RobotComponentMapping
 from linkerbot_sim.robots.joint_groups import resolve_joint_indices
-from linkerbot_sim.robots.mimic import (
-    MimicFollowerTargetMapper,
-    mjcf_equality_follower_joint_names,
-    parse_mjcf_joint_frictionloss,
+from linkerbot_sim.robots.mimic.assets import (
+    mimic_follower_joint_names,
+    parse_asset_mimic_relations,
 )
-from linkerbot_sim.utils.math_utils import expand_scalar_or_vector
+from linkerbot_sim.robots.mimic.runtime import MimicFollowerTargetMapper
 
 
 class JointController:
@@ -46,7 +46,7 @@ class JointController:
         robot: Isaac articulation 对象，需提供 ``dof_names``、``num_dof`` 和 action API。
         joint_names: 上层主动命令空间中的关节名；可以通过配置选择 ``all``。
         settings: runtime 关节控制参数。
-        mjcf_path: 可选 MJCF 路径，用于解析 mimic follower 和 frictionloss。
+        mimic_path: 可选 MJCF/URDF 路径，用于解析 mimic follower。
     输出:
         实例暴露 ``command_indices``、``follower_indices``、``driven_indices``，
         并可通过 ``build_control_targets`` / ``apply_targets`` 生成和下发完整 DOF 目标。
@@ -58,7 +58,9 @@ class JointController:
         *,
         joint_names: list[str],
         settings: JointControlSettings,
-        mjcf_path: str | Path | None = None,
+        mimic_path: str | Path | None = None,
+        component_mapping: RobotComponentMapping | None = None,
+        native_mimic: bool = False,
     ) -> None:
         """初始化控制器索引和 mimic follower 映射。
 
@@ -66,7 +68,7 @@ class JointController:
             robot: Isaac articulation 对象。
             joint_names: 主动命令关节名列表；若包含 follower，初始化时会自动剔除。
             settings: 关节控制设置。
-            mjcf_path: 可选 MJCF 文件路径。
+            mimic_path: 可选 MJCF/URDF 文件路径，用于解析 follower 关系。
         返回:
             无返回值；索引、控制模式和 follower 控制关系保存在实例属性中。
         """
@@ -78,7 +80,7 @@ class JointController:
         requested_indices = resolve_joint_indices(self.dof_names, joint_names)
         # MJCF equality 中的 dependent joint 是 follower。它们需要被驱动，但不能作为独立
         # 命令输入，否则用户给 master 和 follower 同时下目标时会破坏 mimic 关系。
-        self.follower_joint_names = mjcf_equality_follower_joint_names(mjcf_path)
+        self.follower_joint_names = mimic_follower_joint_names(mimic_path)
         self.follower_indices = np.asarray(
             [
                 index
@@ -87,6 +89,7 @@ class JointController:
             ],
             dtype=int,
         )
+        self.native_mimic = bool(native_mimic)
         follower_index_set = {int(index) for index in self.follower_indices}
         # command_indices 只保留主动关节。即使用户的 controlled_joints 包含 follower，
         # 初始化时也会剔除，确保 follower 只由 master 实际状态推导。
@@ -101,11 +104,18 @@ class JointController:
         # driven_indices 用于日志和诊断：它包含控制器实际会下发 action 的全部 DOF，
         # 即主动关节加 follower，但不包含 articulation 中其它自由度。
         self.driven_indices = np.unique(
-            np.concatenate([self.command_indices, self.follower_indices])
+            np.concatenate([self.command_indices, self.runtime_follower_indices])
         ).astype(int)
-        self.follower_mapper = MimicFollowerTargetMapper(self.dof_names, mjcf_path)
+        self.follower_mapper = MimicFollowerTargetMapper(
+            self.dof_names, None if self.native_mimic else mimic_path
+        )
+        self._follower_master_by_name = {
+            relation.dependent_joint: relation.master_joint
+            for relation in parse_asset_mimic_relations(mimic_path)
+        }
         self.settings = settings
-        self.mjcf_path = mjcf_path
+        self.component_mapping = component_mapping or RobotComponentMapping()
+        self.mimic_path = mimic_path
 
         # 这些数组只描述主动关节的显式控制参数。implicit 模式也会缓存增益，便于同一套
         # 数据结构支持运行时模式切换和测试断言。
@@ -114,6 +124,18 @@ class JointController:
         self._active_effort_limits = np.zeros(self.robot.num_dof, dtype=float)
         self._active_specs: dict[int, tuple[ControlMode, ControlMethod]] = {}
         self.last_commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
+
+    @property
+    def runtime_follower_indices(self) -> np.ndarray:
+        """返回需要 Python 驱动的 follower index。
+
+        native URDF mimic 已由 PhysX 约束拥有 follower，运行时不得再次下发；其余资产格式
+        返回解析出的 follower indices，由 controller 每帧根据 master 补齐目标。
+        """
+
+        if self.native_mimic:
+            return np.asarray([], dtype=int)
+        return self.follower_indices
 
     @property
     def command_joint_names(self) -> tuple[str, ...]:
@@ -127,16 +149,16 @@ class JointController:
         return tuple(self.dof_names[int(index)] for index in self.command_indices)
 
     def configure_runtime(self) -> None:
-        """写入 runtime 控制模式、增益、max effort 和摩擦设置。
+        """写入 runtime 控制模式、增益和 max effort。
 
         参数:
-            无，使用初始化时保存的 robot/settings/mjcf_path。
+            无，使用初始化时保存的 robot/settings/mimic_path。
         返回:
-            无返回值；副作用是修改 articulation controller、max efforts 和 friction。
+            无返回值；副作用是修改 articulation controller、max efforts 和控制模式。
         """
 
-        stiffness = np.zeros(self.robot.num_dof, dtype=float)
-        damping = np.zeros(self.robot.num_dof, dtype=float)
+        controller = self.robot.get_articulation_controller()
+        stiffness, damping = self._runtime_gains(controller)
         # 每次 configure 都重新构造 runtime 缓存，避免修改 YAML/配置后复用旧控制器对象时
         # 残留上一轮模式、增益或 effort limit。
         self._active_stiffness = np.zeros(self.robot.num_dof, dtype=float)
@@ -147,14 +169,34 @@ class JointController:
         self._assign_active_runtime_parameters(stiffness, damping)
         self._assign_follower_runtime_parameters(stiffness, damping)
 
-        # Isaac controller 接收完整 DOF gain/max_effort 数组。未由本控制器管理的 DOF 保持 0
-        # 或已有 runtime 值，避免把控制参数写到当前动作不负责的自由度上。
-        controller = self.robot.get_articulation_controller()
+        # Isaac controller 接收完整 DOF gain 数组；上面从 runtime 复制基线后只覆盖本控制器
+        # 管理的 command/follower DOF，因此其它自由度保留资产或其它 controller 的设置。
         controller.set_gains(kps=stiffness, kds=damping)
         controller.set_max_efforts(self._runtime_max_efforts())
         self._configure_effort_modes(controller)
         self._switch_control_modes(controller)
-        self._configure_joint_friction()
+
+    def _runtime_gains(self, controller) -> tuple[np.ndarray, np.ndarray]:
+        """读取并复制完整 runtime gains，供 managed DOF 做局部覆盖。"""
+
+        if not hasattr(controller, "get_gains"):
+            raise RuntimeError(
+                "Articulation controller must provide get_gains to preserve "
+                "unmanaged DOF gains"
+            )
+        gains = controller.get_gains()
+        if not isinstance(gains, tuple) or len(gains) != 2:
+            raise RuntimeError("Articulation controller returned invalid runtime gains")
+        result: list[np.ndarray] = []
+        for name, values in zip(("stiffness", "damping"), gains, strict=True):
+            flattened = np.asarray(values, dtype=float).reshape(-1)
+            if flattened.size < self.robot.num_dof:
+                raise RuntimeError(
+                    f"Runtime {name} gains contain {flattened.size} values; "
+                    f"expected {self.robot.num_dof}"
+                )
+            result.append(flattened[: self.robot.num_dof].copy())
+        return result[0], result[1]
 
     def _assign_active_runtime_parameters(
         self, stiffness: np.ndarray, damping: np.ndarray
@@ -166,25 +208,30 @@ class JointController:
                 [
                     index
                     for index in self.command_indices
-                    if component_for_name(self.dof_names[int(index)]) == group
+                    if self._component_for_joint(self.dof_names[int(index)]) == group
                 ],
                 dtype=int,
             )
             if not group_indices.size:
                 continue
-            settings = self.settings.component(self.dof_names[int(group_indices[0])])
-            kp_values = expand_scalar_or_vector(
-                settings.stiffness, len(group_indices), f"{group} active stiffness"
+            group_names = tuple(self.dof_names[int(index)] for index in group_indices)
+            settings = self.settings.component(group_names[0], component=group)
+            kp_values = resolve_joint_parameter(
+                settings.stiffness,
+                group_names,
+                label=f"{group} active stiffness",
             )
-            kd_values = expand_scalar_or_vector(
-                settings.damping, len(group_indices), f"{group} active damping"
+            kd_values = resolve_joint_parameter(
+                settings.damping,
+                group_names,
+                label=f"{group} active damping",
             )
             # 显式 position/velocity 控制在 Python 侧计算 effort；这些缓存就是每步计算残差时
             # 使用的 kp/kd 和限幅。implicit 模式缓存同样的值，但实际 effort 由 PhysX drive 算。
             self._active_stiffness[group_indices] = kp_values
             self._active_damping[group_indices] = kd_values
-            self._active_effort_limits[group_indices] = abs(
-                float(settings.active_effort_limit())
+            self._active_effort_limits[group_indices] = np.abs(
+                settings.active_effort_limits(group_names)
             )
             for index in group_indices:
                 self._active_specs[int(index)] = (settings.mode, settings.method)
@@ -192,6 +239,8 @@ class JointController:
             # 只有 Isaac/PhysX implicit 模式需要把主动关节 gain 写到 runtime drive 上。
             # 显式模式和 direct effort 模式的主动关节 gain 保持 0，避免 runtime drive 与
             # Python 侧 effort action 同时发力。
+            stiffness[group_indices] = 0.0
+            damping[group_indices] = 0.0
             if settings.mode == "position" and settings.method == "implicit":
                 stiffness[group_indices] = kp_values
                 damping[group_indices] = kd_values
@@ -207,25 +256,26 @@ class JointController:
             group_indices = np.asarray(
                 [
                     index
-                    for index in self.follower_indices
-                    if component_for_name(self.dof_names[int(index)]) == group
+                    for index in self.runtime_follower_indices
+                    if self._component_for_joint(self.dof_names[int(index)]) == group
                 ],
                 dtype=int,
             )
             if not group_indices.size:
                 continue
-            settings = self.settings.component(self.dof_names[int(group_indices[0])])
+            group_names = tuple(self.dof_names[int(index)] for index in group_indices)
+            settings = self.settings.component(group_names[0], component=group)
             # follower 的控制语义固定为 position drive，不随主动控制模式变化。因此即使
             # active_joints 处于 velocity/effort 模式，这里也写入 follower stiffness/damping。
-            stiffness[group_indices] = expand_scalar_or_vector(
+            stiffness[group_indices] = resolve_joint_parameter(
                 settings.follower_stiffness,
-                len(group_indices),
-                f"{group} follower stiffness",
+                group_names,
+                label=f"{group} follower stiffness",
             )
-            damping[group_indices] = expand_scalar_or_vector(
+            damping[group_indices] = resolve_joint_parameter(
                 settings.follower_damping,
-                len(group_indices),
-                f"{group} follower damping",
+                group_names,
+                label=f"{group} follower damping",
             )
 
     def _runtime_max_efforts(self) -> np.ndarray:
@@ -251,15 +301,39 @@ class JointController:
             max_efforts[int(index)] = limit if limit > 0 else 0.0
         # follower 不接受 active effort 命令；这里的 max effort 始终表示 position drive 的
         # 最大输出力/力矩。
-        for index in self.follower_indices:
-            settings = self.settings.component(self.dof_names[int(index)])
+        for group in ("arm", "hand", "default"):
+            group_indices = np.asarray(
+                [
+                    index
+                    for index in self.runtime_follower_indices
+                    if self._component_for_joint(self.dof_names[int(index)]) == group
+                ],
+                dtype=int,
+            )
+            if not group_indices.size:
+                continue
+            group_names = tuple(self.dof_names[int(index)] for index in group_indices)
+            settings = self.settings.component(group_names[0], component=group)
             follower_max_force = settings.follower_max_force
             if follower_max_force is None:
                 follower_max_force = settings.max_force
-            max_efforts[int(index)] = (
-                abs(float(follower_max_force)) if follower_max_force > 0 else 0.0
+            values = resolve_joint_parameter(
+                follower_max_force,
+                group_names,
+                label=f"{group} follower max_force",
             )
+            max_efforts[group_indices] = np.where(values > 0.0, np.abs(values), 0.0)
         return max_efforts
+
+    def _component_for_joint(self, name: str) -> str:
+        """先将 follower 解析到 master，再按精确关节组确定所属组件。
+
+        mimic follower 不一定出现在显式组件映射中，因此必须沿用其 master 的 arm/hand
+        分类，避免对 follower 应用错误的控制模式或增益。
+        """
+
+        source_name = self._follower_master_by_name.get(name, name)
+        return self.component_mapping.joint_component(source_name)
 
     def _configure_effort_modes(self, controller) -> None:
         """把需要 effort action 的主动关节设置成 force effort mode。"""
@@ -292,7 +366,7 @@ class JointController:
             # effort；implicit 模式才保持 position 或 velocity。
             isaac_mode = mode if method == "implicit" else "effort"
             runtime_modes.append((int(index), isaac_mode))
-        for index in self.follower_indices:
+        for index in self.runtime_follower_indices:
             # follower 永远是 position drive，和主动关节 runtime mode 分开设置。
             runtime_modes.append((int(index), "position"))
 
@@ -304,34 +378,6 @@ class JointController:
             )
         for index, mode in runtime_modes:
             controller.switch_dof_control_mode(dof_index=int(index), mode=mode)
-
-    def _configure_joint_friction(self) -> None:
-        """按关节名写入 runtime friction，资产 frictionloss 优先。"""
-
-        view = getattr(self.robot, "_articulation_view", None)
-        if view is None or not hasattr(view, "set_friction_coefficients"):
-            return
-        # MJCF frictionloss 是资产作者给出的关节级物理参数，优先级高于 YAML 默认摩擦。
-        # YAML 仍作为缺省值，保证 URDF-only 或缺少 frictionloss 的资产也有稳定阻尼。
-        friction_by_name = parse_mjcf_joint_frictionloss(self.mjcf_path)
-        friction = np.asarray(
-            [self._joint_friction(name, friction_by_name) for name in self.dof_names],
-            dtype=float,
-        )
-        view.set_friction_coefficients(friction.reshape(1, self.robot.num_dof))
-
-    def _joint_friction(self, name: str, friction_by_name: dict[str, float]) -> float:
-        """按关节名读取 runtime friction。"""
-
-        if name in friction_by_name:
-            return float(friction_by_name[name])
-        settings = self.settings.component(name)
-        if (
-            name in self.follower_joint_names
-            and settings.follower_joint_friction is not None
-        ):
-            return float(settings.follower_joint_friction)
-        return float(settings.joint_friction)
 
     def build_control_targets(
         self,
@@ -443,6 +489,7 @@ class JointController:
             无返回值；副作用是调用 ``robot.apply_action``。
         """
 
+        self._validate_targets_for_apply(targets)
         actual_positions = np.asarray(
             self.robot.get_joint_positions(), dtype=float
         ).reshape(-1)
@@ -482,9 +529,9 @@ class JointController:
 
         # follower 最后单独下发 position action。即使主动关节使用 effort action，follower
         # 也不会被 effort 字段覆盖，始终交给 Isaac position drive 跟随。
-        if self.follower_indices.size:
+        if self.runtime_follower_indices.size:
             self._apply_position_action(
-                articulation_action_type, targets, self.follower_indices
+                articulation_action_type, targets, self.runtime_follower_indices
             )
 
     def _active_groups(self) -> list[tuple[ControlMode, ControlMethod, np.ndarray]]:
@@ -496,7 +543,11 @@ class JointController:
             if spec is None:
                 # 如果调用方忘记先 configure_runtime，仍按 settings 推导分组；不过真正的
                 # runtime gain/mode 写入仍应由 configure_runtime 完成。
-                settings = self.settings.component(self.dof_names[int(index)])
+                joint_name = self.dof_names[int(index)]
+                settings = self.settings.component(
+                    joint_name,
+                    component=self._component_for_joint(joint_name),
+                )
                 spec = (settings.mode, settings.method)
             groups.setdefault(spec, []).append(int(index))
         return [
@@ -511,10 +562,16 @@ class JointController:
 
         if not indices.size:
             return
+        positions = self._finite_vector(
+            targets.positions[indices], "Isaac joint_positions"
+        )
+        velocities = self._finite_vector(
+            targets.velocities[indices], "Isaac joint_velocities"
+        )
         self.robot.apply_action(
             articulation_action_type(
-                joint_positions=targets.positions[indices],
-                joint_velocities=targets.velocities[indices],
+                joint_positions=positions,
+                joint_velocities=velocities,
                 joint_indices=indices,
             )
         )
@@ -526,9 +583,12 @@ class JointController:
 
         if not indices.size:
             return
+        velocities = self._finite_vector(
+            targets.velocities[indices], "Isaac joint_velocities"
+        )
         self.robot.apply_action(
             articulation_action_type(
-                joint_velocities=targets.velocities[indices],
+                joint_velocities=velocities,
                 joint_indices=indices,
             )
         )
@@ -540,9 +600,10 @@ class JointController:
 
         if not indices.size:
             return
+        finite_efforts = self._finite_vector(efforts, "Isaac joint_efforts")
         self.robot.apply_action(
             articulation_action_type(
-                joint_efforts=np.asarray(efforts, dtype=float),
+                joint_efforts=finite_efforts,
                 joint_indices=indices,
             )
         )
@@ -597,6 +658,8 @@ class JointController:
             raise ValueError(
                 f"{label} expected {self.command_indices.size} values, got {vector.size}"
             )
+        if not np.all(np.isfinite(vector)):
+            raise ValueError(f"{label} must contain finite values")
         return vector
 
     def _full_vector(self, values: np.ndarray, label: str) -> np.ndarray:
@@ -609,4 +672,30 @@ class JointController:
             raise ValueError(
                 f"{label} expected {self.robot.num_dof} values, got {vector.size}"
             )
+        if not np.all(np.isfinite(vector)):
+            raise ValueError(f"{label} must contain finite values")
+        return vector
+
+    def _validate_targets_for_apply(self, targets: ControlTargets) -> None:
+        """在每次 action 前重验可变 ndarray，防止构造后的原地篡改。"""
+
+        for label, values in (
+            ("positions", targets.positions),
+            ("velocities", targets.velocities),
+            ("efforts", targets.efforts),
+        ):
+            vector = self._finite_vector(values, f"ControlTargets.{label}")
+            if vector.size != self.robot.num_dof:
+                raise ValueError(
+                    f"ControlTargets.{label} expected {self.robot.num_dof} values, "
+                    f"got {vector.size}"
+                )
+
+    @staticmethod
+    def _finite_vector(values: np.ndarray, label: str) -> np.ndarray:
+        """返回有限的一维 float 向量。"""
+
+        vector = np.asarray(values, dtype=float).reshape(-1)
+        if not np.all(np.isfinite(vector)):
+            raise ValueError(f"{label} must contain finite values")
         return vector

@@ -27,14 +27,11 @@ from linkerbot_sim.objects.physics import (
 from linkerbot_sim.utils.paths import repo_path
 
 
-CapsuleRopeMaterialConfig = ObjectMaterialConfig
-
-
 @dataclass(frozen=True)
 class CapsuleRopePhysicsConfig:
     """``src`` 运行时需要读取并写入当前 stage 的绳体物理属性。"""
 
-    material: CapsuleRopeMaterialConfig | None = None
+    material: ObjectMaterialConfig | None = None
     solver_position_iterations: int | None = None
     solver_velocity_iterations: int | None = None
 
@@ -53,10 +50,10 @@ class CapsuleRopePhysicsConfig:
         }
         unsupported = set(data) - allowed
         if unsupported:
-            names = ", ".join(sorted(unsupported))
-            raise ValueError(f"{label} contains unsupported keys: {names}")
+            paths = ", ".join(f"{label}.{key}" for key in sorted(unsupported))
+            raise ValueError(f"unsupported configuration field(s): {paths}")
         return cls(
-            material=CapsuleRopeMaterialConfig.from_mapping(
+            material=ObjectMaterialConfig.from_mapping(
                 optional_mapping(data, "material", label),
                 label=f"{label}.material",
             ),
@@ -93,25 +90,21 @@ class CapsuleRopeConfig:
     def from_mapping(cls, data: Mapping[str, object]) -> "CapsuleRopeConfig":
         """从 ``configs/objects/*.yaml`` 映射构造绳体运行时对象配置。"""
 
-        if "object" not in data:
+        if not isinstance(data, Mapping):
+            raise ValueError("capsule rope profile must be a mapping")
+        canonical = dict(data)
+        if "object" not in canonical:
             raise ValueError(
                 "Capsule rope config must contain top-level object section"
             )
-        if not isinstance(data["object"], Mapping):
+        if not isinstance(canonical["object"], Mapping):
             raise ValueError("object section must be a mapping")
-        if "rope" in data:
-            rope_data = data["rope"]
-            if not isinstance(rope_data, Mapping):
-                raise ValueError("rope section must be a mapping")
-            _reject_generation_fields(rope_data, label="rope")
-            if rope_data:
-                raise ValueError(
-                    "configs/objects capsule rope profiles no longer use rope; "
-                    "put runtime physics under object.physics and generation fields "
-                    "under tools/object_assets/flexible/rope"
-                )
+        unsupported_top_level = sorted(str(key) for key in canonical if key != "object")
+        if unsupported_top_level:
+            paths = ", ".join(f"profile.{key}" for key in unsupported_top_level)
+            raise ValueError(f"unsupported configuration field(s): {paths}")
 
-        object_cfg = dict(data["object"])
+        object_cfg = dict(canonical["object"])
         _reject_generation_fields(object_cfg, label="object")
         return cls(
             asset_path=str(object_cfg.get("asset_path", cls.asset_path)),
@@ -233,7 +226,7 @@ def apply_capsule_rope_runtime_physics(
     return counts
 
 
-def _define_runtime_material(stage, path, config: CapsuleRopeMaterialConfig):
+def _define_runtime_material(stage, path, config: ObjectMaterialConfig):
     """在 stage 中创建绳体运行时物理材质 prim。"""
 
     from pxr import PhysxSchema, UsdPhysics, UsdShade
@@ -302,6 +295,7 @@ def _reject_generation_fields(data: Mapping[str, object], *, label: str) -> None
         "prim_path",
         "root_path",
         "physics",
+        "state_summary",
     }
     if unsupported:
         names = ", ".join(sorted(unsupported))

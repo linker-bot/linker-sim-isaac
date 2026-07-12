@@ -23,6 +23,7 @@
       damping="0."
     />
     <geom
+      type="sphere"
       condim="3"
       friction="0.0 0.00 0.00"
     />
@@ -539,11 +540,14 @@
                                 condim="3"
                                 friction="1.0 0.005 0.0001"
                               />
-                              <!-- 关节 L6V1_L_hand_thumb_tip_fixed：L6V1_L_hand_thumb_distal -> L6V1_L_hand_thumb_tip，类型 fixed。 -->
-                              <body
+                              <!-- 指尖坐标 frame：使用非物理 site，避免空 fixed body 被导入为无质量刚体。 -->
+                              <site
                                 name="L6V1_L_hand_thumb_tip"
                                 pos="0 0.0035 0.026"
                                 quat="0.707105482511 0 0 0.707108079859"
+                                type="sphere"
+                                size="0.001"
+                                rgba="0 0 0 0"
                               />
                             </body>
                           </body>
@@ -627,10 +631,13 @@
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_index_tip_fixed：L6V1_L_hand_index_distal -> L6V1_L_hand_index_tip，类型 fixed。 -->
-                            <body
+                            <!-- 指尖坐标 frame：使用非物理 site，避免空 fixed body 被导入为无质量刚体。 -->
+                            <site
                               name="L6V1_L_hand_index_tip"
                               pos="0.0341 0 0.034"
+                              type="sphere"
+                              size="0.001"
+                              rgba="0 0 0 0"
                             />
                           </body>
                         </body>
@@ -713,10 +720,13 @@
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_middle_tip_fixed：L6V1_L_hand_middle_distal -> L6V1_L_hand_middle_tip，类型 fixed。 -->
-                            <body
+                            <!-- 指尖坐标 frame：使用非物理 site，避免空 fixed body 被导入为无质量刚体。 -->
+                            <site
                               name="L6V1_L_hand_middle_tip"
                               pos="0.0341 0 0.034"
+                              type="sphere"
+                              size="0.001"
+                              rgba="0 0 0 0"
                             />
                           </body>
                         </body>
@@ -799,10 +809,13 @@
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_ring_tip_fixed：L6V1_L_hand_ring_distal -> L6V1_L_hand_ring_tip，类型 fixed。 -->
-                            <body
+                            <!-- 指尖坐标 frame：使用非物理 site，避免空 fixed body 被导入为无质量刚体。 -->
+                            <site
                               name="L6V1_L_hand_ring_tip"
                               pos="0.0341 0 0.034"
+                              type="sphere"
+                              size="0.001"
+                              rgba="0 0 0 0"
                             />
                           </body>
                         </body>
@@ -885,10 +898,13 @@
                               condim="3"
                               friction="1.0 0.005 0.0001"
                             />
-                            <!-- 关节 L6V1_L_hand_pinky_tip_fixed：L6V1_L_hand_pinky_distal -> L6V1_L_hand_pinky_tip，类型 fixed。 -->
-                            <body
+                            <!-- 指尖坐标 frame：使用非物理 site，避免空 fixed body 被导入为无质量刚体。 -->
+                            <site
                               name="L6V1_L_hand_pinky_tip"
                               pos="0.0341 0 0.034"
+                              type="sphere"
+                              size="0.001"
+                              rgba="0 0 0 0"
                             />
                           </body>
                         </body>

@@ -11,7 +11,9 @@ from linkerbot_sim.objects.config import (
     ObjectProfileConfig,
     ObjectSceneInstanceConfig,
     expanded_object_mapping,
+    load_object_profile,
     object_scene_instances_from_env_config,
+    validate_object_profile,
 )
 from linkerbot_sim.objects.physics import ObjectMaterialConfig
 from linkerbot_sim.objects.dynamic_chain.capsule_rope import (
@@ -19,14 +21,13 @@ from linkerbot_sim.objects.dynamic_chain.capsule_rope import (
     apply_capsule_rope_runtime_physics,
     add_capsule_rope_reference,
 )
-from linkerbot_sim.objects.rigid.runtime import (
-    AddedRigidObject,
+from linkerbot_sim.objects.rigid.config import (
     RigidObjectConfig,
-    RigidObjectMaterialConfig,
     RigidObjectPhysicsConfig,
-    add_rigid_objects,
+    RigidObjectPlanningCollisionConfig,
     rigid_objects_from_env_config,
 )
+from linkerbot_sim.objects.rigid.importer import AddedRigidObject, add_rigid_objects
 
 __all__ = [
     "AddedRigidObject",
@@ -35,12 +36,14 @@ __all__ = [
     "ObjectProfileConfig",
     "ObjectSceneInstanceConfig",
     "RigidObjectConfig",
-    "RigidObjectMaterialConfig",
     "RigidObjectPhysicsConfig",
+    "RigidObjectPlanningCollisionConfig",
     "apply_capsule_rope_runtime_physics",
     "add_capsule_rope_reference",
     "add_rigid_objects",
     "expanded_object_mapping",
+    "load_object_profile",
     "object_scene_instances_from_env_config",
     "rigid_objects_from_env_config",
+    "validate_object_profile",
 ]

@@ -16,10 +16,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
+
+from linkerbot_sim.robots.capabilities import RobotKind
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,152 @@ class JointGroup:
         return np.asarray(
             [list(dof_names).index(name) for name in self.joint_names], dtype=int
         )
+
+
+@dataclass(frozen=True)
+class JointGroupLayout:
+    """一个 articulation 已解析且互不重叠的 command-space groups。"""
+
+    command_joint_names: tuple[str, ...]
+    arm: tuple[str, ...] = ()
+    hand: tuple[str, ...] = ()
+    passive: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        command = _unique_names(self.command_joint_names, "command_joint_names")
+        arm = _unique_names(self.arm, "joint_groups.arm")
+        hand = _unique_names(self.hand, "joint_groups.hand")
+        passive = _unique_names(self.passive, "joint_groups.passive")
+        known = set(command)
+        missing = sorted((set(arm) | set(hand) | set(passive)) - known)
+        if missing:
+            raise ValueError(f"joint groups contain unknown command joints: {missing}")
+        overlap = sorted(
+            (set(arm) & set(hand))
+            | (set(arm) & set(passive))
+            | (set(hand) & set(passive))
+        )
+        if overlap:
+            raise ValueError(f"joint groups contain multiple writers: {overlap}")
+        unassigned = sorted(known - set(arm) - set(hand) - set(passive))
+        if unassigned:
+            raise ValueError(
+                "command joints must belong to arm, hand, or explicitly passive: "
+                f"{unassigned}"
+            )
+        object.__setattr__(self, "command_joint_names", command)
+        object.__setattr__(self, "arm", arm)
+        object.__setattr__(self, "hand", hand)
+        object.__setattr__(self, "passive", passive)
+
+    @classmethod
+    def resolve(
+        cls,
+        *,
+        kind: RobotKind | str,
+        command_joint_names: Sequence[str],
+        joint_groups: object,
+        planning_joint_names: Sequence[str] = (),
+    ) -> "JointGroupLayout":
+        """解析显式 groups，并校验 robot kind 与 planning-joint coverage。"""
+
+        robot_kind = kind if isinstance(kind, RobotKind) else RobotKind.parse(kind)
+        command = _unique_names(command_joint_names, "command_joint_names")
+        explicit = _joint_group_mapping(joint_groups)
+        arm = _group_names(explicit, "arm")
+        hand = _group_names(explicit, "hand")
+        passive = _group_names(explicit, "passive")
+
+        layout = cls(command, arm=arm, hand=hand, passive=passive)
+        layout.validate_kind(robot_kind)
+        if planning_joint_names:
+            layout.validate_planning_joints(planning_joint_names)
+        return layout
+
+    def validate_kind(self, kind: RobotKind | str) -> None:
+        """校验 arm/hand group 是否与 ``RobotKind`` 声明完全一致。"""
+
+        robot_kind = kind if isinstance(kind, RobotKind) else RobotKind.parse(kind)
+        if robot_kind.has_arm != bool(self.arm):
+            raise ValueError(
+                f"robot.kind {robot_kind.value!r} requires "
+                f"arm group present={robot_kind.has_arm}, got {list(self.arm)}"
+            )
+        if robot_kind.has_hand != bool(self.hand):
+            raise ValueError(
+                f"robot.kind {robot_kind.value!r} requires "
+                f"hand group present={robot_kind.has_hand}, got {list(self.hand)}"
+            )
+
+    def validate_planning_joints(self, planning_joint_names: Sequence[str]) -> None:
+        """要求 cuRobo active joints 与 arm group 集合完全一致。"""
+
+        planning = tuple(str(name) for name in planning_joint_names)
+        if len(set(planning)) != len(planning):
+            raise ValueError("planning joint names contain duplicates")
+        if set(planning) != set(self.arm):
+            raise ValueError(
+                "cuRobo active joints must exactly match joint_groups.arm: "
+                f"planning={list(planning)}, arm={list(self.arm)}"
+            )
+
+    def names(self, group: str) -> tuple[str, ...]:
+        """按 canonical group 名称返回冻结 joint order。"""
+
+        normalized = str(group).lower()
+        if normalized not in {"arm", "hand", "passive"}:
+            raise ValueError(f"unknown joint group: {group!r}")
+        return getattr(self, normalized)
+
+    def indices(self, group: str) -> np.ndarray:
+        """返回 group joints 在完整 command-space 中的列索引。"""
+
+        selected = set(self.names(group))
+        return np.asarray(
+            [
+                index
+                for index, name in enumerate(self.command_joint_names)
+                if name in selected
+            ],
+            dtype=int,
+        )
+
+
+def _unique_names(values: Sequence[str], label: str) -> tuple[str, ...]:
+    """冻结 joint name sequence，并拒绝空名称或重复项。"""
+
+    names = tuple(str(value) for value in values)
+    if any(not name for name in names):
+        raise ValueError(f"{label} contains an empty joint name")
+    if len(set(names)) != len(names):
+        raise ValueError(f"{label} contains duplicates")
+    return names
+
+
+def _joint_group_mapping(value: object) -> Mapping[str, object]:
+    """读取必需 joint_groups mapping，并拒绝未声明 group。"""
+
+    if value is None:
+        raise ValueError("joint_groups is required")
+    if not isinstance(value, Mapping):
+        raise ValueError("joint_groups must be a mapping")
+    unsupported = set(value) - {"arm", "hand", "passive"}
+    if unsupported:
+        paths = ", ".join(f"joint_groups.{key}" for key in sorted(unsupported))
+        raise ValueError(
+            f"joint_groups contains unsupported keys: {sorted(unsupported)} "
+            f"(full paths: {paths})"
+        )
+    return value
+
+
+def _group_names(mapping, key: str) -> tuple[str, ...]:
+    """读取单个 group 的 joint name sequence。"""
+
+    value = mapping.get(key, ())
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ValueError(f"joint_groups.{key} must be a sequence")
+    return tuple(str(name) for name in value)
 
 
 def resolve_joint_indices(

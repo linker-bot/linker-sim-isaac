@@ -1,4 +1,4 @@
-"""Small shared helpers for tiled scene construction."""
+"""tiled scene 构建中无 Isaac 状态所有权的轻量共享辅助函数。"""
 
 
 def _print_status(status_prefix: str | None, message: str) -> None:

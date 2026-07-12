@@ -8,7 +8,7 @@
 * 命令子空间位置轨迹：列数等于 controller command space，走 ``build_control_targets``。
 
 传入本模块的 ``JointTrajectory`` 必须已经是“一行对应一个 physics step”的离散执行矩阵，
-并且不包含首样本。cuMotion 连续轨迹函数到离散矩阵的采样、去首样本和对齐工作都应在
+并且不包含首样本。cuRobo 连续轨迹函数到离散矩阵的采样、去首样本和对齐工作都应在
 后端 sampler 完成；execution 只逐行播放，不再调用 ``trajectory.eval_all(...)`` 二次插值。
 
 本模块当前只暴露主动关节位置目标执行步。力控/扭矩控制以后应新增显式命名的 step，
@@ -28,13 +28,31 @@ from linkerbot_sim.trajectories.types import JointTrajectory
 
 
 class CommandExecutionInterrupted(RuntimeError):
-    """Raised when a single-robot command step is stopped by an external request."""
+    """单机器人 command step 被外部取消请求协作式中断时抛出。
+
+    中断只在 physics step 之间检查，不会打断正在执行的 ``world.step``；``step`` 记录已经
+    成功完成的累计步数，调用方可用它保持后续日志和遥测时间连续。
+    """
 
     def __init__(self, message: str, *, step: int | None = None) -> None:
         """保存中断发生时的累计 physics step，便于交互循环续接。"""
 
         super().__init__(message)
         self.step = step
+
+
+class CommandPostStepError(RuntimeError):
+    """物理步已发生但 observer/logger 失败，并携带真实累计 step。
+
+    该异常与普通下发失败不同：物理世界已经不可回滚地推进，调用方必须采用异常中的
+    ``step``，不能重放同一控制样本。
+    """
+
+    def __init__(self, message: str, *, step: int) -> None:
+        """保存已经完成的 physics step 序号。"""
+
+        super().__init__(message)
+        self.step = int(step)
 
 
 @dataclass(frozen=True)
@@ -169,30 +187,38 @@ def _apply_control_targets_once(
     ``targets`` 已经是 controller 认可的完整控制目标，内部包含主动关节、mimic follower
     以及 position/velocity/effort 三类 action 字段。本函数不再关心这些目标来自完整 DOF
     轨迹还是 command-space 轨迹，只负责“apply action -> world.step -> 可选日志”这一帧
-    物理推进流程。
+    物理推进流程。``world.step`` 成功后即先计算 ``next_step``；后处理失败时通过
+    ``CommandPostStepError`` 返回这一真实进度，避免上层误以为该帧尚未执行。
     """
 
     joint_controller.apply_targets(articulation_action_type, targets)
     simulation_world.step(render=render_enabled)
-    _observe_state(state_observer, simulation_world, step=step, phase=phase)
-    _observe_cameras(camera_observer, simulation_world, step=step, phase=phase)
-    if drive_logger is not None and drive_logger.should_write(step):
-        indices = (
-            np.asarray(joint_controller.driven_indices, dtype=int)
-            if log_indices is None
-            else np.asarray(log_indices, dtype=int).reshape(-1)
-        )
-        log_values = drive_logger.collect_step_values(
-            articulation, joint_controller, targets, indices
-        )
-        drive_logger.write(
-            step=step,
-            time_s=(step + 1) * float(simulation_world.get_physics_dt()),
-            phase=phase,
-            drive_update=True,
-            **log_values,
-        )
-    return step + 1
+    next_step = step + 1
+    try:
+        _observe_state(state_observer, simulation_world, step=step, phase=phase)
+        _observe_cameras(camera_observer, simulation_world, step=step, phase=phase)
+        if drive_logger is not None and drive_logger.should_write(step):
+            indices = (
+                np.asarray(joint_controller.driven_indices, dtype=int)
+                if log_indices is None
+                else np.asarray(log_indices, dtype=int).reshape(-1)
+            )
+            log_values = drive_logger.collect_step_values(
+                articulation, joint_controller, targets, indices
+            )
+            drive_logger.write(
+                step=step,
+                time_s=next_step * float(simulation_world.get_physics_dt()),
+                phase=phase,
+                drive_update=True,
+                **log_values,
+            )
+    except Exception as exc:
+        raise CommandPostStepError(
+            f"command post-step processing failed: {exc}",
+            step=next_step,
+        ) from exc
+    return next_step
 
 
 def _apply_command_joint_target_once(
@@ -263,7 +289,8 @@ def execute_smooth_command_position_target(
     """用 smoothstep 在两个 command-space 位置目标之间平滑移动。
 
     本函数只处理主动命令关节。mimic follower 不作为入参暴露，而是在每一帧进入
-    ``JointController.build_control_targets`` 时根据实际 master 状态重算。
+    ``JointController.build_control_targets`` 时根据实际 master 状态重算。duration 按
+    physics dt 四舍五入且至少执行一帧；每帧位置和解析速度都来自同一个 smoothstep 参数。
     """
 
     physics_dt = float(simulation_world.get_physics_dt())
@@ -326,7 +353,8 @@ def execute_command_position_trajectory(
 
     轨迹列按 controller command space 排列，而不是完整 articulation DOF。每一帧都会通过
     ``build_control_targets`` 扩展成完整 DOF 控制目标，再复用私有单帧下发逻辑
-    下发和记录日志。
+    下发和记录日志。轨迹已经对齐 physics grid，本函数不再插值或重复首样本。
+    ``hold=True`` 只在存在至少一个轨迹样本时保持最后完整控制目标。
     """
 
     full_position = np.asarray(articulation.get_joint_positions(), dtype=float).reshape(
@@ -359,19 +387,26 @@ def execute_command_position_trajectory(
             _raise_if_stopped(should_stop, step=step)
             joint_controller.apply_targets(articulation_action_type, targets)
             simulation_world.step(render=render_enabled)
-            _observe_state(
-                state_observer,
-                simulation_world,
-                step=step,
-                phase=trajectory.phases[-1],
-            )
-            _observe_cameras(
-                camera_observer,
-                simulation_world,
-                step=step,
-                phase=trajectory.phases[-1],
-            )
+            sample_step = step
             step += 1
+            try:
+                _observe_state(
+                    state_observer,
+                    simulation_world,
+                    step=sample_step,
+                    phase=trajectory.phases[-1],
+                )
+                _observe_cameras(
+                    camera_observer,
+                    simulation_world,
+                    step=sample_step,
+                    phase=trajectory.phases[-1],
+                )
+            except Exception as exc:
+                raise CommandPostStepError(
+                    f"command post-step processing failed: {exc}",
+                    step=step,
+                ) from exc
             if simulation_app is None:
                 break
     return step
@@ -397,7 +432,9 @@ def execute_command_position_hold(
 ) -> int:
     """保持一个 command-space 位置目标一段时间。
 
-    只下发主动关节目标；follower 每帧由 controller 根据实际 master 状态覆盖。
+    只下发主动关节目标；follower 每帧由 controller 根据实际 master 状态覆盖。正 duration
+    量化为至少一个 physics step，非正 duration 表示持续保持到 SimulationApp 停止或外部
+    ``should_stop`` 请求中断；没有 app 时调用方必须提供可触发的停止回调，否则会持续执行。
     """
 
     physics_dt = float(simulation_world.get_physics_dt())

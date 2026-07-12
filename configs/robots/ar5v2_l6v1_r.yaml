@@ -1,16 +1,23 @@
 # AR5 机械臂 + LinkerHand L6 右手组合配置。
 #
-# 本文件描述一个“单个 Isaac articulation”的机器人 profile：
-# - robot 段负责 Isaac/PhysX 侧的资产导入、stage 路径、碰撞近似和物理覆盖。
-# - cumotion 段负责 cuMotion 规划侧加载的机器人模型资源。
+# 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
+# - env 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
+#   场景实例身份、USD 挂载位置和世界位姿。
+# - robot 段负责组合资产导入、碰撞近似以及导入后的 PhysX 覆盖。
+# - curobo 段只声明机械臂规划能力；joint_groups 定义 Isaac 命令关节成员，并校验 cuRobo
+#   active joints 名称集合。规划向量顺序不由 joint_groups 决定，结果会按名称映射。
 #
 # 注意：
 # - 这里不写机器人在场景中的 root_pose；root_pose 属于 configs/envs/*.yaml。
-# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/cumotion/*.yaml 管理。
-# - 该组合资产包含 AR5V2_R 机械臂和 L6V1 右手，但 cuMotion 当前只加载机械臂 URDF/XRDF。
+# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
+# - 该组合资产包含 AR5V2_R 机械臂和 L6V1 右手，但 cuRobo 只加载机械臂 URDF；
+#   因此手部可参与 Isaac 接触与控制，却不属于 cuRobo 的运动学链或 collision spheres。
+
 robot:
-  # 机器人逻辑名称。
-  # 运行时会作为 SingleArticulation 的 name 使用，也用于日志、配置选择和调试输出。
+  # 能力类别：arm_hand 要求 arm/hand 两个 joint group 都非空，规划能力只绑定 arm。
+  kind: arm_hand
+  # profile 内的资产逻辑名称。正式 env 装配会使用 robots[].label 作为 articulation 实例名；
+  # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
   name: ar5v2_l6v1_r
 
   # 资产类型。
@@ -21,10 +28,6 @@ robot:
   # 组合机器人资产路径，相对仓库根目录。
   # 文件中同时包含 AR5V2_R 机械臂和 LinkerHand L6V1 右手的 MJCF 描述。
   asset_path: assets/combined_system/AR5V2_L6V1_R/AR5V2_L6V1_R.xml
-
-  # 导入到当前 USD stage 的根 prim path，必须是绝对 USD 路径。
-  # Isaac importer 会在该路径下创建机器人 prim，再由代码查找 articulation root。
-  prim_path: /World/AR5V2_L6V1_R
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -49,6 +52,7 @@ robot:
       # 导入后写到机器人 USD/PhysX 上的资产级物理覆盖。
       # 这些参数不属于控制器配置；它们影响接触、摩擦、反弹和刚体阻尼。
       material:
+        # 三个接触参数均为无量纲 PhysX 材料属性，并绑定到组合资产的 collision prim。
         # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
         contact_static_friction: 0.8
         # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
@@ -78,27 +82,57 @@ robot:
         # 灵巧手刚体的速度约束求解迭代次数。
         velocity_iterations: 4
 
-cumotion:
-  # cuMotion 规划后端使用的模型资源。
-  # 虽然 Isaac stage 中导入的是“机械臂+右手”的 MJCF 组合资产，
-  # 但这里的规划模型仍使用单独的 AR5V2_R 机械臂 URDF/XRDF。
-  # IK/planner 等算法参数由 configs/cumotion/*.yaml 提供，不放在本文件。
+curobo:
+  # true 表示此组合机器人可以创建机械臂 cuRobo context；手部仍由 Isaac 控制器执行。
+  enabled: true
+  # 规划组引用 joint_groups.arm，并在 context 建立时校验 cuRobo active joints 名称集合完全一致。
+  planning_joint_group: arm
+  robot:
+    # cuRobo 规划后端使用的模型资源。
+    # 虽然 Isaac stage 中导入的是“机械臂+右手”的 MJCF 组合资产，
+    # 但这里的规划模型仍使用单独的 AR5V2_R 机械臂 URDF。
+    # IK/planner 等算法参数由 configs/curobo/*.yaml 提供，不放在本文件。
 
-  # XRDF 路径：描述 cuMotion 的 C-space、关节语义、默认关节配置等规划信息。
-  xrdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.xrdf
+    # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
+    urdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.urdf
 
-  # URDF 路径：描述 cuMotion 需要的机械臂运动学树和 link/joint 结构。
-  urdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.urdf
+    # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
+    # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
+    flange_frame: AR5V2_R_arm_flan_link
 
-  # 机械臂法兰 frame。
-  # 没有显式 TCP 时，IK/规划会把该 frame 作为默认末端；生成自定义 TCP 时也会以它为父 frame。
-  flange_frame: AR5V2_R_arm_flan_link
+    # 默认 TCP frame；未声明 tool_frames 时必须提供。JSON 省略 tcp_frame_name 时使用此值，
+    # 显式值只能选择已存在于 cuRobo context 的 frame。
+    default_tcp_frame: AR5V2_R_pinch_tcp
 
-  # 默认 TCP frame。JSON 运行时只能选择已存在于 cuMotion context 的 frame。
-  default_tcp_frame: AR5V2_R_pinch_tcp
+    # 自定义 TCP fixed frames；未写 parent_frame 时相对 flange_frame。
+    # xyz 单位为 m，rpy 单位为 rad；创建 context 前写入缓存派生 URDF，不修改源 URDF。
+    custom_tcps:
+      AR5V2_R_pinch_tcp:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
 
-  # 自定义 TCP fixed frames，位姿相对 flange_frame；创建 cuMotion context 前会写入派生 URDF。
-  custom_tcps:
-    AR5V2_R_pinch_tcp:
-      xyz: [0.0, 0.0, 0.0]
-      rpy: [0.0, 0.0, 0.0]
+    # cuRobo robot YAML，提供机械臂 collision spheres、C-space 和模型侧关节信息。
+    robot_config_path: assets/single_system/arm/AR5V2_R/AR5V2_R_curobo.yml
+    # true 表示把上述机械臂 collision spheres 加载到规划 context；不包含组合资产中的手部。
+    load_collision_spheres: true
+
+joint_groups:
+  # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
+  # 默认 controlled_joints=[all] 时，命令/轨迹向量顺序来自 articulation.dof_names。
+  # hand 仅列出可直接接收命令的六个 master 关节。MJCF equality 中的 DIP 等 follower
+  # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
+  arm:
+    - AR5V2_R_arm_joint_1
+    - AR5V2_R_arm_joint_2
+    - AR5V2_R_arm_joint_3
+    - AR5V2_R_arm_joint_4
+    - AR5V2_R_arm_joint_5
+    - AR5V2_R_arm_joint_6
+    - AR5V2_R_arm_joint_7
+  hand:
+    - L6V1_R_hand_index_mcp_pitch
+    - L6V1_R_hand_middle_mcp_pitch
+    - L6V1_R_hand_ring_mcp_pitch
+    - L6V1_R_hand_pinky_mcp_pitch
+    - L6V1_R_hand_thumb_cmc_roll
+    - L6V1_R_hand_thumb_cmc_pitch

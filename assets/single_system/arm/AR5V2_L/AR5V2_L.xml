@@ -23,6 +23,7 @@
       damping="0."
     />
     <geom
+      type="sphere"
       condim="3"
       friction="0.0 0.00 0.00"
     />

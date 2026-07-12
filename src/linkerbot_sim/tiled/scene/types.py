@@ -1,4 +1,4 @@
-"""Shared data structures for tiled Isaac scenes."""
+"""tiled Isaac scene 构建阶段共享的 immutable data structures。"""
 
 from __future__ import annotations
 
@@ -7,8 +7,13 @@ from pathlib import Path
 
 import numpy as np
 
-from linkerbot_sim.app.runtime.objects import RuntimeObjectHandle
-from linkerbot_sim.assets.robot_loader import RobotExecutionConfig, RobotGravityPolicy
+from linkerbot_sim.objects.runtime import RuntimeObjectHandle
+from linkerbot_sim.assets.robot_config import RobotGravityPolicy
+from linkerbot_sim.assets.robot_instances import (
+    RobotExecutionConfig,
+    RobotSceneInstanceConfig,
+)
+from linkerbot_sim.robots.mimic.runtime import MimicFollowerControl
 from linkerbot_sim.tiled.config import TiledEnvConfig
 
 
@@ -16,9 +21,10 @@ from linkerbot_sim.tiled.config import TiledEnvConfig
 class TiledRobotInstance:
     """env profile 中一个可被 tiled builder 导入的机器人实例。"""
 
-    name: str
+    robot_id: int
+    label: str
     profile_name: str
-    scene_instance: object
+    scene_instance: RobotSceneInstanceConfig
 
 
 @dataclass(frozen=True)
@@ -38,12 +44,17 @@ class ImportedTiledRobot:
     gravity_policy: RobotGravityPolicy
     gravity_counts: dict[str, int]
     solver_counts: dict[str, int]
+    controller_profile: str = "default"
+    robot_id: int = 0
+    label: str = ""
+    kind: str = "arm"
+    supports_planning: bool = False
 
     @property
-    def mjcf_path(self) -> Path | None:
-        """MJCF 资产路径；URDF 机器人没有 mimic/equality 文件需要解析。"""
+    def mimic_path(self) -> Path | None:
+        """返回原生格式能够声明 follower 关系的资产路径。"""
 
-        return self.asset_path if self.asset_type == "mjcf" else None
+        return self.asset_path if self.asset_type in {"mjcf", "urdf"} else None
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,10 @@ class TiledArticulationView:
     articulation_paths: tuple[str, ...]
     command_joint_names: tuple[str, ...]
     command_joint_indices: np.ndarray
+    runtime_mimic_controls: tuple[MimicFollowerControl, ...] = ()
+    robot_id: int = 0
+    label: str = ""
+    controller_profile: str = "default"
 
 
 @dataclass(frozen=True)
@@ -72,3 +87,28 @@ class IsaacTiledScene:
     robot_root_pose_overrides_applied: int
     object_pose_overrides_applied: int
     collision_filtering_applied: bool
+
+    @property
+    def robots_by_id(self) -> dict[int, ImportedTiledRobot]:
+        """按 session robot ID 构造 imported robot 主索引。"""
+
+        return {robot.robot_id: robot for robot in self.robots.values()}
+
+    @property
+    def robot_id_by_label(self) -> dict[str, int]:
+        """构造稳定 label 到 session ID 的反向索引。"""
+
+        return {
+            (robot.label or name): robot.robot_id for name, robot in self.robots.items()
+        }
+
+    def robot_label(self, robot_id: int) -> str:
+        """按 ID 返回稳定 label，并在错误中列出当前可用 IDs。"""
+
+        try:
+            robot = self.robots_by_id[int(robot_id)]
+        except KeyError as exc:
+            raise KeyError(
+                f"unknown robot_id {robot_id!r}; available={sorted(self.robots_by_id)}"
+            ) from exc
+        return robot.label

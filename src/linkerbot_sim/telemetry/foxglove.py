@@ -23,6 +23,36 @@ from typing import Any
 
 import numpy as np
 
+from linkerbot_sim.utils.config import require_loopback_host
+from linkerbot_sim.utils.output_paths import OutputPathPlan, plan_output_file
+
+
+DEFAULT_SPHERE_MARKER_RADIUS_M = 0.02
+DEFAULT_SPHERE_MARKER_COLOR_RGBA = (0.1, 0.45, 1.0, 1.0)
+DEFAULT_LINE_MARKER_THICKNESS_M = 0.01
+DEFAULT_LINE_MARKER_COLOR_RGBA = (0.0, 0.8, 0.25, 1.0)
+
+
+def prepare_mcap_output(
+    path: str | Path | None,
+    *,
+    existing_file_policy: str,
+) -> OutputPathPlan | None:
+    """预检一个 MCAP 输出目标，不打开文件或修改目录。
+
+    MCAP writer 不支持安全追加，因此明确拒绝 ``resume``；其余已有文件策略交给统一输出
+    路径规划器，待所有输出一起通过校验后再提交文件系统修改。
+    """
+
+    if path is None:
+        return None
+    if existing_file_policy == "resume":
+        raise ValueError(
+            "runtime.output.mcap_existing_file_policy='resume' is unsupported: "
+            "Foxglove MCAP cannot append to an existing recording"
+        )
+    return plan_output_file(path, policy=existing_file_policy)
+
 
 def _ns_time(time_s: float | None = None) -> int:
     """把秒转换为 Foxglove 使用的纳秒时间戳。
@@ -185,14 +215,12 @@ class FoxgloveLogger:
         cls,
         path: str | Path,
         *,
-        allow_overwrite: bool = True,
         topics: FoxgloveTopicConfig | None = None,
     ) -> "FoxgloveLogger":
         """创建写入离线 MCAP 的 logger。
 
         参数:
             path: 输出 MCAP 文件路径。
-            allow_overwrite: 是否允许覆盖已有文件。
             topics: 可选 topic 名称配置。
         返回:
             ``FoxgloveLogger`` 实例。
@@ -202,7 +230,7 @@ class FoxgloveLogger:
         output_path = Path(path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         return cls(
-            foxglove.open_mcap(output_path, allow_overwrite=allow_overwrite),
+            foxglove.open_mcap(output_path, allow_overwrite=False),
             topics=topics,
         )
 
@@ -226,6 +254,7 @@ class FoxgloveLogger:
             ``FoxgloveLogger`` 实例，可用 Foxglove 连接 ``ws://host:port``。
         """
 
+        host = require_loopback_host(host, label="host")
         foxglove, _messages = _load_foxglove()
         return cls(
             foxglove.start_server(name=name, host=host, port=int(port)), topics=topics
@@ -352,8 +381,8 @@ class FoxgloveLogger:
         entity_id: str,
         positions,
         frame_id: str = "world",
-        radius: float = 0.02,
-        color=(0.1, 0.45, 1.0, 1.0),
+        radius: float = DEFAULT_SPHERE_MARKER_RADIUS_M,
+        color=DEFAULT_SPHERE_MARKER_COLOR_RGBA,
         time_s: float | None = None,
     ) -> None:
         """写入一组球形 marker。
@@ -391,8 +420,8 @@ class FoxgloveLogger:
         entity_id: str,
         points,
         frame_id: str = "world",
-        thickness: float = 0.01,
-        color=(0.0, 0.8, 0.25, 1.0),
+        thickness: float = DEFAULT_LINE_MARKER_THICKNESS_M,
+        color=DEFAULT_LINE_MARKER_COLOR_RGBA,
         time_s: float | None = None,
     ) -> None:
         """写入一条 3D polyline。

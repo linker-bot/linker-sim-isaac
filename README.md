@@ -1,11 +1,14 @@
 # LinkerHand Simulation
 
-Please choose a README language:
+Choose a language:
 
-- [English](README.en.md)
-- [中文](README.zh-CN.md)
+- [English README](README.en.md)
+- [中文 README](README.zh-CN.md)
 
 Documentation:
 
-- [English docs](docs/en/index.md)
-- [中文文档](docs/zh-CN/文档索引.md)
+- [English documentation](docs/en/index.md)
+- [中文文档](docs/zh-CN/index.md)
+
+Start with the [runtime and API chooser](docs/en/getting-started/choose-runtime-and-api.md)
+or its [中文版](docs/zh-CN/getting-started/choose-runtime-and-api.md).

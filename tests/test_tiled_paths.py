@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from linkerbot_sim.tiled.config import TiledEnvConfig
-from linkerbot_sim.tiled.paths import (
+from linkerbot_sim.tiled.scene.paths import (
     env_local_suffix,
     env_origins,
     env_root_path,

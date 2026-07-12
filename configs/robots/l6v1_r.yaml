@@ -1,0 +1,83 @@
+# LinkerHand L6V1 右手独立 articulation 配置。
+#
+# 本 profile 只描述可复用机器人资产、运行能力和物理属性；由 env 的
+# robots[].robot_profile 引用。场景中的 label、prim_path 与 root_pose 属于 robots[] 实例，
+# 控制器 bundle 则由实例覆盖或 runtime 默认值选择。本手没有机械臂规划组，因此明确关闭 cuRobo。
+#
+
+robot:
+  # profile 内的资产逻辑名称；正式 env 实例的 articulation、日志和 registry 使用
+  # robots[].label/robot_id，profile 按文件名选择。
+  name: l6v1_r
+  # hand 要求 joint_groups.hand 非空，并禁止启用 cuRobo arm planning。
+  kind: hand
+  # Isaac 使用 MJCF，以保留手指 equality/mimic 关系。
+  asset_type: mjcf
+  # 仓库相对的右手 MJCF 资产路径。
+  asset_path: assets/single_system/hand/L6V1_R/L6V1_R.xml
+
+  import:
+    # 非凸 mesh 分解成多个凸碰撞体，保留更准确的指尖接触形状。
+    collision_approximation: convex_decomposition
+    # 是否计算 articulation 内部 link 自碰撞；默认关闭以控制接触计算成本。
+    self_collision: false
+
+  physics:
+    gravity:
+      # false 会在相应刚体写 disableGravity=True；default 处理未显式分组的刚体。
+      default: false
+      # 手部刚体关闭重力，避免重力与关节控制目标叠加。
+      hand: false
+
+    physx:
+      # 导入后覆盖接触 material；这些值不属于 controller gain。
+      material:
+        # 三个值均为无量纲 PhysX 接触材质参数，并绑定到手部 collision prim。
+        # 接触开始滑动前的静摩擦系数。
+        contact_static_friction: 0.8
+        # 相对滑动后的动摩擦系数。
+        contact_dynamic_friction: 0.6
+        # 0 表示接触不额外反弹。
+        contact_restitution: 0.0
+      rigid_body:
+        # 0 表示不增加线速度衰减。
+        linear_damping: 0.0
+        # 小幅角阻尼用于抑制手指接触抖动。
+        angular_damping: 0.1
+
+    solver:
+      hand:
+        # 手部约束、穿透修正和关节收敛的位置迭代次数。
+        position_iterations: 32
+        # 摩擦及碰撞后速度收敛的速度迭代次数。
+        velocity_iterations: 4
+
+  planning_collision:
+    # 规划后端不读取此手的 cuRobo 模型；场景碰撞 registry 改用这些保守包络球表示整只手。
+    # 包络只用于规划碰撞查询，不创建/修改 PhysX collider；运行时按 env robots[].root_pose
+    # 的静态初始变换把 root-local 球心转换到世界坐标，不跟踪之后发生的 root 移动。
+    spheres:
+      - name: hand_envelope
+        # 球心相对 robot root，单位 m。
+        center: [0.0, 0.0, 0.09]
+        # 包络球半径，单位 m，必须为正有限值。
+        radius: 0.16
+
+curobo:
+  # hand-only profile 不提供 arm 规划模型，也不创建 cuRobo context；Isaac 控制与接触不受影响。
+  enabled: false
+
+joint_groups:
+  # kind=hand 要求 arm 为空、hand 非空；名称必须匹配 articulation DOF。
+  # hand 列表只声明六个可直接接收命令的 master 关节；默认 controlled_joints=[all]
+  # 时命令/轨迹向量顺序来自 articulation.dof_names。
+  # MJCF equality 中的 DIP 等 follower 会被自动发现并从主动命令空间剔除，再按 master
+  # 实际位置通过 follower position drive 执行，因此不要把 follower 重复写入此列表。
+  arm: []
+  hand:
+    - L6V1_R_hand_index_mcp_pitch
+    - L6V1_R_hand_middle_mcp_pitch
+    - L6V1_R_hand_ring_mcp_pitch
+    - L6V1_R_hand_pinky_mcp_pitch
+    - L6V1_R_hand_thumb_cmc_roll
+    - L6V1_R_hand_thumb_cmc_pitch

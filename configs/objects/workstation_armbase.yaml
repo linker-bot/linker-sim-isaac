@@ -1,22 +1,22 @@
 # workstation armbase 运行时对象配置。
 #
-# env scene 负责 root_pose；本文件负责对象类别、资产路径、导入参数和运行时物理属性。
+# env objects[].object_profile 通过文件名 workstation_armbase 选择本 profile；实例 name、
+# prim_path 与 root_pose 由 env 管理。本文件负责可复用的资产导入与运行时物理覆盖。
+# 本 profile 没有 planning_collision，因此工装会参与 PhysX 接触，但不会自动成为规划障碍物。
+
 
 object:
-  # 对象 profile 名称；env 中通过 object_profile: workstation_armbase 引用本文件。
+  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
   name: workstation_armbase
 
-  # 对象类型。rigid 表示导入后作为刚体/固定物体处理。
+  # 对象能力类别。rigid 允许 USD/URDF 导入、static 策略与接触材质覆盖。
   kind: rigid
 
   # 资产来源类型。这里通过 Isaac URDF importer 导入工装基座。
   source: urdf
 
-  # 工装基座 URDF 路径，相对仓库根目录。
+  # 工装基座 URDF 路径，相对仓库根目录；stage 目标 prim_path 由 env 实例提供。
   asset_path: assets/rigid_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
-
-  # 导入或引用到当前 USD stage 的根 prim path。
-  prim_path: /World/WorkstationArmBase
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -24,10 +24,11 @@ object:
     collision_approximation: convex_decomposition
 
   physics:
-    # true 表示运行时把该对象作为静态环境，不参与动力学运动。
+    # true 表示静态工装：URDF 未显式配置 fix_base 时，importer 会固定根基座；
+    # 对没有 fixed root 的资产，runtime 才改为 kinematic 并关闭重力，避免重复静态约束。
     static: true
 
-    # 工装接触材质覆盖；用于和机器人/绳体接触时计算摩擦与反弹。
+    # 运行时创建并强绑定到工装 collision prim 的接触材质；各系数均无量纲。
     material:
       # 静摩擦系数：影响接触面开始滑动前的摩擦。
       static_friction: 0.8

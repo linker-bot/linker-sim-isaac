@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from linkerbot_sim.controllers.types import (
     ComponentControlSettings,
@@ -8,6 +9,7 @@ from linkerbot_sim.controllers.types import (
 )
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.execution.steps import (
+    CommandPostStepError,
     CommandPositionTrajectoryStep,
     HoldCommandPositionTargetStep,
     SmoothCommandPositionTargetStep,
@@ -167,6 +169,37 @@ def test_execute_command_position_trajectory_expands_command_space_targets() -> 
         controller.applied_targets[-1].positions, [1.5, 0.2, 2.5]
     )
     assert logger.rows[-1]["phase"] == "b"
+
+
+def test_command_post_step_failure_reports_the_committed_step() -> None:
+    articulation = _FakeArticulation()
+    world = _FakeWorld()
+    controller = _FakeCommandController()
+    trajectory = JointTrajectory.from_samples(
+        times=np.asarray([0.1]),
+        positions=np.asarray([[1.0, 2.0]]),
+        joint_names=("j0", "j2"),
+    )
+
+    class FailingObserver:
+        def observe(self, *_args, **_kwargs) -> None:
+            raise RuntimeError("observer failed")
+
+    with pytest.raises(CommandPostStepError, match="observer failed") as exc_info:
+        execute_command_position_trajectory(
+            articulation=articulation,
+            simulation_world=world,
+            articulation_action_type=object,
+            joint_controller=controller,
+            trajectory=trajectory,
+            simulation_app=None,
+            render_enabled=False,
+            step=7,
+            state_observer=FailingObserver(),
+        )
+
+    assert exc_info.value.step == 8
+    assert world.step_calls == [False]
 
 
 def test_command_position_steps_use_command_space_controller() -> None:

@@ -1,30 +1,30 @@
 # T block 运行时对象配置。
 #
-# env scene 负责 root_pose；本文件负责对象类别、资产路径、导入参数和运行时物理属性。
+# env objects[].object_profile 通过文件名 TblockV1_default 选择本 profile；实例 name、prim_path
+# 与 root_pose 由 env 管理。本文件负责可复用的对象类别、资产路径、运行时物理属性和规划几何。
 # T 形块几何、质量、阻尼和可视材质属于资产固有属性，
 # 放在 tools/object_assets/rigid/tblock/config.yaml。
 
+
 object:
-  # 对象 profile 名称；env 中通过 object_profile: TblockV1_default 引用本文件。
+  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份则使用 objects[].name。
   name: TblockV1_default
 
-  # 对象类型。rigid 表示导入后作为刚体/固定物体处理。
+  # 对象能力类别。rigid 允许 USD/URDF 资产、static 策略及可选规划简化几何。
   kind: rigid
 
   # 资产来源类型。T block 已由 tools 生成 USD/USDA，因此这里直接引用 usd。
   source: usd
 
-  # T block USD 资产路径，相对仓库根目录。
+  # T block USD 资产路径，相对仓库根目录；stage 挂载 prim_path 不在此处固定。
   asset_path: assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda
 
-  # 引用到当前 USD stage 后的根 prim path。
-  prim_path: /World/TBlock
-
   physics:
-    # true 表示运行时把该对象作为静态环境，不参与动力学运动。
+    # true 会把子树刚体设为 kinematic 并关闭重力；false 不强制冻结，保留 USD 写入的动力学属性。
     static: false
 
-    # T block 接触材质覆盖；用于和机器人/绳体接触时计算摩擦与反弹。
+    # T block 接触材质覆盖；运行时创建 PhysX material，并以强绑定应用到子树 collision prim。
+    # 摩擦系数与恢复系数均无量纲，只影响物理接触，不影响下面的规划几何。
     material:
       # 静摩擦系数：影响接触面开始滑动前的摩擦。
       static_friction: 0.8
@@ -34,3 +34,19 @@ object:
       restitution: 0.0
       # 摩擦合成模式；average 表示与接触另一方材质取平均。
       friction_combine_mode: average
+
+  planning_collision:
+    # 后端无关的规划障碍物描述；运行时用对象实时 world pose 乘以下方局部 pose，
+    # 再交给 cuRobo 等规划适配器。它不读取、创建或修改 USD/PhysX collider。
+    # 这里用覆盖 stem+cap 的包围 cuboid：x/y/z 尺寸来自 tools/object_assets/rigid/tblock/config.yaml。
+    shape: cuboid
+    # cuboid 沿自身局部 x/y/z 轴的全尺寸，单位 m。
+    size: [0.04, 0.2, 0.22]
+    # shape 相对对象 root 的局部位姿：xyz 单位 m，rpy 单位 rad。
+    # TBlock 资产根在局部原点，几何中心约在 x=-0.02, z=0.11。
+    xyz: [-0.02, 0.0, 0.11]
+    rpy: [0.0, 0.0, 0.0]
+    # 规划安全膨胀量，单位 m；cuboid 每个轴的全尺寸会增加 2*padding，不改变 PhysX 几何。
+    padding: 0.0
+    # false 会保留配置但不把该 shape 作为有效规划障碍物。
+    enabled: true

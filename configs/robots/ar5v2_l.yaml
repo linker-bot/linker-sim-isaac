@@ -1,16 +1,23 @@
 # AR5V2_L 单独机械臂配置。
 #
-# 本文件描述一个“单个 Isaac articulation”的机器人 profile：
-# - robot 段负责 Isaac/PhysX 侧的资产导入、stage 路径、碰撞近似和物理覆盖。
-# - cumotion 段负责 cuMotion 规划侧加载的机器人模型资源。
+# 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
+# - env 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
+#   场景实例的身份、USD 挂载位置和世界位姿，同一 profile 可由多个实例复用。
+# - robot 段负责 Isaac/PhysX 侧的资产导入、碰撞近似和导入后的物理覆盖。
+# - curobo 段只声明该 articulation 的规划能力及 cuRobo 机器人模型资源。
+# - joint_groups 定义 Isaac 命令关节成员，并与 cuRobo active joints 校验名称集合；
+#   向量顺序来自 articulation/显式 selector，规划结果按名称映射。
 #
 # 注意：
 # - 这里不写机器人在场景中的 root_pose；root_pose 属于 configs/envs/*.yaml。
-# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/cumotion/*.yaml 管理。
+# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
 # - 本 profile 只导入机械臂本体，不包含 LinkerHand 灵巧手。
+
 robot:
-  # 机器人逻辑名称。
-  # 运行时会作为 SingleArticulation 的 name 使用，也用于日志、配置选择和调试输出。
+  # 能力类别：arm 要求 joint_groups.arm 非空，并允许把 arm 绑定为 cuRobo 规划组。
+  kind: arm
+  # profile 内的资产逻辑名称。正式 env 装配会使用 robots[].label 作为 articulation 实例名；
+  # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
   name: ar5v2_l
 
   # 资产类型。
@@ -20,10 +27,6 @@ robot:
   # 机器人资产路径，相对仓库根目录。
   # 该文件只包含 AR5V2_L 机械臂，不包含手部模型。
   asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
-
-  # 导入到当前 USD stage 的根 prim path，必须是绝对 USD 路径。
-  # Isaac importer 会在该路径下创建机器人 prim，再由代码查找 articulation root。
-  prim_path: /World/AR5V2_L
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -47,6 +50,7 @@ robot:
       # 导入后写到机器人 USD/PhysX 上的资产级物理覆盖。
       # 这些参数不属于控制器配置；它们影响接触、摩擦、反弹和刚体阻尼。
       material:
+        # 三个接触参数均为无量纲 PhysX 材料属性，并绑定到机器人 collision prim。
         # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
         contact_static_friction: 0.8
         # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
@@ -70,25 +74,51 @@ robot:
         # 机械臂刚体的速度约束求解迭代次数。
         velocity_iterations: 4
 
-cumotion:
-  # cuMotion 规划后端使用的模型资源。
-  # IK/planner 等算法参数由 configs/cumotion/*.yaml 提供，不放在本文件。
+curobo:
+  # true 表示运行时可为该机器人创建 cuRobo context；不代表每次动作都必须走规划器。
+  enabled: true
+  # 规划关节组固定引用下方 joint_groups.arm；context 建立后会校验 cuRobo active joints
+  # 与该组的名称集合精确一致，具体向量再按关节名映射，避免静默错位。
+  planning_joint_group: arm
+  robot:
+    # cuRobo 规划后端使用的模型资源。
+    # IK/planner 等算法参数由 configs/curobo/*.yaml 提供，不放在本文件。
 
-  # XRDF 路径：描述 cuMotion 的 C-space、关节语义、默认关节配置等规划信息。
-  xrdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xrdf
+    # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
+    urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
 
-  # URDF 路径：描述 cuMotion 需要的机械臂运动学树和 link/joint 结构。
-  urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+    # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
+    # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
+    flange_frame: AR5V2_L_arm_flan_link
 
-  # 机械臂法兰 frame。
-  # 没有显式 TCP 时，IK/规划会把该 frame 作为默认末端；生成自定义 TCP 时也会以它为父 frame。
-  flange_frame: AR5V2_L_arm_flan_link
+    # 默认 TCP frame；未声明 tool_frames 时必须提供。运行时 JSON 中的 tcp_frame_name 只负责
+    # 在已加载 frame 中选择，省略时使用此值。
+    default_tcp_frame: AR5V2_L_tool_tcp
 
-  # 默认 TCP frame。运行时 JSON 中的 tcp_frame_name 只负责在已加载 frame 中选择。
-  default_tcp_frame: AR5V2_L_tool_tcp
+    # 自定义 TCP fixed frames；未写 parent_frame 时相对 flange_frame。
+    # xyz 单位为 m，rpy 单位为 rad，采用 URDF fixed joint 的父 frame -> TCP 位姿语义；
+    # 创建 cuRobo context 前会把这些 frame 写入缓存中的派生 URDF，不修改源资产。
+    custom_tcps:
+      AR5V2_L_tool_tcp:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
 
-  # 自定义 TCP fixed frames，位姿相对 flange_frame；创建 cuMotion context 前会写入派生 URDF。
-  custom_tcps:
-    AR5V2_L_tool_tcp:
-      xyz: [0.0, 0.0, 0.0]
-      rpy: [0.0, 0.0, 0.0]
+    # cuRobo robot YAML，定义 collision spheres、C-space 和模型侧关节信息。
+    robot_config_path: assets/single_system/arm/AR5V2_L/AR5V2_L_curobo.yml
+    # true 表示规划 context 加载上述 robot YAML 中的 collision spheres，供碰撞查询使用。
+    load_collision_spheres: true
+
+joint_groups:
+  # 名称必须与导入后 articulation 的 DOF 名精确一致。
+  # 列表定义 arm 成员；默认 controlled_joints=[all] 时命令顺序来自 articulation.dof_names。
+  # 启用 cuRobo 时，arm 名称集合必须与其 active joints 一致。
+  arm:
+    - AR5V2_L_arm_joint_1
+    - AR5V2_L_arm_joint_2
+    - AR5V2_L_arm_joint_3
+    - AR5V2_L_arm_joint_4
+    - AR5V2_L_arm_joint_5
+    - AR5V2_L_arm_joint_6
+    - AR5V2_L_arm_joint_7
+  # 纯机械臂 profile 没有 hand 命令关节；显式空列表同时声明该能力边界。
+  hand: []

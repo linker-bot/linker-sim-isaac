@@ -1,49 +1,36 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
-import sys
 from xml.etree import ElementTree as ET
 
 import numpy as np
 
-SCRIPTS_ROOT = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_ROOT) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_ROOT))
-
-from linkerbot_sim.assets.asset_paths import (
-    DEFAULT_AR5_RIGHT_URDF,
-    DEFAULT_L6_RIGHT_URDF,
-    DEFAULT_WORKSTATION_V1_ARMBASE_URDF,
-    DEFAULT_WORKSTATION_V1_TABLEBASE_URDF,
-)
-from linkerbot_sim.assets.robot_loader import (
-    DualRobotExecutionConfig,
-    RobotPhysxOverrides,
-    RobotGravityPolicy,
+from linkerbot_sim.assets.robot_config import (
     RobotAssetConfig,
+    RobotGravityPolicy,
+    RobotPhysxOverrides,
+)
+from linkerbot_sim.assets.robot_instances import (
     RobotExecutionConfig,
-    RobotSceneInstanceConfig,
-    dual_robot_root_poses_from_env_config,
-    dual_robot_scene_instances_from_env_config,
-    robot_scene_instance_from_env_config,
-    robot_root_pose_from_env_config,
+    robot_instances_from_env_config,
 )
 from linkerbot_sim.assets.solver_overrides import (
     SolverIterationConfig,
     robot_solver_settings,
 )
-from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
-from linkerbot_sim.backends.cumotion.context import CuMotionConfig
-from linkerbot_sim.backends.cumotion.dual_urdf import (
-    dual_cumotion_config_from_sides,
-    prepare_cumotion_config_from_robot_config,
+from linkerbot_sim.envs.settings import EnvRuntimeSettings
+from linkerbot_sim.backends.curobo.config import (
+    CuroboConfig,
+    CuroboIkConfig,
+    CuroboMotionPlannerConfig,
 )
-from linkerbot_sim.backends.cumotion.profile_config import (
-    merged_robot_config_with_cumotion_profile,
-    motion_planner_config_from_profile,
+from linkerbot_sim.backends.curobo.profile_merge import (
+    merged_robot_config_with_curobo_profile,
+    robot_curobo_config,
 )
-from linkerbot_sim.app.runtime.objects import runtime_objects_from_env_config
-from linkerbot_sim.objects.rigid.runtime import (
+from linkerbot_sim.objects.runtime import runtime_objects_from_env_config
+from linkerbot_sim.objects.rigid.config import (
     RigidObjectConfig,
     rigid_objects_from_env_config,
 )
@@ -52,31 +39,59 @@ from linkerbot_sim.objects.config import (
     ObjectSceneInstanceConfig,
 )
 from linkerbot_sim.objects.dynamic_chain.capsule_rope import CapsuleRopeConfig
-from pinch_grasp import grasp_target_position
+from linkerbot_sim.configs.profiles import load_profile_yaml
 from linkerbot_sim.utils.config import load_yaml
+from linkerbot_sim.utils.paths import repo_path
 from tools.object_assets.flexible.rope.builder import CapsuleRopeAssetConfig
 from tools.object_assets.rigid.tblock.builder import TBlockAssetConfig
+
+
+def _robot_asset_config(data: dict[str, object]) -> RobotAssetConfig:
+    return RobotAssetConfig.from_mapping(data, prim_path="/World/Robots/test_robot")
+
+
+def test_domain_layers_do_not_import_the_app_composition_root() -> None:
+    domain_roots = (
+        Path("src/linkerbot_sim/envs"),
+        Path("src/linkerbot_sim/objects"),
+        Path("src/linkerbot_sim/tiled/scene"),
+    )
+    violations: list[str] = []
+    for root in domain_roots:
+        for path in sorted(root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+                    "linkerbot_sim.app"
+                ):
+                    violations.append(f"{path}:{node.lineno}:{node.module}")
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name.startswith("linkerbot_sim.app"):
+                            violations.append(f"{path}:{node.lineno}:{alias.name}")
+    assert violations == []
 
 
 def test_default_robot_config_paths_exist() -> None:
     config = load_yaml("configs/robots/ar5v2_l6v1_l.yaml")
     env_config = load_yaml("configs/envs/scene1.yaml")
-    robot = RobotAssetConfig.from_mapping(config)
+    scene_instance = robot_instances_from_env_config(env_config)[0]
+    robot = _robot_asset_config(config)
     execution = RobotExecutionConfig.from_mapping(
         config,
-        root_pose=robot_root_pose_from_env_config(env_config, "single"),
+        scene_instance=scene_instance,
     )
     assert robot.asset_path.is_file()
     assert execution.controlled_joints == ("all",)
 
 
-def test_robot_configs_are_cumotion_only() -> None:
+def test_robot_configs_are_curobo_only() -> None:
     for path in sorted(Path("configs/robots").glob("*.yaml")):
         config = load_yaml(path)
-        assert "cumotion" in config
-        _assert_robot_cumotion_section_contains_only_model_resources(config)
+        assert "curobo" in config
+        _assert_robot_curobo_section_contains_only_model_resources(config)
         assert "robots" not in config
-        robot = RobotAssetConfig.from_mapping(config)
+        robot = _robot_asset_config(config)
         assert robot.import_config.collision_approximation in {
             "convex_decomposition",
             "convex_hull",
@@ -84,70 +99,36 @@ def test_robot_configs_are_cumotion_only() -> None:
         assert robot.gravity_policy.enabled_for_component("arm") is False
         assert robot.physx_overrides.default.contact_static_friction == 0.8
         assert robot.solver_iterations is not None
-        assert robot.solver_iterations.arm_position_iterations is not None
-        assert robot.solver_iterations.arm_velocity_iterations is not None
-        cumotion = CuMotionConfig.from_mapping(config)
-        assert Path(cumotion.urdf_path).is_file()
-        assert Path(cumotion.xrdf_path).is_file()
-        assert cumotion.flange_frame
+        if config["robot"]["kind"] in {"arm", "arm_hand"}:
+            assert robot.solver_iterations.arm_position_iterations is not None
+            assert robot.solver_iterations.arm_velocity_iterations is not None
+        if config["robot"]["kind"] in {"hand", "arm_hand"}:
+            assert robot.solver_iterations.hand_position_iterations is not None
+            assert robot.solver_iterations.hand_velocity_iterations is not None
         assert "controlled_joints" not in config
         assert "arm_joints" not in config
         assert "hand_master_joints" not in config
         assert "tcp" not in config
-        assert cumotion.default_tcp_frame is None or cumotion.default_tcp_frame
-        for tcp in cumotion.custom_tcp_frames:
-            assert tcp.frame_name
-            assert tcp.parent_frame
-        assert "robot_description" not in config["cumotion"]
-        assert "base_urdf" not in config["cumotion"]
         assert "lula" not in config
         assert "ik" not in config
+        if config["curobo"].get("enabled") is False:
+            assert config["robot"]["kind"] == "hand"
+            assert "robot" not in config["curobo"]
+            continue
+        curobo = CuroboConfig.from_mapping(config)
+        assert curobo.robot.urdf_path is not None
+        assert curobo.robot.urdf_path.is_file()
+        assert curobo.robot.flange_frame
+        assert curobo.robot.default_tcp_frame is None or curobo.robot.default_tcp_frame
+        for tcp in curobo.robot.custom_tcp_frames:
+            assert tcp.frame_name
+            assert tcp.parent_frame
+        assert "robot_description" not in config["curobo"]["robot"]
+        assert "base_urdf" not in config["curobo"]["robot"]
 
 
-def test_dual_robot_scene_builds_from_single_robot_profiles() -> None:
-    env_config = load_yaml("configs/envs/scene2.yaml")
-    instances = dual_robot_scene_instances_from_env_config(env_config)
-    side_configs = {
-        side: load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
-        for side, instance in instances.items()
-    }
-    dual = DualRobotExecutionConfig.from_robot_configs(
-        left=side_configs["left"],
-        right=side_configs["right"],
-        root_poses=dual_robot_root_poses_from_env_config(env_config),
-    )
-    assert dual.left.robot.asset_path.is_file()
-    assert dual.right.robot.asset_path.is_file()
-    assert dual.left.robot.asset_path.name == "AR5V2_L6V1_L.xml"
-    assert dual.right.robot.asset_path.name == "AR5V2_L6V1_R.xml"
-    assert dual.left.robot.gravity_policy.enabled_for_component("arm") is False
-    assert dual.right.robot.gravity_policy.enabled_for_component("hand") is False
-    assert dual.left.robot.physx_overrides.default.contact_static_friction == 0.8
-    assert dual.right.robot.physx_overrides.default.rigid_body_angular_damping == 0.1
-
-    robot_config = dual_cumotion_config_from_sides(
-        left=side_configs["left"],
-        right=side_configs["right"],
-    )
-    prepared = prepare_cumotion_config_from_robot_config(
-        robot_config,
-        dual_root_poses=dual_robot_root_poses_from_env_config(env_config),
-    )
-    cumotion = prepared.backend_config
-    assert prepared.generated_assets is True
-    assert prepared.urdf_path.is_file()
-    assert prepared.xrdf_path.is_file()
-    assert cumotion.flange_frame is None
-    assert {tcp.frame_name for tcp in cumotion.custom_tcp_frames} == {
-        "AR5V2_L_pinch_tcp",
-        "AR5V2_R_pinch_tcp",
-    }
-    assert prepared.flange_frames["left"]
-    assert prepared.flange_frames["right"]
-
-
-def _assert_robot_cumotion_section_contains_only_model_resources(config: dict) -> None:
-    """Robot YAML 只声明 cuMotion 模型资源；算法参数由 configs/cumotion/*.yaml 提供。"""
+def _assert_robot_curobo_section_contains_only_model_resources(config: dict) -> None:
+    """Robot YAML 只声明 cuRobo 模型资源；算法参数由 configs/curobo/*.yaml 提供。"""
 
     disallowed_keys = {
         "kinematics",
@@ -159,113 +140,100 @@ def _assert_robot_cumotion_section_contains_only_model_resources(config: dict) -
         "orientation_weight",
         "collision_free_ik_params",
         "collision_free_params",
-        "motion_planner_config_path",
-        "motion_planner_params",
-        "trajectory_limits",
-        "trajectory_solver_params",
+        "device",
     }
-    cumotion = config["cumotion"]
-    assert not (set(cumotion) & disallowed_keys)
-    assert set(cumotion) <= {
-        "xrdf_path",
+    curobo = config["curobo"]
+    assert set(curobo) <= {"enabled", "planning_joint_group", "robot"}
+    if curobo.get("enabled") is False:
+        assert "robot" not in curobo
+        return
+    robot = curobo["robot"]
+    assert not (set(robot) & disallowed_keys)
+    assert set(robot) <= {
+        "robot_config_path",
         "urdf_path",
+        "base_link",
         "flange_frame",
+        "tool_frames",
         "default_tcp_frame",
         "custom_tcps",
+        "load_collision_spheres",
     }
 
 
-def test_dual_scene_robot_profiles_provide_cumotion_semantics() -> None:
-    for env_path in sorted(Path("configs/envs").glob("*.yaml")):
-        env_config = load_yaml(env_path)
-        robots = env_config.get("robots")
-        if not isinstance(robots, dict) or "dual" not in robots:
-            continue
-        instances = dual_robot_scene_instances_from_env_config(env_config)
-        for side, instance in instances.items():
-            config = load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
-            cumotion = config.get("cumotion")
-            assert isinstance(cumotion, dict), f"{env_path}:{side} missing cumotion"
-            assert Path(cumotion["xrdf_path"]).is_file()
-            assert Path(cumotion["urdf_path"]).is_file()
-            assert cumotion["flange_frame"]
-            xrdf = load_yaml(cumotion["xrdf_path"])
-            assert xrdf["cspace"]["joint_names"]
+def test_curobo_profiles_and_examples_are_valid_defaults() -> None:
+    """内置 cuRobo profile/example 应只提供可合并的后端默认值。"""
 
-
-def test_cumotion_profiles_and_examples_are_valid_defaults() -> None:
-    """内置 cuMotion profile/example 应只提供可合并的后端默认值。"""
-
-    for path in sorted(Path("configs/cumotion").glob("*.yaml")):
+    for path in sorted(Path("configs/curobo").glob("*.yaml")):
         config = load_yaml(path)
-        assert "cumotion" in config
+        assert "curobo" in config
         assert "motion_planning" not in config
-        cumotion = config["cumotion"]
-        assert "xrdf_path" not in cumotion
-        assert "urdf_path" not in cumotion
-        assert "flange_frame" not in cumotion
-        assert "kinematics" in cumotion
-        assert "ik" in cumotion["kinematics"]
-        ik_config = cumotion["kinematics"]["ik"]
-        assert ik_config["position_tolerance"] >= 0.0
-        assert ik_config["orientation_tolerance"] >= 0.0
-        assert ik_config["ccd_max_iterations"] > 0
-        assert ik_config["bfgs_max_iterations"] > 0
-        assert "motion_planner" in cumotion
-        motion_planner_config_from_profile(config).validate()
+        curobo = config["curobo"]
+        assert "robot" not in curobo
+        assert "kinematics" in curobo
+        assert "ik" in curobo["kinematics"]
+        ik_config = CuroboIkConfig.from_mapping(curobo["kinematics"]["ik"])
+        assert ik_config.position_tolerance >= 0.0
+        assert ik_config.orientation_tolerance >= 0.0
+        assert ik_config.num_seeds > 0
+        assert ik_config.max_batch_size > 0
+        assert "motion_planner" in curobo
+        CuroboMotionPlannerConfig.from_mapping(curobo["motion_planner"]).validate()
 
 
-def test_cumotion_config_parses_grouped_kinematics() -> None:
-    """推荐配置结构应把 IK/FK 参数放在 cumotion.kinematics 下。"""
+def test_curobo_config_parses_grouped_kinematics() -> None:
+    """推荐配置结构应把 IK 参数放在 curobo.kinematics 下。"""
 
-    config = CuMotionConfig.from_mapping(
+    config = CuroboConfig.from_mapping(
         {
-            "cumotion": {
-                "xrdf_path": "robot.xrdf",
-                "urdf_path": "robot.urdf",
-                "flange_frame": "flange",
+            "curobo": {
+                "enabled": True,
+                "planning_joint_group": "arm",
+                "robot": {
+                    "urdf_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+                    "flange_frame": "flange",
+                    "default_tcp_frame": "tool",
+                },
                 "kinematics": {
                     "ik": {
-                        "cspace_seeds": [0.1, 0.2],
+                        "num_seeds": 16,
+                        "max_batch_size": 64,
                         "position_tolerance": 0.003,
                         "orientation_tolerance": 0.04,
-                        "ccd_max_iterations": 11,
-                        "bfgs_max_iterations": 12,
-                        "orientation_weight": 0.2,
-                        "collision_free_params": {"max_iterations": 7},
+                        "collision_cache": {"cuboid": 3},
                     },
-                    "fk": {},
                 },
             }
         }
     )
 
-    ik_config = config.kinematics.ik
-    np.testing.assert_allclose(ik_config.cspace_seeds, [0.1, 0.2])
+    ik_config = config.ik
+    assert ik_config.num_seeds == 16
+    assert ik_config.max_batch_size == 64
     assert ik_config.position_tolerance == 0.003
     assert ik_config.orientation_tolerance == 0.04
-    assert ik_config.ccd_max_iterations == 11
-    assert ik_config.bfgs_max_iterations == 12
-    assert ik_config.orientation_weight == 0.2
-    assert ik_config.collision_free_params == {"max_iterations": 7}
+    assert ik_config.collision_cache == {"cuboid": 3}
 
 
-def test_cumotion_config_rejects_removed_flat_ik_fields() -> None:
+def test_curobo_config_rejects_invalid_ik_batch_sizes() -> None:
     try:
-        CuMotionConfig.from_mapping(
+        CuroboConfig.from_mapping(
             {
-                "cumotion": {
-                    "xrdf_path": "robot.xrdf",
-                    "urdf_path": "robot.urdf",
-                    "flange_frame": "flange",
-                    "ik_cspace_seeds": [0.0, 0.1],
+                "curobo": {
+                    "enabled": True,
+                    "planning_joint_group": "arm",
+                    "robot": {
+                        "urdf_path": ("assets/single_system/arm/AR5V2_L/AR5V2_L.urdf"),
+                        "default_tcp_frame": "tool",
+                    },
+                    "kinematics": {"ik": {"num_seeds": 0}},
                 }
             }
         )
     except ValueError as exc:
-        assert "removed field" in str(exc)
+        assert "num_seeds" in str(exc)
     else:
-        raise AssertionError("CuMotionConfig accepted removed flat IK field")
+        raise AssertionError("CuroboConfig accepted invalid IK seed count")
 
 
 def test_env_runtime_settings_read_env_profile_values() -> None:
@@ -339,6 +307,36 @@ def test_env_runtime_settings_use_default_visuals() -> None:
     assert settings.visuals.fill_light.intensity == 250.0
 
 
+def test_env_runtime_settings_use_visual_defaults_for_partial_mapping() -> None:
+    settings = EnvRuntimeSettings.from_env_config(
+        {
+            "env": {},
+            "visuals": {
+                "viewport": {"enabled": False},
+                "lights": {
+                    "key": {"intensity": 900.0},
+                    "fill": {"enabled": False},
+                },
+            },
+        }
+    )
+
+    assert settings.visuals.viewport.enabled is False
+    assert settings.visuals.viewport.eye == (1.35, -1.65, 1.05)
+    assert settings.visuals.viewport.target == (0.0, -0.1, 0.42)
+    assert settings.visuals.viewport.prim_path == "/OmniverseKit_Persp"
+    assert settings.visuals.key_light.enabled is True
+    assert settings.visuals.key_light.path == "/World/KeyLight"
+    assert settings.visuals.key_light.intensity == 900.0
+    assert settings.visuals.key_light.angle == 0.5
+    assert settings.visuals.key_light.color is None
+    assert settings.visuals.key_light.rotation_rpy is None
+    assert settings.visuals.fill_light.enabled is False
+    assert settings.visuals.fill_light.path == "/World/FillLight"
+    assert settings.visuals.fill_light.intensity == 250.0
+    assert settings.visuals.fill_light.color is None
+
+
 def test_env_runtime_settings_reject_invalid_env_mapping() -> None:
     try:
         EnvRuntimeSettings.from_env_config({"env": {"physics_frequency": 0.0}})
@@ -366,53 +364,46 @@ def test_env_runtime_settings_reject_invalid_env_mapping() -> None:
     else:
         raise AssertionError("EnvRuntimeSettings accepted invalid viewport eye")
 
-    try:
-        EnvRuntimeSettings.from_env_config(
-            {
-                "env": {},
-                "visuals": {"camera": {"enabled": True}},
-            }
-        )
-    except ValueError as exc:
-        assert "visuals.camera was renamed to visuals.viewport" in str(exc)
-    else:
-        raise AssertionError("EnvRuntimeSettings accepted legacy visuals.camera")
 
-
-def test_cumotion_profile_merge_order() -> None:
+def test_curobo_profile_merge_order() -> None:
     """profile 默认值应低于 robot YAML；动作参数直接来自脚本。"""
 
     profile = {
-        "cumotion": {
+        "curobo": {
             "kinematics": {
                 "ik": {
                     "position_tolerance": 0.01,
-                    "orientation_weight": 0.1,
+                    "num_seeds": 8,
                 },
             },
             "motion_planner": {
-                "planning_pipeline": "graph_search",
-                "graph_search": {"generate_interpolated_path": True},
+                "num_ik_seeds": 8,
+                "num_trajopt_seeds": 2,
+                "max_batch_size": 128,
             },
         },
     }
     robot = {
-        "cumotion": {
-            "xrdf_path": "robot.xrdf",
-            "urdf_path": "robot.urdf",
-            "flange_frame": "flange",
+        "curobo": {
+            "enabled": True,
+            "planning_joint_group": "arm",
+            "robot": {
+                "urdf_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+                "flange_frame": "flange",
+                "default_tcp_frame": "tool",
+            },
             "kinematics": {"ik": {"position_tolerance": 0.002}},
         }
     }
-    merged_robot = merged_robot_config_with_cumotion_profile(robot, profile)
-    merged_ik = merged_robot["cumotion"]["kinematics"]["ik"]
+    merged_robot = merged_robot_config_with_curobo_profile(robot, profile)
+    merged_ik = merged_robot["curobo"]["kinematics"]["ik"]
     assert merged_ik["position_tolerance"] == 0.002
-    assert merged_ik["orientation_weight"] == 0.1
-    assert merged_robot["cumotion"]["flange_frame"] == "flange"
+    assert merged_ik["num_seeds"] == 8
+    assert merged_robot["curobo"]["robot"]["flange_frame"] == "flange"
 
-    backend = motion_planner_config_from_profile(profile)
-    assert backend.planning_pipeline == "graph_search"
-    assert backend.graph_search.generate_interpolated_path is True
+    backend = CuroboConfig.from_mapping(merged_robot).motion_planner
+    assert backend.num_ik_seeds == 8
+    assert backend.num_trajopt_seeds == 2
 
 
 def test_robot_gravity_policy_parses_grouped_mapping() -> None:
@@ -444,6 +435,7 @@ def test_robot_physx_overrides_parse_and_apply_grouped_mapping() -> None:
                 "contact_static_friction": 0.7,
                 "contact_dynamic_friction": 0.4,
                 "contact_restitution": 0.0,
+                "friction_combine_mode": "max",
             },
             "rigid_body": {"linear_damping": 0.02, "angular_damping": 0.1},
             "hand": {"rigid_body": {"angular_damping": 0.2}},
@@ -462,6 +454,22 @@ def test_robot_physx_overrides_parse_and_apply_grouped_mapping() -> None:
     assert configs["arm"].rigid_body_linear_damping == 0.02
     assert configs["hand"].rigid_body_angular_damping == 0.2
     assert configs["hand"].joint_friction == 0.75
+    assert configs["arm"].friction_combine_mode == "max"
+
+    preserved = RobotPhysxOverrides.from_mapping(
+        {"material": None}, label="robot.physics.physx"
+    ).apply_to_configs({"default": PhysxOverrideConfig()})
+    assert preserved["default"].contact_material_override is False
+
+    try:
+        RobotPhysxOverrides.from_mapping(
+            {"material": {"friction_combine_mode": "unknown"}},
+            label="robot.physics.physx",
+        )
+    except ValueError as exc:
+        assert "friction_combine_mode" in str(exc)
+    else:
+        raise AssertionError("robot material accepted invalid combine mode")
 
 
 def test_robot_solver_iterations_parse_grouped_mapping() -> None:
@@ -482,14 +490,25 @@ def test_robot_solver_iterations_parse_grouped_mapping() -> None:
 
 
 def test_right_side_urdf_assets_exist() -> None:
-    assert DEFAULT_AR5_RIGHT_URDF.is_file()
-    assert DEFAULT_L6_RIGHT_URDF.is_file()
+    arm_urdf = robot_curobo_config(
+        load_profile_yaml("robot", "ar5v2_l6v1_r")
+    ).robot.urdf_path
+    assert arm_urdf is not None and arm_urdf.is_file()
+
+    hand_mjcf = _robot_asset_config(load_profile_yaml("robot", "l6v1_r")).asset_path
+    assert hand_mjcf.with_suffix(".urdf").is_file()
 
 
 def test_workstation_static_urdf_assets_exist() -> None:
+    armbase_urdf = repo_path(
+        ObjectProfileConfig.from_profile("workstation_armbase").asset_path
+    )
+    tablebase_urdf = repo_path(
+        ObjectProfileConfig.from_profile("workstation_tablebase").asset_path
+    )
     workstation_assets = {
-        DEFAULT_WORKSTATION_V1_ARMBASE_URDF: "workstationV1_armbase_frame",
-        DEFAULT_WORKSTATION_V1_TABLEBASE_URDF: "workstationV1_tablebase_frame",
+        armbase_urdf: "workstationV1_armbase_frame",
+        tablebase_urdf: "workstationV1_tablebase_frame",
     }
 
     for asset_file, frame_name in workstation_assets.items():
@@ -502,8 +521,14 @@ def test_workstation_static_urdf_assets_exist() -> None:
 
 
 def test_workstation_uses_primitive_collisions() -> None:
-    armbase_root = ET.parse(DEFAULT_WORKSTATION_V1_ARMBASE_URDF).getroot()
-    tablebase_root = ET.parse(DEFAULT_WORKSTATION_V1_TABLEBASE_URDF).getroot()
+    armbase_path = repo_path(
+        ObjectProfileConfig.from_profile("workstation_armbase").asset_path
+    )
+    tablebase_path = repo_path(
+        ObjectProfileConfig.from_profile("workstation_tablebase").asset_path
+    )
+    armbase_root = ET.parse(armbase_path).getroot()
+    tablebase_root = ET.parse(tablebase_path).getroot()
     armbase_collisions = _workstation_collision_mapping(armbase_root)
     tablebase_collisions = _workstation_collision_mapping(tablebase_root)
     expected_names = ("table_body", "armbase_column", "armbase_top_flange")
@@ -580,6 +605,45 @@ def test_robot_asset_mesh_references_exist() -> None:
     assert missing == []
 
 
+def test_mjcf_fingertip_frames_are_non_physical_sites() -> None:
+    asset_files = [
+        *Path("assets/single_system/hand").glob("L6V1_*/L6V1_*.xml"),
+        *Path("assets/combined_system").glob("AR5V2_L6V1_*/AR5V2_L6V1_*.xml"),
+    ]
+    assert len(asset_files) == 4
+
+    for asset_file in asset_files:
+        root = ET.parse(asset_file).getroot()
+        tip_sites = {
+            str(site.get("name"))
+            for site in root.iter("site")
+            if str(site.get("name", "")).endswith("_tip")
+        }
+        tip_bodies = {
+            str(body.get("name"))
+            for body in root.iter("body")
+            if str(body.get("name", "")).endswith("_tip")
+        }
+        assert len(tip_sites) == 5, asset_file
+        assert tip_bodies == set(), asset_file
+
+
+def test_mjcf_default_geometries_have_explicit_types() -> None:
+    asset_files = [
+        *Path("assets/single_system").glob("**/*.xml"),
+        *Path("assets/combined_system").glob("**/*.xml"),
+    ]
+    assert len(asset_files) == 6
+
+    for asset_file in asset_files:
+        root = ET.parse(asset_file).getroot()
+        default_geometries = root.findall("./default/geom")
+        assert default_geometries, asset_file
+        assert all(geom.get("type") is not None for geom in default_geometries), (
+            asset_file
+        )
+
+
 def test_default_rope_and_pinch_grasp_action_constants() -> None:
     rope = CapsuleRopeConfig.from_mapping(
         load_yaml("configs/objects/capsule_rope.yaml")
@@ -592,8 +656,6 @@ def test_default_rope_and_pinch_grasp_action_constants() -> None:
     assert rope.physics.material.static_friction == 0.7
     assert rope.physics.material.dynamic_friction == 0.5
     assert rope.physics.solver_position_iterations == 48
-    target = grasp_target_position((0.025, -0.55, 0.08), lift_height=0.1)
-    np.testing.assert_allclose(target, (0.025, -0.55, 0.18))
 
 
 def test_capsule_rope_runtime_config_does_not_contain_generation_fields() -> None:
@@ -660,17 +722,14 @@ def test_scene1_places_rope_from_env_root_pose() -> None:
     rope_object = next(
         item for item in runtime_objects if item.runtime_handle == "rope"
     )
-    object_profile = CapsuleRopeConfig.from_mapping(
-        load_yaml(f"configs/objects/{rope_object.object_profile}.yaml")
-    )
 
-    assert object_profile.prim_path == "/World/CapsuleRope"
+    assert rope_object.prim_path == "/World/CapsuleRope"
     assert rope_object.root_pose.xyz == (0.1, -0.55, -0.4)
 
 
-def test_system_configs_reject_obsolete_shapes() -> None:
+def test_system_configs_reject_unknown_shapes() -> None:
     try:
-        RobotAssetConfig.from_mapping({"asset_path": "assets/example.xml"})
+        _robot_asset_config({"asset_path": "assets/example.xml"})
     except ValueError:
         pass
     else:
@@ -691,12 +750,11 @@ def test_system_configs_reject_obsolete_shapes() -> None:
 
 
 def test_robot_asset_config_parses_collision_approximation() -> None:
-    config = RobotAssetConfig.from_mapping(
+    config = _robot_asset_config(
         {
             "robot": {
                 "asset_type": "urdf",
                 "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
-                "prim_path": "/World/Robot",
                 "import": {"collision_approximation": "convex_hull"},
             }
         }
@@ -706,12 +764,11 @@ def test_robot_asset_config_parses_collision_approximation() -> None:
 
 
 def test_robot_asset_config_parses_self_collision() -> None:
-    config = RobotAssetConfig.from_mapping(
+    config = _robot_asset_config(
         {
             "robot": {
                 "asset_type": "mjcf",
                 "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
-                "prim_path": "/World/Robot",
                 "import": {
                     "collision_approximation": "convex_decomposition",
                     "self_collision": True,
@@ -724,12 +781,11 @@ def test_robot_asset_config_parses_self_collision() -> None:
 
 
 def test_robot_asset_config_defaults_self_collision_to_false() -> None:
-    config = RobotAssetConfig.from_mapping(
+    config = _robot_asset_config(
         {
             "robot": {
                 "asset_type": "mjcf",
                 "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
-                "prim_path": "/World/Robot",
                 "import": {"collision_approximation": "convex_decomposition"},
             }
         }
@@ -738,14 +794,112 @@ def test_robot_asset_config_defaults_self_collision_to_false() -> None:
     assert config.import_config.self_collision is False
 
 
+def test_robot_asset_config_parses_named_importer_settings() -> None:
+    config = _robot_asset_config(
+        {
+            "robot": {
+                "asset_type": "urdf",
+                "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+                "import": {
+                    "fix_base": False,
+                    "merge_fixed_joints": False,
+                    "collision_from_visuals": True,
+                    "import_inertia_tensor": False,
+                },
+            }
+        }
+    )
+
+    assert config.import_config.fix_base is False
+    assert config.import_config.merge_fixed_joints is False
+    assert config.import_config.collision_from_visuals is True
+    assert config.import_config.import_inertia_tensor is False
+    assert config.import_config.import_sites is True
+
+    mjcf = _robot_asset_config(
+        {
+            "robot": {
+                "asset_type": "mjcf",
+                "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
+                "import": {"merge_fixed_joints": True, "import_sites": False},
+            }
+        }
+    )
+    assert mjcf.import_config.merge_fixed_joints is True
+    assert mjcf.import_config.import_sites is False
+
+
+def test_import_config_rejects_fields_unsupported_by_asset_format() -> None:
+    for asset_type, field in (
+        ("mjcf", "collision_from_visuals"),
+        ("urdf", "import_sites"),
+    ):
+        asset_path = (
+            "assets/single_system/arm/AR5V2_L/AR5V2_L.xml"
+            if asset_type == "mjcf"
+            else "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf"
+        )
+        try:
+            _robot_asset_config(
+                {
+                    "robot": {
+                        "asset_type": asset_type,
+                        "asset_path": asset_path,
+                        "import": {field: False},
+                    }
+                }
+            )
+        except ValueError as exc:
+            assert f"unsupported keys: {field}" in str(exc)
+        else:
+            raise AssertionError(f"{asset_type} accepted unsupported field {field}")
+
+
+def test_robot_asset_config_rejects_non_boolean_importer_settings() -> None:
+    for field in (
+        "fix_base",
+        "merge_fixed_joints",
+        "collision_from_visuals",
+        "import_inertia_tensor",
+    ):
+        try:
+            _robot_asset_config(
+                {
+                    "robot": {
+                        "asset_type": "urdf",
+                        "asset_path": ("assets/single_system/arm/AR5V2_L/AR5V2_L.urdf"),
+                        "import": {field: "false"},
+                    }
+                }
+            )
+        except ValueError as exc:
+            assert f"robot.import.{field}" in str(exc)
+        else:
+            raise AssertionError(f"accepted non-boolean robot.import.{field}")
+
+    try:
+        _robot_asset_config(
+            {
+                "robot": {
+                    "asset_type": "urdf",
+                    "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+                    "import": {"import_sites": False},
+                }
+            }
+        )
+    except ValueError as exc:
+        assert "unsupported keys: import_sites" in str(exc)
+    else:
+        raise AssertionError("URDF robot accepted MJCF-only import_sites")
+
+
 def test_robot_asset_config_rejects_non_bool_self_collision() -> None:
     try:
-        RobotAssetConfig.from_mapping(
+        _robot_asset_config(
             {
                 "robot": {
                     "asset_type": "mjcf",
                     "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.xml",
-                    "prim_path": "/World/Robot",
                     "import": {"self_collision": "true"},
                 }
             }
@@ -756,14 +910,13 @@ def test_robot_asset_config_rejects_non_bool_self_collision() -> None:
         raise AssertionError("RobotAssetConfig accepted non-bool self_collision")
 
 
-def test_import_config_rejects_removed_collision_approximation_aliases() -> None:
+def test_import_config_rejects_unknown_collision_approximation() -> None:
     try:
-        RobotAssetConfig.from_mapping(
+        _robot_asset_config(
             {
                 "robot": {
                     "asset_type": "urdf",
                     "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
-                    "prim_path": "/World/Robot",
                     "import": {"collision_approximation": "convexHull"},
                 }
             }
@@ -771,7 +924,9 @@ def test_import_config_rejects_removed_collision_approximation_aliases() -> None
     except ValueError as exc:
         assert "collision_approximation" in str(exc)
     else:
-        raise AssertionError("RobotAssetConfig accepted removed collision alias")
+        raise AssertionError(
+            "RobotAssetConfig accepted unknown collision approximation"
+        )
 
 
 def test_env_configs_provide_solver_settings() -> None:
@@ -799,8 +954,7 @@ def test_robot_configs_provide_solver_iteration_settings() -> None:
 
     for path in sorted(Path("configs/robots").glob("*.yaml")):
         config = load_yaml(path)
-        robot_execution = RobotExecutionConfig.from_mapping(config)
-        solver = robot_execution.robot.solver_iterations
+        solver = _robot_asset_config(config).solver_iterations
         assert solver is not None, f"{path} must provide robot.physics.solver"
         assert solver.solver_type is None
         for field_name in (
@@ -825,7 +979,13 @@ def test_robot_configs_provide_solver_iteration_settings() -> None:
 def test_env_profiles_define_robot_scene_instances() -> None:
     """env.robots 选择 robot profile，并保存 scene 中的安装位姿。"""
 
-    allowed_keys = {"robot_profile", "root_pose"}
+    allowed_keys = {
+        "label",
+        "robot_profile",
+        "root_pose",
+        "prim_path",
+        "controller_profile",
+    }
     for path in sorted(Path("configs/envs").glob("*.yaml")):
         config = load_yaml(path)
         settings = EnvRuntimeSettings.from_env_config(config)
@@ -833,42 +993,29 @@ def test_env_profiles_define_robot_scene_instances() -> None:
         assert settings.visuals.key_light.path.startswith("/")
         assert settings.visuals.fill_light.path.startswith("/")
         robots = config.get("robots")
-        assert isinstance(robots, dict), f"{path} must contain robots mapping"
-        assert set(robots) <= {"single", "dual"}
+        assert isinstance(robots, list), f"{path} must contain robots list"
         assert robots
-        if "single" in robots:
-            assert set(robots["single"]) <= allowed_keys
-            instance = RobotSceneInstanceConfig.from_mapping("single", robots["single"])
+        instances = robot_instances_from_env_config(config)
+        assert [instance.robot_id for instance in instances] == list(
+            range(len(instances))
+        )
+        for raw, instance in zip(robots, instances, strict=True):
+            assert set(raw) <= allowed_keys
+            assert raw.get("label") == instance.label
             assert instance.robot_profile
             assert len(instance.root_pose.xyz) == 3
             assert len(instance.root_pose.rpy) == 3
             assert Path(f"configs/robots/{instance.robot_profile}.yaml").is_file()
-        if "dual" in robots:
-            assert set(robots["dual"]) == {"left", "right"}
-            for side, item in robots["dual"].items():
-                assert set(item) <= allowed_keys
-                instance = RobotSceneInstanceConfig.from_mapping(f"dual.{side}", item)
-                assert instance.robot_profile
-                assert len(instance.root_pose.xyz) == 3
-                assert len(instance.root_pose.rpy) == 3
-                assert Path(f"configs/robots/{instance.robot_profile}.yaml").is_file()
 
 
 def test_env_scene_robot_profiles_match_runtime_shapes() -> None:
-    env_config = load_yaml("configs/envs/scene1.yaml")
-
-    single = robot_scene_instance_from_env_config(env_config, "single")
-    single_config = load_yaml(f"configs/robots/{single.robot_profile}.yaml")
-    assert "robot" in single_config
-    assert "robots" not in single_config
-
-    dual_env_config = load_yaml("configs/envs/scene2.yaml")
-    dual_instances = dual_robot_scene_instances_from_env_config(dual_env_config)
-    assert dual_instances["left"].robot_profile != dual_instances["right"].robot_profile
-    for instance in dual_instances.values():
-        side_config = load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
-        assert "robot" in side_config
-        assert "robots" not in side_config
+    for env_name in ("scene1", "scene2"):
+        env_config = load_yaml(f"configs/envs/{env_name}.yaml")
+        instances = robot_instances_from_env_config(env_config)
+        for instance in instances:
+            profile = load_yaml(f"configs/robots/{instance.robot_profile}.yaml")
+            assert "robot" in profile
+            assert "robots" not in profile
 
 
 def test_robot_profiles_do_not_own_scene_root_pose() -> None:
@@ -876,35 +1023,6 @@ def test_robot_profiles_do_not_own_scene_root_pose() -> None:
         config = load_yaml(path)
         assert "root_pose" not in config
         assert "robots" not in config
-
-    try:
-        RobotExecutionConfig.from_mapping(
-            {
-                "robot": {
-                    "asset_type": "urdf",
-                    "asset_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
-                    "prim_path": "/World/Robot",
-                },
-                "root_pose": {"xyz": [0, 0, 0], "rpy": [0, 0, 0]},
-            }
-        )
-    except ValueError as exc:
-        assert "env robots" in str(exc)
-    else:
-        raise AssertionError("RobotExecutionConfig accepted robot-level root_pose")
-
-
-def test_dual_cumotion_requires_scene_robot_root_poses() -> None:
-    config = dual_cumotion_config_from_sides(
-        left=load_yaml("configs/robots/ar5v2_l6v1_l.yaml"),
-        right=load_yaml("configs/robots/ar5v2_l6v1_r.yaml"),
-    )
-    try:
-        prepare_cumotion_config_from_robot_config(config)
-    except ValueError as exc:
-        assert "root poses" in str(exc)
-    else:
-        raise AssertionError("dual cuMotion generation accepted missing root poses")
 
 
 def test_env_profiles_do_not_inline_robot_solver_iterations() -> None:
@@ -959,17 +1077,18 @@ def test_env_profiles_do_not_inline_object_asset_paths() -> None:
         "name",
         "object_profile",
         "runtime_handle",
+        "prim_path",
         "root_pose",
     }
     disallowed_object_profile_keys = {
         "kind",
         "source",
         "asset_path",
-        "prim_path",
         "root_path",
         "urdf_drive_type",
         "import",
         "physics",
+        "planning_collision",
     }
     for path in sorted(Path("configs/envs").glob("*.yaml")):
         config = load_yaml(path)
@@ -977,8 +1096,10 @@ def test_env_profiles_do_not_inline_object_asset_paths() -> None:
             assert set(item) <= allowed_object_instance_keys
             assert set(item).isdisjoint(disallowed_object_profile_keys)
             assert "object_profile" in item
+            assert "prim_path" in item
             assert "root_pose" in item
-            ObjectSceneInstanceConfig.from_mapping(item, index=index)
+            instance = ObjectSceneInstanceConfig.from_mapping(item, index=index)
+            assert instance.effective_prim_path == item["prim_path"]
 
 
 def test_object_profiles_define_all_object_runtime_properties() -> None:
@@ -989,9 +1110,9 @@ def test_object_profiles_define_all_object_runtime_properties() -> None:
         assert profile.kind in {"rigid", "dynamic_chain"}
         assert profile.source in {"usd", "urdf"}
         assert profile.asset_path
-        assert profile.prim_path.startswith("/")
         assert profile.root_path is None or profile.root_path.startswith("/")
         assert profile.raw is not None
+        assert "prim_path" not in profile.raw["object"]
 
 
 def test_env_object_scene_instances_reject_object_profile_properties() -> None:
@@ -999,9 +1120,9 @@ def test_env_object_scene_instances_reject_object_profile_properties() -> None:
         ("kind", "rigid"),
         ("source", "urdf"),
         ("asset_path", "assets/example.urdf"),
-        ("prim_path", "/World/Object"),
         ("import", {}),
         ("physics", {}),
+        ("planning_collision", {"shape": "cuboid", "size": [1, 1, 1]}),
     ):
         try:
             ObjectSceneInstanceConfig.from_mapping(
@@ -1029,22 +1150,28 @@ def test_env_object_scene_instances_reject_object_profile_properties() -> None:
         raise AssertionError("Scene instance accepted missing root_pose")
 
 
-def test_rigid_object_config_merges_runtime_object_profile() -> None:
+def test_rigid_object_config_parses_planning_collision() -> None:
     config = RigidObjectConfig.from_mapping(
         {
-            "name": "workstation_armbase",
-            "object_profile": "workstation_armbase",
-            "root_pose": {"xyz": [1, 2, 3], "rpy": [0.1, 0.2, 0.3]},
+            "name": "block",
+            "source": "usd",
+            "asset_path": "assets/rigid_env_objects/TblockV1_default/TblockV1_default.usda",
+            "prim_path": "/World/Block",
+            "planning_collision": {
+                "shape": "cuboid",
+                "size": [0.1, 0.2, 0.3],
+                "xyz": [0.0, 0.0, 0.15],
+                "padding": 0.01,
+            },
         },
         index=0,
     )
 
-    assert config.asset_path.is_file()
-    assert config.prim_path == "/World/WorkstationArmBase"
-    assert config.import_config.collision_approximation == "convex_decomposition"
-    assert config.root_pose.xyz == (1.0, 2.0, 3.0)
-    assert config.root_pose.rpy == (0.1, 0.2, 0.3)
-    assert config.physics.static is True
+    assert config.planning_collision is not None
+    assert config.planning_collision.shape == "cuboid"
+    assert config.planning_collision.size == (0.1, 0.2, 0.3)
+    assert config.planning_collision.xyz == (0.0, 0.0, 0.15)
+    assert config.planning_collision.padding == 0.01
 
 
 def test_rigid_object_config_parses_root_pose() -> None:
@@ -1058,7 +1185,6 @@ def test_rigid_object_config_parses_root_pose() -> None:
             ),
             "prim_path": "/World/Fixture",
             "root_pose": {"xyz": [1, 2, 3], "rpy": [0.1, 0.2, 0.3]},
-            "import": {"collision_approximation": "convex_hull"},
             "physics": {
                 "static": True,
                 "material": {
@@ -1074,7 +1200,7 @@ def test_rigid_object_config_parses_root_pose() -> None:
     assert config.name == "fixture"
     assert config.asset_type == "usd"
     assert config.prim_path == "/World/Fixture"
-    assert config.import_config.collision_approximation == "convex_hull"
+    assert config.import_config.collision_approximation == "convex_decomposition"
     assert config.root_pose.xyz == (1.0, 2.0, 3.0)
     assert config.root_pose.rpy == (0.1, 0.2, 0.3)
     assert config.physics.static is True
@@ -1083,6 +1209,25 @@ def test_rigid_object_config_parses_root_pose() -> None:
     assert config.physics.material.dynamic_friction == 0.6
     assert config.physics.material.restitution is None
     assert config.physics.material.friction_combine_mode == "average"
+
+
+def test_usd_rigid_object_rejects_importer_fields() -> None:
+    for import_value in ({"collision_approximation": "convex_hull"}, None):
+        try:
+            RigidObjectConfig.from_mapping(
+                {
+                    "name": "fixture",
+                    "source": "usd",
+                    "asset_path": "fixture.usd",
+                    "prim_path": "/World/Fixture",
+                    "import": import_value,
+                },
+                index=0,
+            )
+        except ValueError as exc:
+            assert "not supported for USD assets" in str(exc)
+        else:
+            raise AssertionError("USD object accepted dead importer fields")
 
 
 def test_rigid_object_config_rejects_invalid_shapes() -> None:
@@ -1112,6 +1257,13 @@ def test_rigid_object_config_rejects_invalid_shapes() -> None:
             "asset_path": "x.usd",
             "prim_path": "/World/Object",
             "import": {"self_collision": True},
+        },
+        {
+            "source": "urdf",
+            "asset_path": "x.urdf",
+            "prim_path": "/World/Object",
+            "import": {"fix_base": True},
+            "physics": {"static": False},
         },
         {
             "source": "usd",
@@ -1205,6 +1357,36 @@ def test_solver_settings_keep_scene_and_robot_layers_separate() -> None:
         solver_iterations_for_prim_name("L6V1_L_hand_base_link", arm_velocity_only)
         is None
     )
+
+
+def test_nonstandard_rigid_body_groups_drive_gravity_and_solver_selection() -> None:
+    from linkerbot_sim.assets.solver_overrides import solver_iterations_for_prim_name
+    from linkerbot_sim.robots.classification import RobotComponentMapping
+
+    mapping = RobotComponentMapping.from_profile(
+        {"rigid_body_groups": {"arm": ["body_a"], "hand": ["body_b"]}}
+    )
+    gravity = RobotGravityPolicy.from_mapping(
+        {"default": False, "arm": True, "hand": False},
+        label="robot.physics.gravity",
+    )
+    solver = robot_solver_settings(
+        {
+            "arm": {"position_iterations": 17},
+            "hand": {"velocity_iterations": 9},
+        },
+        label="robot.physics.solver",
+    )
+
+    assert solver is not None
+    assert gravity.enabled_for_component(mapping.rigid_body_component("body_a"))
+    assert not gravity.enabled_for_component(mapping.rigid_body_component("body_b"))
+    assert solver_iterations_for_prim_name(
+        "body_a", solver, component_mapping=mapping
+    ) == (17, None, "arm")
+    assert solver_iterations_for_prim_name(
+        "body_b", solver, component_mapping=mapping
+    ) == (None, 9, "hand")
 
 
 def test_env_solver_rejects_robot_iteration_fields() -> None:

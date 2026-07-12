@@ -1,0 +1,28 @@
+#usda 1.0
+(
+    defaultPrim = "IndustrialWarehouse"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "IndustrialWarehouse"
+{
+    # Runtime root_pose owns the outer prim's xformOpOrder. Keep unit conversion
+    # on this child so applying the scene pose cannot discard the 0.01 scale.
+    def Xform "CentimeterAsset" (
+        prepend references = @../../../usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial/Buildings/Warehouse/Warehouse01.usd@
+    )
+    {
+        double3 xformOp:scale = (0.01, 0.01, 0.01)
+        uniform token[] xformOpOrder = ["xformOp:scale"]
+
+        # The source pack is visual-only. Reuse its low-poly floor mesh as the
+        # static scene collider so this environment can replace the default ground.
+        over "SM_Floor_A1" (
+            prepend apiSchemas = ["PhysicsCollisionAPI"]
+        )
+        {
+            bool physics:collisionEnabled = 1
+        }
+    }
+}

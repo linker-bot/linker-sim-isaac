@@ -1,13 +1,14 @@
+# scene3_tiled 的 env_002 差异片段：只替换 base.yaml 中 Tblock 的 env-local 初始位姿。
+# 未声明的 World、solver、sensor、visual、robot、object 与 clone 设置全部继承 base；
+# fragment 不能新增实例。env_id 必须在本 profile 内唯一且位于 [0, tiled.num_envs)。
 env_id: 2
 objects:
+  # key 必须精确匹配 base.yaml 的 objects[].name；root_pose 为完整替换，不逐轴合并。
   Tblock:
     root_pose:
+      # env-local xyz 单位 m；rpy 为 XYZ 欧拉角，单位 rad。
       xyz: [0.18, -0.035, -0.4]
       rpy: [0.0, 1.5707, -0.16]
-cameras:
-  world_rgbd:
-    pose:
-      xyz: [0.08, 0.0, 0.08]
-      rpy: [0.0, 1.1, 0.0]
 metadata:
+  # JSON-compatible replay 标签，仅供状态/快照/evaluator 使用，不改变运行行为。
   replay_id: scene3_tiled_002

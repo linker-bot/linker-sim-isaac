@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.spatial.transform import Rotation
-from linkerbot_sim.utils.rotations import normalize_quat_wxyz_or_identity
+
+from linkerbot_sim.utils.rotations import rpy_xyz_to_matrix
 
 
 def as_vector(
@@ -56,20 +57,6 @@ def expand_scalar_or_vector(values, length: int, label: str) -> np.ndarray:
     return array.astype(float)
 
 
-def quat_wxyz_to_matrix(quat) -> np.ndarray:
-    """把 wxyz 四元数转换为旋转矩阵。
-
-    参数:
-        quat: 长度 4 的四元数，顺序为 ``[w, x, y, z]``。
-    返回:
-        shape ``(3, 3)`` 的旋转矩阵；零范数输入返回单位矩阵。
-    """
-
-    # 零四元数通常来自缺省/坏配置；底层工具按单位旋转处理，避免 SciPy 抛晦涩异常。
-    w, x, y, z = normalize_quat_wxyz_or_identity(quat)
-    return Rotation.from_quat([x, y, z, w]).as_matrix()
-
-
 def axis_angle_to_matrix(axis, angle: float) -> np.ndarray:
     """把轴角旋转转换为旋转矩阵。
 
@@ -104,3 +91,9 @@ def make_transform(position=(0.0, 0.0, 0.0), rotation=None) -> np.ndarray:
     if rotation is not None:
         transform[:3, :3] = np.asarray(rotation, dtype=float).reshape(3, 3)
     return transform
+
+
+def make_rpy_transform(position=(0.0, 0.0, 0.0), rpy=(0.0, 0.0, 0.0)) -> np.ndarray:
+    """用 XYZ RPY 和平移构造齐次变换矩阵。"""
+
+    return make_transform(position, rpy_xyz_to_matrix(rpy))

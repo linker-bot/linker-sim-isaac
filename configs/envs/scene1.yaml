@@ -5,11 +5,16 @@
 # - solver 段只配置 scene 级 PhysX solver 类型。
 # - visuals 段配置 GUI 视角和灯光，不影响物理。
 # - robots / objects 段只选择已有 profile 并给出 root_pose，资产路径和物理属性不在这里写。
+#
+# 坐标与单位约定：单场景 root_pose、viewport eye/target 均使用 world frame；xyz 单位
+# 为米（m），rpy 是 XYZ 欧拉角 [roll, pitch, yaw] 且单位为弧度（rad），频率单位 Hz。
+# 所有显式 prim_path 都必须是绝对 USD path。
+
 env:
-  # 场景语义名称。建议和文件名一致，便于日志和 debug 输出识别。
+  # 必填的场景语义标识符；profile 仍由文件名选择，通常保持二者一致便于人工定位。
   name: scene1
 
-  # 场景描述，只用于人工阅读和日志上下文。
+  # 可选的人类可读描述，不参与 World、资产或 runtime 行为。
   description: single left arm rope pinch grasp scene
 
   # 世界重力 z 分量，单位 m/s^2。项目约定 z 轴向上，所以常用负值。
@@ -22,10 +27,10 @@ env:
   # Isaac 默认地面的 z 高度，单位 m；仅在 add_ground 为 true 时生效。
   ground_height: 0.0
 
-  # 绳体接触和抓取对物理步频敏感，因此默认高于 empty_scene。
+  # 绳体接触和抓取对物理步频敏感；较高频率可减小单步穿透并改善约束收敛。
   physics_frequency: 240.0
 
-  # GUI 渲染/画面更新频率，单位 Hz；headless 时 runtime 会直接使用 physics_dt。
+  # GUI/相机输出的渲染频率，单位 Hz；纯物理 headless 路径可直接跟随 physics_dt。
   render_frequency: 60.0
 
 solver:
@@ -61,22 +66,23 @@ visuals:
       intensity: 250.0
 
 robots:
-  # 单机器人 runtime 使用 robots.single。
-  single:
-    # 引用 configs/robots/ar5v2_l6v1_l.yaml。
+  # label 是控制、状态与快照使用的场景内唯一 ID；robot_profile 引用 configs/robots，
+  # 资产、关节和 solver iteration 由该 profile 管理。
+  - label: ar5v2_l6v1_0
     robot_profile: ar5v2_l6v1_l
-    # 当前场景中的机器人根位姿；同一 robot profile 可在不同 env 中摆到不同位置。
+    # 当前实例在 world frame 中的初始根位姿。
     root_pose:
-      # 根节点平移，世界坐标 [x, y, z]，单位 m。
       xyz: [0.0, 0.09, 0.0]
-      # 根节点欧拉角 [roll, pitch, yaw]，单位 rad。
       rpy: [-1.5707, 0.0, 0.0]
 
 objects:
+  # name 是对象实例的场景内唯一键；object_profile 提供资产、导入和物理设置，
+  # prim_path/root_pose 只确定当前 scene 的 namespace 与 world 初始摆放。
   # workstation 是环境中的固定物体；资产路径、导入参数和物理属性来自 object_profile。
   - name: workstation_armbase
     # 引用 configs/objects/workstation_armbase.yaml。
     object_profile: workstation_armbase
+    prim_path: /World/WorkstationArmBase
     # 工装基座在当前场景中的根位姿。
     root_pose:
       xyz: [0.0, 0.0, 0.0]
@@ -87,6 +93,7 @@ objects:
   - name: rope
     # 引用 configs/objects/capsule_rope.yaml。
     object_profile: capsule_rope
+    prim_path: /World/CapsuleRope
     # runtime_handle 供脚本按语义名查找该对象，例如抓取脚本寻找 rope 端块。
     runtime_handle: rope
     # 绳体在当前抓取场景中的初始根位姿。

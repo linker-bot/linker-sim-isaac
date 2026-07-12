@@ -3,7 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from linkerbot_sim.tiled.trajectory import TiledTrajectoryBuffer, TiledTrajectoryOverlay
+from linkerbot_sim.tiled.playback.buffer import TiledTrajectoryBuffer
+from linkerbot_sim.tiled.playback.models import PlaybackJointTrack
 
 
 def test_trajectory_buffer_broadcasts_single_trajectory_to_selected_envs() -> None:
@@ -133,7 +134,7 @@ def test_trajectory_buffer_rejects_active_replace_when_disabled() -> None:
         )
 
 
-def test_trajectory_buffer_applies_sync_overlay_to_selected_envs() -> None:
+def test_trajectory_buffer_applies_sync_joint_track_to_selected_envs() -> None:
     buffer = TiledTrajectoryBuffer(num_envs=2)
     buffer.load(
         robot_name="left",
@@ -141,8 +142,8 @@ def test_trajectory_buffer_applies_sync_overlay_to_selected_envs() -> None:
         times=[0.0, 1.0],
         positions=[[0.0, 10.0, 20.0], [1.0, 11.0, 21.0]],
         joint_names=["arm", "hand_a", "hand_b"],
-        overlays=(
-            TiledTrajectoryOverlay(
+        joint_tracks=(
+            PlaybackJointTrack(
                 joint_indices=(1, 2),
                 start_positions=np.asarray([[5.0, 6.0]]),
                 target_positions=np.asarray([[7.0, 10.0]]),
@@ -159,13 +160,13 @@ def test_trajectory_buffer_applies_sync_overlay_to_selected_envs() -> None:
     np.testing.assert_allclose(result.joint_positions[0], [100.0, 100.0, 100.0])
     np.testing.assert_allclose(result.joint_positions[1], [0.5, 6.0, 8.0])
     status = buffer.status(robot_name="left")
-    assert status["robots"]["left"]["envs"][0]["overlay_joint_names"] == [
+    assert status["robots"]["left"]["envs"][0]["joint_track_names"] == [
         "hand_a",
         "hand_b",
     ]
 
 
-def test_trajectory_buffer_overlay_duration_reaches_target_early() -> None:
+def test_trajectory_buffer_joint_track_duration_reaches_target_early() -> None:
     buffer = TiledTrajectoryBuffer(num_envs=1)
     buffer.load(
         robot_name="left",
@@ -173,8 +174,8 @@ def test_trajectory_buffer_overlay_duration_reaches_target_early() -> None:
         times=[0.0, 1.0],
         positions=[[0.0, 5.0], [1.0, 6.0]],
         joint_names=["arm", "hand"],
-        overlays=(
-            TiledTrajectoryOverlay(
+        joint_tracks=(
+            PlaybackJointTrack(
                 joint_indices=(1,),
                 start_positions=np.asarray([[2.0]]),
                 target_positions=np.asarray([[8.0]]),
@@ -192,7 +193,7 @@ def test_trajectory_buffer_overlay_duration_reaches_target_early() -> None:
     np.testing.assert_allclose(result.joint_positions, [[0.5, 8.0]])
 
 
-def test_trajectory_buffer_runs_before_sync_after_overlay_sequence() -> None:
+def test_trajectory_buffer_runs_before_sync_after_joint_track_sequence() -> None:
     buffer = TiledTrajectoryBuffer(num_envs=1)
     buffer.load(
         robot_name="left",
@@ -200,22 +201,22 @@ def test_trajectory_buffer_runs_before_sync_after_overlay_sequence() -> None:
         times=[0.0, 0.1],
         positions=[[0.0, 0.0], [1.0, 0.0]],
         joint_names=["arm", "hand"],
-        overlays=(
-            TiledTrajectoryOverlay(
+        joint_tracks=(
+            PlaybackJointTrack(
                 joint_indices=(1,),
                 start_positions=np.asarray([[0.0]]),
                 target_positions=np.asarray([[0.2]]),
                 duration_s=0.1,
                 timing="before",
             ),
-            TiledTrajectoryOverlay(
+            PlaybackJointTrack(
                 joint_indices=(1,),
                 start_positions=np.asarray([[0.0]]),
                 target_positions=np.asarray([[0.8]]),
                 duration_s=0.1,
                 timing="sync",
             ),
-            TiledTrajectoryOverlay(
+            PlaybackJointTrack(
                 joint_indices=(1,),
                 start_positions=np.asarray([[0.0]]),
                 target_positions=np.asarray([[0.0]]),
@@ -261,8 +262,8 @@ def test_trajectory_buffer_appends_hand_only_playback() -> None:
         times=[0.0, 0.1],
         positions=[[1.0, 0.2], [1.0, 0.2]],
         joint_names=["arm", "hand"],
-        overlays=(
-            TiledTrajectoryOverlay(
+        joint_tracks=(
+            PlaybackJointTrack(
                 joint_indices=(1,),
                 start_positions=np.asarray([[0.2]]),
                 target_positions=np.asarray([[0.8]]),
@@ -286,3 +287,168 @@ def test_trajectory_buffer_appends_hand_only_playback() -> None:
 
     np.testing.assert_allclose(main.joint_positions, [[1.0, 0.2]])
     np.testing.assert_allclose(hand.joint_positions, [[1.0, 0.8]])
+
+
+def test_trajectory_buffer_rejects_append_over_depth_without_mutating_queue() -> None:
+    buffer = TiledTrajectoryBuffer(
+        num_envs=1,
+        max_queue_depth_per_env=1,
+    )
+    buffer.load(
+        robot_name="left",
+        env_ids=[0],
+        times=[0.0, 0.1],
+        positions=[[0.0], [1.0]],
+        joint_names=["j1"],
+        request_id="existing",
+    )
+
+    with pytest.raises(ValueError, match="trajectories=2>1"):
+        buffer.load(
+            robot_name="left",
+            env_ids=[0],
+            times=[0.0, 0.1],
+            positions=[[1.0], [2.0]],
+            joint_names=["j1"],
+            request_id="rejected",
+            append=True,
+        )
+
+    status = buffer.status(robot_name="left")
+    assert status["rejected_loads"] == 1
+    assert status["queued_trajectories"] == 1
+    assert status["queued_samples"] == 2
+    assert status["queued_duration_s"] == pytest.approx(0.1)
+    assert status["limits"] == {
+        "max_queue_depth_per_env": 1,
+        "max_samples_per_env": 100_000,
+        "max_duration_s_per_env": 3600.0,
+        "overflow_policy": "reject",
+    }
+    env_status = status["robots"]["left"]["envs"][0]
+    assert env_status["request_id"] == "existing"
+    assert env_status["queued_trajectories"] == 1
+
+
+def test_trajectory_buffer_sample_rejection_is_atomic_across_selected_envs() -> None:
+    buffer = TiledTrajectoryBuffer(num_envs=2, max_samples_per_env=2)
+    buffer.load(
+        robot_name="left",
+        env_ids=[0],
+        times=[0.0, 0.1],
+        positions=[[0.0], [1.0]],
+        joint_names=["j1"],
+        request_id="existing",
+    )
+
+    with pytest.raises(ValueError, match="samples=3>2"):
+        buffer.load(
+            robot_name="left",
+            env_ids=[0, 1],
+            times=[0.0, 0.1, 0.2],
+            positions=[[0.0], [1.0], [2.0]],
+            joint_names=["j1"],
+            request_id="rejected",
+        )
+
+    status = buffer.status(robot_name="left")
+    assert status["rejected_loads"] == 1
+    assert status["robots"]["left"]["count"] == 1
+    assert status["robots"]["left"]["envs"][0]["request_id"] == "existing"
+
+
+def test_trajectory_buffer_enforces_total_queued_duration() -> None:
+    buffer = TiledTrajectoryBuffer(
+        num_envs=1,
+        max_queue_depth_per_env=3,
+        max_duration_s_per_env=0.2,
+    )
+    buffer.load(
+        robot_name="left",
+        env_ids=[0],
+        times=[0.0, 0.1],
+        positions=[[0.0], [1.0]],
+        joint_names=["j1"],
+    )
+    buffer.load(
+        robot_name="left",
+        env_ids=[0],
+        times=[0.0, 0.1],
+        positions=[[1.0], [2.0]],
+        joint_names=["j1"],
+        append=True,
+    )
+
+    with pytest.raises(ValueError, match="duration_s=0.3>0.2"):
+        buffer.load(
+            robot_name="left",
+            env_ids=[0],
+            times=[0.0, 0.1],
+            positions=[[2.0], [3.0]],
+            joint_names=["j1"],
+            append=True,
+        )
+
+    status = buffer.status(robot_name="left")
+    assert status["queued_trajectories"] == 2
+    assert status["queued_samples"] == 4
+    assert status["queued_duration_s"] == pytest.approx(0.2)
+    assert status["robots"]["left"]["rejected_loads"] == 1
+
+
+def test_trajectory_buffer_rejected_loads_are_robot_scoped() -> None:
+    buffer = TiledTrajectoryBuffer(num_envs=1, max_queue_depth_per_env=1)
+    for robot in ("left", "right"):
+        buffer.load(
+            robot_name=robot,
+            env_ids=[0],
+            times=[0.0, 0.1],
+            positions=[[0.0], [1.0]],
+            joint_names=["j1"],
+        )
+    with pytest.raises(ValueError, match="capacity exceeded"):
+        buffer.load(
+            robot_name="right",
+            env_ids=[0],
+            times=[0.0, 0.1],
+            positions=[[1.0], [2.0]],
+            joint_names=["j1"],
+            append=True,
+        )
+
+    left = buffer.status(robot_name="left")
+    right = buffer.status(robot_name="right")
+    combined = buffer.status()
+
+    assert left["rejected_loads"] == 0
+    assert left["rejected_loads_scope"] == "robot"
+    assert left["robots"]["left"]["rejected_loads"] == 0
+    assert right["rejected_loads"] == 1
+    assert right["robots"]["right"]["rejected_loads"] == 1
+    assert combined["rejected_loads"] == 1
+    assert combined["rejected_loads_scope"] == "buffer"
+
+
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+def test_playback_rejects_non_finite_command_inputs(value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        PlaybackJointTrack(
+            joint_indices=(0,),
+            start_positions=np.asarray([0.0]),
+            target_positions=np.asarray([1.0]),
+            duration_s=value,
+        )
+
+    buffer = TiledTrajectoryBuffer(num_envs=1)
+    with pytest.raises(ValueError, match="finite"):
+        buffer.step(
+            robot_name="robot",
+            current_positions=np.asarray([[0.0]]),
+            dt_s=value,
+        )
+    with pytest.raises(ValueError, match="finite"):
+        buffer.step(
+            robot_name="robot",
+            current_positions=np.asarray([[value]]),
+            dt_s=0.1,
+        )

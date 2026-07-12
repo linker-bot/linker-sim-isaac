@@ -1,0 +1,303 @@
+inventory:
+  source_root: src/linkerbot_sim
+  source_python_glob: src/linkerbot_sim/**/*.py
+  source_python_count: 207
+  reviewed_on: 2026-07-12
+  candidate_scan:
+    engine: python_ast
+    assignment_scope: module
+    name_regex: ^_?[A-Z][A-Z0-9_]+$
+    reviewed_candidate_count: 75
+    reviewed_candidate_sha256: 032b1a7c3fff69dda00dfa0d94bf17cdb82c59694f88ca7fc37b08c4d04948f5
+    review_dispositions:
+      - yaml_or_request_owned
+      - allowlisted_retained
+  project_yaml_glob: configs/**/*.yaml
+  project_yaml_count: 42
+  third_party_task_glob: configs/curobo/task/**/*.yml
+  third_party_task_count: 8
+
+# This file is an exception register, not a list of ordinary dataclass defaults.
+# Values already supplied by a strict current profile/request are deliberately absent.
+entries:
+  - id: single_scene_interactive_wire_vocabulary
+    path: src/linkerbot_sim/app/interactive/single_scene/protocol.py
+    symbol: _SINGLE_TRACK_WRAPPER_FIELDS and InteractiveMotionCommand wire defaults
+    category: protocol_contract
+    decision: retain_in_code
+    reason: >-
+      Message names, reset/snapshot defaults, and request field ownership are the JSON
+      wire contract. Loading them from deployment YAML would let two
+      processes silently speak different protocols; request values remain configurable
+      in each JSON message instead.
+    owner: runtime-protocol
+    sites:
+      - app/interactive/single_scene/protocol.py:_SINGLE_TRACK_WRAPPER_FIELDS
+      - app/interactive/single_scene/queue.py:TERMINAL_COMMAND_STATES
+
+  - id: tiled_scene_interactive_wire_vocabulary
+    path: src/linkerbot_sim/app/interactive/tiled_scene/action_messages.py
+    symbol: CONTROL_MESSAGE_TYPES, _CONTROL_FIELDS, and _ENV_IDS_REQUIRED_MESSAGE_TYPES
+    category: protocol_contract
+    decision: retain_in_code
+    reason: >-
+      These sets define the canonical command vocabulary, each control command's
+      accepted fields, and which commands require an explicit environment selector.
+      They are protocol rules rather than simulation or deployment preferences, so
+      YAML must not alter them.
+    owner: runtime-protocol
+    sites:
+      - app/interactive/tiled_scene/action_messages.py:CONTROL_MESSAGE_TYPES
+      - app/interactive/tiled_scene/protocol.py:_CONTROL_FIELDS
+      - app/interactive/tiled_scene/protocol.py:_ENV_IDS_REQUIRED_MESSAGE_TYPES
+
+  - id: snapshot_schema_contract
+    path: src/linkerbot_sim/snapshots/schema.py
+    symbol: SNAPSHOT_SCHEMA and snapshot array/coordinate conventions
+    category: protocol_contract
+    decision: retain_in_code
+    reason: >-
+      Snapshot schema identity, local-coordinate semantics, wxyz orientation order, and
+      state array dimensions must be identical for writers and readers. Changing them
+      requires a coordinated snapshot writer and reader schema change, not a profile
+      override.
+    owner: state-and-snapshots
+
+  - id: quaternion_units_and_dimensions
+    path: src/linkerbot_sim/utils/rotations.py
+    symbol: quat_wxyz_to_matrix, matrix_to_quat_wxyz, and fixed vector dimensions
+    category: mathematical_invariant
+    decision: retain_in_code
+    reason: >-
+      The project contract uses metres, radians, three-vectors, and wxyz quaternions;
+      xyzw reordering exists only at third-party API boundaries. Making units or array
+      dimensions profile-dependent would make results ambiguous and unsafe to replay.
+    owner: simulation-core
+
+  - id: numerical_stability_tolerances
+    path: src/linkerbot_sim
+    symbol: fixed epsilon sites used by timing, interpolation, retiming, and pose validation
+    category: mathematical_invariant
+    decision: retain_in_code
+    reason: >-
+      The 1e-12/1e-9/1e-6 comparisons prevent floating-point tick duplication, endpoint
+      loss, and quaternion singularities. They implement numerical algorithms rather than
+      experiment tolerances; user-facing IK/planning tolerances remain in cuRobo YAML.
+    owner: simulation-core
+    sites:
+      - app/motion/timeline/builders.py:duration_to_ticks
+      - app/motion/timeline/executor.py:execute_robot_timeline
+      - app/interactive/tiled_scene/command_utils.py:_action_decimation
+      - app/interactive/tiled_scene/transport.py:_runtime_idle_step_count
+      - tiled/playback/buffer.py:TiledTrajectoryBuffer.load
+      - tiled/playback/models.py:_Playback.sample
+      - trajectories/retiming.py:retime_joint_trajectory
+      - sensors/camera/observer.py:CameraFrameObserver.observe
+      - backends/curobo/linear_pose_path.py:_validate_line_start_position
+      - app/runtime/collision/registry.py:_geometry_fingerprint
+      - utils/timing.py:differentiate_samples
+
+  - id: urdf_mjcf_omitted_attribute_defaults
+    path: src/linkerbot_sim/robots/mimic
+    symbol: URDF mimic/origin/axis and MJCF equality omitted-attribute defaults
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      Multiplier 1, offset/origin 0, x-axis defaults, fixed-joint defaults, and MJCF
+      polynomial defaults are defined by the URDF/MJCF asset formats. Treating omitted
+      asset attributes as deployment YAML would make one asset mean different things in
+      import, mimic control, and planning collision kinematics.
+    owner: assets-and-kinematics
+    sites:
+      - robots/mimic/urdf.py:parse_urdf_joint_mimics
+      - robots/mimic/mjcf.py:parse_mjcf_joint_equalities
+      - app/runtime/collision/urdf_kinematics.py:_UrdfKinematics.__init__
+      - app/runtime/collision/urdf_kinematics.py:_urdf_origin
+      - app/runtime/collision/urdf_kinematics.py:_urdf_axis
+
+  - id: usd_physx_schema_tokens
+    path: src/linkerbot_sim/assets/usd_overrides.py
+    symbol: apply_physx_overrides USD/PhysX token and binding semantics
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      USD schema names, PhysX API tokens, material purpose, and binding strength are fixed
+      integration contracts. Robot physics values are YAML-owned, while the schema used to
+      author those values must stay code-owned and version-tested.
+    owner: assets-and-physics
+
+  - id: urdf_import_bootstrap_contract
+    path: src/linkerbot_sim/assets/robot_import.py
+    symbol: configure_urdf_import distance_scale, mimic parsing, and drive bootstrap seeds
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      Unit scale 1.0 and native mimic parsing are importer correctness contracts. The
+      position-drive strength/damping values only bootstrap Isaac's URDF importer and are
+      overwritten by the resolved controller/robot physics settings, so exposing a second
+      YAML owner would create conflicting gain sources.
+    owner: assets-and-control
+
+  - id: curobo_v0_8_task_bundle
+    path: configs/curobo/task
+    symbol: CuroboTaskBundle.named("curobo_v0_8_default")
+    category: third_party_contract
+    decision: retain_pinned
+    reason: >-
+      The nvidia-curobo 0.8.0 package omits task resources required by its solver factories.
+      LinkerBot therefore vendors the exact upstream bundle and exposes only its tested
+      name; arbitrary task paths remain rejected to prevent cross-version solver drift.
+    owner: motion-planning
+    bundle_version: 0.8.0
+    upstream_commit: 4ea77366ca48ee453e7df139e39fa6532af49f3b
+    files:
+      graph_planner/exact_graph_planner.yml: 0468c67a2edc16e5840792ab9bafd108a3ffec4f87ab4998a3d97cc2d7c8b73d
+      graph_planner/transition_graph_planner.yml: 1e2cd8799c5d8fd5502cbf3c4a7283dd81a98ba239da5c110de65be7b56718f9
+      ik/lbfgs_ik.yml: b350e4dfa90a54afade0c40f5eccf12a9db720ba8391b2de01d392f3b051ee4b
+      ik/particle_ik.yml: cc0f04fc3c945e6dc39bddff2cb8bb5cced35c105d29bcab898ced06e1b61a17
+      ik/transition_ik.yml: 1e2cd8799c5d8fd5502cbf3c4a7283dd81a98ba239da5c110de65be7b56718f9
+      metrics_base.yml: a99c622096983905c5ab3df05d16399acd80c558aad5c13d24377345e8c18832
+      trajopt/lbfgs_bspline_trajopt.yml: 07c93d557663e5ba5baca5ddf9cd73e17f0892c617b73a5dd091fec928aef7a0
+      trajopt/transition_bspline_trajopt.yml: 3e5d981036c967d3e3c9522d89730b19c7c631085d3070504b76853de4673c36
+
+  - id: curobo_version_capabilities
+    path: src/linkerbot_sim/backends/curobo/config.py
+    symbol: SUPPORTED_COLLISION_CACHE_TYPES, SUPPORTED_CUROBO_DTYPES, and CuroboTaskBundle
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      Collision cache shapes, supported tensor dtypes, and exact compatible package
+      versions describe capabilities of the pinned cuRobo implementation. YAML selects
+      among validated capabilities but cannot declare an unsupported capability valid.
+    owner: motion-planning
+    sites:
+      - app/runtime/collision/registry.py:PlanningSceneSnapshot.view_fingerprint
+
+  - id: curobo_conservative_geometry_adapter
+    path: src/linkerbot_sim/backends/curobo/collision_world.py
+    symbol: sphere/capsule conservative cuboid materialization
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      cuRobo 0.8.0 scene loading does not accept every project collision primitive. The
+      conservative conversion is part of the backend adapter's safety guarantee; choosing
+      a less conservative approximation would require a separately tested algorithm.
+    owner: motion-planning
+
+  - id: kit_eula_acceptance
+    path: src/linkerbot_sim/app/launch.py
+    symbol: _EULA_ENV_VAR and _ACCEPTED_EULA_VALUES
+    category: safety_invariant
+    decision: retain_in_code
+    reason: >-
+      EULA acceptance is an explicit deployment/legal acknowledgement. A repository YAML
+      file must not accept it on an operator's behalf; the launcher only recognizes the
+      documented deployment environment variable and otherwise refuses to start.
+    owner: runtime-platform
+
+  - id: reset_velocity_and_observer_semantics
+    path: src/linkerbot_sim/app/runtime/single_scene_reset.py
+    symbol: reset_single_scene_runtime velocity clearing and observer reset
+    category: safety_invariant
+    decision: retain_in_code
+    reason: >-
+      A reset must not carry velocity, queued targets, derivative history, or stale effort
+      state into the next episode. Making this optional would violate snapshot/reset
+      determinism and create unsafe motion, so it remains a protocol-level invariant.
+    owner: simulation-runtime
+
+  - id: mjcf_replication_safety_downgrade
+    path: src/linkerbot_sim/tiled/scene/clone.py
+    symbol: _clone_config_compatible_with_robots
+    category: safety_invariant
+    decision: retain_in_code
+    reason: >-
+      PhysX replication is forcibly disabled when an MJCF world-fixed joint lacks body0,
+      because replication otherwise produces incorrect clone transforms. YAML may request
+      replication but cannot bypass this detected safety guard.
+    owner: tiled-scene-runtime
+
+  - id: tiled_scene_control_retry_and_idle_safety
+    path: src/linkerbot_sim/app/interactive/tiled_scene/transport.py
+    symbol: _CONTROL_QUEUE_RETRY_TIMEOUT_S and _MAX_IDLE_STEPS_PER_CHUNK
+    category: internal_scheduling
+    decision: retain_in_code
+    reason: >-
+      The retry interval wakes a blocked Queue while preserving a non-droppable control
+      event. The 10,000-tick cap prevents one configured idle chunk from monopolizing the
+      main simulation thread; both are non-bypassable resource guards, not tuning knobs.
+    owner: runtime-transport
+    sites:
+      - app/interactive/tiled_scene/transport.py:_CONTROL_QUEUE_RETRY_TIMEOUT_S
+      - app/interactive/tiled_scene/transport.py:_MAX_IDLE_STEPS_PER_CHUNK
+
+  - id: tiled_single_response_slots
+    path: src/linkerbot_sim/app/interactive/tiled_scene/transport.py
+    symbol: _InteractiveRequest.response_queue and per-request Queue(maxsize=1)
+    category: protocol_contract
+    decision: retain_in_code
+    reason: >-
+      Each accepted TCP or WebSocket request has exactly one main-thread response. A
+      private one-slot queue represents that one-to-one handoff and prevents response
+      buffering; deployment throughput is bounded separately by the configured shared
+      request queue and connection admission limits, so this protocol slot is not a YAML
+      capacity.
+    owner: runtime-transport
+
+  - id: websocket_framing_and_close_codes
+    path: src/linkerbot_sim/app/interactive/single_scene/transports.py
+    symbol: bounded frame sentinels, inbound max_queue=1, and RFC 6455 close codes
+    category: protocol_contract
+    decision: retain_in_code
+    reason: >-
+      Extra sentinel bytes detect oversized frames without unbounded allocation, one
+      library-level inbound slot prevents duplicate buffering behind the configured request
+      queue, and close codes 1009/1013 are RFC interoperability values.
+    owner: runtime-transport
+
+  - id: repository_resource_roots
+    path: src/linkerbot_sim/utils/paths.py
+    symbol: REPO_ROOT, ASSETS_ROOT, CONFIGS_ROOT, and LOGS_ROOT
+    category: repository_layout_contract
+    decision: retain_in_code
+    reason: >-
+      These constants describe the current source-checkout packaging layout. Individual
+      assets and outputs remain profile-configurable; supporting installed package resources
+      requires a dedicated packaging design rather than per-run YAML path mutation.
+    owner: build-and-packaging
+
+  - id: foxglove_marker_presentation
+    path: src/linkerbot_sim/telemetry
+    symbol: DEFAULT_*_MARKER_* and _OBJECT/_TCP marker radius/color constants
+    category: visual_preference
+    decision: retain_in_code
+    reason: >-
+      Marker radius and RGBA define the stable Foxglove presentation emitted by the
+      project runtime. Specialized publishers can already pass explicit values to the
+      logger API, while deployment profiles must not make recorded visualization semantics
+      differ silently between Scene and Tiled processes.
+    owner: telemetry
+
+  - id: camera_payload_format_contracts
+    path: src/linkerbot_sim/sensors/camera/recorder.py
+    symbol: PNG/PPM/NPY/NPZ format signatures and validation constants
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      File signatures, channel counts, PNG chunk layout, and dtype checks define standard
+      payload formats. YAML selects a supported rgb/depth format, while the byte-level
+      encoding contract must remain identical for every producer and consumer.
+    owner: sensors-and-output
+
+  - id: camera_output_default_quota
+    path: src/linkerbot_sim/sensors/camera/limits.py
+    symbol: DEFAULT_MAX_BYTES_PER_CAMERA
+    category: safety_invariant
+    decision: retain_in_code
+    reason: >-
+      Direct recorder construction and omitted runtime settings must remain bounded even
+      when a caller bypasses bundled profiles. The 10 GiB value is a conservative safety
+      fallback; planned datasets can select a larger positive quota in the runtime profile.
+    owner: sensors-and-output
+    sites:
+      - sensors/camera/limits.py:DEFAULT_MAX_BYTES_PER_CAMERA

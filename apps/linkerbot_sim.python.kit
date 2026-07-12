@@ -1,0 +1,224 @@
+[package]
+description = "LinkerBot Simulation Python application"
+title = "LinkerBot Simulation Python"
+version = "0.3.0"
+keywords = ["experience", "app", "usd", "isaacsim"]
+
+# Isaac Sim 5.1's stock base experience also enables every extDeprecated
+# compatibility package. Keep this list aligned with its supported dependencies,
+# while deliberately omitting that legacy block.
+[dependencies]
+"isaacsim.app.about" = {}
+"isaacsim.asset.browser" = {}
+"isaacsim.core.api" = {}
+"isaacsim.core.cloner" = {}
+"isaacsim.core.deprecation_manager" = { order = -100 }
+"isaacsim.core.experimental.materials" = {}
+"isaacsim.core.experimental.objects" = {}
+"isaacsim.core.experimental.prims" = {}
+"isaacsim.core.experimental.utils" = {}
+"isaacsim.core.nodes" = {}
+"isaacsim.core.simulation_manager" = {}
+"isaacsim.core.throttling" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.core.version" = {}
+"isaacsim.cortex.behaviors" = {}
+"isaacsim.cortex.framework" = {}
+"isaacsim.gui.menu" = {}
+"isaacsim.gui.content_browser" = {}
+"isaacsim.gui.property" = {}
+"isaacsim.gui.sensors.icon" = {}
+"isaacsim.replicator.behavior" = {}
+"isaacsim.replicator.domain_randomization" = {}
+"isaacsim.replicator.writers" = {}
+"isaacsim.robot_motion.lula" = {}
+"isaacsim.robot_motion.motion_generation" = {}
+"isaacsim.robot.manipulators" = {}
+"isaacsim.robot.policy.examples" = {}
+"isaacsim.robot.schema" = {}
+"isaacsim.robot.surface_gripper" = {}
+"isaacsim.robot.wheeled_robots" = {}
+"isaacsim.sensors.camera" = {}
+"isaacsim.sensors.physics" = {}
+"isaacsim.sensors.physx" = {}
+"isaacsim.sensors.rtx" = {}
+"isaacsim.simulation_app" = {}
+"isaacsim.storage.native" = {}
+"isaacsim.util.debug_draw" = {}
+"omni.kit.loop-isaac" = {}
+
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.physx.tensors" = {}
+"omni.replicator.core" = {}
+"omni.replicator.replicator_yaml" = {}
+"omni.syntheticdata" = {}
+"semantics.schema.editor" = {}
+"semantics.schema.property" = {}
+
+"omni.anim.curve.core" = {}
+"omni.anim.graph.schema" = {}
+"omni.anim.navigation.schema" = {}
+"omni.graph.action" = {}
+"omni.graph.core" = {}
+"omni.graph.nodes" = {}
+"omni.graph.scriptnode" = {}
+"omni.graph.ui_nodes" = {}
+"omni.hydra.engine.stats" = {}
+"omni.hydra.rtx" = {}
+"omni.kit.mainwindow" = {}
+"omni.kit.manipulator.camera" = {}
+"omni.kit.manipulator.prim" = {}
+"omni.kit.manipulator.selection" = {}
+"omni.kit.material.library" = {}
+"omni.kit.menu.common" = { order = 1000 }
+"omni.kit.menu.create" = {}
+"omni.kit.menu.stage" = {}
+"omni.kit.menu.utils" = {}
+"omni.kit.primitive.mesh" = {}
+"omni.kit.property.bundle" = {}
+"omni.kit.raycast.query" = {}
+"omni.kit.stage_template.core" = {}
+"omni.kit.telemetry" = {}
+"omni.kit.tool.asset_importer" = {}
+"omni.kit.tool.collect" = {}
+"omni.kit.viewport.legacy_gizmos" = {}
+"omni.kit.viewport.menubar.camera" = {}
+"omni.kit.viewport.menubar.display" = {}
+"omni.kit.viewport.menubar.lighting" = {}
+"omni.kit.viewport.menubar.render" = {}
+"omni.kit.viewport.menubar.settings" = {}
+"omni.kit.viewport.scene_camera_model" = {}
+"omni.kit.viewport.window" = {}
+"omni.kit.window.console" = {}
+"omni.kit.window.content_browser" = {}
+"omni.kit.window.property" = {}
+"omni.kit.window.stage" = {}
+"omni.kit.window.status_bar" = {}
+"omni.kit.window.toolbar" = {}
+"omni.physics.physx" = {}
+"omni.physics.stageupdate" = {}
+"omni.rtx.settings.core" = {}
+"omni.uiaudio" = {}
+"omni.usd.metrics.assembler.ui" = {}
+"omni.usd.schema.flow" = {}
+"omni.usd.schema.metrics.assembler" = {}
+"omni.warp.core" = {}
+"omni.hydra.usdrt_delegate" = {}
+
+[settings]
+exts."omni.kit.material.library".ui_show_list = [
+    "OmniPBR",
+    "OmniGlass",
+    "OmniSurface",
+    "USD Preview Surface",
+]
+exts."omni.kit.renderer.core".present.enabled = false
+exts."omni.kit.viewport.window".windowMenu.entryCount = 2
+exts."omni.kit.viewport.window".windowMenu.label = ""
+exts."omni.rtx.window.settings".window_menu = "Window"
+exts."omni.usd".locking.onClose = false
+exts."omni.ui".raster.default_rasterpolicy_enabled = true
+exts."omni.kit.widget.graph".raster_nodes = true
+renderer.asyncInit = true
+renderer.gpuEnumeration.glInterop.enabled = false
+rtx-transient.dlssg.enabled = false
+rtx.hydra.mdlMaterialWarmup = true
+rtx.post.dlss.execMode = 3
+omni.replicator.asyncRendering = false
+foundation.verifyOsVersion.enabled = false
+physics.autoPopupSimulationOutputWindow = false
+exts."semantics_schema_editor".hideWindowOnStartup = true
+
+[settings."filter:platform"."windows-x86_64"]
+isaac.startup.ros_bridge_extension = ""
+
+[settings."filter:platform"."linux-x86_64"]
+isaac.startup.ros_bridge_extension = ""
+
+[settings.exts."omni.kit.menu.utils"]
+logDeprecated = false
+margin_size = [18, 3]
+tick_spacing = [10, 6]
+margin_size_posttick = [0, 3]
+separator_size = [14, 10]
+root_spacing = 3
+post_label_spaces = 6
+color_tick_enabled = 0xFFFAC434
+color_separator = 0xFF7E7E7E
+color_label_enabled = 0xFFEEEEEE
+menu_title_color = 0xFF202020
+menu_title_line_color = 0xFF5E5E5E
+menu_title_text_color = 0xFF8F8F8F
+menu_title_text_height = 24
+menu_title_close_color = 0xFFC6C6C6
+indent_all_ticks = false
+show_menu_titles = true
+
+[settings.app]
+name = "LinkerBot-Sim-Python"
+version = "5.1.0"
+versionFile = "${env:ISAAC_PATH}/VERSION"
+content.emptyStageOnStart = true
+fastShutdown = true
+file.ignoreUnsavedOnExit = true
+font.file = "${fonts}/OpenSans-SemiBold.ttf"
+font.size = 16
+gatherRenderResults = true
+hangDetector.enabled = true
+hangDetector.timeout = 120
+settings.fabricDefaultStageFrameHistoryCount = 3
+settings.persistent = false
+useFabricSceneDelegate = true
+enableDeveloperWarnings = false
+runLoops.main.rateLimitEnabled = false
+runLoops.main.manualModeEnabled = true
+player.useFixedTimeStepping = false
+events.qualifiedNames = true
+vulkan = true
+asyncRendering = false
+asyncRenderingLowLatency = false
+
+[settings.app.window]
+iconPath = "${isaacsim.simulation_app}/data/omni.isaac.sim.png"
+title = "LinkerBot Simulation"
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/apps",
+]
+
+[settings.app.renderer]
+resolution.height = 720
+resolution.width = 1280
+skipWhileMinimized = false
+sleepMsOnFocus = 0
+sleepMsOutOfFocus = 0
+
+[settings.app.viewport]
+defaultCamPos.x = 5
+defaultCamPos.y = 5
+defaultCamPos.z = 5
+defaults.fillViewport = false
+grid.enabled = true
+outline.enabled = true
+boundingBoxes.enabled = false
+show.camera = false
+show.lights = false
+
+[settings.telemetry]
+enableAnonymousAppName = true
+enableAnonymousData = true
+
+[settings.persistent]
+app.primCreation.DefaultXformOpOrder = "xformOp:translate, xformOp:orient, xformOp:scale"
+app.primCreation.DefaultXformOpType = "Scale, Orient, Translate"
+app.primCreation.typedDefaults.camera.clippingRange = [0.01, 10000000.0]
+app.primCreation.DefaultXformOpPrecision = "Double"
+app.primCreation.DefaultRotationOrder = "ZYX"
+app.primCreation.PrimCreationWithDefaultXformOps = true
+app.stage.timeCodeRange = [0, 1000000]
+app.stage.upAxis = "Z"

@@ -201,6 +201,8 @@ class EffortLogger:
         joint_names: list[str],
         *,
         flush_interval_steps: int = 1,
+        existing_data_policy: str = "error",
+        timestamped_run_name: str | None = None,
     ) -> None:
         """创建 effort CSV writer，并按关节名展开三类 effort 列。"""
 
@@ -215,7 +217,11 @@ class EffortLogger:
                 ]
             )
         self.writer = CsvWriter(
-            path, fieldnames, flush_interval_rows=flush_interval_steps
+            path,
+            fieldnames,
+            flush_interval_rows=flush_interval_steps,
+            existing_data_policy=existing_data_policy,
+            timestamped_run_name=timestamped_run_name,
         )
 
     def _vector(self, values: np.ndarray | None, label: str) -> np.ndarray:

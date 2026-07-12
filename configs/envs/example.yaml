@@ -2,7 +2,7 @@
 #
 # 用途：
 # - 说明 configs/envs/*.yaml 的合法结构。
-# - 选择单臂或双臂机器人实例，并保存它们在当前 scene 中的 root_pose。
+# - 选择一个或多个机器人实例，并保存它们在当前 scene 中的 root_pose。
 # - 摆放已经存在的 object profile；对象资产路径和物理属性不写在 env。
 #
 # 使用方式：
@@ -14,15 +14,23 @@
 # - env.gravity_z / physics_frequency / render_frequency 是 World 级设置。
 # - solver.type 是 scene 级 PhysX solver 类型。
 # - robot.physics.solver 中的 arm/hand iteration 属于 robot profile，不写在 env。
-# - robots.single 与 robots.dual 可以共存；单臂脚本读 single，双臂脚本读 dual。
+# - robots 始终是 list；loader 按顺序生成会话级 robot_id，label 必须唯一且稳定。
+# - robot 实例 USD 路径属于 robots[].prim_path；省略时从 label 生成 /World/Robots/<label>。
 # - root_pose 属于 scene，因为同一个 robot/object profile 可以在不同场景中摆到不同位置。
+#
+# 坐标与单位：
+# - 单场景 robot/object 的 root_pose 位于 world frame；相机 pose 位于 parent_prim_path frame。
+# - xyz / eye / target / clipping_range 使用米（m），rpy 使用 XYZ 欧拉角和弧度（rad）。
+# - physics_frequency、render_frequency 和 camera frequency 使用赫兹（Hz）。
+# - prim_path / parent_prim_path 均为绝对 USD path。
+
 
 env:
-  # 场景语义名称。建议和文件名一致，便于日志和 debug 输出识别。
+  # 必填的场景语义标识符；profile 仍由文件名选择，通常保持二者一致便于人工定位。
   name: example_scene
 
-  # 可选描述，只用于人工阅读和日志上下文。
-  description: example single/dual robot scene
+  # 可选的人类可读描述，不参与 World、资产或 runtime 行为。
+  description: example multi-robot scene
 
   # 世界重力 z 分量，单位 m/s^2。项目约定 z 轴向上，所以常用负值。
   gravity_z: -9.81
@@ -36,7 +44,7 @@ env:
   # 物理步频，单位 Hz。绳体接触、灵巧手抓取通常需要比普通 rigid scene 更高的频率。
   physics_frequency: 240.0
 
-  # GUI 渲染步频，单位 Hz。headless 时 runtime 会直接使用 physics_dt。
+  # 渲染步频，单位 Hz。GUI 或存在相机输出消费者时使用；纯物理 headless 可跟随 physics_dt。
   render_frequency: 60.0
 
 solver:
@@ -67,17 +75,23 @@ visuals:
       # 可选：color: [1.0, 1.0, 1.0]
 
 sensors:
-  # 仿真传感器摄像机和 GUI viewport 分开配置。disabled 示例只用于说明 schema。
+  # 仿真传感器摄像机和 GUI viewport 分开配置。camera key 是输出和 per-runtime 状态中的
+  # 稳定名称；disabled 示例保留完整字段，只用于说明当前合法结构。
   cameras:
     wrist_rgbd:
+      # false 时不创建 camera prim、annotator 或帧输出。
       enabled: false
+      # prim_path 必须位于 parent_prim_path 下；此处相机随机器人法兰一起运动。
       parent_prim_path: /World/AR5V2_L6V1_L/AR5V2_L_arm_flan_link
       prim_path: /World/AR5V2_L6V1_L/AR5V2_L_arm_flan_link/WristRGBD
+      # 相对于 parent prim 的局部位姿：xyz 单位 m，rpy 单位 rad。
       pose:
         xyz: [0.0, 0.0, 0.08]
         rpy: [0.0, 0.0, 0.0]
+      # [width, height] 单位 pixel；采样 frequency 单位 Hz。
       resolution: [640, 480]
       frequency: 30.0
+      # 采集 RGB/depth；clipping_range 是 [near, far]，单位 m。
       modalities: [rgb, depth]
       clipping_range: [0.01, 5.0]
       # 可选：显式 pinhole 内参，单位为像素。
@@ -87,6 +101,7 @@ sensors:
       #   cx: 320.0
       #   cy: 240.0
       output:
+        # save_dir 为离线帧目录；topic prefix 是 Foxglove channel namespace。
         save_dir: logs/cameras/wrist_rgbd
         foxglove_topic_prefix: /cameras/wrist_rgbd
         # 可选：foxglove_live_host: 127.0.0.1
@@ -94,33 +109,30 @@ sensors:
         # 可选：foxglove_mcap_path: logs/cameras/wrist_rgbd.mcap
 
 robots:
-  # 单臂 runtime 使用 robots.single。
-  single:
-    # 引用 configs/robots/ar5v2_l6v1_l.yaml。
+  # 每一项是当前场景中的 robot 实例。label 必须唯一，是控制/状态/快照使用的稳定 ID；
+  # robot_profile 引用 configs/robots，controller_profile 可按实例选择 controller bundle。
+  - label: ar5v2_l6v1_0
     robot_profile: ar5v2_l6v1_l
+    # prim_path: /World/Robots/ar5v2_l6v1_0
+    # 可选：按实例覆盖 robot profile 和 runtime 的 controller bundle。
+    controller_profile: default
+    # 单场景 root_pose 使用 world frame：xyz 单位 m，rpy 单位 rad。
     root_pose:
       xyz: [0.0, 0.09, 0.0]
       rpy: [-1.5707, 0.0, 0.0]
-
-  # 双臂 runtime 使用 robots.dual.left/right。
-  # 每侧引用一个“单 articulation”robot profile；不要在 configs/robots 里再写 dual robots mapping。
-  dual:
-    left:
-      robot_profile: ar5v2_l6v1_l
-      root_pose:
-        xyz: [0.0, 0.09, 0.0]
-        rpy: [-1.5707, 0.0, 0.0]
-    right:
-      robot_profile: ar5v2_l6v1_r
-      root_pose:
-        xyz: [0.0, -0.09, 0.0]
-        rpy: [1.5707, 0.0, 0.0]
+  - label: ar5v2_l6v1_1
+    robot_profile: ar5v2_l6v1_r
+    root_pose:
+      xyz: [0.0, -0.09, 0.0]
+      rpy: [1.5707, 0.0, 0.0]
 
 objects:
-  # env 只声明对象实例：name、object_profile、可选 runtime_handle 和 root_pose。
+  # env 只声明对象实例：name、object_profile、可选 prim_path/runtime_handle 和 root_pose。
   # kind/source/asset_path/import/physics 写在 configs/objects/*.yaml。
   - name: workstation_armbase
     object_profile: workstation_armbase
+    prim_path: /World/WorkstationArmBase
+    # 单场景 object root_pose 同样位于 world frame。
     root_pose:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
@@ -128,6 +140,7 @@ objects:
   # 如果要换成 tablebase，只改 object_profile 和摆放，不在 env 内联资产路径。
   - name: workstation_tablebase
     object_profile: workstation_tablebase
+    prim_path: /World/WorkstationTableBase
     root_pose:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
@@ -135,6 +148,7 @@ objects:
   # 动态对象也由 env 统一实例化和摆放；绳体几何/质量/关节限制由 tools/object_assets/flexible/rope 生成。
   - name: rope
     object_profile: capsule_rope
+    prim_path: /World/CapsuleRope
     runtime_handle: rope
     root_pose:
       xyz: [0.1, -0.55, 0.05]

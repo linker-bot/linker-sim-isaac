@@ -1,6 +1,6 @@
 """轨迹数据类型。
 
-项目内部的关节轨迹对齐 cuMotion ``Trajectory`` 的表达：一条轨迹由时间域和
+项目内部的关节轨迹对齐 cuRobo ``Trajectory`` 的表达：一条轨迹由时间域和
 关节空间 position / velocity / acceleration / jerk 采样矩阵组成；effort 控制场景可额外携带
 joint effort 采样矩阵。
 
@@ -58,7 +58,7 @@ class JointTrajectory:
 
         参数:
             times/positions/velocities/accelerations/jerks:
-                cuMotion 风格的采样矩阵，shape 分别为 ``(N,)`` 和 ``(N, dof)``。
+                cuRobo 风格的采样矩阵，shape 分别为 ``(N,)`` 和 ``(N, dof)``。
             joint_names: 关节名元组，定义每列对应的关节。
         返回:
             无返回值；非法空轨迹会抛出 ``ValueError``。
@@ -79,6 +79,14 @@ class JointTrajectory:
             )
         if self.times.size == 0:
             raise ValueError("Trajectory must contain at least one sample")
+        if not np.all(np.isfinite(self.times)):
+            raise ValueError("times must contain finite values")
+        if self.times.size > 1 and np.any(np.diff(self.times) <= 0.0):
+            raise ValueError("times must be strictly increasing")
+        if not np.all(np.isfinite(self.positions)):
+            raise ValueError("positions must contain finite values")
+        self.times = self.times.copy()
+        self.positions = self.positions.copy()
         # 速度/加速度/jerk 对执行器并非总是必需；缺省填零可保持对象接口完整，
         # 让日志和控制器无需为“没有速度曲线”的简单轨迹写特殊分支。
         self.velocities = _matrix_or_zeros(
@@ -110,7 +118,7 @@ class JointTrajectory:
         efforts: np.ndarray | None = None,
         phases: tuple[str, ...] | None = None,
     ) -> "JointTrajectory":
-        """从 cuMotion 风格采样矩阵创建轨迹。
+        """从 cuRobo 风格采样矩阵创建轨迹。
 
         这是 ``__init__`` 的语义化别名，便于调用方表达“这些矩阵来自外部采样结果”。
         形状校验、缺省导数填零和 phase 校验仍由构造函数完成。
@@ -152,7 +160,10 @@ class JointTrajectory:
 
         # 对时间做钳制而不是抛错，便于执行循环在浮点舍入导致略微越界时仍返回端点。
         # 这与多数轨迹播放器“超出域保持首/末样本”的行为一致。
-        t = float(np.clip(time_s, self.times[0], self.times[-1]))
+        query_time = float(time_s)
+        if not np.isfinite(query_time):
+            raise ValueError("time_s must be finite")
+        t = float(np.clip(query_time, self.times[0], self.times[-1]))
         return TrajectoryEval(
             position=_interp_rows(self.times, self.positions, t),
             velocity=_interp_rows(self.times, self.velocities, t),
@@ -188,13 +199,15 @@ def _matrix_or_zeros(
         raise ValueError(
             f"{label} shape mismatch: expected {shape}, got {matrix.shape}"
         )
-    return matrix
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{label} must contain finite values")
+    return matrix.copy()
 
 
 def _interp_rows(times: np.ndarray, values: np.ndarray, time_s: float) -> np.ndarray:
     """对每一列独立做一维线性插值。
 
-    该 helper 不检查时间单调性；构造轨迹的调用方应保证采样时间来自合法规划或生成流程。
+    该 helper 只消费已经由 ``JointTrajectory`` 校验过的严格递增时间轴。
     """
 
     # 单点轨迹没有可插值区间，直接返回该点副本，避免 ``np.interp`` 在退化时间域上

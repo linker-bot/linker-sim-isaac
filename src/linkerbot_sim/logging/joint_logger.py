@@ -1,7 +1,7 @@
 """关节轨迹跟踪日志。
 
 该模块把“目标关节状态”和“实际关节状态”展开成稳定的 CSV 列名，
-便于用 ``scripts/plot_joint_tracking_logs.py`` 或其它工具绘制误差曲线。
+便于用 pandas、Matplotlib 或其它 CSV 工具绘制误差曲线。
 位置单位为 rad，速度单位为 rad/s。可选 effort 列记录 commanded/measured/applied effort，
 量纲由 PhysX 关节类型决定。
 
@@ -15,12 +15,47 @@ from pathlib import Path
 
 import numpy as np
 
-from linkerbot_sim.logging.csv_writer import CsvWriter
+from linkerbot_sim.logging.csv_writer import CsvOutputPlan, CsvWriter
 from linkerbot_sim.logging.config import JointLoggingConfig
 from linkerbot_sim.logging.effort_logger import (
     commanded_efforts_from_controller,
     read_joint_efforts,
 )
+
+
+def joint_tracking_fieldnames(
+    joint_names: list[str],
+    config: JointLoggingConfig,
+) -> list[str]:
+    """按配置构造稳定 CSV schema，但不打开输出文件。
+
+    字段按 joint input 顺序展开，同一关节内各观测量顺序固定；路径预检可以先用该纯函数
+    核对已有表头，确认无冲突后再创建 writer。
+    """
+
+    fieldnames = ["step", "time_s", "phase", "drive_update"]
+    for name in joint_names:
+        if config.log_command_position:
+            fieldnames.append(f"qd_{name}_rad")
+        if config.log_actual_position:
+            fieldnames.append(f"q_{name}_rad")
+        if config.log_command_velocity:
+            fieldnames.append(f"vd_{name}_rad_s")
+        if config.log_actual_velocity:
+            fieldnames.append(f"v_{name}_rad_s")
+        if config.log_command_position and config.log_actual_position:
+            fieldnames.append(f"pos_err_{name}_rad")
+        if config.log_command_velocity and config.log_actual_velocity:
+            fieldnames.append(f"vel_err_{name}_rad_s")
+        if config.log_command_effort:
+            fieldnames.append(f"tau_cmd_{name}")
+        if config.log_action_effort:
+            fieldnames.append(f"tau_action_{name}")
+        if config.log_measured_effort:
+            fieldnames.append(f"tau_measured_{name}")
+        if config.log_applied_effort:
+            fieldnames.append(f"tau_applied_{name}")
+    return fieldnames
 
 
 class JointTrackingLogger:
@@ -42,6 +77,10 @@ class JointTrackingLogger:
         *,
         flush_interval_steps: int = 1,
         config: JointLoggingConfig | None = None,
+        existing_data_policy: str = "error",
+        timestamped_run_name: str | None = None,
+        output_plan: CsvOutputPlan | None = None,
+        paths_applied: bool = False,
     ) -> None:
         """创建关节跟踪 logger。
 
@@ -56,30 +95,15 @@ class JointTrackingLogger:
 
         self.joint_names = joint_names
         self.config = config or JointLoggingConfig()
-        fieldnames = ["step", "time_s", "phase", "drive_update"]
-        for name in self.joint_names:
-            if self.config.log_command_position:
-                fieldnames.append(f"qd_{name}_rad")
-            if self.config.log_actual_position:
-                fieldnames.append(f"q_{name}_rad")
-            if self.config.log_command_velocity:
-                fieldnames.append(f"vd_{name}_rad_s")
-            if self.config.log_actual_velocity:
-                fieldnames.append(f"v_{name}_rad_s")
-            if self.config.log_command_position and self.config.log_actual_position:
-                fieldnames.append(f"pos_err_{name}_rad")
-            if self.config.log_command_velocity and self.config.log_actual_velocity:
-                fieldnames.append(f"vel_err_{name}_rad_s")
-            if self.config.log_command_effort:
-                fieldnames.append(f"tau_cmd_{name}")
-            if self.config.log_action_effort:
-                fieldnames.append(f"tau_action_{name}")
-            if self.config.log_measured_effort:
-                fieldnames.append(f"tau_measured_{name}")
-            if self.config.log_applied_effort:
-                fieldnames.append(f"tau_applied_{name}")
+        fieldnames = joint_tracking_fieldnames(self.joint_names, self.config)
         self.writer = CsvWriter(
-            path, fieldnames, flush_interval_rows=flush_interval_steps
+            path,
+            fieldnames,
+            flush_interval_rows=flush_interval_steps,
+            existing_data_policy=existing_data_policy,
+            timestamped_run_name=timestamped_run_name,
+            output_plan=output_plan,
+            paths_applied=paths_applied,
         )
 
     def should_write(self, step: int) -> bool:

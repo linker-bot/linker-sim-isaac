@@ -19,12 +19,10 @@ from pathlib import Path
 
 import numpy as np
 
-from linkerbot_sim.assets.robot_loader import (
-    RobotExecutionConfig,
-    RobotGravityPolicy,
-    apply_root_pose,
-    import_robot_asset,
-)
+from linkerbot_sim.assets.robot_config import RobotGravityPolicy
+from linkerbot_sim.assets.robot_import import import_robot_asset
+from linkerbot_sim.assets.robot_instances import RobotExecutionConfig
+from linkerbot_sim.assets.root_pose import apply_root_pose
 from linkerbot_sim.assets.solver_overrides import (
     apply_solver_iteration_overrides,
     merge_solver_configs,
@@ -40,6 +38,7 @@ from linkerbot_sim.controllers.config import (
     physx_override_configs,
 )
 from linkerbot_sim.controllers.joint_controller import JointController
+from linkerbot_sim.robots.classification import RobotComponentMapping
 
 
 @dataclass(frozen=True)
@@ -57,14 +56,19 @@ class ImportedRobot:
     asset_type: str
     controlled_joints: tuple[str, ...]
     gravity_policy: RobotGravityPolicy
+    component_mapping: RobotComponentMapping
     solver_counts: dict[str, int]
     gravity_counts: dict[str, int]
 
     @property
-    def mjcf_path(self) -> Path | None:
-        """只有 MJCF 资产需要传给 controller 解析 equality/mimic 信息。"""
+    def mimic_path(self) -> Path | None:
+        """返回可由原生格式声明 follower 关系的资产路径。
 
-        return self.asset_path if self.asset_type == "mjcf" else None
+        只有 MJCF 和 URDF 参与 mimic 解析；USD 的约束已经烘焙在 stage 中，不把资产路径
+        交给基于 XML 的关系解析器。
+        """
+
+        return self.asset_path if self.asset_type in {"mjcf", "urdf"} else None
 
 
 @dataclass(frozen=True)
@@ -74,7 +78,6 @@ class PreparedRobotRuntime:
     articulation: object
     joint_controller: JointController
     asset_path: Path
-    mjcf_path: Path | None
     gravity_policy: RobotGravityPolicy
 
 
@@ -97,11 +100,11 @@ def import_execution_robot_to_stage(
     articulation_path, asset_path, imported_root_path = import_robot_asset(
         robot_execution.robot
     )
-    # root_pose 写在导入根 prim 上，保证 Isaac 执行模型和 cuMotion 双臂生成模型使用同一安装位姿。
+    # root_pose 写在导入根 prim 上，保证 Isaac 执行模型和 cuRobo 双臂生成模型使用同一安装位姿。
     apply_root_pose(stage, imported_root_path, robot_execution.root_pose)
     controlled_joints = tuple(robot_execution.controlled_joints)
-    # USD 层先写 drive/friction seed，并叠加 robot YAML 中的材料和刚体阻尼；
-    # reset 后 controller 会再写运行时最终控制参数。
+    # USD 层写入 joint friction 和 drive seed，并叠加 robot YAML 中的材料与刚体阻尼；
+    # reset 后 controller 只更新运行时 gain、effort limit 和控制模式。
     physx_configs = robot_execution.robot.physx_overrides.apply_to_configs(
         physx_override_configs(controller_profiles)
     )
@@ -110,19 +113,33 @@ def import_execution_robot_to_stage(
         physx_configs,
         driven_joint_names=controlled_joints,
         mjcf_path=asset_path if robot_execution.robot.asset_type == "mjcf" else None,
+        mimic_path=(
+            asset_path if robot_execution.robot.asset_type in {"mjcf", "urdf"} else None
+        ),
+        component_mapping=robot_execution.robot.component_mapping,
+        native_mimic=robot_execution.robot.asset_type == "urdf",
     )
     solver_config = merge_solver_configs(
         scene_solver_settings(env_config),
         robot_execution.robot.solver_iterations,
     )
     solver_counts = (
-        apply_solver_iteration_overrides(stage, articulation_path, solver_config)
+        apply_solver_iteration_overrides(
+            stage,
+            articulation_path,
+            solver_config,
+            component_mapping=robot_execution.robot.component_mapping,
+        )
         if solver_config is not None
         else {"configured": 0}
     )
     # 机器人重力策略只来自 robot YAML。这里写 USD disableGravity，reset 后还会按策略处理 runtime。
     gravity_policy = robot_execution.robot.gravity_policy
-    gravity_counts = apply_robot_gravity_policy(imported_root_path, gravity_policy)
+    gravity_counts = apply_robot_gravity_policy(
+        imported_root_path,
+        gravity_policy,
+        component_mapping=robot_execution.robot.component_mapping,
+    )
     articulation = world.scene.add(
         single_articulation_type(
             prim_path=articulation_path, name=robot_execution.robot.name
@@ -136,6 +153,7 @@ def import_execution_robot_to_stage(
         asset_type=robot_execution.robot.asset_type,
         controlled_joints=controlled_joints,
         gravity_policy=gravity_policy,
+        component_mapping=robot_execution.robot.component_mapping,
         solver_counts=solver_counts,
         gravity_counts=gravity_counts,
     )
@@ -164,13 +182,14 @@ def finalize_robot_controller(
         imported.articulation,
         joint_names=list(imported.controlled_joints),
         settings=joint_control_settings(controller_profiles, mode=control_mode),
-        mjcf_path=imported.mjcf_path,
+        mimic_path=imported.mimic_path,
+        component_mapping=imported.component_mapping,
+        native_mimic=imported.asset_type == "urdf",
     )
     controller.configure_runtime()
     return PreparedRobotRuntime(
         articulation=imported.articulation,
         joint_controller=controller,
         asset_path=imported.asset_path,
-        mjcf_path=imported.mjcf_path,
         gravity_policy=gravity_policy,
     )

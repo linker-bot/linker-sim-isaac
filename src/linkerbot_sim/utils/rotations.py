@@ -41,7 +41,10 @@ def rpy_xyz_to_quat_wxyz(rpy_rad) -> np.ndarray:
         shape ``(4,)`` 的 wxyz 四元数。
     """
 
-    return matrix_to_quat_wxyz(rpy_xyz_to_matrix(rpy_rad))
+    xyzw = Rotation.from_euler(
+        "xyz", np.asarray(rpy_rad, dtype=float).reshape(3)
+    ).as_quat()
+    return xyzw[[3, 0, 1, 2]]
 
 
 def matrix_to_quat_wxyz(matrix) -> np.ndarray:
@@ -72,3 +75,10 @@ def normalize_quat_wxyz_or_identity(quat, *, label: str = "quat_wxyz") -> np.nda
     if norm <= 0.0:
         return np.asarray([1.0, 0.0, 0.0, 0.0], dtype=float)
     return quat_wxyz / norm
+
+
+def quat_wxyz_to_matrix(quat) -> np.ndarray:
+    """把 wxyz 四元数转换为旋转矩阵；零四元数按单位旋转处理。"""
+
+    w, x, y, z = normalize_quat_wxyz_or_identity(quat)
+    return Rotation.from_quat([x, y, z, w]).as_matrix()

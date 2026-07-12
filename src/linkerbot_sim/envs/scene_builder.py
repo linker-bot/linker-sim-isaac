@@ -19,7 +19,11 @@ import math
 from linkerbot_sim.envs.visual_settings import SceneVisualSettings
 
 
-def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
+def configure_visuals(
+    settings: SceneVisualSettings | None = None,
+    *,
+    configure_viewport: bool = True,
+) -> None:
     """添加基础灯光并设置默认视角。
 
     该函数只负责“看得见”的基础视觉环境，不参与物理仿真参数设置：
@@ -30,6 +34,7 @@ def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
 
     参数:
         settings: 来自 env profile 的可选视觉配置；为 ``None`` 时使用默认值。
+        configure_viewport: 是否导入 viewport API 并设置观察视角；headless camera 只需灯光。
     返回:
         无返回值；副作用是创建灯光 prim 并设置 viewport。
     """
@@ -38,7 +43,6 @@ def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
 
     # Isaac/Omni 相关模块放在函数内部导入，避免普通单元测试或文档工具 import
     # 本模块时就强依赖 Isaac Sim 运行时。
-    from isaacsim.core.utils.viewports import set_camera_view
     from pxr import Gf, Sdf, UsdGeom, UsdLux
     import omni.usd
 
@@ -68,8 +72,10 @@ def configure_visuals(settings: SceneVisualSettings | None = None) -> None:
         if settings.fill_light.color is not None:
             fill.CreateColorAttr(Gf.Vec3f(*settings.fill_light.color))
 
-    if settings.viewport.enabled:
+    if configure_viewport and settings.viewport.enabled:
         # eye 是 viewport 观察位置，target 是视线目标点，单位与 stage 一致，此处为 m。
+        from isaacsim.core.utils.viewports import set_camera_view
+
         set_camera_view(
             eye=Gf.Vec3d(*settings.viewport.eye),
             target=Gf.Vec3d(*settings.viewport.target),

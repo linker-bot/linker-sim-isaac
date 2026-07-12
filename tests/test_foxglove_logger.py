@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from linkerbot_sim.sensors.camera.foxglove import FoxgloveCameraFrameSink
 from linkerbot_sim.telemetry import foxglove
 
 
@@ -29,6 +30,18 @@ def test_foxglove_optional_dependency_error() -> None:
             sys.modules.pop("foxglove", None)
         else:
             sys.modules["foxglove"] = original_module
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.10"])
+def test_foxglove_live_factories_reject_non_loopback_hosts(host: str) -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        foxglove.FoxgloveLogger.open_live_server(host=host)
+    with pytest.raises(ValueError, match="loopback"):
+        FoxgloveCameraFrameSink.open_live(
+            host=host,
+            port=8765,
+            topic_prefix_by_camera={},
+        )
 
 
 def test_foxglove_vector_shape_validation() -> None:

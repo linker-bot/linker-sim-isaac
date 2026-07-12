@@ -1,11 +1,14 @@
-"""Realtime simulation state snapshots.
+"""实时仿真状态快照、主线程采样器和线程安全转交通道。
 
-本模块定义交互实时模式的状态快照和线程安全转交通道。Isaac/PhysX 状态采样必须在
-仿真主线程完成；后台 publisher 只能消费这里生成的纯 Python/numpy 快照。
+Isaac/PhysX 对象只能在仿真主线程读取。本模块先把关节状态、力矩和 USD 世界位姿冻结为
+只含 Python 标量与 numpy 数组的快照，再交给后台 publisher；后台线程不得持有或访问
+articulation、stage 等仿真对象。``StateStream`` 通过有界队列明确处理背压，使遥测消费者
+变慢时只丢弃快照，而不会阻塞 physics step。
 """
 
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from threading import Condition
@@ -18,9 +21,15 @@ from linkerbot_sim.utils.rotations import matrix_to_quat_wxyz
 
 @dataclass(frozen=True)
 class RobotJointStateSnapshot:
-    """单侧 articulation 的一帧关节状态。"""
+    """一个已注册机器人 articulation 的一帧关节状态。
 
-    side: str
+    所有向量均按 ``joint_names`` 排列，位置、速度和加速度分别使用 rad、rad/s 和
+    rad/s²。某类 effort 无法读取时保留 ``None``；API 存在但本帧读取失败时则用同长度
+    ``NaN`` 向量表示，序列化时转换为 JSON ``null``。
+    """
+
+    robot_id: int
+    label: str
     joint_names: tuple[str, ...]
     positions_rad: np.ndarray
     velocities_rad_s: np.ndarray
@@ -30,7 +39,11 @@ class RobotJointStateSnapshot:
     applied_efforts: np.ndarray | None = None
 
     def effort_values(self, field: str) -> np.ndarray | None:
-        """按 Foxglove `JointStates.effort` 语义选择一类 effort。"""
+        """按 Foxglove ``JointStates.effort`` 配置选择一类力矩向量。
+
+        ``none`` 明确关闭该字段；其余值返回对应采样结果。未知名称属于配置错误，会抛出
+        ``ValueError``，避免默默发布语义错误的力矩。
+        """
 
         if field == "none":
             return None
@@ -45,7 +58,7 @@ class RobotJointStateSnapshot:
     def as_dict(self) -> dict[str, object]:
         """转换为 JSON 友好的字典，供 Foxglove JSON topic 使用。"""
 
-        return {
+        result = {
             "joint_names": list(self.joint_names),
             "positions_rad": _json_vector(self.positions_rad),
             "velocities_rad_s": _json_vector(self.velocities_rad_s),
@@ -54,11 +67,18 @@ class RobotJointStateSnapshot:
             "measured_efforts": _optional_json_vector(self.measured_efforts),
             "applied_efforts": _optional_json_vector(self.applied_efforts),
         }
+        result["robot_id"] = int(self.robot_id)
+        result["label"] = self.label
+        return result
 
 
 @dataclass(frozen=True)
 class ObjectPoseSnapshot:
-    """一个 runtime object 的世界位姿。"""
+    """一个 runtime object 的 USD 世界位姿。
+
+    ``position_m`` 使用米，``orientation_wxyz`` 使用 wxyz 四元数顺序；对象名只作为
+    快照键，实际 USD 身份由 ``prim_path`` 保留。
+    """
 
     name: str
     prim_path: str
@@ -77,7 +97,11 @@ class ObjectPoseSnapshot:
 
 @dataclass(frozen=True)
 class StateSnapshot:
-    """交互实时模式的一帧完整状态快照。"""
+    """交互实时模式的一帧完整、可跨线程传递的状态快照。
+
+    ``step`` 是完成本次 physics step 前使用的零基序号，``time_s`` 是该 step 完成后的
+    仿真时间。``phase`` 用于区分 motion/hold 等执行阶段，不存在时不写入 JSON。
+    """
 
     step: int
     time_s: float
@@ -91,7 +115,7 @@ class StateSnapshot:
         result: dict[str, object] = {
             "step": int(self.step),
             "time_s": float(self.time_s),
-            "robots": {robot.side: robot.as_dict() for robot in self.robots},
+            "robots": [robot.as_dict() for robot in self.robots],
             "objects": {obj.name: obj.as_dict() for obj in self.objects},
         }
         if self.phase is not None:
@@ -100,28 +124,59 @@ class StateSnapshot:
 
 
 class StateStream:
-    """保存最新状态快照的线程安全通道。
+    """有界状态快照通道；生产者发布时永不等待后台 telemetry。
 
-    该通道只保留最新帧。publisher 慢于采样时会自然丢旧帧，从而避免反压仿真
-    主循环。
+    ``latest`` 每次发布只保留最新帧；``drop_oldest`` 在满载时淘汰最早帧；
+    ``drop_newest`` 在满载时拒绝新帧。序号对每次被处理的 ``publish`` 调用递增，即使
+    新帧因 ``drop_newest`` 被丢弃也不会复用序号。``wait_next`` 会消费返回的队列项，因而
+    该通道按单消费者语义设计。
     """
 
-    def __init__(self) -> None:
-        """初始化快照通道。"""
+    def __init__(
+        self,
+        *,
+        capacity: int = 1,
+        drop_policy: str = "latest",
+    ) -> None:
+        """初始化快照通道并校验背压策略。"""
 
+        if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 1:
+            raise ValueError("capacity must be a positive integer")
+        if drop_policy not in {"latest", "drop_oldest", "drop_newest"}:
+            raise ValueError(
+                "drop_policy must be one of: latest, drop_oldest, drop_newest"
+            )
+        self.capacity = capacity
+        self.drop_policy = drop_policy
         self._condition = Condition()
         self._sequence = 0
-        self._snapshot: StateSnapshot | None = None
+        self._items: deque[tuple[int, StateSnapshot]] = deque()
+        self._dropped = 0
         self._closed = False
 
     def publish(self, snapshot: StateSnapshot) -> int:
-        """发布一帧快照，并返回递增序号。"""
+        """非阻塞发布一帧快照，并返回当前递增序号。
+
+        通道关闭后的发布不修改队列或序号，直接返回最后序号；丢帧策略的累计结果可通过
+        ``status`` 观察。
+        """
 
         with self._condition:
             if self._closed:
                 return self._sequence
             self._sequence += 1
-            self._snapshot = snapshot
+            item = (self._sequence, snapshot)
+            if self.drop_policy == "latest":
+                self._dropped += len(self._items)
+                self._items.clear()
+                self._items.append(item)
+            elif len(self._items) >= self.capacity:
+                self._dropped += 1
+                if self.drop_policy == "drop_oldest":
+                    self._items.popleft()
+                    self._items.append(item)
+            else:
+                self._items.append(item)
             self._condition.notify_all()
             return self._sequence
 
@@ -129,39 +184,77 @@ class StateStream:
         """返回最新快照和序号；还没有快照时返回 None。"""
 
         with self._condition:
-            if self._snapshot is None:
+            if not self._items:
                 return None
-            return self._sequence, self._snapshot
+            return self._items[-1]
 
     def wait_next(
         self, after_sequence: int = 0, *, timeout_s: float | None = None
     ) -> tuple[int, StateSnapshot] | None:
-        """等待并返回比 `after_sequence` 更新的快照。"""
+        """等待并消费一个比 ``after_sequence`` 更新的快照。
+
+        超时，或通道关闭且没有待消费快照时返回 ``None``。调用期间会清除不新于指定序号
+        的队列项，调用方应把上次返回的序号继续传入，避免重复处理。
+        """
 
         with self._condition:
             if not self._condition.wait_for(
-                lambda: self._closed or self._sequence > int(after_sequence),
+                lambda: (
+                    self._closed
+                    or any(
+                        sequence > int(after_sequence) for sequence, _ in self._items
+                    )
+                ),
                 timeout=timeout_s,
             ):
                 return None
-            if self._closed or self._snapshot is None:
+            if self._closed and not self._items:
                 return None
-            if self._sequence <= int(after_sequence):
+            while self._items and self._items[0][0] <= int(after_sequence):
+                self._items.popleft()
+            if not self._items:
                 return None
-            return self._sequence, self._snapshot
+            return self._items.popleft()
 
-    def close(self) -> None:
-        """关闭通道并唤醒等待中的消费者。"""
+    def is_closed(self) -> bool:
+        """返回通道是否已拒绝后续生产者发布。"""
 
         with self._condition:
+            return self._closed
+
+    def status(self) -> dict[str, object]:
+        """返回有界队列深度、容量和累计丢帧数。"""
+
+        with self._condition:
+            return {
+                "buffer_depth": len(self._items),
+                "buffer_capacity": self.capacity,
+                "drop_policy": self.drop_policy,
+                "dropped_snapshots": self._dropped,
+                "last_sampled_sequence": self._sequence,
+                "closed": self._closed,
+            }
+
+    def close(self, *, discard_pending: bool = False) -> None:
+        """停止接收新快照，并唤醒所有等待者。
+
+        默认保留已经进入队列的快照供消费者排空；``discard_pending=True`` 会立即丢弃并
+        计入累计丢帧数。重复关闭是幂等的。
+        """
+
+        with self._condition:
+            if discard_pending:
+                self._dropped += len(self._items)
+                self._items.clear()
             self._closed = True
             self._condition.notify_all()
 
 
-class DualRobotStateSampler:
-    """从双 articulation runtime 采样状态快照。
+class SceneRobotStateSampler:
+    """按 registry 顺序在主线程采样全部机器人和可选场景对象。
 
-    本对象应只在仿真主线程调用。它内部维护上一帧速度，用于计算差分加速度。
+    采样器不按机器人侧别或数量分派逻辑；每个机器人的关节维度来自 articulation。速度
+    历史只用于有限差分加速度，reset 后首帧因没有前值而明确输出 ``NaN``。
     """
 
     def __init__(
@@ -173,41 +266,56 @@ class DualRobotStateSampler:
         include_efforts: bool = False,
         include_objects: bool = False,
     ) -> None:
-        """创建双臂状态采样器。"""
+        """保存采样依赖和频率设置，不读取任何 Isaac 状态。
+
+        ``stage`` 与 ``object_handles`` 仅在 ``include_objects`` 为真时使用；实际读取推迟到
+        ``sample``，以确保调用发生在仿真主线程。
+        """
 
         self.stage = stage
         self.object_handles = tuple(object_handles)
         self.rate_hz = float(rate_hz)
         self.include_efforts = bool(include_efforts)
         self.include_objects = bool(include_objects)
-        self._previous_velocities: dict[str, tuple[float, np.ndarray]] = {}
+        self._previous_velocities: dict[int, tuple[float, np.ndarray]] = {}
 
     def should_sample(self, *, step: int, physics_dt: float) -> bool:
-        """按配置频率判断当前 physics step 是否采样。"""
+        """把目标 Hz 量化为整数 physics-step 间隔并判断当前全局 step。
 
-        if self.rate_hz <= 0.0:
+        采样频率高于 physics 频率时钳制为每步一次；非正 ``rate_hz`` 表示禁用采样。
+        """
+
+        if self.rate_hz <= 0:
             return False
-        if physics_dt <= 0.0:
-            return True
-        interval_steps = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
-        return int(step) % interval_steps == 0
+        interval = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
+        return int(step) % interval == 0
 
     def reset(self) -> None:
-        """清理 reset 前的差分速度缓存。"""
+        """清除 velocity history，使 reset 后第一帧 acceleration 返回 NaN。"""
 
         self._previous_velocities.clear()
 
-    def sample(self, runtime, *, step: int, phase: str | None = None) -> StateSnapshot:
-        """采样一帧双臂和对象状态。"""
+    def sample(
+        self,
+        runtime,
+        *,
+        step: int,
+        phase: str | None = None,
+    ) -> StateSnapshot:
+        """在主线程冻结本 step 的机器人、可选力矩与对象位姿。
 
-        physics_dt = float(runtime.simulation_world.get_physics_dt())
+        返回值不再引用 Isaac 对象，可由后台线程安全消费。调用方必须保证当前线程拥有
+        runtime/stage 的读取权。
+        """
+
+        physics_dt = float(runtime.world.get_physics_dt())
         time_s = (int(step) + 1) * physics_dt
-        robots = (
-            self._sample_side(runtime.left, time_s=time_s),
-            self._sample_side(runtime.right, time_s=time_s),
+        robots = tuple(
+            self._sample_robot(robot, time_s=time_s)
+            for robot in runtime.robots_by_id.values()
         )
         objects = (
-            self._sample_objects()
+            _sample_runtime_objects(self.stage, self.object_handles)
             if self.include_objects and self.stage is not None
             else ()
         )
@@ -219,26 +327,35 @@ class DualRobotStateSampler:
             objects=objects,
         )
 
-    def _sample_side(self, side_runtime, *, time_s: float) -> RobotJointStateSnapshot:
-        """采样单侧 articulation 的关节状态。"""
+    def _sample_robot(self, runtime, *, time_s: float) -> RobotJointStateSnapshot:
+        """采样单 robot，并用相邻 velocity frame 估算 acceleration。"""
 
-        robot = side_runtime.articulation
-        positions = _vector_from_method(robot, "get_joint_positions", _num_dof(robot))
-        velocities = _vector_from_method(robot, "get_joint_velocities", positions.size)
-        accelerations = self._acceleration_from_velocity(
-            side_runtime.side, velocities, time_s=time_s
+        execution = runtime.execution
+        articulation = execution.articulation
+        positions = _vector_from_method(
+            articulation, "get_joint_positions", _num_dof(articulation)
         )
+        velocities = _vector_from_method(
+            articulation, "get_joint_velocities", positions.size
+        )
+        previous = self._previous_velocities.get(runtime.robot_id)
+        self._previous_velocities[runtime.robot_id] = (time_s, velocities.copy())
+        if previous is None or time_s <= previous[0]:
+            accelerations = np.full(velocities.size, np.nan, dtype=float)
+        else:
+            accelerations = (velocities - previous[1]) / (time_s - previous[0])
         commanded = measured = applied = None
         if self.include_efforts:
-            commanded = _commanded_efforts(
-                side_runtime.joint_controller, positions.size
+            commanded = _commanded_efforts(execution.joint_controller, positions.size)
+            efforts = read_joint_efforts(
+                articulation, None, measured=True, applied=True
             )
-            efforts = read_joint_efforts(robot, None, measured=True, applied=True)
             measured = efforts.measured
             applied = efforts.applied
         return RobotJointStateSnapshot(
-            side=str(side_runtime.side),
-            joint_names=tuple(str(name) for name in getattr(robot, "dof_names", ())),
+            robot_id=runtime.robot_id,
+            label=runtime.label,
+            joint_names=tuple(str(name) for name in articulation.dof_names),
             positions_rad=positions,
             velocities_rad_s=velocities,
             accelerations_rad_s2=accelerations,
@@ -247,176 +364,25 @@ class DualRobotStateSampler:
             applied_efforts=applied,
         )
 
-    def _acceleration_from_velocity(
-        self, side: str, velocities: np.ndarray, *, time_s: float
-    ) -> np.ndarray:
-        """用上一帧速度计算差分加速度。"""
 
-        previous = self._previous_velocities.get(side)
-        self._previous_velocities[side] = (float(time_s), velocities.copy())
-        if previous is None:
-            return np.full(velocities.size, np.nan, dtype=float)
-        previous_time, previous_velocity = previous
-        dt = float(time_s) - float(previous_time)
-        if dt <= 0.0 or previous_velocity.size != velocities.size:
-            return np.full(velocities.size, np.nan, dtype=float)
-        return (velocities - previous_velocity) / dt
+class SceneRobotStateObserver:
+    """在共享 World step 后按频率发布与后端对象解耦的场景快照。"""
 
-    def _sample_objects(self) -> tuple[ObjectPoseSnapshot, ...]:
-        """采样 runtime objects 的 root prim 世界位姿。"""
-
-        return _sample_runtime_objects(self.stage, self.object_handles)
-
-
-class DualRobotStateObserver:
-    """执行层 step 后调用的状态观察器。"""
-
-    def __init__(self, *, sampler: DualRobotStateSampler, stream: StateStream) -> None:
-        """保存采样器和快照通道。"""
+    def __init__(self, *, sampler: SceneRobotStateSampler, stream: StateStream) -> None:
+        """绑定主线程采样器与单一输出通道。"""
 
         self.sampler = sampler
         self.stream = stream
 
     def observe(self, runtime, *, step: int, phase: str | None = None) -> None:
-        """必要时采样并发布一帧状态。"""
+        """命中 sampling interval 时冻结 snapshot 并写入 ``StateStream``。"""
 
-        physics_dt = float(runtime.simulation_world.get_physics_dt())
-        if not self.sampler.should_sample(step=step, physics_dt=physics_dt):
-            return
-        self.stream.publish(self.sampler.sample(runtime, step=step, phase=phase))
-
-    def reset(self) -> None:
-        """清理状态采样器内部派生缓存。"""
-
-        self.sampler.reset()
-
-
-class SingleRobotStateSampler:
-    """从单 articulation runtime 采样状态快照。"""
-
-    def __init__(
-        self,
-        *,
-        stage,
-        object_handles: Sequence[object] = (),
-        rate_hz: float = 60.0,
-        include_efforts: bool = False,
-        include_objects: bool = False,
-        side_label: str = "single",
-    ) -> None:
-        """创建单臂状态采样器。"""
-
-        self.stage = stage
-        self.object_handles = tuple(object_handles)
-        self.rate_hz = float(rate_hz)
-        self.include_efforts = bool(include_efforts)
-        self.include_objects = bool(include_objects)
-        self.side_label = str(side_label)
-        self._previous_velocity: tuple[float, np.ndarray] | None = None
-
-    def should_sample(self, *, step: int, physics_dt: float) -> bool:
-        """按配置频率判断当前 physics step 是否采样。"""
-
-        if self.rate_hz <= 0.0:
-            return False
-        if physics_dt <= 0.0:
-            return True
-        interval_steps = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
-        return int(step) % interval_steps == 0
+        dt = float(runtime.world.get_physics_dt())
+        if self.sampler.should_sample(step=step, physics_dt=dt):
+            self.stream.publish(self.sampler.sample(runtime, step=step, phase=phase))
 
     def reset(self) -> None:
-        """清理 reset 前的差分速度缓存。"""
-
-        self._previous_velocity = None
-
-    def sample(self, runtime, *, step: int, phase: str | None = None) -> StateSnapshot:
-        """采样一帧单臂和对象状态。"""
-
-        physics_dt = float(runtime.simulation_world.get_physics_dt())
-        time_s = (int(step) + 1) * physics_dt
-        objects = (
-            _sample_runtime_objects(self.stage, self.object_handles)
-            if self.include_objects and self.stage is not None
-            else ()
-        )
-        return StateSnapshot(
-            step=int(step),
-            time_s=time_s,
-            phase=phase,
-            robots=(self._sample_robot(runtime, time_s=time_s),),
-            objects=objects,
-        )
-
-    def _sample_robot(self, runtime, *, time_s: float) -> RobotJointStateSnapshot:
-        """采样单 articulation 的关节状态。"""
-
-        robot = runtime.articulation
-        positions = _vector_from_method(robot, "get_joint_positions", _num_dof(robot))
-        velocities = _vector_from_method(robot, "get_joint_velocities", positions.size)
-        accelerations = self._acceleration_from_velocity(velocities, time_s=time_s)
-        commanded = measured = applied = None
-        if self.include_efforts:
-            commanded = _commanded_efforts(runtime.joint_controller, positions.size)
-            efforts = read_joint_efforts(robot, None, measured=True, applied=True)
-            measured = efforts.measured
-            applied = efforts.applied
-        return RobotJointStateSnapshot(
-            side=self.side_label,
-            joint_names=tuple(str(name) for name in getattr(robot, "dof_names", ())),
-            positions_rad=positions,
-            velocities_rad_s=velocities,
-            accelerations_rad_s2=accelerations,
-            commanded_efforts=commanded,
-            measured_efforts=measured,
-            applied_efforts=applied,
-        )
-
-    def _acceleration_from_velocity(
-        self,
-        velocities: np.ndarray,
-        *,
-        time_s: float,
-    ) -> np.ndarray:
-        """用上一帧速度计算差分加速度。"""
-
-        previous = self._previous_velocity
-        self._previous_velocity = (float(time_s), velocities.copy())
-        if previous is None:
-            return np.full(velocities.size, np.nan, dtype=float)
-        previous_time, previous_velocity = previous
-        dt = float(time_s) - float(previous_time)
-        if dt <= 0.0 or previous_velocity.size != velocities.size:
-            return np.full(velocities.size, np.nan, dtype=float)
-        return (velocities - previous_velocity) / dt
-
-
-class SingleRobotStateObserver:
-    """单臂执行层 step 后调用的状态观察器。"""
-
-    def __init__(
-        self,
-        *,
-        runtime,
-        sampler: SingleRobotStateSampler,
-        stream: StateStream,
-    ) -> None:
-        """保存 app runtime、采样器和快照通道。"""
-
-        self.runtime = runtime
-        self.sampler = sampler
-        self.stream = stream
-
-    def observe(self, _world, *, step: int, phase: str | None = None) -> None:
-        """必要时采样并发布一帧状态。"""
-
-        execution = self.runtime.execution
-        physics_dt = float(execution.simulation_world.get_physics_dt())
-        if not self.sampler.should_sample(step=step, physics_dt=physics_dt):
-            return
-        self.stream.publish(self.sampler.sample(execution, step=step, phase=phase))
-
-    def reset(self) -> None:
-        """清理状态采样器内部派生缓存。"""
+        """把 reset 传播给 sampler 的 derivative history。"""
 
         self.sampler.reset()
 
@@ -433,7 +399,11 @@ def _sample_runtime_objects(
     stage,
     object_handles: Sequence[object],
 ) -> tuple[ObjectPoseSnapshot, ...]:
-    """采样 runtime objects 的 root prim 世界位姿。"""
+    """采样 runtime objects 的 root prim 世界位姿。
+
+    没有可解析 prim path、prim 已失效或暂时无法读取位姿的对象会跳过；单个对象缺失不应
+    阻断同一帧其余机器人遥测。
+    """
 
     snapshots: list[ObjectPoseSnapshot] = []
     for handle in object_handles:
@@ -456,7 +426,11 @@ def _sample_runtime_objects(
 
 
 def _vector_from_method(source, method_name: str, expected_size: int) -> np.ndarray:
-    """调用一个无参状态读取方法；缺失或失败时返回 nan。"""
+    """调用无参状态读取方法；缺失、异常或维度错误时返回 ``NaN`` 向量。
+
+    遥测采样不得因某个可选 Isaac getter 的瞬时失败中断仿真主循环，同时必须保持关节
+    列数稳定，因此失败被编码为固定形状的缺失值。
+    """
 
     method = getattr(source, method_name, None)
     if method is None:

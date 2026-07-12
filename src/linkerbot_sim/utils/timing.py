@@ -25,14 +25,13 @@ def differentiate_samples(values: np.ndarray, times: np.ndarray) -> np.ndarray:
         raise ValueError("values must have shape (N, dof)")
     if samples.shape[0] != sample_times_array.size:
         raise ValueError("times length must match values rows")
-    if samples.shape[0] == 1:
-        return np.zeros_like(samples)
-
+    if not np.all(np.isfinite(samples)):
+        raise ValueError("values must contain finite values")
+    if not np.all(np.isfinite(sample_times_array)):
+        raise ValueError("times must contain finite values")
+    intervals = np.diff(sample_times_array)
+    if np.any(intervals <= 0.0):
+        raise ValueError("times must be strictly increasing")
     result = np.zeros_like(samples)
-    for index in range(1, samples.shape[0]):
-        # dt 用极小正数下限保护重复时间戳，避免除零；这会产生很大的导数，提示输入采样异常。
-        dt = max(
-            1.0e-12, float(sample_times_array[index] - sample_times_array[index - 1])
-        )
-        result[index] = (samples[index] - samples[index - 1]) / dt
+    result[1:] = np.diff(samples, axis=0) / intervals[:, None]
     return result

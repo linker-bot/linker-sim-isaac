@@ -1,39 +1,74 @@
 # Documentation Index
 
-Language: [English](index.md) | [中文](../zh-CN/文档索引.md)
+Language: [English](index.md) | [中文](../zh-CN/index.md)
 
-This is the entry point for `docs/en/`. The English tree mirrors the Chinese customer-facing documentation. Necessary product and API terms such as `cuMotion`, `Tiled`, `Foxglove`, `Isaac`, `USD`, and `TCP Frame` are kept in English.
+Use this page as the documentation entrypoint. Start by choosing a runtime and
+interface; use guides for tasks and reference pages for exact contracts.
 
-## Configuration And Naming
+## Start By Goal
 
-- [Configuration Guide](configuration-and-naming/configuration-guide.md): responsibilities of `configs/` profiles, references between profiles, and common run commands.
-- [Asset Naming](configuration-and-naming/asset-naming.md): naming rules for assets, joints, links/bodies, and configuration profiles.
+| Goal | Read |
+| --- | --- |
+| Understand the system and its boundaries | [Project Overview](getting-started/project-overview.md) |
+| Choose Single Scene or Tiled Scene, JSON or Python | [Runtime And API Chooser](getting-started/choose-runtime-and-api.md) |
+| Run Single Scene end to end | [Single Scene Quickstart](getting-started/single-scene-quickstart.md) |
+| Run Tiled Scene end to end | [Tiled Scene Quickstart](getting-started/tiled-scene-quickstart.md) |
+| Configure a run | [Configuration Guide](guides/configuration.md) |
+| Use Single Scene commands | [Single Scene Runtime And JSON](reference/single-scene-json.md) |
+| Use batched Tiled environments | [Tiled Scene Runtime And JSON](reference/tiled-scene-json.md) |
+| Call supported in-process interfaces | [Python Facade Reference](reference/python-api.md) |
+| Choose a control or trajectory path | [Control And Trajectories](guides/control-and-trajectories.md) |
+| Plan motion with cuRobo | [Motion Planning](guides/motion-planning.md) |
+| Configure physical, planning, or inter-env collision | [Collision Models](guides/collision-models.md) |
+| Capture, restore, or clone runtime state | [Snapshot Reference](reference/snapshots.md) |
+| Publish state or inspect MCAP | [Telemetry](guides/telemetry.md) |
+| Configure cameras and image output | [Cameras](guides/cameras.md) |
+| Understand CSV, MCAP, image, and metadata files | [Output Reference](reference/outputs.md) |
+| Diagnose startup, protocol, planning, or shutdown failures | [Troubleshooting](operations/troubleshooting.md) |
+| Generate or inspect USD assets | [Object Assets](development/object-assets.md) |
+| Locate a source owner or internal module | [Source Module Map](development/module-map.md) |
 
-## Interaction And Runtime
+## Getting Started
 
-- [Interactive Simulation](interaction-and-runtime/interactive-simulation.md): single-arm, dual-arm, and tiled interactive entrypoints, JSON protocols, and common commands.
-- [Realtime State Stream](interaction-and-runtime/realtime-state-stream.md): Foxglove live, MCAP, and state snapshot output for single-arm and dual-arm interactive runtimes.
+- [Project Overview](getting-started/project-overview.md)
+- [Choose A Runtime And API](getting-started/choose-runtime-and-api.md)
+- [Single Scene Quickstart](getting-started/single-scene-quickstart.md)
+- [Tiled Scene Quickstart](getting-started/tiled-scene-quickstart.md)
 
-## Tiled Environments
+## Guides
 
-- [Tiled Usage And Command Format](tiled-environments/tiled-usage-and-command-format.md): tiled environment configuration, interaction protocol, trajectory buffers, and async planner usage.
+- [Configuration](guides/configuration.md)
+- [Control And Trajectories](guides/control-and-trajectories.md)
+- [Motion Planning And cuRobo](guides/motion-planning.md)
+- [Collision Models](guides/collision-models.md)
+- [Realtime Telemetry](guides/telemetry.md)
+- [Foxglove Quick Reference](guides/foxglove.md)
+- [Cameras](guides/cameras.md)
 
-## Motion Planning
+## Reference
 
-- [cuMotion Backend API](motion-planning/cumotion-backend-api.md): cuMotion backend interfaces, requests/results, path conversion, and trajectory adapters.
-- [cuMotion Motion Modes And Parameters](motion-planning/cumotion-motion-modes-and-parameters.md): Python/JSON examples for different motion modes and their boundaries.
+- [YAML Configuration Reference](reference/configuration.md)
+- [Single Scene CLI](reference/single-scene-cli.md)
+- [Single Scene Runtime And JSON](reference/single-scene-json.md)
+- [Tiled Scene CLI](reference/tiled-scene-cli.md)
+- [Tiled Scene Runtime And JSON](reference/tiled-scene-json.md)
+- [Python Facades](reference/python-api.md)
+- [Snapshot Data And Restore](reference/snapshots.md)
+- [Persistent And Live Outputs](reference/outputs.md)
 
-## Telemetry And Sensors
+## Operations
 
-- [Foxglove Data](telemetry-and-sensors/foxglove-data.md): Foxglove live, MCAP, state streams, camera images, and effort fields.
-- [Camera Types And Sensors](telemetry-and-sensors/camera-types-and-sensors.md): GUI viewport versus simulated sensor cameras, configuration, and output conventions.
+- [Known Risks And Design Constraints](operations/constraints.md)
+- [Troubleshooting](operations/troubleshooting.md)
 
-## Assets And Scenes
+## Development
 
-- [Object Asset Generation](assets-and-scenes/object-asset-generation.md): offline generation of capsule rope, T block, and related USD/USDA assets.
-- [Isaac Collision Approximation](assets-and-scenes/isaac-collision-approximation.md): Isaac importer collision approximation fields and USD/PhysX semantics.
-- [USD Asset Preview](assets-and-scenes/usd-asset-preview.md): commands and checks for previewing `.usd` / `.usda` assets in Isaac Sim.
+- [Source Module Map](development/module-map.md)
+- [Naming](development/naming.md)
+- [Object Asset Generation](development/object-assets.md)
+- [Collision Approximation](development/collision-approximation.md)
+- [USD Asset Preview](development/usd-preview.md)
 
-## Risks And Constraints
+## Maintenance
 
-- [Known Risks And Design Constraints](risks-and-constraints/known-risks-and-design-constraints.md): known simulation risks, design constraints, and regression guards.
+- [Documentation Organization And Maintenance](maintenance/documentation-guide.md)

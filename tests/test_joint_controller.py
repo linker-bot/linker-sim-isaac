@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -9,7 +11,8 @@ from linkerbot_sim.controllers.types import (
     ControlTargets,
     JointControlSettings,
 )
-from linkerbot_sim.robots.mimic import MimicFollowerControl
+from linkerbot_sim.robots.classification import RobotComponentMapping
+from linkerbot_sim.robots.mimic.runtime import MimicFollowerControl
 
 
 class _Action:
@@ -48,6 +51,11 @@ class _FakeController:
 
     def set_gains(self, *, kps, kds) -> None:
         self.gains = (np.asarray(kps, dtype=float), np.asarray(kds, dtype=float))
+
+    def get_gains(self) -> tuple[np.ndarray, np.ndarray]:
+        if self.gains is None:
+            return np.zeros(3, dtype=float), np.zeros(3, dtype=float)
+        return self.gains[0].copy(), self.gains[1].copy()
 
     def set_max_efforts(self, values, joint_indices=None) -> None:
         self.max_efforts = np.asarray(values, dtype=float)
@@ -90,6 +98,9 @@ class _MissingDofModeController:
     def set_gains(self, *, kps, kds) -> None:
         self.gains = (np.asarray(kps, dtype=float), np.asarray(kds, dtype=float))
 
+    def get_gains(self) -> tuple[np.ndarray, np.ndarray]:
+        return np.zeros(3, dtype=float), np.zeros(3, dtype=float)
+
     def set_max_efforts(self, values, joint_indices=None) -> None:
         self.max_efforts = np.asarray(values, dtype=float)
 
@@ -111,7 +122,6 @@ def _controller(
         robot,
         joint_names=["arm_joint", "hand_joint", "follower_joint"],
         settings=JointControlSettings(default=settings, arm=settings, hand=settings),
-        mjcf_path=None,
     )
     controller.follower_indices = np.asarray([2], dtype=int)
     controller.follower_joint_names = {"follower_joint"}
@@ -230,6 +240,23 @@ def test_effort_control_sends_direct_clipped_effort() -> None:
     np.testing.assert_allclose(effort_action.joint_efforts, [1.5, -1.0])
 
 
+def test_apply_targets_revalidates_arrays_mutated_after_construction() -> None:
+    controller, robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+    targets = ControlTargets(
+        positions=robot.positions.copy(),
+        velocities=np.zeros(robot.num_dof, dtype=float),
+        efforts=np.zeros(robot.num_dof, dtype=float),
+    )
+    targets.positions[0] = np.nan
+
+    with pytest.raises(ValueError, match="finite"):
+        controller.apply_targets(_Action, targets)
+
+    assert robot.actions == []
+
+
 def test_controller_requires_per_dof_control_mode_switching() -> None:
     settings = ComponentControlSettings(
         mode="velocity",
@@ -242,7 +269,6 @@ def test_controller_requires_per_dof_control_mode_switching() -> None:
         robot,
         joint_names=["arm_joint", "hand_joint", "follower_joint"],
         settings=JointControlSettings(default=settings, arm=settings, hand=settings),
-        mjcf_path=None,
     )
     controller.follower_indices = np.asarray([2], dtype=int)
     controller.follower_joint_names = {"follower_joint"}
@@ -260,3 +286,151 @@ def test_command_joint_names_follow_command_indices_and_exclude_followers() -> N
 
     assert controller.command_joint_names == ("arm_joint", "hand_joint")
     assert "follower_joint" not in controller.command_joint_names
+
+
+def test_configure_runtime_preserves_unmanaged_dof_gains() -> None:
+    robot = _FakeRobot()
+    initial_kps = np.asarray([3.0, 23.0, 47.0], dtype=float)
+    initial_kds = np.asarray([0.3, 2.3, 4.7], dtype=float)
+    robot.controller.gains = (initial_kps.copy(), initial_kds.copy())
+    settings = ComponentControlSettings(
+        mode="position",
+        method="implicit",
+        stiffness=(11.0,),
+        damping=(1.1,),
+    )
+    controller = JointController(
+        robot,
+        joint_names=["arm_joint"],
+        settings=JointControlSettings(default=settings, arm=settings, hand=settings),
+    )
+
+    controller.configure_runtime()
+
+    assert robot.controller.gains is not None
+    actual_kps, actual_kds = robot.controller.gains
+    np.testing.assert_allclose(actual_kps, [11.0, 23.0, 47.0])
+    np.testing.assert_allclose(actual_kds, [1.1, 2.3, 4.7])
+
+
+def test_explicit_runtime_zeroes_managed_drive_and_preserves_unmanaged_gains() -> None:
+    robot = _FakeRobot()
+    robot.controller.gains = (
+        np.asarray([3.0, 23.0, 47.0], dtype=float),
+        np.asarray([0.3, 2.3, 4.7], dtype=float),
+    )
+    settings = ComponentControlSettings(
+        mode="position",
+        method="explicit",
+        stiffness=(11.0,),
+        damping=(1.1,),
+    )
+    controller = JointController(
+        robot,
+        joint_names=["arm_joint"],
+        settings=JointControlSettings(default=settings, arm=settings, hand=settings),
+    )
+
+    controller.configure_runtime()
+
+    assert robot.controller.gains is not None
+    actual_kps, actual_kds = robot.controller.gains
+    np.testing.assert_allclose(actual_kps, [0.0, 23.0, 47.0])
+    np.testing.assert_allclose(actual_kds, [0.0, 2.3, 4.7])
+
+
+def _nonstandard_mimic_urdf(path: Path) -> Path:
+    path.write_text(
+        """<robot name="test">
+  <joint name="axis_b" type="revolute"/>
+  <joint name="axis_shadow" type="revolute">
+    <mimic joint="axis_b" multiplier="1" offset="0"/>
+  </joint>
+</robot>
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_nonstandard_joint_groups_and_name_maps_configure_correct_components(
+    tmp_path: Path,
+) -> None:
+    robot = _FakeRobot()
+    robot.dof_names = ["axis_a", "axis_b", "axis_shadow"]
+    mapping = RobotComponentMapping.from_profile(
+        {"joint_groups": {"arm": ["axis_a"], "hand": ["axis_b"]}}
+    )
+    settings = JointControlSettings(
+        default=ComponentControlSettings(stiffness=(99.0,), damping=(9.0,)),
+        arm=ComponentControlSettings(
+            stiffness={"axis_a": 11.0},
+            damping=(1.0,),
+            max_force={"axis_a": 101.0},
+        ),
+        hand=ComponentControlSettings(
+            stiffness={"axis_b": 22.0},
+            damping=2.0,
+            max_force={"axis_b": 202.0},
+            follower_stiffness={"axis_shadow": 33.0},
+            follower_damping=(3.0,),
+            follower_max_force={"axis_shadow": 303.0},
+        ),
+    )
+    controller = JointController(
+        robot,
+        joint_names=["all"],
+        settings=settings,
+        mimic_path=_nonstandard_mimic_urdf(tmp_path / "robot.urdf"),
+        component_mapping=mapping,
+    )
+
+    controller.configure_runtime()
+
+    assert robot.controller.gains is not None
+    np.testing.assert_allclose(robot.controller.gains[0], [11.0, 22.0, 33.0])
+    np.testing.assert_allclose(robot.controller.gains[1], [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(robot.controller.max_efforts, [101.0, 202.0, 303.0])
+
+
+def test_controller_name_map_requires_exact_selected_joint_coverage() -> None:
+    robot = _FakeRobot()
+    robot.dof_names = ["axis_a", "axis_b", "unmanaged"]
+    settings = ComponentControlSettings(
+        stiffness={"axis_a": 1.0, "unknown": 2.0},
+        damping=1.0,
+    )
+    controller = JointController(
+        robot,
+        joint_names=["axis_a", "axis_b"],
+        settings=JointControlSettings(default=settings),
+    )
+
+    with pytest.raises(ValueError, match="unknown=.*missing="):
+        controller.configure_runtime()
+
+
+def test_native_mimic_excludes_follower_from_python_drive_and_actions(
+    tmp_path: Path,
+) -> None:
+    robot = _FakeRobot()
+    robot.dof_names = ["axis_a", "axis_b", "axis_shadow"]
+    controller = JointController(
+        robot,
+        joint_names=["all"],
+        settings=JointControlSettings(),
+        mimic_path=_nonstandard_mimic_urdf(tmp_path / "native.urdf"),
+        native_mimic=True,
+    )
+
+    controller.configure_runtime()
+    targets = controller.build_control_targets(
+        command_positions=np.asarray([0.1, 0.2]),
+        base_positions=robot.positions,
+    )
+    controller.apply_targets(_Action, targets)
+
+    np.testing.assert_array_equal(controller.follower_indices, [2])
+    np.testing.assert_array_equal(controller.driven_indices, [0, 1])
+    assert controller.follower_mapper.controls == []
+    assert all(2 not in action.joint_indices for action in robot.actions)

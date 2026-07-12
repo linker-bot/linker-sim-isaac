@@ -3,12 +3,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
-from linkerbot_sim.telemetry.state_snapshot import (
-    DualRobotStateSampler,
-    SingleRobotStateSampler,
-    StateStream,
-)
+from linkerbot_sim.telemetry.state_snapshot import SceneRobotStateSampler, StateStream
 
 
 class _World:
@@ -39,30 +36,27 @@ class _Articulation:
 
 
 def _runtime() -> SimpleNamespace:
-    left_articulation = _Articulation(("l0", "l1"))
-    right_articulation = _Articulation(("r0", "r1"))
-    return SimpleNamespace(
-        simulation_world=_World(),
-        left=SimpleNamespace(
-            side="left",
-            articulation=left_articulation,
-            joint_controller=SimpleNamespace(
-                last_commanded_efforts=np.asarray([np.nan, 0.2], dtype=float)
+    robots = {}
+    for robot_id, label in enumerate(("robot_a", "robot_b")):
+        articulation = _Articulation((f"j{robot_id}_0", f"j{robot_id}_1"))
+        robots[robot_id] = SimpleNamespace(
+            robot_id=robot_id,
+            label=label,
+            execution=SimpleNamespace(
+                articulation=articulation,
+                joint_controller=SimpleNamespace(
+                    last_commanded_efforts=np.asarray(
+                        [np.nan, 0.2 + robot_id], dtype=float
+                    )
+                ),
             ),
-        ),
-        right=SimpleNamespace(
-            side="right",
-            articulation=right_articulation,
-            joint_controller=SimpleNamespace(
-                last_commanded_efforts=np.asarray([0.3, 0.4], dtype=float)
-            ),
-        ),
-    )
+        )
+    return SimpleNamespace(world=_World(), robots_by_id=robots)
 
 
-def test_dual_state_sampler_differentiates_joint_acceleration() -> None:
+def test_scene_state_sampler_differentiates_joint_acceleration() -> None:
     runtime = _runtime()
-    sampler = DualRobotStateSampler(
+    sampler = SceneRobotStateSampler(
         stage=None,
         rate_hz=10.0,
         include_efforts=True,
@@ -70,61 +64,40 @@ def test_dual_state_sampler_differentiates_joint_acceleration() -> None:
     )
 
     first = sampler.sample(runtime, step=0, phase="initial")
-    runtime.left.articulation.velocities = np.asarray([0.2, -0.1], dtype=float)
+    runtime.robots_by_id[0].execution.articulation.velocities = np.asarray(
+        [0.2, -0.1], dtype=float
+    )
     second = sampler.sample(runtime, step=1, phase="next")
 
     assert first.step == 0
     assert first.time_s == 0.1
     np.testing.assert_allclose(second.robots[0].accelerations_rad_s2, [2.0, -1.0])
     np.testing.assert_allclose(second.robots[0].measured_efforts, [1.0, 2.0])
-    assert second.as_dict()["robots"]["left"]["commanded_efforts"][0] is None
+    payload = second.as_dict()
+    assert payload["robots"][0]["robot_id"] == 0
+    assert payload["robots"][0]["label"] == "robot_a"
+    assert payload["robots"][0]["commanded_efforts"][0] is None
 
 
-def test_dual_state_sampler_reset_clears_acceleration_history() -> None:
+def test_scene_state_sampler_reset_clears_acceleration_history() -> None:
     runtime = _runtime()
-    sampler = DualRobotStateSampler(
-        stage=None,
-        rate_hz=10.0,
-        include_efforts=False,
-        include_objects=False,
-    )
+    sampler = SceneRobotStateSampler(stage=None, rate_hz=10.0)
 
     sampler.sample(runtime, step=0, phase="before_reset")
-    runtime.left.articulation.velocities = np.asarray([0.2, -0.1], dtype=float)
+    runtime.robots_by_id[0].execution.articulation.velocities = np.asarray(
+        [0.2, -0.1], dtype=float
+    )
     sampler.reset()
     after_reset = sampler.sample(runtime, step=0, phase="after_reset")
 
     assert np.isnan(after_reset.robots[0].accelerations_rad_s2).all()
 
 
-def test_single_state_sampler_uses_single_robot_label() -> None:
-    articulation = _Articulation(("j0", "j1"))
-    runtime = SimpleNamespace(
-        simulation_world=_World(),
-        articulation=articulation,
-        joint_controller=SimpleNamespace(
-            last_commanded_efforts=np.asarray([0.1, 0.2], dtype=float)
-        ),
-    )
-    sampler = SingleRobotStateSampler(
-        stage=None,
-        rate_hz=10.0,
-        include_efforts=True,
-        include_objects=False,
-    )
-
-    snapshot = sampler.sample(runtime, step=0, phase="single")
-
-    assert snapshot.robots[0].side == "single"
-    assert snapshot.as_dict()["robots"]["single"]["joint_names"] == ["j0", "j1"]
-    np.testing.assert_allclose(snapshot.robots[0].commanded_efforts, [0.1, 0.2])
-
-
 def test_state_stream_keeps_latest_snapshot() -> None:
     stream = StateStream()
-    snapshot = DualRobotStateSampler(
-        stage=None, rate_hz=1.0, include_efforts=False
-    ).sample(_runtime(), step=4)
+    snapshot = SceneRobotStateSampler(stage=None, rate_hz=1.0).sample(
+        _runtime(), step=4
+    )
 
     sequence = stream.publish(snapshot)
     latest = stream.latest()
@@ -133,3 +106,32 @@ def test_state_stream_keeps_latest_snapshot() -> None:
     assert sequence == 1
     assert latest == (1, snapshot)
     assert waited == (1, snapshot)
+
+
+def test_state_stream_applies_bounded_drop_policies() -> None:
+    snapshots = tuple(
+        SceneRobotStateSampler(stage=None, rate_hz=1.0).sample(_runtime(), step=step)
+        for step in range(3)
+    )
+    oldest = StateStream(capacity=2, drop_policy="drop_oldest")
+    newest = StateStream(capacity=2, drop_policy="drop_newest")
+    latest = StateStream(capacity=3, drop_policy="latest")
+
+    for snapshot in snapshots:
+        oldest.publish(snapshot)
+        newest.publish(snapshot)
+        latest.publish(snapshot)
+
+    assert oldest.wait_next(0, timeout_s=0.01) == (2, snapshots[1])
+    assert newest.wait_next(0, timeout_s=0.01) == (1, snapshots[0])
+    assert latest.wait_next(0, timeout_s=0.01) == (3, snapshots[2])
+    assert oldest.status()["dropped_snapshots"] == 1
+    assert newest.status()["dropped_snapshots"] == 1
+    assert latest.status()["dropped_snapshots"] == 2
+
+
+def test_state_stream_rejects_invalid_capacity_and_drop_policy() -> None:
+    with pytest.raises(ValueError, match="capacity"):
+        StateStream(capacity=0)
+    with pytest.raises(ValueError, match="drop_policy"):
+        StateStream(drop_policy="block")

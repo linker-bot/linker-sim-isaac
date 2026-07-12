@@ -8,11 +8,11 @@ runtime 类型句柄都集中在这里。Isaac/Omni 的重型 import 仍放在 `
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 
 from linkerbot_sim.app.launch import launch_simulation_app
-from linkerbot_sim.app.runtime.settings import EnvRuntimeSettings
+from linkerbot_sim.envs.settings import EnvRuntimeSettings
 from linkerbot_sim.app.runtime.simulation_app_lifecycle import close_simulation_app
+from linkerbot_sim.configs.runtime import SimulationAppSettings
 from linkerbot_sim.envs.scene_builder import build_world, configure_visuals
 
 
@@ -32,7 +32,7 @@ class SimulationSession:
 
 
 def create_simulation_session(
-    *, gui: bool, settings: EnvRuntimeSettings
+    *, simulation_app: SimulationAppSettings, settings: EnvRuntimeSettings
 ) -> SimulationSession:
     """启动 Isaac、创建 World，并返回 stage 和 runtime 类型句柄。
 
@@ -40,9 +40,7 @@ def create_simulation_session(
     路径留下 Kit 进程或扩展资源。正常路径下不关闭 app，由脚本统一管理生命周期。
     """
 
-    # headless smoke 经常在无交互环境运行，默认接受 EULA 可以避免 Isaac 首次启动卡住。
-    os.environ.setdefault("OMNI_KIT_ACCEPT_EULA", "Y")
-    simulation_app = launch_simulation_app(gui=gui)
+    app = launch_simulation_app(simulation_app)
     try:
         from isaacsim.core.prims import SingleArticulation
         from isaacsim.core.utils.types import ArticulationAction
@@ -50,20 +48,26 @@ def create_simulation_session(
 
         world = build_world(
             physics_dt=settings.physics_dt,
-            rendering_dt=settings.rendering_dt(gui=gui),
+            rendering_dt=settings.rendering_dt(
+                gui=simulation_app.gui,
+                headless_dt_policy=(simulation_app.render.headless_dt_policy),
+            ),
             gravity_z=settings.gravity_z,
             add_ground=settings.add_ground,
             ground_height=settings.ground_height,
         )
-        if gui:
-            configure_visuals(settings.visuals)
+        if settings.requires_rendering(gui=simulation_app.gui):
+            configure_visuals(
+                settings.visuals,
+                configure_viewport=simulation_app.gui,
+            )
         return SimulationSession(
-            app=simulation_app,
+            app=app,
             world=world,
             stage=omni.usd.get_context().get_stage(),
             articulation_action_type=ArticulationAction,
             single_articulation_type=SingleArticulation,
         )
     except Exception:
-        close_simulation_app(simulation_app)
+        close_simulation_app(app)
         raise

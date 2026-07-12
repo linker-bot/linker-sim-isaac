@@ -1,7 +1,7 @@
 """后端无关的碰撞对象描述。
 
-这些数据结构只表达几何和位姿，不依赖 cuMotion 或 Isaac。后端适配层可以把同一对象
-转换成 cuMotion obstacle、Isaac debug marker 或其它规划库的碰撞体。尺寸单位为米，
+这些数据结构只表达几何和位姿，不依赖 cuRobo 或 Isaac。后端适配层可以把同一对象
+转换成 cuRobo obstacle、Isaac debug marker 或其它规划库的碰撞体。尺寸单位为米，
 姿态用 4x4 齐次矩阵生成。
 """
 

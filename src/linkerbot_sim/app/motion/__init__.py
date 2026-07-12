@@ -1,1 +1,1 @@
-"""Motion specs and cuMotion execution helpers."""
+"""机器人运动请求、规划与执行组件。"""

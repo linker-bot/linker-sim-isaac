@@ -17,22 +17,22 @@ from linkerbot_sim.snapshots.schema import ObjectSnapshot, SimulationSnapshot
 
 @dataclass(frozen=True)
 class RobotTargetDescriptor:
-    """目标 runtime 中一个机器人角色的元信息。
+    """目标 runtime 中一个机器人的元信息。
 
     adapter 会从真实 runtime 生成该描述符；兼容性检查只依赖名字和 profile/fingerprint，
     不直接触碰 Isaac/控制器对象。
     """
 
-    role: str
+    label: str
     joint_names: tuple[str, ...]
     robot_profile: str | None = None
     asset_fingerprint: str | None = None
     command_joint_names: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        """标准化目标机器人名字字段，并拒绝空 role/重复关节名。"""
+        """标准化目标机器人 label，并拒绝空 label/重复关节名。"""
 
-        object.__setattr__(self, "role", str(self.role))
+        object.__setattr__(self, "label", str(self.label))
         object.__setattr__(
             self,
             "joint_names",
@@ -43,8 +43,8 @@ class RobotTargetDescriptor:
             "command_joint_names",
             tuple(str(name) for name in self.command_joint_names),
         )
-        if not self.role:
-            raise ValueError("RobotTargetDescriptor.role cannot be empty")
+        if not self.label:
+            raise ValueError("RobotTargetDescriptor.label cannot be empty")
         if not self.joint_names:
             raise ValueError("RobotTargetDescriptor.joint_names cannot be empty")
         _reject_duplicates(self.joint_names, "RobotTargetDescriptor.joint_names")
@@ -86,8 +86,8 @@ class ObjectTargetDescriptor:
 class SnapshotTargetDescriptor:
     """目标 runtime 的完整快照恢复能力描述。
 
-    tiled、single、dual 都会被统一表达成这个结构，所以后续检查逻辑不需要知道目标
-    runtime 的具体类型。
+    SingleSceneRuntime 与 TiledSceneRuntime 都表达成这个结构，后续检查逻辑不需要访问
+    具体 Isaac runtime 类型。
     """
 
     runtime_kind: str
@@ -131,10 +131,10 @@ class JointMapping:
 
 @dataclass(frozen=True)
 class RobotCompatibilityMapping:
-    """一个 snapshot 机器人角色到一个目标机器人角色的解析结果。"""
+    """一个 snapshot robot label 到目标 robot label 的解析结果。"""
 
-    source_role: str
-    target_role: str
+    source_label: str
+    target_label: str
     joints: JointMapping
     command_joints: JointMapping | None = None
 
@@ -176,40 +176,40 @@ def check_snapshot_compatibility(
     snapshot: SimulationSnapshot,
     target: SnapshotTargetDescriptor,
     *,
-    robot_map: Mapping[str, str] | None = None,
+    label_map: Mapping[str, str] | None = None,
     strict: bool = True,
 ) -> SnapshotCompatibilityResult:
     """检查 ``snapshot`` 是否可以恢复到 ``target``。
 
-    ``robot_map`` 表示 snapshot robot role 到目标 robot role 的映射。strict 模式要求
+    ``label_map`` 表示 snapshot robot label 到目标 robot label 的显式映射。strict 模式要求
     名字集合完全一致，但允许顺序不同；非 strict 模式只恢复两侧共有的名字。
     """
 
     issues: list[str] = []
     robot_mappings: dict[str, RobotCompatibilityMapping] = {}
     object_mappings: dict[str, ObjectCompatibilityMapping] = {}
-    resolved_robot_map = _resolve_robot_map(snapshot, target, robot_map, issues)
-    for source_role, target_role in resolved_robot_map.items():
+    resolved_label_map = _resolve_label_map(snapshot, target, label_map, issues)
+    for source_label, target_label in resolved_label_map.items():
         # 先检查 profile/fingerprint 这类“同名但不同资产”的风险，再解析关节名字。
-        # profile/fingerprint 任一侧缺失时不阻断，便于兼容旧 runtime 和测试 fake。
-        source_robot = snapshot.robots[source_role]
-        target_robot = target.robots[target_role]
+        # profile/fingerprint 任一侧缺失时不阻断，允许没有资产元数据的 debug runtime。
+        source_robot = snapshot.robots[source_label]
+        target_robot = target.robots[target_label]
         _check_optional_match(
             source_robot.robot_profile,
             target_robot.robot_profile,
-            f"robots.{source_role}.robot_profile",
+            f"robots.{source_label}.robot_profile",
             issues,
         )
         _check_optional_match(
             source_robot.asset_fingerprint,
             target_robot.asset_fingerprint,
-            f"robots.{source_role}.asset_fingerprint",
+            f"robots.{source_label}.asset_fingerprint",
             issues,
         )
         joint_mapping = _name_mapping(
             source_robot.joint_names,
             target_robot.joint_names,
-            f"robots.{source_role}.joint_names",
+            f"robots.{source_label}.joint_names",
             strict=strict,
             issues=issues,
         )
@@ -220,20 +220,19 @@ def check_snapshot_compatibility(
             command_mapping = _name_mapping(
                 source_robot.command_joint_names,
                 target_robot.command_joint_names,
-                f"robots.{source_role}.command_joint_names",
+                f"robots.{source_label}.command_joint_names",
                 strict=strict,
                 issues=issues,
             )
         if joint_mapping is not None:
-            robot_mappings[target_role] = RobotCompatibilityMapping(
-                source_role=source_role,
-                target_role=target_role,
+            robot_mappings[target_label] = RobotCompatibilityMapping(
+                source_label=source_label,
+                target_label=target_label,
                 joints=joint_mapping,
                 command_joints=command_mapping,
             )
     for object_name, source_object in snapshot.objects.items():
-        # 对象当前按名字匹配。机器人可以通过 robot_map 改名，是因为 single/dual/tiled
-        # 常用不同 role；对象名通常来自 runtime handle，自动改名反而更危险。
+        # 对象名通常来自 runtime handle，不提供自动或显式改名。
         target_object = target.objects.get(object_name)
         if target_object is None:
             issues.append(f"objects.{object_name} is not present in target")
@@ -273,7 +272,7 @@ def require_snapshot_compatibility(
     snapshot: SimulationSnapshot,
     target: SnapshotTargetDescriptor,
     *,
-    robot_map: Mapping[str, str] | None = None,
+    label_map: Mapping[str, str] | None = None,
     strict: bool = True,
 ) -> SnapshotCompatibilityResult:
     """返回兼容性结果；如不兼容则抛出 ``SnapshotCompatibilityError``。"""
@@ -281,7 +280,7 @@ def require_snapshot_compatibility(
     result = check_snapshot_compatibility(
         snapshot,
         target,
-        robot_map=robot_map,
+        label_map=label_map,
         strict=strict,
     )
     if not result.compatible:
@@ -289,47 +288,53 @@ def require_snapshot_compatibility(
     return result
 
 
-def _resolve_robot_map(
+def _resolve_label_map(
     snapshot: SimulationSnapshot,
     target: SnapshotTargetDescriptor,
-    robot_map: Mapping[str, str] | None,
+    label_map: Mapping[str, str] | None,
     issues: list[str],
 ) -> dict[str, str]:
-    """解析 snapshot robot role 到目标 robot role 的映射。
+    """解析 snapshot robot label 到目标 robot label 的映射。
 
-    映射优先级：显式 ``robot_map``、同名 role、一对一自动映射。除此之外都要求用户显式
-    指定，避免 dual/single/tiled 多机器人场景误配。
+    默认只接受稳定 label 精确匹配。显式 ``label_map`` 用于有意的 label 重命名，必须
+    是 source 到 target 的一对一映射。
     """
 
-    if robot_map is not None:
-        # 显式 robot_map 最高优先级，主要用于 dual -> single、single -> tiled named robot
-        # 这类 role 名字不一致但机械臂配置兼容的场景。
+    if label_map is not None:
+        if not label_map:
+            issues.append("label_map cannot be empty")
+            return {}
         resolved: dict[str, str] = {}
-        for source_role, target_role in robot_map.items():
-            source = str(source_role)
-            target_role_str = str(target_role)
+        targets: set[str] = set()
+        for source_label, target_label in label_map.items():
+            source = str(source_label)
+            target_label_str = str(target_label)
             if source not in snapshot.robots:
-                issues.append(f"robot_map source role {source!r} is not in snapshot")
+                issues.append(f"label_map source label {source!r} is not in snapshot")
                 continue
-            if target_role_str not in target.robots:
+            if target_label_str not in target.robots:
                 issues.append(
-                    f"robot_map target role {target_role_str!r} is not in target"
+                    f"label_map target label {target_label_str!r} is not in target"
                 )
                 continue
-            resolved[source] = target_role_str
+            if target_label_str in targets:
+                issues.append(
+                    f"label_map target label {target_label_str!r} is duplicated"
+                )
+                continue
+            resolved[source] = target_label_str
+            targets.add(target_label_str)
         return resolved
-    # 常规情况优先按同名 role 匹配，例如 tiled 的同名机器人或 dual 的 left/right。
-    exact = {role: role for role in snapshot.robots if role in target.robots}
-    if exact:
-        return exact
-    # 单机器人 snapshot 和单机器人目标之间允许自动映射，避免用户为 single <-> tiled
-    # 这种一对一场景额外写 robot_map。
-    if len(snapshot.robots) == 1 and len(target.robots) == 1:
-        return {
-            next(iter(snapshot.robots.keys())): next(iter(target.robots.keys())),
-        }
-    issues.append("robot_map is required to map snapshot robots to target robots")
-    return {}
+    resolved = {}
+    for source_label in snapshot.robots:
+        if source_label not in target.robots:
+            issues.append(
+                f"robots.{source_label} is not present in target; "
+                "provide label_map for an intentional rename"
+            )
+            continue
+        resolved[source_label] = source_label
+    return resolved
 
 
 def _name_mapping(
@@ -359,7 +364,7 @@ def _name_mapping(
         if extra:
             issues.append(f"{label} missing in target: {extra}")
         return None
-    # 非 strict 模式只恢复交集，用于调试或资产小幅变更后的手动迁移。
+    # 非 strict 模式只恢复交集，用于调试或资产小幅变更后的手动恢复。
     common_names = tuple(name for name in target_names if name in source_index)
     if not common_names:
         issues.append(f"{label} has no common names")
@@ -427,13 +432,13 @@ def _robot_targets(
     if not isinstance(values, Mapping):
         raise ValueError("SnapshotTargetDescriptor.robots must be a mapping")
     result = {}
-    for role, descriptor in values.items():
+    for label, descriptor in values.items():
         if not isinstance(descriptor, RobotTargetDescriptor):
             raise ValueError("target robot values must be RobotTargetDescriptor")
-        key = str(role)
-        if key != descriptor.role:
+        key = str(label)
+        if key != descriptor.label:
             raise ValueError(
-                f"target robot key {key!r} does not match role {descriptor.role!r}"
+                f"target robot key {key!r} does not match label {descriptor.label!r}"
             )
         result[key] = descriptor
     return result

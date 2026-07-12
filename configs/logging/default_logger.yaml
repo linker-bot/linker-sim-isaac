@@ -1,36 +1,54 @@
 # 日志默认配置。
 #
-# 本文件控制 scripts/pinch_grasp.py 等脚本的 CSV 关节跟踪输出：
-# - 输出路径相对仓库根目录解析，命令行 --log 可覆盖 joint_tracking_path。
-# - flush_interval_s 控制刷盘周期，interval_steps 控制采样降频。
-# - 各布尔字段控制是否写对应列，关闭昂贵列可以减少仿真循环开销。
+# 本文件定义 single_scene 交互入口的 CSV 关节跟踪输出。tiled_scene 启动仍会加载并严格
+# 校验 runtime.profiles.logging 指向的整份配置，但当前不会创建该 CSV logger 或产生此输出。
+# runtime.profiles.logging 或 --logging-profile 只负责按文件名选择整份配置，不逐字段覆盖。
+#
+# 输出语义：
+# - joint_tracking_path 相对仓库根目录解析；多机器人场景会为每个 robot 派生
+#   <stem>.<robot_id>.<label><suffix>，不会让多个机器人共写同一 CSV。
+# - 每行固定包含 step、time_s、phase、drive_update，再按 controller.driven_indices 的稳定顺序
+#   展开逐关节列；它记录受控主动关节和 Python 驱动的 MJCF follower，不是 articulation 全部 DOF。
+# - 当前 CSV schema 固定使用 rad/rad_s 后缀，适配项目现有旋转 DOF；logger 不读取关节类型，
+#   若接入 prismatic DOF，须由消费方按 m/m_s 解读这些列。effort 则旋转为 N*m、直线为 N。
+# - interval_steps 决定哪些 physics step 采样，flush_interval_s 决定 writer 缓冲刷新的行周期；
+#   各布尔字段同时控制 CSV schema 和对应 Isaac 状态是否读取。
+
 logging:
-  # 是否启用 CSV 写入；false 时仍会构造 logger，但不会打开文件。
+  # 总开关。false 时仍构造无文件 writer 以保持调用路径一致，但不创建目录或 CSV。
   enabled: false
 
-  # 关节跟踪 CSV 输出路径；相对路径以仓库根目录为基准。
+  # 关节跟踪 CSV 基础路径；相对路径以仓库根目录为基准，也可写绝对路径或 null。
+  # null 与 enabled=false 都会禁用文件输出；实际每机器人文件名会追加 robot_id 和 label。
   joint_tracking_path: logs/joint_tracking/pinch_grasp.csv
 
-  # flush 周期，秒。脚本会换算成物理步数，避免每行都刷盘。
+  # 目标 flush 间隔，单位 s，必须为有限正数。runtime 用 physics_dt 换算成至少 1 的整数，
+  # writer 按该整数个“已写入行”执行 flush；interval_steps>1 时，两次 flush 间的仿真时长会相应增加。
   flush_interval_s: 0.2
 
-  # 采样降频。1 表示每个 physics step 都写一行；例如 10 表示每 10 步写一行。
+  # 采样降频，必须为正整数。step % interval_steps == 0 时写一行；1 表示每个 physics step，
+  # 例如 10 表示 step 0、10、20... 采样。它不改变 physics_dt 或控制更新频率。
   interval_steps: 5
 
-  # 所有模式下都可以记录实际位置/速度。关闭这些列可以减少 get_joint_* 和 CSV 写入成本。
-  actual_position: true
-  actual_velocity: true
+  # 实际状态：分别生成 q_<joint>_rad、v_<joint>_rad_s，并按需调用 Isaac get_joint_*。
+  # command 与 actual 同时开启时还会自动生成 pos_err/vel_err（command - actual）列。
+  log_actual_position: true
+  log_actual_velocity: true
 
-  # 命令目标列。position 模式主要看 command_position，velocity 模式主要看 command_velocity。
-  command_position: true
-  command_velocity: true
+  # 命令目标：分别生成 qd_<joint>_rad、vd_<joint>_rad_s，记录当前完整控制 target。
+  # 在非对应主动模式下列仍存在，值取 target 缓冲中的位置/速度，而非推断的 PhysX drive 输出。
+  log_command_position: true
+  log_command_velocity: true
 
-  # direct effort 或显式控制下的 effort command。implicit drive 通常会写 nan。
-  command_effort: true
+  # tau_cmd_<joint>：Python 控制器显式计算/接收并限幅后的 effort command。
+  # explicit position/velocity 与 direct effort 的主动 DOF 有值；implicit drive 和 follower 写 nan。
+  log_command_effort: true
 
-  # 控制器实际下发给 Isaac 的 effort action；显式 position/velocity 和 direct effort 下有值。
-  action_effort: false
+  # tau_action_<joint>：控制器实际下发的 effort action 缓存。当前实现中，显式/direct 主动 DOF
+  # 与 tau_cmd 相同；implicit position/velocity 和 follower position action 写 nan。
+  log_action_effort: false
 
-  # PhysX measured/applied effort 读取相对更贵，默认关闭，需要分析力矩时再打开。
-  measured_effort: false
-  applied_effort: false
+  # tau_measured：PhysX 求解器沿 DOF 测得/计算的 effort；tau_applied：Isaac 当前 actuation effort。
+  # 两者会额外读取 PhysX/Isaac buffer，接口不可用或读取失败时写 nan，因此默认关闭。
+  log_measured_effort: false
+  log_applied_effort: false

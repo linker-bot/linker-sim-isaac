@@ -26,7 +26,8 @@ def test_load_profile_yaml_accepts_directory_env_profile() -> None:
     )
     assert [item.env_id for item in tiled.per_env] == [0, 1, 2, 3]
     assert tiled.per_env[1].object_root_poses["Tblock"].xyz == (0.12, 0.04, -0.4)
-    assert tiled.per_env[1].camera_poses["world_rgbd"].xyz == (0.08, 0.0, 0.08)
+    assert tiled.per_env[0].camera_poses["world_rgbd"].xyz == (0.08, 0.0, 0.08)
+    assert "world_rgbd" not in tiled.per_env[1].camera_poses
 
 
 def test_load_env_profile_directory_merges_per_env_yaml(tmp_path: Path) -> None:
@@ -38,7 +39,7 @@ def test_load_env_profile_directory_merges_per_env_yaml(tmp_path: Path) -> None:
 env:
   name: demo_tiled
 robots:
-  single:
+  - label: single
     robot_profile: ar5v2_l6v1_l
     root_pose:
       xyz: [0.0, 0.0, 0.0]
@@ -49,6 +50,12 @@ objects:
     root_pose:
       xyz: [0.0, 0.0, 0.0]
       rpy: [0.0, 0.0, 0.0]
+sensors:
+  cameras:
+    world_rgbd:
+      enabled: false
+      env_ids: [3]
+      prim_path: /World/WorldRGBD
 tiled:
   enabled: true
   per_env_config_dir: envs
@@ -57,6 +64,7 @@ tiled:
     )
     (env_dir / "env_003.yaml").write_text(
         """
+env_id: 3
 objects:
   block:
     root_pose:

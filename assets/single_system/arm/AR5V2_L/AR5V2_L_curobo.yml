@@ -1,0 +1,75 @@
+robot_cfg:
+  kinematics:
+    urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+    base_link: world
+    tool_frames:
+      - AR5V2_L_arm_flan_link
+    collision_link_names:
+      - AR5V2_L_arm_base
+      - AR5V2_L_arm_link1
+      - AR5V2_L_arm_link2
+      - AR5V2_L_arm_link3
+      - AR5V2_L_arm_link4
+      - AR5V2_L_arm_link5
+      - AR5V2_L_arm_link6
+      - AR5V2_L_arm_link7
+      - AR5V2_L_arm_flan_link
+    collision_sphere_buffer: 0.0
+    collision_spheres:
+      AR5V2_L_arm_base:
+        - {center: [0.0, 0.0, 0.08], radius: 0.10}
+      AR5V2_L_arm_link1:
+        - {center: [0.0, 0.0, 0.08], radius: 0.075}
+      AR5V2_L_arm_link2:
+        - {center: [0.0, 0.0, 0.07], radius: 0.07}
+        - {center: [0.0, 0.0, 0.19], radius: 0.065}
+        - {center: [0.0, 0.0, 0.30], radius: 0.065}
+      AR5V2_L_arm_link3:
+        - {center: [0.0, 0.0, 0.0], radius: 0.075}
+      AR5V2_L_arm_link4:
+        - {center: [0.0, 0.0, 0.06], radius: 0.065}
+        - {center: [0.0, 0.0, 0.16], radius: 0.06}
+        - {center: [0.0, 0.0, 0.25], radius: 0.06}
+      AR5V2_L_arm_link5:
+        - {center: [0.0, 0.0, -0.07], radius: 0.065}
+      AR5V2_L_arm_link6:
+        - {center: [0.0, 0.0, 0.0], radius: 0.065}
+      AR5V2_L_arm_link7:
+        - {center: [0.0, 0.0, 0.0], radius: 0.06}
+      AR5V2_L_arm_flan_link:
+        # Conservative arm-hand envelope. It covers the common L6 hand range
+        # instead of claiming articulated finger collision checking.
+        - {center: [0.0, 0.0, 0.09], radius: 0.16}
+    cspace:
+      joint_names:
+        - AR5V2_L_arm_joint_1
+        - AR5V2_L_arm_joint_2
+        - AR5V2_L_arm_joint_3
+        - AR5V2_L_arm_joint_4
+        - AR5V2_L_arm_joint_5
+        - AR5V2_L_arm_joint_6
+        - AR5V2_L_arm_joint_7
+      default_joint_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+      cspace_distance_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      null_space_weight: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+      max_acceleration: 40.0
+      max_jerk: 10000.0
+    self_collision_buffer:
+      AR5V2_L_arm_base: 0.0
+      AR5V2_L_arm_link1: 0.0
+      AR5V2_L_arm_link2: 0.0
+      AR5V2_L_arm_link3: 0.0
+      AR5V2_L_arm_link4: 0.0
+      AR5V2_L_arm_link5: 0.0
+      AR5V2_L_arm_link6: 0.0
+      AR5V2_L_arm_link7: 0.0
+      AR5V2_L_arm_flan_link: 0.0
+    self_collision_ignore:
+      AR5V2_L_arm_base: [AR5V2_L_arm_link1, AR5V2_L_arm_link2]
+      AR5V2_L_arm_link1: [AR5V2_L_arm_link2, AR5V2_L_arm_link3]
+      AR5V2_L_arm_link2: [AR5V2_L_arm_link3, AR5V2_L_arm_link4]
+      AR5V2_L_arm_link3: [AR5V2_L_arm_link4, AR5V2_L_arm_link5]
+      AR5V2_L_arm_link4: [AR5V2_L_arm_link5, AR5V2_L_arm_link6, AR5V2_L_arm_link7, AR5V2_L_arm_flan_link]
+      AR5V2_L_arm_link5: [AR5V2_L_arm_link6, AR5V2_L_arm_link7]
+      AR5V2_L_arm_link6: [AR5V2_L_arm_link7, AR5V2_L_arm_flan_link]
+      AR5V2_L_arm_link7: [AR5V2_L_arm_flan_link]

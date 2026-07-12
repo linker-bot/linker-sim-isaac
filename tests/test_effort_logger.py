@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 
 import numpy as np
+import pytest
 
+from linkerbot_sim.logging.csv_writer import (
+    CsvWriter,
+    apply_csv_output_plans,
+    plan_csv_output,
+)
 from linkerbot_sim.logging.config import (
     JointLoggingConfig,
     joint_logging_config_from_mapping,
@@ -114,6 +121,144 @@ def test_effort_logger_writes_commanded_measured_and_applied_efforts(tmp_path) -
     assert row["tau_cmd_j0"] == "0.1"
     assert row["tau_measured_j1"] == "2"
     assert row["tau_applied_j1"] == "4"
+
+
+def test_csv_writer_existing_data_policies(tmp_path: Path) -> None:
+    path = tmp_path / "tracking.csv"
+    path.write_text("step\n1\n", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        CsvWriter(path, ["step"])
+    assert path.read_text(encoding="utf-8") == "step\n1\n"
+
+    resumed = CsvWriter(path, ["step"], existing_data_policy="resume")
+    resumed.write({"step": 2})
+    resumed.close()
+    assert _read_rows(path) == [{"step": "1"}, {"step": "2"}]
+
+    truncated = CsvWriter(path, ["step"], existing_data_policy="truncate")
+    truncated.write({"step": 3})
+    truncated.close()
+    assert _read_rows(path) == [{"step": "3"}]
+
+
+def test_csv_writer_resume_rejects_header_mismatch_without_mutation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "tracking.csv"
+    original = "wrong,columns\n1,2\n"
+    path.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="header does not match"):
+        CsvWriter(path, ["step"], existing_data_policy="resume")
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_csv_writer_resume_rejects_unterminated_final_record_without_mutation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "tracking.csv"
+    original = "step\n1"
+    path.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unterminated final record"):
+        CsvWriter(path, ["step"], existing_data_policy="resume")
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_csv_writer_resume_rejects_unclosed_quote_without_mutation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "tracking.csv"
+    original = 'step,note\n1,"unfinished\n'
+    path.write_text(original, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="malformed"):
+        CsvWriter(path, ["step", "note"], existing_data_policy="resume")
+
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_csv_group_validates_every_resume_header_before_any_mutation(
+    tmp_path: Path,
+) -> None:
+    truncate_path = tmp_path / "robot_0.csv"
+    truncate_path.write_text("old\nvalue\n", encoding="utf-8")
+    invalid_resume = tmp_path / "robot_1.csv"
+    invalid_resume.write_text("wrong\nvalue\n", encoding="utf-8")
+
+    truncate_plan = plan_csv_output(
+        truncate_path,
+        ["step"],
+        existing_data_policy="truncate",
+    )
+    with pytest.raises(ValueError, match="header does not match"):
+        plan_csv_output(
+            invalid_resume,
+            ["step"],
+            existing_data_policy="resume",
+        )
+
+    assert truncate_path.read_text(encoding="utf-8") == "old\nvalue\n"
+    assert invalid_resume.read_text(encoding="utf-8") == "wrong\nvalue\n"
+    assert truncate_plan.path_plan.existed_at_preflight is True
+
+
+def test_prepared_csv_group_applies_before_opening_writers(tmp_path: Path) -> None:
+    paths = (tmp_path / "robot_0.csv", tmp_path / "robot_1.csv")
+    plans = tuple(
+        plan_csv_output(path, ["step"], existing_data_policy="error") for path in paths
+    )
+
+    apply_csv_output_plans(plans)
+    writers = tuple(
+        CsvWriter(
+            path,
+            ["step"],
+            existing_data_policy="error",
+            output_plan=plan,
+            paths_applied=True,
+        )
+        for path, plan in zip(paths, plans, strict=True)
+    )
+    try:
+        for step, writer in enumerate(writers):
+            writer.write({"step": step})
+    finally:
+        for writer in writers:
+            writer.close()
+
+    assert [_read_rows(path) for path in paths] == [
+        [{"step": "0"}],
+        [{"step": "1"}],
+    ]
+
+
+def test_csv_writer_timestamped_dir_uses_unique_run_namespace(tmp_path: Path) -> None:
+    requested = tmp_path / "tracking.csv"
+    writer = CsvWriter(
+        requested,
+        ["step"],
+        existing_data_policy="timestamped_dir",
+        timestamped_run_name="20260711T120000.000000Z",
+    )
+    try:
+        writer.write({"step": 1})
+        assert writer.path == (tmp_path / "20260711T120000.000000Z" / "tracking.csv")
+    finally:
+        writer.close()
+
+
+def test_joint_tracking_logger_propagates_csv_existing_data_policy(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "joint_tracking.csv"
+    path.write_text("existing", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="already exists"):
+        JointTrackingLogger(path, ["j0"], existing_data_policy="error")
 
 
 def test_joint_tracking_logger_includes_optional_effort_columns(tmp_path) -> None:
@@ -230,11 +375,11 @@ def test_joint_logging_config_parses_yaml_mapping() -> None:
             "logging": {
                 "enabled": False,
                 "interval_steps": 5,
-                "measured_effort": True,
-                "applied_effort": True,
-                "action_effort": True,
-                "command_effort": False,
-            }
+                "log_measured_effort": True,
+                "log_applied_effort": True,
+                "log_action_effort": True,
+                "log_command_effort": False,
+            },
         }
     )
 

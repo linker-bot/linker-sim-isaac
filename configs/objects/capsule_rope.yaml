@@ -1,33 +1,38 @@
 # Capsule rope 运行时对象配置。
 #
 # 边界：
-# - scene/env profile 负责世界性质和 root_pose 摆放。
-# - 本文件只放 linkerbot_sim/src 运行时需要读取的对象属性。
+# - env objects[].object_profile 通过文件名 capsule_rope 选择本 profile；实例 name、prim_path
+#   与 root_pose 由 env 管理，同一绳体资产 profile 可在场景中实例化多次。
+# - 本文件只放 src/linkerbot_sim 运行时代码在引用已有 USD 后需要读取的对象属性。
 # - 绳体几何、段数、质量、阻尼、关节限制和可视材质属于生成固有属性，
 #   放在 tools/object_assets/flexible/rope/config.yaml。
 
+
 object:
-  # 对象 profile 名称；env 中通过 object_profile: capsule_rope 引用本文件。
+  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
   name: capsuleropeV1_default
 
-  # 对象类型。dynamic_chain 表示由多个刚体和关节组成的链式动态对象。
+  # 对象能力类别。dynamic_chain 表示由多个刚体和关节组成的链式动态对象，当前只支持 USD。
   kind: dynamic_chain
 
   # 资产来源类型。capsule rope 已由工具生成 USD/USDA，因此这里直接引用 usd。
   source: usd
 
-  # 绳体 USD 资产路径，相对仓库根目录。
+  # 绳体 USD 资产路径，相对仓库根目录；stage 挂载位置由 env 实例 prim_path 决定。
   asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
-  # 默认引用 prim 路径；env scene 只负责 root_pose，不覆盖 prim_path。
-  prim_path: /World/CapsuleRope
-
-  # USD 资产文件内部的默认 prim 路径。
-  # dynamic_chain runtime 会从该根节点下收集绳体刚体和 joint。
+  # 源 USD 的绝对根路径元数据。当前 runtime 只校验并保留该值，不用它决定挂载或遍历根；
+  # 实际引用位置和刚体/joint 收集根均由 env 实例的 prim_path 决定。
   root_path: /CapsuleRope
 
+  # dynamic-chain 顶层 pose/velocity 摘要取同一个命名刚体；值必须是资产中的刚体短名称，
+  # 不能写 prim path，并且每个实例下必须精确匹配一个 body。快照仍保留全部 body 数组。
+  state_summary:
+    reference_body: left_box
+
   physics:
-    # 接触材质属于运行时仿真属性，可按对象 profile 调整。
+    # 运行时创建并强绑定到绳体所有 collision prim 的接触材质。
+    # 各系数均无量纲；仅覆盖当前 stage，不回写源 USD。
     material:
       # 静摩擦系数：影响接触面开始滑动前的摩擦。
       static_friction: 0.7
@@ -38,7 +43,7 @@ object:
       # 摩擦合成模式；average 表示与接触另一方材质取平均。
       friction_combine_mode: average
 
-    # 绳体刚体 solver 迭代次数是运行时 PhysX 覆盖，不参与资产生成。
+    # 绳体所有刚体的 solver 迭代次数是运行时 PhysX 覆盖，不参与资产生成。
     # position iterations 影响关节/接触位置约束收敛，绳体抓取不稳定时可提高。
     solver_position_iterations: 48
     # velocity iterations 影响摩擦、碰撞后速度等速度约束收敛。

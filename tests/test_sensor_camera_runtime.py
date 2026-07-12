@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from linkerbot_sim.sensors.camera_config import SceneSensorSettings
-from linkerbot_sim.sensors.camera_runtime import (
+import pytest
+
+from linkerbot_sim.sensors import SceneSensorSettings
+from linkerbot_sim.sensors.camera.runtime import (
+    _define_camera_prim_with_square_pixels,
     create_sensor_camera_runtime,
     create_sensor_camera_runtimes,
     initialize_sensor_camera_runtimes,
@@ -29,8 +32,8 @@ class FakeCamera:
         self.kwargs = kwargs
         self.calls: list[tuple[str, object]] = []
 
-    def initialize(self) -> None:
-        self.calls.append(("initialize", None))
+    def initialize(self, *, attach_rgb_annotator: bool = True) -> None:
+        self.calls.append(("initialize", attach_rgb_annotator))
 
     def set_clipping_range(self, *, near_distance: float, far_distance: float) -> None:
         self.calls.append(("set_clipping_range", (near_distance, far_distance)))
@@ -131,7 +134,7 @@ def test_create_sensor_camera_runtime_initializes_camera_wrapper() -> None:
     initialize_sensor_camera_runtimes((runtime,))
 
     assert runtime.camera.calls == [
-        ("initialize", None),
+        ("initialize", False),
         ("set_focal_length", 1.0),
         ("set_horizontal_aperture", (1.0, False)),
         ("set_vertical_aperture", (1.0, False)),
@@ -150,6 +153,32 @@ def test_create_sensor_camera_runtime_initializes_camera_wrapper() -> None:
         (0.0, 240.0, 120.0),
         (0.0, 0.0, 1.0),
     )
+
+
+def test_camera_prim_aperture_matches_configured_resolution() -> None:
+    from pxr import Usd, UsdGeom
+
+    stage = Usd.Stage.CreateInMemory()
+    stage.DefinePrim("/World")
+    settings = SceneSensorSettings.from_env_config(
+        {
+            "sensors": {
+                "cameras": {
+                    "world": {
+                        "prim_path": "/World/Camera",
+                        "resolution": [640, 480],
+                    }
+                }
+            }
+        }
+    ).cameras[0]
+
+    _define_camera_prim_with_square_pixels(stage=stage, settings=settings)
+
+    camera = UsdGeom.Camera(stage.GetPrimAtPath("/World/Camera"))
+    horizontal = camera.GetHorizontalApertureAttr().Get()
+    vertical = camera.GetVerticalApertureAttr().Get()
+    assert vertical / horizontal == pytest.approx(480.0 / 640.0)
 
 
 def test_create_sensor_camera_runtimes_skips_disabled_cameras() -> None:
@@ -172,6 +201,27 @@ def test_create_sensor_camera_runtimes_skips_disabled_cameras() -> None:
     )
 
     assert runtimes == ()
+
+
+def test_create_sensor_camera_runtimes_rejects_unconsumed_tiled_scene_scope() -> None:
+    settings = SceneSensorSettings.from_env_config(
+        {
+            "sensors": {
+                "cameras": {
+                    "scoped": {
+                        "prim_path": "/World/Camera",
+                        "env_ids": [0],
+                    }
+                }
+            }
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"sensors\.cameras\.scoped\.env_ids is only valid for TiledSceneRuntime",
+    ):
+        create_sensor_camera_runtimes(stage=FakeStage(set()), sensors=settings)
 
 
 def test_create_sensor_camera_runtime_rejects_missing_parent_prim() -> None:

@@ -1,15 +1,18 @@
 # 运行时对象 profile 示例。
 #
 # 用途：
-# - 描述 linkerbot_sim/src 在导入已有对象资产后需要读取/覆盖的属性。
+# - 描述 src/linkerbot_sim 运行时代码在导入已有对象资产后需要读取/覆盖的属性。
 # - 作为 configs/envs/*.yaml 的 objects[].object_profile 引用目标。
 #
 # 边界：
-# - 本文件不描述对象放在世界哪里；root_pose 放在 env 的 objects[] 中。
+# - 本文件名就是 object_profile 选择名；object.name 是资产逻辑名，env objects[].name 才是
+#   场景实例身份。本文件不描述对象放在世界哪里；prim_path/root_pose 放在 env objects[] 中，
+#   其中 root_pose.xyz 单位为 m、root_pose.rpy 单位为 rad。
 # - 本文件不生成对象资产；capsule rope 的几何、段数、质量和关节限制放在
 #   tools/object_assets/flexible/rope/config.yaml，生成出的 USD 再由这里引用。
-# - rigid 对象可以设置 physics.static 和 import.collision_approximation。
-# - dynamic_chain 当前用于 capsule rope，可以设置接触材质和 solver iteration。
+# - rigid 对象可以设置 physics.static、URDF import 参数和独立的 planning_collision；规划几何
+#   不会修改 PhysX collider。dynamic_chain 当前用于 capsule rope，只支持已有 USD，并可设置
+#   接触材质、状态摘要参考刚体和 solver iteration。
 #
 # rigid 对象 profile 形状示例，实际请参考 workstation_armbase.yaml：
 #
@@ -18,7 +21,6 @@
 #   kind: rigid
 #   source: urdf
 #   asset_path: assets/rigid_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
-#   prim_path: /World/Fixture
 #   import:
 #     collision_approximation: convex_decomposition
 #   physics:
@@ -29,30 +31,37 @@
 #       restitution: 0.0
 #       friction_combine_mode: average
 
+
 object:
-  # 对象逻辑名称；env objects[].name 是 scene 中的实例名。
+  # 资产逻辑名称；env 按 profile 文件名引用配置，objects[].name 是场景中的实例名。
   name: example_capsule_rope
 
-  # 支持 rigid 和 dynamic_chain。
+  # 能力类别支持 rigid 和 dynamic_chain；不同类别允许的 import/physics 子字段严格不同。
   kind: dynamic_chain
 
-  # 支持 usd 和 urdf。capsule rope 是已经生成好的 USD 资产。
+  # 资产来源支持 usd 和 urdf；dynamic_chain 当前必须是 usd，且 USD 不接受 import 段。
   source: usd
   asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
-  # 引用到当前 stage 后的根 prim 路径。
-  prim_path: /World/ExampleCapsuleRope
-
-  # USD 资产文件内部的默认 prim 路径；dynamic_chain runtime 用它收集刚体和 joint。
+  # 源 USD 的绝对根路径元数据。当前 runtime 只校验并保留该值，不用它决定挂载或遍历根；
+  # 实际引用位置和刚体/joint 收集根均由 env 实例的 prim_path 决定。
   root_path: /CapsuleRope
 
+  # 顶层 object pose/velocity 以一个刚体为确定性摘要；必须写资产中的刚体短名称而非 prim path，
+  # 且每个实例下只能匹配一个 body。快照中的完整 body pose/velocity 数组不受影响。
+  state_summary:
+    reference_body: left_box
+
   physics:
-    # 运行时接触材质覆盖。若省略某个字段，就不覆盖对应 USD 属性。
+    # 运行时接触材质覆盖；各系数均无量纲。只要 material 至少含一个字段，runtime 就会
+    # 创建新材质并绑定到所有 collision prim；未写字段不在新材质上 author，按 PhysX 默认处理，
+    # 不应理解为继续使用源资产旧材质中的同名值。显式值只作用于当前 stage。
     material:
       static_friction: 0.7
       dynamic_friction: 0.5
       restitution: 0.0
       friction_combine_mode: average
-    # dynamic_chain 刚体 solver iteration 覆盖；适合绳体/端块接触不稳定时调整。
+    # dynamic_chain 全部刚体的 PhysX solver iteration 覆盖，不改变生成资产。
+    # position 影响关节/接触位置约束收敛；velocity 影响摩擦和碰撞后速度约束收敛。
     solver_position_iterations: 48
     solver_velocity_iterations: 4

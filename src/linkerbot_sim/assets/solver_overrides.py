@@ -13,7 +13,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from linkerbot_sim.robots.classification import is_arm_name, is_hand_name
+from linkerbot_sim.robots.classification import (
+    RobotComponentMapping,
+    is_arm_name,
+    is_hand_name,
+)
 
 
 @dataclass(frozen=True)
@@ -251,7 +255,10 @@ def is_arm_prim_name(name: str) -> bool:
 
 
 def solver_iterations_for_prim_name(
-    name: str, config: SolverIterationConfig
+    name: str,
+    config: SolverIterationConfig,
+    *,
+    component_mapping: RobotComponentMapping | None = None,
 ) -> tuple[int | None, int | None, str] | None:
     """根据 prim 名和配置决定该刚体要写入的迭代次数。
 
@@ -263,11 +270,22 @@ def solver_iterations_for_prim_name(
         返回 ``None``。
     """
 
-    if is_arm_prim_name(name):
+    component = (
+        component_mapping.rigid_body_component(name)
+        if component_mapping is not None
+        else (
+            "arm"
+            if is_arm_prim_name(name)
+            else "hand"
+            if is_hand_prim_name(name)
+            else "default"
+        )
+    )
+    if component == "arm":
         position_iterations = config.arm_position_iterations
         velocity_iterations = config.arm_velocity_iterations
         group = "arm"
-    elif is_hand_prim_name(name):
+    elif component == "hand":
         position_iterations = config.hand_position_iterations
         velocity_iterations = config.hand_velocity_iterations
         group = "hand"
@@ -279,7 +297,11 @@ def solver_iterations_for_prim_name(
 
 
 def apply_solver_iteration_overrides(
-    stage, articulation_root_path: str, config: SolverIterationConfig
+    stage,
+    articulation_root_path: str,
+    config: SolverIterationConfig,
+    *,
+    component_mapping: RobotComponentMapping | None = None,
 ) -> dict[str, int]:
     """写入配置中显式指定的 PhysX solver 属性。
 
@@ -326,7 +348,9 @@ def apply_solver_iteration_overrides(
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
         # 通过命名约定判断 arm/hand，未知刚体不写入，避免把环境或装饰 prim 意外纳入迭代次数覆盖。
-        solver_iterations = solver_iterations_for_prim_name(prim.GetName(), config)
+        solver_iterations = solver_iterations_for_prim_name(
+            prim.GetName(), config, component_mapping=component_mapping
+        )
         if solver_iterations is None:
             counts["skipped_rigid_bodies"] += 1
             continue

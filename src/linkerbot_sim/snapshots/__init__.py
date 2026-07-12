@@ -1,4 +1,8 @@
-"""Runtime-neutral simulation snapshot primitives."""
+"""运行时无关的仿真快照公共入口。
+
+snapshot 层只描述机器人/对象状态和兼容性检查，不直接依赖 Isaac 或 cuRobo。canonical
+SingleSceneRuntime 与 TiledSceneRuntime 通过 adapters 共享同一套 canonical schema。
+"""
 
 from linkerbot_sim.snapshots.compatibility import (
     JointMapping,
@@ -12,22 +16,23 @@ from linkerbot_sim.snapshots.compatibility import (
     check_snapshot_compatibility,
     require_snapshot_compatibility,
 )
-from linkerbot_sim.snapshots.adapters import (
-    clone_tiled_env_state,
-    dual_target_descriptor,
-    get_dual_robot_snapshot,
-    get_single_robot_snapshot,
+from linkerbot_sim.snapshots.dispatch import (
     get_snapshot,
-    get_tiled_snapshot,
-    set_dual_robot_snapshot,
-    set_single_robot_snapshot,
     set_snapshot,
-    set_tiled_snapshot,
-    single_target_descriptor,
-    tiled_target_descriptor,
+)
+from linkerbot_sim.snapshots.single_scene_adapter import (
+    get_single_scene_snapshot,
+    set_single_scene_snapshot,
+    single_scene_target_descriptor,
+)
+from linkerbot_sim.snapshots.tiled_scene_adapter import (
+    clone_tiled_env_state,
+    get_tiled_scene_snapshot,
+    set_tiled_scene_snapshot,
+    tiled_scene_target_descriptor,
 )
 from linkerbot_sim.snapshots.schema import (
-    SCHEMA_VERSION,
+    SNAPSHOT_SCHEMA,
     ObjectSnapshot,
     RobotSnapshot,
     SimulationSnapshot,
@@ -35,8 +40,9 @@ from linkerbot_sim.snapshots.schema import (
     SnapshotRestoreResult,
 )
 
+# __all__ 同时暴露 schema、compatibility 和 adapter API；调用方无需知道内部文件拆分。
 __all__ = [
-    "SCHEMA_VERSION",
+    "SNAPSHOT_SCHEMA",
     "JointMapping",
     "ObjectCompatibilityMapping",
     "ObjectSnapshot",
@@ -52,16 +58,13 @@ __all__ = [
     "SnapshotTargetDescriptor",
     "check_snapshot_compatibility",
     "clone_tiled_env_state",
-    "dual_target_descriptor",
-    "get_dual_robot_snapshot",
-    "get_single_robot_snapshot",
+    "get_single_scene_snapshot",
     "get_snapshot",
-    "get_tiled_snapshot",
+    "get_tiled_scene_snapshot",
     "require_snapshot_compatibility",
-    "set_dual_robot_snapshot",
-    "set_single_robot_snapshot",
+    "set_single_scene_snapshot",
     "set_snapshot",
-    "set_tiled_snapshot",
-    "single_target_descriptor",
-    "tiled_target_descriptor",
+    "set_tiled_scene_snapshot",
+    "single_scene_target_descriptor",
+    "tiled_scene_target_descriptor",
 ]
