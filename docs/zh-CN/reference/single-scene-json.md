@@ -401,8 +401,8 @@ mapping 只修改列出的关节，其余 group 关节保持当前值：
 默认关节列表：
 
 ```jsonl
-{"type":"plan_cspace_goal","id":"arm-plan-goal0","robot_id":0,"group":"arm","joint_positions":[1.64,1.2,-1.5707,1.57,-0.37,0.0,0.0],"duration_s":1.0,"avoid_collisions":false}
-{"type":"plan_cspace_goal","id":"arm-plan-goal1","robot_id":1,"group":"arm","joint_positions":[1.2,-1.2,-1.5707,1.57,0.37,0.0,0.0],"duration_s":1.0,"avoid_collisions":false}
+{"type":"plan_cspace_goal","id":"example1","robot_id":0,"group":"arm","joint_positions":[1.64,1.57,-1.5707,1.57,-0.37,0.0,0.0],"duration_s":1.0,"avoid_collisions":false}
+{"type":"plan_cspace_goal","id":"example2","robot_id":1,"group":"arm","joint_positions":[1.64,-1.57,-1.5707,1.57,0.37,0.0,0.0],"duration_s":1.0,"avoid_collisions":false}
 ```
 
 上面是两条独立 JSONL 指令，每行提交一个机器人目标；它们不是一个 JSON array。需要两台机器人
@@ -446,11 +446,11 @@ mapping 只修改列出的关节，其余 group 关节保持当前值：
 ```json
 {
   "type": "ik_offset",
-  "id": "ik-up",
+  "id": "ik_test",
   "robot_id": 0,
   "group": "arm",
-  "offset": [0.0, 0.0, 0.05],
-  "offset_frame": "robot_base",
+  "offset": [0.0, -0.05, 0.05],
+  "offset_frame": "world",
   "tcp_frame_name": "AR5V2_L_pinch_tcp",
   "duration_s": 0.8,
   "avoid_collisions": false

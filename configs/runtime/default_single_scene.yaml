@@ -154,7 +154,7 @@ runtime:
     # existing_data_policy: error | truncate | resume | timestamped_dir；若任一相机同时写
     # Foxglove MCAP，则不支持追加，resume 会被拒绝。shutdown_policy 中 drain 会排空
     # 待写帧，abort 会放弃剩余队列。
-    existing_data_policy: error
+    existing_data_policy: timestamped_dir
     shutdown_policy: drain
     # rgb_format: ppm | png | npy；depth_format: npy | npz。
     rgb_format: ppm
@@ -196,9 +196,9 @@ runtime:
       path: null
     # Foxglove 实时服务仅监听回环地址；enabled=true 时 port 必须为 1..65535。
     foxglove_live:
-      enabled: false
+      enabled: true
       host: 127.0.0.1
-      port: null
+      port: 8765
 
   # 已存在输出的处理策略。CSV 支持 error | truncate | resume | timestamped_dir；
   # telemetry MCAP 不支持安全追加，因此 mcap_existing_file_policy 不能使用 resume。
