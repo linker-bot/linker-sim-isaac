@@ -288,6 +288,96 @@ def test_command_joint_names_follow_command_indices_and_exclude_followers() -> N
     assert "follower_joint" not in controller.command_joint_names
 
 
+def test_command_target_modes_follow_command_indices() -> None:
+    controller, _robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+    controller._active_specs = {
+        0: ("velocity", "implicit"),
+        1: ("effort", "direct"),
+    }
+
+    assert controller.command_target_modes == ("velocity", "effort")
+
+
+def test_control_target_cache_is_deep_copied_and_explicitly_restorable() -> None:
+    controller, robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+    controller.configure_runtime()
+    targets = controller.build_control_targets(
+        command_positions=np.asarray([0.4, 0.2]),
+        base_positions=robot.positions,
+    )
+
+    controller.apply_targets(_Action, targets)
+    targets.positions[0] = 99.0
+    snapshot = controller.snapshot_control_targets_cache()
+
+    assert snapshot is not None
+    np.testing.assert_allclose(snapshot.positions[:2], [0.4, 0.2])
+    snapshot.positions[0] = 88.0
+    np.testing.assert_allclose(
+        controller.last_control_targets.positions[:2], [0.4, 0.2]
+    )
+
+    controller.restore_control_targets_cache(None)
+    assert controller.last_control_targets is None
+    controller.restore_control_targets_cache(snapshot)
+    snapshot.positions[1] = 77.0
+    np.testing.assert_allclose(
+        controller.last_control_targets.positions[:2], [88.0, 0.2]
+    )
+
+
+def test_apply_failure_does_not_commit_effort_or_control_target_cache() -> None:
+    controller, robot = _controller(
+        ComponentControlSettings(
+            mode="effort",
+            method="direct",
+            max_force=10.0,
+            effort_limit=10.0,
+        )
+    )
+    controller.configure_runtime()
+    initial = ControlTargets(
+        positions=robot.positions,
+        velocities=np.zeros(robot.num_dof),
+        efforts=np.asarray([1.0, 2.0, 0.0]),
+    )
+    controller.apply_targets(_Action, initial)
+    cached_before = controller.snapshot_control_targets_cache()
+    efforts_before = controller.last_commanded_efforts.copy()
+    calls = 0
+
+    def fail_on_follower(action) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("follower action failed")
+
+    robot.apply_action = fail_on_follower
+    changed = ControlTargets(
+        positions=robot.positions,
+        velocities=np.zeros(robot.num_dof),
+        efforts=np.asarray([7.0, 8.0, 0.0]),
+    )
+
+    with pytest.raises(RuntimeError, match="follower action failed"):
+        controller.apply_targets(_Action, changed)
+
+    assert cached_before is not None
+    np.testing.assert_allclose(
+        controller.last_control_targets.efforts,
+        cached_before.efforts,
+    )
+    np.testing.assert_allclose(
+        controller.last_commanded_efforts,
+        efforts_before,
+        equal_nan=True,
+    )
+
+
 def test_configure_runtime_preserves_unmanaged_dof_gains() -> None:
     robot = _FakeRobot()
     initial_kps = np.asarray([3.0, 23.0, 47.0], dtype=float)
@@ -434,3 +524,92 @@ def test_native_mimic_excludes_follower_from_python_drive_and_actions(
     np.testing.assert_array_equal(controller.driven_indices, [0, 1])
     assert controller.follower_mapper.controls == []
     assert all(2 not in action.joint_indices for action in robot.actions)
+
+
+def test_prepare_runtime_is_engine_and_cache_side_effect_free() -> None:
+    controller, robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+    controller.configure_runtime()
+    cached = controller.build_control_targets(
+        command_positions=np.asarray([0.4, 0.2]),
+        base_positions=robot.positions,
+    )
+    controller.apply_targets(_Action, cached)
+    actions_before = tuple(robot.actions)
+    switches_before = tuple(robot.controller.mode_switches)
+    gains_before = tuple(value.copy() for value in robot.controller.gains)
+    cache_before = controller.snapshot_control_targets_cache()
+    previous_settings = controller.settings
+    velocity = ComponentControlSettings(
+        mode="velocity",
+        method="explicit",
+        damping=4.0,
+        max_force=3.0,
+    )
+
+    prepared = controller.prepare_runtime(
+        JointControlSettings(default=velocity, arm=velocity, hand=velocity)
+    )
+
+    assert controller.settings is previous_settings
+    assert tuple(robot.actions) == actions_before
+    assert tuple(robot.controller.mode_switches) == switches_before
+    assert robot.controller.gains is not None
+    np.testing.assert_allclose(robot.controller.gains[0], gains_before[0])
+    np.testing.assert_allclose(robot.controller.gains[1], gains_before[1])
+    assert cache_before is not None
+    np.testing.assert_allclose(
+        controller.last_control_targets.positions,
+        cache_before.positions,
+    )
+    assert prepared.active_specs == (
+        (0, "velocity", "explicit"),
+        (1, "velocity", "explicit"),
+    )
+    assert prepared.runtime_modes[:2] == ((0, "effort"), (1, "effort"))
+
+
+def test_apply_prepared_runtime_commits_host_state_only_after_engine_success() -> None:
+    controller, robot = _controller(
+        ComponentControlSettings(mode="position", method="implicit")
+    )
+    controller.configure_runtime()
+    previous_settings = controller.settings
+    velocity = ComponentControlSettings(
+        mode="velocity",
+        method="explicit",
+        damping=4.0,
+        max_force=3.0,
+    )
+    candidate = JointControlSettings(
+        default=velocity,
+        arm=velocity,
+        hand=velocity,
+    )
+    prepared = controller.prepare_runtime(candidate)
+    original_switch = robot.controller.switch_dof_control_mode
+
+    def fail_switch(*, dof_index: int, mode: str) -> None:
+        if dof_index == 1:
+            raise RuntimeError("mode write failed")
+        original_switch(dof_index=dof_index, mode=mode)
+
+    robot.controller.switch_dof_control_mode = fail_switch
+
+    with pytest.raises(RuntimeError, match="mode write failed"):
+        controller.apply_prepared_runtime(prepared, clear_target_cache=True)
+
+    assert controller.settings is previous_settings
+    assert controller.command_target_modes == ("position", "position")
+
+
+def test_apply_prepared_runtime_rejects_another_controller_plan() -> None:
+    first, _ = _controller(ComponentControlSettings())
+    second, _ = _controller(ComponentControlSettings())
+
+    with pytest.raises(ValueError, match="another JointController"):
+        second.apply_prepared_runtime(
+            first.prepare_runtime(),
+            clear_target_cache=True,
+        )

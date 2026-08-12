@@ -1,0 +1,284 @@
+"""三种 ingress 共用的有界 admission/response 队列。"""
+
+from __future__ import annotations
+
+from collections import OrderedDict, deque
+from dataclasses import dataclass
+from threading import Condition
+import time
+
+from .protocol import MirrorRequest, MirrorResponse
+
+
+class MirrorAdmissionError(RuntimeError):
+    code = "admission_error"
+
+
+class DuplicateRequestError(MirrorAdmissionError):
+    code = "duplicate_request_id"
+
+
+class AdmissionCapacityError(MirrorAdmissionError):
+    code = "queue_capacity_exceeded"
+
+
+class AdmissionClosedError(MirrorAdmissionError):
+    code = "admission_closed"
+
+
+class RuntimeEstoppedError(MirrorAdmissionError):
+    code = "runtime_estopped"
+
+
+@dataclass(frozen=True)
+class AdmissionStatus:
+    pending: int
+    active_request_id: str | None
+    terminal: int
+    capacity: int
+    closed: bool
+    estopped: bool
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "pending": self.pending,
+            "active_request_id": self.active_request_id,
+            "terminal": self.terminal,
+            "capacity": self.capacity,
+            "closed": self.closed,
+            "estopped": self.estopped,
+        }
+
+
+class MirrorAdmissionQueue:
+    """有界、单主线程消费、并发 ingress 可安全提交的队列。
+
+    相同 request_id 在 pending/active/terminal 三种状态下都拒绝。terminal history 至少与
+    admission capacity 同大，保证已接收请求的响应不会在等待方读取前立即被逐出。
+    """
+
+    def __init__(self, *, capacity: int = 256, terminal_capacity: int = 512) -> None:
+        if type(capacity) is not int or capacity <= 0:
+            raise ValueError("capacity 必须是正整数")
+        if type(terminal_capacity) is not int or terminal_capacity < capacity:
+            raise ValueError("terminal_capacity 必须是 >= capacity 的整数")
+        self.capacity = capacity
+        self.terminal_capacity = terminal_capacity
+        self._condition = Condition()
+        self._pending: deque[MirrorRequest] = deque()
+        self._active: MirrorRequest | None = None
+        self._terminal: OrderedDict[str, MirrorResponse] = OrderedDict()
+        self._reserved_immediate: set[str] = set()
+        self._cancelled: set[str] = set()
+        self._closed = False
+        self._estopped = False
+
+    def submit(self, request: MirrorRequest) -> None:
+        with self._condition:
+            if self._closed:
+                raise AdmissionClosedError("Mirror admission 已关闭")
+            if self._estopped and (
+                request.operation.startswith("motion.")
+                or request.operation
+                in {
+                    "state.set",
+                    "control.set_mode",
+                    "control.set_hybrid_parameters",
+                    "control.tare_wrench",
+                }
+            ):
+                raise RuntimeEstoppedError(
+                    "Mirror 已 estop；reset 前拒绝新 motion、state.set 与 control.set_mode"
+                )
+            if self._known(request.request_id):
+                raise DuplicateRequestError(f"重复 request_id: {request.request_id!r}")
+            if len(self._pending) + int(self._active is not None) >= self.capacity:
+                raise AdmissionCapacityError("Mirror admission queue 已满")
+            self._pending.append(request)
+            self._condition.notify_all()
+
+    def reserve_immediate(self, request_id: str) -> None:
+        """为线程安全控制操作原子保留 ID，保持与普通请求相同的去重语义。"""
+
+        with self._condition:
+            if self._closed:
+                raise AdmissionClosedError("Mirror admission 已关闭")
+            if self._known(request_id):
+                raise DuplicateRequestError(f"重复 request_id: {request_id!r}")
+            self._reserved_immediate.add(request_id)
+
+    def complete_immediate(self, response: MirrorResponse) -> None:
+        with self._condition:
+            if response.request_id not in self._reserved_immediate:
+                raise RuntimeError("immediate response 没有对应 reservation")
+            self._reserved_immediate.remove(response.request_id)
+            self._store_terminal(response)
+            self._condition.notify_all()
+
+    def claim(self, *, timeout_s: float | None = None) -> MirrorRequest | None:
+        deadline = None if timeout_s is None else time.monotonic() + float(timeout_s)
+        with self._condition:
+            while not self._pending and not self._closed:
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0.0:
+                    return None
+                self._condition.wait(remaining)
+            if self._active is not None:
+                raise RuntimeError("Mirror admission 只允许一个主线程 active request")
+            if not self._pending:
+                return None
+            self._active = self._pending.popleft()
+            return self._active
+
+    def complete(self, response: MirrorResponse) -> None:
+        with self._condition:
+            if self._active is None or self._active.request_id != response.request_id:
+                raise RuntimeError("response 不属于当前 active request")
+            self._active = None
+            self._cancelled.discard(response.request_id)
+            self._store_terminal(response)
+            self._condition.notify_all()
+
+    def wait_response(self, request_id: str, *, timeout_s: float) -> MirrorResponse:
+        deadline = time.monotonic() + float(timeout_s)
+        with self._condition:
+            while request_id not in self._terminal:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise TimeoutError(f"等待 Mirror response 超时: {request_id!r}")
+                self._condition.wait(remaining)
+            return self._terminal[request_id]
+
+    def cancel(self, request_id: str) -> bool:
+        with self._condition:
+            if self._active is not None and self._active.request_id == request_id:
+                self._cancelled.add(request_id)
+                return True
+            for request in tuple(self._pending):
+                if request.request_id != request_id:
+                    continue
+                self._pending.remove(request)
+                self._store_terminal(
+                    MirrorResponse.failure(
+                        request_id,
+                        code="cancelled",
+                        message="请求在执行前被取消",
+                        protocol=request.protocol,
+                    )
+                )
+                self._condition.notify_all()
+                return True
+            return False
+
+    def cancel_current(self) -> bool:
+        with self._condition:
+            if self._active is None:
+                return False
+            self._cancelled.add(self._active.request_id)
+            return True
+
+    def cancel_pending(self, *, code: str, message: str) -> tuple[str, ...]:
+        """清空尚未执行的请求，但不改变 active/estop 状态。"""
+
+        with self._condition:
+            cancelled: list[str] = []
+            while self._pending:
+                request = self._pending.popleft()
+                cancelled.append(request.request_id)
+                self._store_terminal(
+                    MirrorResponse.failure(
+                        request.request_id,
+                        code=code,
+                        message=message,
+                        protocol=request.protocol,
+                    )
+                )
+            self._condition.notify_all()
+            return tuple(cancelled)
+
+    def should_cancel(self, request_id: str) -> bool:
+        with self._condition:
+            return request_id in self._cancelled or self._estopped or self._closed
+
+    def estop(self) -> tuple[str, ...]:
+        with self._condition:
+            self._estopped = True
+            cancelled = []
+            while self._pending:
+                request = self._pending.popleft()
+                cancelled.append(request.request_id)
+                self._store_terminal(
+                    MirrorResponse.failure(
+                        request.request_id,
+                        code="estopped",
+                        message="请求因 runtime.estop 被清除",
+                        protocol=request.protocol,
+                    )
+                )
+            if self._active is not None:
+                self._cancelled.add(self._active.request_id)
+                cancelled.append(self._active.request_id)
+            self._condition.notify_all()
+            return tuple(cancelled)
+
+    def clear_estop(self) -> None:
+        with self._condition:
+            self._estopped = False
+
+    def status(self) -> AdmissionStatus:
+        with self._condition:
+            return AdmissionStatus(
+                pending=len(self._pending),
+                active_request_id=(
+                    None if self._active is None else self._active.request_id
+                ),
+                terminal=len(self._terminal),
+                capacity=self.capacity,
+                closed=self._closed,
+                estopped=self._estopped,
+            )
+
+    def close(self) -> bool:
+        with self._condition:
+            if self._closed:
+                return True
+            self._closed = True
+            while self._pending:
+                request = self._pending.popleft()
+                self._store_terminal(
+                    MirrorResponse.failure(
+                        request.request_id,
+                        code="runtime_closing",
+                        message="Mirror 正在关闭",
+                        protocol=request.protocol,
+                    )
+                )
+            if self._active is not None:
+                self._cancelled.add(self._active.request_id)
+            self._condition.notify_all()
+            return self._active is None
+
+    def _known(self, request_id: str) -> bool:
+        return bool(
+            request_id in self._terminal
+            or request_id in self._reserved_immediate
+            or (self._active is not None and self._active.request_id == request_id)
+            or any(item.request_id == request_id for item in self._pending)
+        )
+
+    def _store_terminal(self, response: MirrorResponse) -> None:
+        self._terminal[response.request_id] = response
+        self._terminal.move_to_end(response.request_id)
+        while len(self._terminal) > self.terminal_capacity:
+            self._terminal.popitem(last=False)
+
+
+__all__ = [
+    "AdmissionCapacityError",
+    "AdmissionClosedError",
+    "AdmissionStatus",
+    "DuplicateRequestError",
+    "MirrorAdmissionError",
+    "MirrorAdmissionQueue",
+    "RuntimeEstoppedError",
+]

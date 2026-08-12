@@ -1,0 +1,85 @@
+# 默认 bundle 的灵巧手控制器参数。
+#
+# 本文件属于 physx controller bundle。bundle 的选择优先级为 scene.robots[].controller_profile、
+# robot.controller_profile 或 physics.engine 派生默认值；加载
+# bundle 时会与同目录的
+# arm_controller.yaml 一起解析。它只描述控制律、关节 drive 和 effort 限幅，不负责机器人
+# 接触材质、刚体阻尼、重力或 solver iteration。
+#
+# 消费边界：
+# - position_control 既为资产导入后的 USD/PhysX drive 提供初始 seed，也在 position 模式下
+#   提供运行时最终参数；velocity_control/effort_control 只在对应主动控制模式下消费。
+# - active_joints 面向 robot joint_groups/controlled_joints 选出的主动 hand DOF。
+# - follower_joints 面向 L6 资产中 DIP 等 mimic/equality 从动 DOF，不占上层命令向量位置。
+# - 参数可写一个标量、长度为 1 的列表（两者都会广播到本组全部关节）、与本组顺序等长的
+#   列表，或覆盖本组全部精确 DOF 名的 mapping；其它列表长度会被拒绝，name-map 不能遗漏
+#   或夹带未知关节。
+# - 所有数值必须为非负有限数。stiffness/damping/max_force/effort 的物理量随关节类型变化：
+#   revolute 对应 N*m、rad、s，prismatic 对应 N、m、s。
+#
+
+# 当前文件面向 hand；加载器会校验 target 与 hand_controller.yaml 的目录角色一致，防止误用臂部增益。
+target: hand
+
+position_control:
+  # implicit 使用 Isaac/PhysX position drive 下发位置目标；explicit 在 Python 侧计算
+  # stiffness * 位置误差 + damping * 速度误差，再按 max_force 限幅为 effort。
+  method: implicit
+
+  # 直接接收上层位置命令的手部主关节参数。
+  active_joints:
+    # 位置误差到回正 effort 的刚度；revolute 为 N*m/rad，prismatic 为 N/m。
+    stiffness: 1000.0
+    # 速度误差阻尼；revolute 为 N*m*s/rad，prismatic 为 N*s/m。
+    damping: 50.0
+    # implicit drive 或显式 PD effort 的绝对限幅；revolute 为 N*m，prismatic 为 N。
+    max_force: 100.0
+
+  # MJCF L6 follower 用更高刚度贴近 equality 关系，并跟随 master 实际位置。
+  # URDF mimic 由原生 PhysX 约束执行，运行时不会再叠加这里的 follower drive。
+  follower_joints:
+    # follower position drive 刚度。
+    stiffness: 50000.0
+    # follower position drive 阻尼。
+    damping: 50.0
+    # follower drive 最大驱动力/力矩。
+    max_force: 100.0
+
+velocity_control:
+  # explicit 计算 damping * (目标速度 - 实际速度) 并下发 effort；也可选 implicit，
+  # 由 PhysX velocity drive 消费目标速度和 damping。
+  method: explicit
+
+  # 主动速度关节不使用 stiffness，只配置残差增益和输出限幅。
+  active_joints:
+    # 速度残差到 effort 的比例系数。
+    damping: 20.0
+    # explicit effort 或 implicit velocity drive 的绝对限幅，单位随关节类型为 N*m 或 N。
+    max_force: 100.0
+
+  # follower 的语义不随主动模式变化，仍然使用 position drive。
+  follower_joints:
+    # follower position drive 刚度；保持手部 equality 关系所需的高刚度。
+    stiffness: 50000.0
+    # follower position drive 阻尼。
+    damping: 40.0
+    # follower drive 最大驱动力/力矩。
+    max_force: 100.0
+
+effort_control:
+  # direct 将上层 effort 命令按 effort_limit 对称限幅后直接下发给 Isaac，不使用 PD 增益。
+  method: direct
+
+  active_joints:
+    # 主动关节 effort 的对称限幅，即 [-effort_limit, effort_limit]；
+    # revolute 单位 N*m，prismatic 单位 N。
+    effort_limit: 100.0
+
+  # follower 不接收 direct effort，继续由 position drive 维护跟随关系。
+  follower_joints:
+    # follower position drive 刚度。
+    stiffness: 50000.0
+    # follower position drive 阻尼。
+    damping: 40.0
+    # follower drive 最大驱动力/力矩。
+    max_force: 100.0

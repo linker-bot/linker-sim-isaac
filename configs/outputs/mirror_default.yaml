@@ -1,0 +1,124 @@
+# 全部渲染、camera sink、日志和遥测只属于 Mirror 冷边界。
+# 路径均相对仓库根目录解析；时间字段使用秒，频率字段使用 Hz，容量字段使用字节或条目数。
+outputs:
+  # Kit/RTX 主渲染窗口设置；它与 scene 中每台离屏相机的分辨率和采样频率相互独立。
+  render:
+    # 总渲染开关；false 时仍可运行物理和无 GUI 输出。
+    enabled: true
+    # 是否创建交互式 Kit 窗口；远程/无显示环境通常设为 false。
+    gui: true
+    # Kit renderer 名称，例如 RaytracedLighting；必须与当前 Isaac Sim 扩展支持项一致。
+    renderer: RaytracedLighting
+    # 主窗口渲染分辨率，单位 pixel，均必须为正整数。
+    width: 1280
+    height: 960
+    # 每帧每像素的 RTX sample 数；增大可降噪，但会提高 GPU 渲染成本。
+    samples_per_pixel_per_frame: 1
+
+  # scene.cameras 的异步输出策略；相机几何、内参和采样频率仍在 scene profile 中声明。
+  camera:
+    # true 时至少要配置 save_root、live_port 或 MCAP path 中的一种 consumer；false 时可保留
+    # 合法 consumer 配置，运行时不会解析路径、绑定端口或创建 camera sink。
+    enabled: true
+    # 离线帧根目录；运行时会按 camera id 派生独立子目录。null 可关闭磁盘帧输出。
+    save_root: logs/cameras
+    # Foxglove live server 的监听地址；只有 live_port 非 null 时才会绑定。
+    foxglove_live_host: 127.0.0.1
+    # 相机 live stream 端口，范围 1..65535；null 表示不创建实时 Foxglove 相机端点。
+    foxglove_live_port: 8849
+    # 相机 MCAP 输出文件；null 表示不录制相机 MCAP，磁盘帧和 live stream 不受影响。
+    foxglove_mcap_path: null
+    # producer 与后台 writer 之间的有界帧队列容量，按待处理 frame 数计。
+    queue_size: 128
+    # 队列满时策略：block/drop_oldest/drop_newest/error。
+    # block 保证不主动丢帧，但 writer 跟不上时会反压仿真线程。
+    overflow_policy: block
+    # writer 等待新帧的单次轮询间隔，单位 s；也决定空闲时检查 shutdown 的节奏。
+    worker_poll_interval_s: 0.1
+    # 目标目录已有数据时策略：error/truncate/resume/timestamped_dir。
+    # timestamped_dir 为本次运行创建带时间戳的独立目录，避免覆盖旧数据。
+    existing_data_policy: timestamped_dir
+    # 关闭时队列处理策略：drain 写完已接收帧，discard 丢弃尚未写出的帧。
+    shutdown_policy: drain
+    # RGB payload 编码：ppm 无压缩、png 无损压缩、npy 保存数组。
+    rgb_format: png
+    # 深度 payload 编码：npy 为未压缩 NumPy 数组，npz 为压缩归档。
+    depth_format: npz
+    # 每写入多少帧 flush 一次 metadata JSONL；1 最耐异常退出，但同步频率最高。
+    metadata_flush_interval_frames: 1
+    # 每台相机离线目录的最大写入预算，单位 byte；10737418240 = 10 GiB。
+    max_bytes_per_camera: 10737418240
+    # 关闭 camera writer、live server 和 MCAP sink 的最长等待时间，单位 s。
+    shutdown_timeout_s: 2.0
+
+  # 每台机器人独立派生的 joint tracking CSV；各布尔项决定输出列。
+  logging:
+    # 关节 CSV 总开关；false 时可保留合法 joint_tracking_path，运行时不会解析路径、创建 logger 或写文件。
+    enabled: false
+    # 目标 CSV 已存在时策略：error/truncate/resume/timestamped_dir。
+    existing_data_policy: timestamped_dir
+    # CSV 基础路径；双臂实例会在文件名中追加 robot_id 和 label，避免互相覆盖。
+    joint_tracking_path: logs/joint_tracking/pinch_grasp.csv
+    # 混合力/位控制诊断 CSV；仅在下方 log_hybrid_control=true 时创建。
+    hybrid_control_path: logs/hybrid_control/hybrid_force_position.csv
+    log_hybrid_control: false
+    # 最长缓存时间，单位 s；达到该间隔后把已缓冲行 flush 到文件。
+    flush_interval_s: 0.05
+    # 每隔多少个 physics step 记录一行；1 表示每个物理步都采样。
+    interval_steps: 1
+    # 实际关节状态：来自 articulation 当前 position/velocity。
+    log_actual_position: true
+    log_actual_velocity: true
+    # 上层控制命令：记录请求/控制器下发的 position、velocity 与 effort 目标。
+    log_command_position: true
+    log_command_velocity: true
+    log_command_effort: true
+    # 控制链不同阶段的 effort：action 是策略输入，measured 是传感/后端测量，applied 是最终施加值。
+    log_action_effort: false
+    log_measured_effort: false
+    log_applied_effort: false
+
+  # 低延迟机器人状态流；与 camera live server 分开端口和队列，避免大图像阻塞状态消息。
+  telemetry:
+    # true 时必须至少启用一种消息 modality，并配置 live_port 或 mcap_path；false 时可保留
+    # 合法 endpoint，运行时不会解析 MCAP 路径、绑定端口或创建 telemetry sink。
+    enabled: true
+    # 状态发布频率，单位 Hz；由采样调度器从 physics step 节奏投影。
+    rate_hz: 60.0
+    # 待发布状态 snapshot 的有界 buffer 容量。
+    buffer_size: 1
+    # buffer 满时策略：latest/drop_oldest/drop_newest；latest 保留最新状态供实时观察。
+    drop_policy: latest
+    # 发布/编码异常策略：stop 终止 Mirror，continue 记录错误后继续运行。
+    on_error: stop
+    # 标准 sensor_msgs/JointState topic，便于 Foxglove 和 ROS 工具消费。
+    include_joint_states: true
+    # 项目完整状态 JSON，包含请求状态及可选对象信息。
+    include_state_json: true
+    # 场景可视化 marker 数据；用于 Foxglove 还原机器人/对象位置。
+    include_scene_markers: true
+    # 是否在 joint state 中携带 effort；true 时 joint_effort_field 不能为 none，false 时可保留
+    # 合法来源选择，但运行时会投影为 none 且不发布 effort 数组。
+    include_efforts: false
+    # state JSON 是否包含 scene 对象状态；关闭可减少序列化和带宽。
+    include_objects: true
+    # 发布 owner thread 已冻结的混合控制诊断；非 hybrid 阶段只发布 active=false。
+    include_hybrid_control: true
+    # effort 来源：none/commanded/measured/applied；none 表示不发布 effort 数组。
+    joint_effort_field: none
+    # Foxglove telemetry server 监听地址；只有 live_port 非 null 时使用。
+    foxglove_live_host: 127.0.0.1
+    # telemetry live stream 端口，范围 1..65535；与相机端口必须避免冲突。
+    foxglove_live_port: 8848
+    # telemetry MCAP 路径；可与 live stream 同时启用，null 则只发送实时数据。
+    mcap_path: logs/telemetry/mirror.mcap
+    # MCAP 已存在时策略：error/truncate/timestamped_dir。
+    existing_data_policy: timestamped_dir
+    # 三类消息的绝对 topic；必须以 / 开头、互不相同且不能包含 '..'。
+    topics:
+      joint_states: /joint_states
+      scene: /scene
+      state: /linkerbot/mirror/state
+      hybrid_control: /linkerbot/mirror/hybrid_control
+    # 关闭 telemetry worker、网络端点和 MCAP writer 的最长等待时间，单位 s。
+    shutdown_timeout_s: 2.0

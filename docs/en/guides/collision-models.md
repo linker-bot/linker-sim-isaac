@@ -1,121 +1,89 @@
-# Collision Models Guide
+# Collision Models
 
 Language: [English](collision-models.md) | [中文](../../zh-CN/guides/collision-models.md)
 
-The project has three independent collision layers. Configure the layer that owns the
-behavior you need; enabling one layer does not imply that either of the others is active.
+Three collision concepts must remain separate: physical contact, replicated-world
+isolation, and planner avoidance.
 
-| Layer | Purpose | Primary owner |
+## Physical Contact
+
+The physics backend resolves contact between scene bodies. Both products can require
+physical contact for manipulation. For example, Kaleidoscope's T-block reward depends
+on contact resolved by the selected PhysX CUDA or Newton backend even though
+the product has no planner collision world.
+
+Disabling PhysX scene-query support does not disable contact dynamics. Newton
+also resolves task contact without constructing a planning collision/query world.
+
+## Replicated Environment Isolation
+
+Kaleidoscope creates many homogeneous environments. Isolation is fixed by the
+selected physics engine rather than exposed as a public profile selector:
+
+- the PhysX builder always enables environment IDs for its GridCloner replicas; and
+- the Newton builder always creates independent Newton-runtime worlds.
+
+The internal replication implementations remain separate because the engines have
+different topology and ownership models. What was removed is the false ability to
+mix an engine with an incompatible public replication profile.
+
+Isolation prevents bodies in different environments from contacting each other. It
+is required for valid vector-task physics but does not provide obstacle avoidance or
+path queries.
+
+Validate isolation after scene assembly and inspect representative environments at
+the beginning, middle, and end of the index range in GPU smoke tests.
+
+## Planner Collision World
+
+Mirror owns collision geometry providers and per-robot planning contexts. They build
+a consistent query representation for cuRobo planning and can be refreshed after
+state changes.
+
+Approximation quality, mesh/cuboid conversion, robot envelopes, and obstacle identity
+must be explicit. See [Collision Approximation](../development/collision-approximation.md).
+
+## Product Matrix
+
+| Capability | Mirror | Kaleidoscope |
 | --- | --- | --- |
-| Simulation collision | PhysX contact, friction, penetration response, and rigid-body motion | Imported USD/URDF/MJCF colliders plus robot/object physics profiles |
-| Planning collision | Robot self-collision and obstacle checks used by cuRobo | Robot cuRobo model, object `planning_collision`, and the Scene collision registry |
-| Tiled env filtering | Prevent contact between different cloned env roots | Env `tiled.clone` configuration |
+| Physical contacts | Yes | Yes |
+| Cross-environment isolation | Not applicable | Required |
+| Scene queries for planning | Yes | Disabled |
+| cuRobo collision world | Yes | No |
+| Per-request `avoid_collisions` | Yes | No |
+| Collision-aware batch IK | Optional Mirror path | No |
 
-## Simulation Collision
+## Refresh Rules
 
-Isaac importers materialize colliders from robot and rigid-object assets. The project-level
-`collision_approximation` field selects how imported geometry becomes collision geometry;
-valid choices and asset-format restrictions are documented in
-[Collision Approximation](../development/collision-approximation.md).
+Mirror invalidates planning collision state after:
 
-Object profiles own runtime material, static/dynamic behavior, solver iterations, and import
-options. Env profiles own each object instance path and pose. A planning obstacle does not
-create a PhysX collider, and disabling planning collision does not disable physical contact.
+- a physics step;
+- `set_state`;
+- snapshot restore;
+- reset.
 
-Use simulation collision when the requirement is contact behavior: grasping, settling,
-friction, restitution, penetration, or whether an object moves after impact.
-
-## Planning Collision
-
-cuRobo collision-aware requests require all of the following:
-
-- A robot profile with a valid cuRobo planning model and collision geometry.
-- A materialized cuRobo context with collision-query capability.
-- A Single Scene or Tiled Scene planning path that supports `avoid_collisions=true`.
-- A planning world containing the obstacles relevant to that request.
-
-Rigid object profiles may expose a simplified planning shape:
-
-```yaml
-planning_collision:
-  shape: cuboid
-  size: [0.04, 0.2, 0.22]
-  xyz: [-0.02, 0.0, 0.11]
-  rpy: [0.0, 0.0, 0.0]
-  padding: 0.0
-  enabled: true
-```
-
-This shape is an explicit planning approximation. It does not replace the object's authored
-PhysX compound collider. Supported canonical shapes are the ones accepted by the object
-profile parser; cuRobo adapters materialize them into the fixed `cuboid`/`mesh` cache model.
-
-Single Scene runtime registers object and robot geometry providers, captures one immutable planning
-snapshot per planning transaction, and excludes the target robot from its own obstacle list.
-With `coordination="static_others"`, other robots can be included as frozen obstacles.
-Dynamic state changes mark the collision registry dirty; `force_collision_refresh` requests
-an explicit current view.
-
-`avoid_collisions=true` is strict. Missing robot spheres, unavailable world collision, an
-unsupported request path, or insufficient backend capability fails the request. The runtime
-does not silently execute a collision-unaware trajectory.
-
-Use planning collision when the requirement is path feasibility, obstacle avoidance, or robot
-self-collision during IK/planning. It does not simulate contact forces.
-
-## Tiled Scene Inter-Env Filtering
-
-Cloned envs share one PhysX scene. Without inter-env filtering, colliders from neighboring env
-roots can contact each other when spacing or geometry overlaps.
-
-```yaml
-tiled:
-  clone:
-    filter_collisions: true
-    collision_filter_strategy: collision_groups
-    collision_root_path: /World/collisions
-    physics_scene_path: null
-    global_collision_paths: auto
-    extra_global_collision_paths: []
-```
-
-`physics_scene_path: null` auto-discovers the stage's single
-`UsdPhysics.Scene`. Discovery fails when the stage contains none or more than
-one; for a multi-scene stage, set the field to the required absolute prim path.
-
-`collision_groups` creates one collision group per env and a shared global group. With the
-inverted PhysX filter, an env contacts itself and declared global ground/fixtures, but not other
-envs. Its authored relation count grows linearly with env count.
-
-`filtered_pairs` authors pair filters directly and has quadratic scaling. It is an explicit
-alternative for environments where collision groups cannot be used. Group-only fields are
-rejected unless filtering and the `collision_groups` strategy are active.
-
-Inter-env filtering changes physical contact only. It does not give the planner an obstacle
-world and does not enable cuRobo collision checking.
-
-## Choosing Global Paths
-
-`global_collision_paths: auto` scans the supported ground locations outside env roots. An
-explicit list replaces auto discovery; `extra_global_collision_paths` appends shared fixtures.
-Every configured path must be a valid absolute prim path outside cloned env roots. Treating an
-env-local prim as global would reintroduce cross-env coupling.
+The planner refreshes according to `planning.request_defaults` or an explicit request.
+That profile owns refresh policy only; cuRobo collision capability and cache capacity
+come from `curobo.motion_planner`. A forced refresh can be expensive, so do not
+duplicate it for every segment when one consistent timeline snapshot is sufficient.
 
 ## Diagnostics
 
-| Symptom | Check |
-| --- | --- |
-| Robot passes through an object in simulation | Imported collider, `physics.static`, material, collision approximation, and stage pose |
-| Physical contact works but planning ignores the object | Object `planning_collision`, Scene collision registry, and cuRobo capability |
-| `avoid_collisions=true` is rejected | Robot collision model, context capability, request kind, and cache/world availability |
-| Different Tiled envs touch each other | `filter_collisions`, strategy, global paths, spacing, and authored group diagnostics |
-| Ground stops colliding after filtering | Ground/global prim is missing from global collision paths |
-| Planning view is stale after state mutation | Registry invalidation and `force_collision_refresh` |
+When contact behavior is wrong, first determine which layer is failing:
 
-## Related Documentation
+1. inspect physical shapes, transforms, and contact reports;
+2. for Kaleidoscope, verify environment origins and isolation authoring;
+3. for Mirror planning, inspect provider geometry and freshness separately from
+   physical contact;
+4. compare robot collision envelopes with the visual and articulation geometry.
 
-- [Motion Planning](motion-planning.md)
-- [Configuration](configuration.md)
-- [Collision Approximation](../development/collision-approximation.md)
-- [Tiled Scene JSON Reference](../reference/tiled-scene-json.md)
-- [Known Constraints](../operations/constraints.md)
+Do not fix a planner approximation by changing physical collision shapes without a
+separate dynamics review.
+
+The warehouse floor in the `mirror/scene3` scene (file
+`configs/scenes/mirror/scene3.yaml`, identity `scene.id: scene3`) makes this boundary explicit. Its coplanar
+source mesh is visual-only, while the wrapper asset authors an invisible analytic
+plane at the same local height for physical contact. The scene therefore keeps
+`add_ground: false`, avoiding a second overlapping ground surface, and PhysX plus
+Newton CPU/CUDA consume the same analytic collider.

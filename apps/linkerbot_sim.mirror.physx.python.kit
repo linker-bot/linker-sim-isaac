@@ -1,0 +1,37 @@
+[package]
+description = "LinkerBot Mirror with PhysX CPU"
+title = "LinkerBot Mirror (PhysX)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "mirror", "physx"]
+
+# Mirror PhysX 需要 importer、RTX camera、viewport 和 PhysX；具体 pipeline 仍由
+# MirrorConfig/IsaacSession 在 World 创建前设置。
+[dependencies]
+"isaacsim.exp.base.python" = {}
+
+[settings]
+physics.fabricUseGPUInterop = false
+physics.fabricUpdateTransformations = false
+physics.fabricUpdateVelocities = false
+physics.fabricUpdateForceSensors = false
+physics.fabricUpdateJointStates = false
+physics.fabricUpdatePoints = false
+rtx.hydra.supportMultiTickRate = true
+rtx.rendering.perSensorTickTlas = true
+rtx.post.dlss.execMode = 3
+
+[settings.app]
+name = "LinkerBot-Mirror-PhysX"
+version = "6.0.1"
+window.title = "LinkerBot Mirror"
+settings.persistent = false
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]

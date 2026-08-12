@@ -1,8 +1,7 @@
-"""从 env profile 解析场景级传感器配置。"""
+"""Mirror resolved scene 投影出的场景级 typed 传感器配置。"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from linkerbot_sim.sensors.camera.config import SensorCameraSettings
@@ -10,36 +9,18 @@ from linkerbot_sim.sensors.camera.config import SensorCameraSettings
 
 @dataclass(frozen=True)
 class SceneSensorSettings:
-    """env profile 中的 sensor 配置集合。"""
+    """Mirror assembly 直接构造的 sensor 配置集合。"""
 
     cameras: tuple[SensorCameraSettings, ...] = ()
 
-    @classmethod
-    def from_env_config(cls, config: Mapping[str, object]) -> "SceneSensorSettings":
-        """从完整 env profile 解析 sensors 顶层分组。"""
-
-        if "sensors" not in config:
-            return cls()
-        sensors = config["sensors"]
-        if sensors is None:
-            raise ValueError("sensors must be a mapping")
-        if not isinstance(sensors, Mapping):
-            raise ValueError("sensors must be a mapping")
-        _reject_keys(sensors, {"cameras"}, "sensors")
-        if "cameras" not in sensors:
-            cameras: object = {}
-        else:
-            cameras = sensors["cameras"]
-        if not isinstance(cameras, Mapping):
-            raise ValueError("sensors.cameras must be a mapping")
-        return cls(
-            cameras=tuple(
-                SensorCameraSettings.from_mapping(
-                    name, camera_data, label="sensors.cameras"
-                )
-                for name, camera_data in cameras.items()
-            )
-        )
+    def __post_init__(self) -> None:
+        if not isinstance(self.cameras, tuple) or not all(
+            isinstance(camera, SensorCameraSettings) for camera in self.cameras
+        ):
+            raise TypeError("cameras must be a tuple of SensorCameraSettings")
+        names = tuple(camera.name for camera in self.cameras)
+        if len(set(names)) != len(names):
+            raise ValueError("camera names must be unique")
 
     @property
     def enabled_cameras(self) -> tuple[SensorCameraSettings, ...]:
@@ -53,10 +34,10 @@ class SceneSensorSettings:
 
         return any(camera.output.has_consumer for camera in self.enabled_cameras)
 
-    def validate_single_scene_camera_scope(self) -> None:
-        """在构建 SingleSceneRuntime 前拒绝仅 TiledSceneRuntime 支持的 camera selector。
+    def validate_mirror_camera_scope(self) -> None:
+        """在构建 Mirror 场景前拒绝复制环境专用的 camera selector。
 
-        非 tiled 场景没有 env 维度，接受 ``env_ids`` 会产生看似生效但实际被忽略的配置，
+        Mirror 没有复制环境维度，接受 ``env_ids`` 会产生看似生效但实际被忽略的配置，
         因此在创建任何相机资源前直接报完整 YAML 路径。
         """
 
@@ -64,13 +45,5 @@ class SceneSensorSettings:
             if camera.env_ids is not None:
                 raise ValueError(
                     f"sensors.cameras.{camera.name}.env_ids is only valid for "
-                    "TiledSceneRuntime"
+                    "replicated environments"
                 )
-
-
-def _reject_keys(data: Mapping[str, object], allowed: set[str], label: str) -> None:
-    """拒绝未知 sensor 字段，并报告其完整 YAML 路径。"""
-
-    unsupported = sorted(str(key) for key in data if key not in allowed)
-    if unsupported:
-        raise ValueError(f"{label}.{unsupported[0]} is not supported")

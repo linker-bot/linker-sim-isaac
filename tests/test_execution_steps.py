@@ -57,10 +57,17 @@ class _FakeTargets:
 class _FakeController:
     def __init__(self, settings: JointControlSettings) -> None:
         self.settings = settings
-        self.configure_runtime_calls = 0
+        self.prepare_runtime_calls = 0
+        self.apply_prepared_runtime_calls = 0
 
-    def configure_runtime(self) -> None:
-        self.configure_runtime_calls += 1
+    def prepare_runtime(self, settings: JointControlSettings):
+        self.prepare_runtime_calls += 1
+        return settings
+
+    def apply_prepared_runtime(self, prepared, *, clear_target_cache: bool) -> None:
+        assert clear_target_cache is True
+        self.apply_prepared_runtime_calls += 1
+        self.settings = prepared
 
 
 class _FakeCommandController:
@@ -135,7 +142,8 @@ def test_switch_control_mode_step_reconfigures_controller_without_stepping() -> 
 
     assert step == 42
     assert controller.settings is next_settings
-    assert controller.configure_runtime_calls == 1
+    assert controller.prepare_runtime_calls == 1
+    assert controller.apply_prepared_runtime_calls == 1
 
 
 def test_execute_command_position_trajectory_expands_command_space_targets() -> None:

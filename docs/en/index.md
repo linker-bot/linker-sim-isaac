@@ -1,74 +1,55 @@
-# Documentation Index
+# LinkerHand Simulation Documentation
 
 Language: [English](index.md) | [中文](../zh-CN/index.md)
 
-Use this page as the documentation entrypoint. Start by choosing a runtime and
-interface; use guides for tasks and reference pages for exact contracts.
+This documentation describes the current Mirror and Kaleidoscope product contracts.
+The migration is intentionally breaking: removed names, scripts, configuration roots,
+and message formats are not supported aliases.
 
-## Start By Goal
+## Start Here
 
 | Goal | Read |
 | --- | --- |
-| Understand the system and its boundaries | [Project Overview](getting-started/project-overview.md) |
-| Choose Single Scene or Tiled Scene, JSON or Python | [Runtime And API Chooser](getting-started/choose-runtime-and-api.md) |
-| Run Single Scene end to end | [Single Scene Quickstart](getting-started/single-scene-quickstart.md) |
-| Run Tiled Scene end to end | [Tiled Scene Quickstart](getting-started/tiled-scene-quickstart.md) |
-| Configure a run | [Configuration Guide](guides/configuration.md) |
-| Use Single Scene commands | [Single Scene Runtime And JSON](reference/single-scene-json.md) |
-| Use batched Tiled environments | [Tiled Scene Runtime And JSON](reference/tiled-scene-json.md) |
-| Call supported in-process interfaces | [Python Facade Reference](reference/python-api.md) |
-| Choose a control or trajectory path | [Control And Trajectories](guides/control-and-trajectories.md) |
-| Plan motion with cuRobo | [Motion Planning](guides/motion-planning.md) |
-| Configure physical, planning, or inter-env collision | [Collision Models](guides/collision-models.md) |
-| Capture, restore, or clone runtime state | [Snapshot Reference](reference/snapshots.md) |
-| Publish state or inspect MCAP | [Telemetry](guides/telemetry.md) |
-| Configure cameras and image output | [Cameras](guides/cameras.md) |
-| Understand CSV, MCAP, image, and metadata files | [Output Reference](reference/outputs.md) |
-| Diagnose startup, protocol, planning, or shutdown failures | [Troubleshooting](operations/troubleshooting.md) |
-| Generate or inspect USD assets | [Object Assets](development/object-assets.md) |
-| Locate a source owner or internal module | [Source Module Map](development/module-map.md) |
-
-## Getting Started
-
-- [Project Overview](getting-started/project-overview.md)
-- [Choose A Runtime And API](getting-started/choose-runtime-and-api.md)
-- [Single Scene Quickstart](getting-started/single-scene-quickstart.md)
-- [Tiled Scene Quickstart](getting-started/tiled-scene-quickstart.md)
+| Understand the two products and their ownership boundaries | [Project Overview](getting-started/project-overview.md) |
+| Choose between JSON, native Torch, Gymnasium, and skrl | [Mode And API Chooser](getting-started/choose-runtime-and-api.md) |
+| Write joint, IK, planning, and synchronized motion JSON | [Mirror JSON Protocol And Motion Examples](reference/mirror-json.md) |
+| Operate a reality-mapped world | [Mirror Quickstart](getting-started/mirror-quickstart.md) |
+| Run a GPU vector environment | [Kaleidoscope Quickstart](getting-started/kaleidoscope-quickstart.md) |
 
 ## Guides
 
 - [Configuration](guides/configuration.md)
 - [Control And Trajectories](guides/control-and-trajectories.md)
-- [Motion Planning And cuRobo](guides/motion-planning.md)
+- [Motion Planning](guides/motion-planning.md)
 - [Collision Models](guides/collision-models.md)
-- [Realtime Telemetry](guides/telemetry.md)
-- [Foxglove Quick Reference](guides/foxglove.md)
 - [Cameras](guides/cameras.md)
+- [Telemetry](guides/telemetry.md)
+- [Outputs](reference/outputs.md)
+- [Foxglove](guides/foxglove.md)
 
-## Reference
+Mirror owns every guide above. Kaleidoscope deliberately omits planning, avoidance,
+camera, transport, telemetry, and persistent output from its hot runtime closure.
 
-- [YAML Configuration Reference](reference/configuration.md)
-- [Single Scene CLI](reference/single-scene-cli.md)
-- [Single Scene Runtime And JSON](reference/single-scene-json.md)
-- [Tiled Scene CLI](reference/tiled-scene-cli.md)
-- [Tiled Scene Runtime And JSON](reference/tiled-scene-json.md)
-- [Python Facades](reference/python-api.md)
-- [Snapshot Data And Restore](reference/snapshots.md)
-- [Persistent And Live Outputs](reference/outputs.md)
+## References
+
+- [Mirror CLI](reference/mirror-cli.md)
+- [Mirror JSON Protocol](reference/mirror-json.md)
+- [Kaleidoscope API](reference/kaleidoscope-api.md)
+- [Python API](reference/python-api.md)
+- [Configuration Schema](reference/configuration.md)
+- [Snapshots And State](reference/snapshots.md)
+- [Output Policy](reference/outputs.md)
 
 ## Operations
 
-- [Known Risks And Design Constraints](operations/constraints.md)
+- [Runtime Constraints](operations/constraints.md)
 - [Troubleshooting](operations/troubleshooting.md)
 
 ## Development
 
-- [Source Module Map](development/module-map.md)
-- [Naming](development/naming.md)
-- [Object Asset Generation](development/object-assets.md)
+- [Naming And Ownership](development/naming.md)
+- [Module Map](development/module-map.md)
+- [Object Assets](development/object-assets.md)
 - [Collision Approximation](development/collision-approximation.md)
-- [USD Asset Preview](development/usd-preview.md)
-
-## Maintenance
-
-- [Documentation Organization And Maintenance](maintenance/documentation-guide.md)
+- [USD Preview](development/usd-preview.md)
+- [Documentation Maintenance](maintenance/documentation-guide.md)

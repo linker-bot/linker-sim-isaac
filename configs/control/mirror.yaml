@@ -1,0 +1,44 @@
+# Mirror 交互控制配置；物理后端负责派生默认 controller bundle，避免在四个 profile
+# 中重复声明同一组交互策略。scene/robot 仍可显式覆盖具体实例的 controller profile。
+control:
+  # 主动关节命令模式：position/velocity/effort 分别选择位置、速度或力矩控制 section。
+  # 后端会据此从 controller bundle 取对应参数，不在运行中热切换。
+  mode: position
+  # 没有待执行请求时的物理时钟策略：pause 停止推进；hold_step 保持当前目标并继续步进。
+  idle_physics_policy: hold_step
+  # hold_step 模式下每轮空闲推进覆盖的仿真时长，单位 s，必须大于 0。
+  idle_step_duration_s: 0.05
+  # 是否按墙钟限制 physics tick 速率。true 时 idle 与 motion 共用同一时钟，以 scene 的
+  # physics_frequency_hz 实时推进；机器负载过高时允许仿真变慢，不会突发补跑落后的 tick。
+  # false 时不等待墙钟，仿真会按当前机器能够达到的最快速度推进，但 physics dt 保持不变。
+  sync_simulation_to_wall_clock: true
+  # 下面三项是 Mirror v1 运动请求省略字段时唯一采用的默认值。
+  # 关节轨迹的归一化插值曲线：linear 为匀速，smoothstep 在起止处平滑速度。
+  joint_interpolation: smoothstep
+  # 位姿请求坐标系：env 使用场景局部坐标，world 使用 USD 世界坐标。
+  pose_frame: env
+  # 只给位置目标时的姿态策略：free 不约束，current 保持当前姿态，target 使用请求目标。
+  orientation_mode: current
+
+  # interface 统一约束 admission、输入大小和线程 deadline；CLI 只选择是否开放端点。
+  interface:
+    # 已接纳但尚未终结的请求上限；达到容量后新请求会在 admission 阶段被拒绝。
+    admission_capacity: 32
+    # 已完成/失败请求结果的内存历史容量，必须不小于 admission_capacity。
+    terminal_history_capacity: 256
+    # 是否允许 CLI 创建标准输入端点；网络端点仍由命令行参数单独选择。
+    stdin_enabled: true
+    # 标准输入到达 EOF 后的行为：exit 结束进程，keep_alive 仅关闭 stdin 并保持其它端点。
+    stdin_eof_policy: exit
+    # ingress 等待单个请求终态响应的最长墙钟时间，单位 s。
+    response_timeout_s: 30.0
+    # owner loop 等待请求队列的单次轮询超时，单位 s；较小值会提高关闭响应速度。
+    queue_poll_timeout_s: 0.05
+    # 单条输入消息的最大 UTF-8 字节数，防止异常请求无界占用内存。
+    max_message_bytes: 1048576
+    # 同时建立的网络连接上限；不等同于 admission 请求容量。
+    max_connections: 16
+    # 后台入口必须完成启动的最长等待时间，单位 s。
+    startup_timeout_s: 5.0
+    # 关闭入口线程、连接和 owner queue 的最长等待时间，单位 s。
+    shutdown_timeout_s: 2.0

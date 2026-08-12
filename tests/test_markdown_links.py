@@ -138,3 +138,25 @@ def test_markdown_link_cli_returns_failure_for_untracked_target(
     assert main(["--repo-root", str(tmp_path)]) == 1
     output = capsys.readouterr().out
     assert "README.md:1: target is not tracked by Git: draft.md" in output
+
+
+def test_markdown_link_cli_can_accept_nonignored_worktree_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    readme = tmp_path / "README.md"
+    readme.write_text("[draft](draft.md)\n", encoding="utf-8")
+    (tmp_path / "draft.md").write_text("# Draft\n", encoding="utf-8")
+    subprocess.run(("git", "init", "-q"), cwd=tmp_path, check=True)
+    subprocess.run(("git", "add", "README.md"), cwd=tmp_path, check=True)
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--allow-untracked-existing",
+            ]
+        )
+        == 0
+    )
+    assert "visible non-ignored worktree files" in capsys.readouterr().out

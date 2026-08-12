@@ -1,0 +1,113 @@
+# scene3 的现实映像版本。该文件保留 warehouse、相机和 GUI 视觉事实；
+# 与无相机、240 Hz 的 Kaleidoscope tblock_push 不是同一场景，禁止互相覆盖合并。
+# 所有 xyz 使用 m，rpy 使用绕固定 XYZ 轴的 rad；profile 路径相对对应 configs 分组解析。
+scene:
+  # 场景稳定标识，必须与文件 stem scene3 一致，用于配置来源和外部状态标识。
+  id: scene3
+  # 面向人的简短描述，不参与装配逻辑。
+  description: dual arm push T reality mirror
+  # 世界重力在 Z 轴的加速度，单位 m/s^2；负值表示朝世界 -Z。
+  gravity_z: -9.81
+  # 仓库资产已经在其局部地板高度声明解析 Plane；这里禁止再叠加默认地面。
+  add_ground: false
+  # add_ground=true 时默认 Plane 的世界 Z 高度，单位 m；关闭时保留该完整 schema 字段。
+  ground_height: 0.0
+  # 物理 step 频率，单位 Hz；60 Hz 对应 physics_dt = 1/60 s。
+  physics_frequency_hz: 60.0
+  # 主 viewport 的目标渲染频率，单位 Hz；相机使用各自 frequency_hz，不继承此值。
+  render_frequency_hz: 60.0
+  # 在 interactive ready 前顺序创建两臂 planner；cuRobo 数值 warmup 仍由
+  # configs/curobo/mirror.yaml 的 motion_planner.warmup 控制。
+  planning_startup: prewarm
+
+  # 机器人实例按列表顺序获得稳定 robot_id；label 在本场景内必须唯一。
+  # robot_profile 选择 configs/robots/<name>.yaml，root_pose 定义 articulation 初始世界位姿。
+  robots:
+    # 左侧机械臂+左手实例；未写 controller_profile 时按 physics.engine 选择默认 bundle。
+    - label: left_arm
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        # 机器人 root 的世界平移 xyz，单位 m。
+        xyz: [0.0, 0.09, 0.0]
+        # 机器人 root 的世界 XYZ Euler 旋转，单位 rad。
+        rpy: [-1.5707, 0.0, 0.0]
+    # 右侧机械臂+右手实例；相反的 Y 偏移和 roll 使两臂相向布置。
+    - label: right_arm
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+  # 场景对象实例。name、prim_path 均须唯一；object_profile 选择可复用资产/物理配置。
+  objects:
+    # 视觉仓库和解析地面；向下平移使资产的局部地板与机器人工作区对齐。
+    - name: warehouse
+      object_profile: industrial_warehouse
+      # 引用资产挂载到 stage 的绝对 USD prim path。
+      prim_path: /World/IndustrialWarehouse
+      root_pose:
+        xyz: [0.0, 0.0, -1.266845]
+        rpy: [0.0, 0.0, 0.0]
+    # 双臂固定工装；static 策略和接触材质来自 object profile。
+    - name: workstation
+      object_profile: workstation_armbase
+      prim_path: /World/WorkstationArmBase
+      root_pose:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
+    # 被推动的动态 T-block；该 name 也用于状态流和外部对象寻址。
+    - name: Tblock
+      object_profile: TblockV1_default
+      prim_path: /World/TBlock
+      root_pose:
+        xyz: [0.15, 0.0, -0.4]
+        rpy: [0.0, 1.5707, 0.0]
+
+  # 物理相机列表；输出编码、目录、队列和容量属于 configs/outputs/mirror_default.yaml。
+  cameras:
+    # camera id 必须唯一，并用于派生输出目录、topic 与状态索引。
+    - id: world_rgbd
+      # 相机 pose 所在的父 namespace；相机 prim_path 必须是其后代绝对路径。
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      pose:
+        # 相机相对 parent_prim_path 的局部位姿，xyz 为 m，rpy 为 rad。
+        xyz: [0.08, 0.0, 0.08]
+        rpy: [0.0, 1.1, 0.0]
+      # 输出图像 [width, height]，单位 pixel；内参需与该尺寸使用同一像素坐标系。
+      resolution: [320, 240]
+      # 相机采样频率，单位 Hz；observer 从物理时钟按此频率调度帧。
+      frequency_hz: 20.0
+      # 要采集的 modality；rgb 为颜色图，depth 为相机深度数组。
+      modalities: [rgb, depth]
+      # 相机 near/far clipping plane，单位 m，必须满足 0 < near < far。
+      clipping_range_m: [0.01, 5.0]
+      # OpenCV pinhole 内参，全部使用 pixel；fx/fy 为焦距，cx/cy 为主点。
+      # 这些值由 640x480 参数等比例缩放到当前 320x240 分辨率。
+      intrinsics:
+        fx: 307.5
+        fy: 308.0
+        cx: 160.0
+        cy: 120.0
+
+  # 交互 GUI 的观察相机；只改变用户视角，不改变 world_rgbd 传感器。
+  viewport:
+    # false 时不应用该视角；render/gui 总开关仍由 outputs.render 控制。
+    enabled: true
+    # 观察点和注视目标均为世界坐标 xyz，单位 m。
+    eye: [1.35, -1.65, 1.05]
+    target: [0.0, -0.1, 0.42]
+    # Kit perspective camera 的绝对 USD prim path。
+    prim_path: /OmniverseKit_Persp
+
+  # Mirror scene 内创建的灯光；id/path 必须唯一，intensity 必须大于 0。
+  lights:
+    # DistantLight 主光；angle 控制光源角尺寸/阴影柔和度。
+    - id: key
+      path: /World/KeyLight
+      intensity: 1200.0
+      angle: 0.5
+    # 未提供 angle 的补光会按 DomeLight 创建，为阴影区域提供环境照明。
+    - id: fill
+      path: /World/FillLight
+      intensity: 250.0

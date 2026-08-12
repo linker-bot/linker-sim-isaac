@@ -10,7 +10,6 @@ from linkerbot_sim.backends.curobo.collision_capability import (
 )
 from linkerbot_sim.backends.curobo.tensor_adapter import (
     seed_config_from_state_or_seed,
-    tensor_like_to_numpy,
 )
 from linkerbot_sim.backends.curobo.tool_pose import (
     goal_tool_pose_from_single_tcp_target,
@@ -18,6 +17,7 @@ from linkerbot_sim.backends.curobo.tool_pose import (
 )
 from linkerbot_sim.planning.requests import IKRequest
 from linkerbot_sim.planning.results import IKResult
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 class CuroboInverseKinematics:
@@ -180,7 +180,7 @@ def _result_solution(result, *, fallback: np.ndarray) -> np.ndarray:
         value = getattr(result, name, None)
         if value is None:
             continue
-        array = tensor_like_to_numpy(value)
+        array = tensor_like_to_numpy(value, dtype=float)
         if array.ndim == 3:
             array = array[:, 0, :]
         if array.ndim == 2:
@@ -197,7 +197,7 @@ def _result_error(result, *, names: tuple[str, ...], fallback: float) -> float:
         value = getattr(result, name, None)
         if value is None:
             continue
-        error = np.asarray(tensor_like_to_numpy(value), dtype=float).reshape(-1)
+        error = tensor_like_to_numpy(value, dtype=float).reshape(-1)
         if error.size:
             return float(np.min(error))
     return float(fallback)

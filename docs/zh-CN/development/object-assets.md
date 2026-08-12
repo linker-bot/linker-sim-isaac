@@ -3,7 +3,7 @@
 语言：[中文](object-assets.md) | [English](../../en/development/object-assets.md)
 
 本文说明如何用 `tools/object_assets/` 生成环境物体 USD/USDA 资产，并把生成结果接入
-`configs/objects/` 和 `configs/envs/`。
+`configs/objects/` 和所属产品的 `configs/scenes/{mirror,kaleidoscope}/`。
 
 ## 构建器完整参数表
 
@@ -28,7 +28,7 @@
 | 生成配置 | `tools/object_assets/<rigid|flexible>/<name>/config.yaml` | 描述资产固有属性，例如几何、质量、阻尼、关节限制和可视颜色 |
 | 生成入口 | `tools/object_assets/<rigid|flexible>/<name>/build_asset.py` | 启动 headless Isaac/Omni，写出 USD/PhysX schema |
 | 运行时对象 | `configs/objects/*.yaml` | 引用已经生成好的 USD/URDF，并配置资产来源、导入参数、物理属性、规划碰撞和适用时的资产内部 `root_path` |
-| 场景实例 | `configs/envs/*.yaml` 的 `objects[]` | 选择 object profile，并设置每个场景里的 stage `prim_path` 和 `root_pose` |
+| 场景实例 | `configs/scenes/<mode>/<scene>.yaml` 的 `objects[]` | 选择 object profile，并设置每个场景里的 stage `prim_path` 和 `root_pose` |
 
 运行脚本不会自动重新生成物体资产。修改 `tools/object_assets/.../config.yaml` 后，需要手动运行
 对应的 `build_asset.py`。
@@ -91,6 +91,11 @@ configs/objects/capsule_rope.yaml
 iteration。`asset_path` 要指向生成出来的 `.usda` 文件；dynamic chain 的 `root_path` 要和
 生成配置中的 `object.root_path` 一致。
 
+运行时物理字段按后端分层：`object.physics.material` 只保存通用
+`static_friction/dynamic_friction/restitution`；`friction_combine_mode` 位于
+`object.physics.physx.material`；绳体的 `position_iterations/velocity_iterations` 位于
+`object.physics.physx.solver`。Newton 只消费通用材质，PhysX leaf 不进入 Newton runtime。
+
 ## T Block
 
 生成配置：
@@ -129,10 +134,10 @@ PYTHONPATH=src .venv/bin/python tools/object_assets/rigid/tblock/build_asset.py 
 configs/objects/TblockV1_default.yaml
 ```
 
-刚体是否静态冻结、接触材质和 solver 覆盖属于运行时对象 profile，不写在生成配置里。T block
-这类 rigid USD object 的 stage 路径和位姿分别写在 env profile 的 `objects[].prim_path` 与
-`objects[].root_pose`；省略实例路径时使用 `/World/Objects/<name>`，其中 `<name>` 来自
-`objects[].name`。
+刚体是否静态冻结、通用接触材质和 PhysX combine mode 属于运行时对象 profile，不写在生成配置里。T block
+这类 rigid USD object 的 stage 路径和位姿分别写在 scene profile 的 `scene.objects[].prim_path` 与
+`scene.objects[].root_pose`；实例名称来自 `scene.objects[].name`。当前 strict scene schema 要求显式
+`prim_path`，不从已删除的旧 env 配置推导路径。
 
 ## 预览生成结果
 
@@ -163,16 +168,18 @@ isaacsim isaacsim.exp.full
 2. 运行对应 `build_asset.py` 生成或刷新 `.usda`。
 3. 在 `configs/objects/<profile>.yaml` 中引用同一个 `asset_path`；如果该运行时类型使用
    `root_path`，也要和生成配置保持一致。
-4. 在 `configs/envs/<scene>.yaml` 的 `objects[]` 中引用 `object_profile`，并设置 `root_pose`。
+4. 在 `configs/scenes/<mode>/<scene>.yaml` 的 `objects[]` 中引用 `object_profile`，并设置
+   `root_pose`；mode root 使用 `<mode>/<scene>` selector 引用该文件，文件内 `scene.id` 只写
+   `<scene>` basename。
 5. 运行 dry-run 或仿真脚本验证配置链路。
 
-示例 env 片段：
+示例 scene 片段：
 
 ```yaml
 objects:
   - name: tblock
     object_profile: TblockV1_default
-    runtime_handle: tblock
+    prim_path: /World/TBlock
     root_pose:
       xyz: [0.0, -0.45, 0.12]
       rpy: [0.0, 0.0, 0.0]
@@ -192,14 +199,14 @@ PYTHONPATH=src .venv/bin/python -m pytest \
 不启动 Isaac，校验配置依赖图：
 
 ```bash
-PYTHONPATH=src .venv/bin/python scripts/validate_config.py --runtime-profile default_single_scene
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode mirror --profile physx_cpu
 ```
 
-统一场景交互导入检查：
+Mirror 场景交互导入检查：
 
 ```bash
 export OMNI_KIT_ACCEPT_EULA=Y
-PYTHONPATH=src .venv/bin/python scripts/single_scene_interactive.py --env scene1 --gui
+PYTHONPATH=src .venv/bin/python scripts/mirror.py --profile physx_cpu
 ```
 
 ## 常见问题
@@ -215,7 +222,7 @@ PYTHONPATH=src .venv/bin/python scripts/single_scene_interactive.py --env scene1
   扩展加载。
 
 资产生成了，但仿真中找不到 prim
-: 检查 `configs/objects/*.yaml` 的 `asset_path` 和 env `objects[].prim_path`；如果该对象 profile
+: 检查 `configs/objects/*.yaml` 的 `asset_path` 和 scene `objects[].prim_path`；如果该对象 profile
   使用 `root_path`，也要确认它和生成配置中的 `object.root_path` 一致。
 
 修改了生成配置但仿真没有变化

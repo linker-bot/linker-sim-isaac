@@ -1,9 +1,9 @@
-"""cuRobo 后端配置模型及项目拥有的严格 YAML 边界。
+"""cuRobo 后端的 typed 配置与机器人模型 YAML 边界。
 
-本文件只解析项目 YAML/Mapping，不导入 cuRobo。真实 robot config 是否可被 cuRobo 加载、
-tool frame 是否存在、joint order 是否匹配等模型相关问题，交给 ``CuroboContext`` 或具体
-solver 在运行时检查。所有 mapping 都拒绝未知键、隐式类型转换和任意第三方 task 路径；
-只有项目验证过的 task bundle 能进入 backend，防止配置绕开已测试的求解器组合。
+算法、设备和完整后端配置只能由已经严格解析的项目 profile 单向投影，不能在 backend
+再次解释任意 mapping。这里仅保留机器人模型与 TCP frame 的 canonical mapping parser，
+因为它们属于 ``configs/robots`` 的资产 schema。真实模型、joint order 与 tool frame
+存在性仍由 ``CuroboContext`` 或具体 solver 在运行时校验。
 """
 
 from __future__ import annotations
@@ -11,44 +11,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 import math
-from numbers import Integral, Real
+from numbers import Real
 from pathlib import Path
 from typing import Any
 import xml.etree.ElementTree as ET
 
-import numpy as np
-
 from linkerbot_sim.utils.paths import repo_path
 
 
-SUPPORTED_COLLISION_CACHE_TYPES = frozenset({"cuboid", "mesh"})
-SUPPORTED_CUROBO_DTYPES = frozenset({"float32"})
 DEFAULT_CUROBO_TASK_BUNDLE = "curobo_v0_8_default"
-_RAW_IK_TASK_KEYS = frozenset(
-    {"optimizer_configs", "metrics_rollout", "transition_model"}
-)
-_RAW_MOTION_TASK_KEYS = frozenset(
-    {
-        "ik_optimizer_configs",
-        "ik_transition_model",
-        "metrics_rollout",
-        "trajopt_optimizer_configs",
-        "trajopt_transition_model",
-        "graph_planner_config",
-        "graph_planner_rollout",
-        "graph_planner_transition_model",
-    }
-)
-_GENERIC_RAW_TASK_PATH_KEYS = frozenset({"task_path", "task_file", "task_config_path"})
-_DEVICE_KEYS = frozenset(
-    {
-        "device",
-        "tensor_dtype",
-        "collision_geometry_dtype",
-        "collision_gradient_dtype",
-        "collision_distance_dtype",
-    }
-)
 _ROBOT_KEYS = frozenset(
     {
         "robot_config_path",
@@ -62,62 +33,6 @@ _ROBOT_KEYS = frozenset(
     }
 )
 _TCP_KEYS = frozenset({"frame_name", "parent_frame", "xyz", "rpy"})
-_IK_KEYS = frozenset(
-    {
-        "num_seeds",
-        "position_tolerance",
-        "orientation_tolerance",
-        "use_cuda_graph",
-        "random_seed",
-        "optimizer_collision_activation_distance",
-        "store_debug",
-        "override_optimizer_num_iters",
-        "override_iters_for_multi_link_ik",
-        "optimization_dt",
-        "velocity_regularization_weight",
-        "acceleration_regularization_weight",
-        "success_requires_convergence",
-        "seed_position_weight",
-        "seed_orientation_weight",
-        "seed_velocity_weight",
-        "seed_acceleration_weight",
-        "seed_solver_num_seeds",
-        "max_batch_size",
-        "multi_env",
-        "max_goalset",
-        "self_collision_check",
-        "collision_cache",
-    }
-)
-_MOTION_PLANNER_KEYS = frozenset(
-    {
-        "warmup",
-        "num_ik_seeds",
-        "num_trajopt_seeds",
-        "position_tolerance",
-        "orientation_tolerance",
-        "use_cuda_graph",
-        "random_seed",
-        "optimizer_collision_activation_distance",
-        "store_debug",
-        "max_batch_size",
-        "multi_env",
-        "max_goalset",
-        "self_collision_check",
-        "collision_cache",
-    }
-)
-_CUROBO_KEYS = frozenset(
-    {
-        "enabled",
-        "planning_joint_group",
-        "robot",
-        "task_bundle",
-        "device",
-        "kinematics",
-        "motion_planner",
-    }
-)
 
 
 @dataclass(frozen=True)
@@ -192,8 +107,14 @@ class CuroboTcpFrame:
 
     frame_name: str
     parent_frame: str
-    xyz: np.ndarray
-    rpy: np.ndarray
+    xyz: tuple[float, float, float]
+    rpy: tuple[float, float, float]
+
+    def __post_init__(self) -> None:
+        """把直接构造和 YAML 构造统一冻结为有限三元组。"""
+
+        object.__setattr__(self, "xyz", _vector3(self.xyz, "curobo TCP xyz"))
+        object.__setattr__(self, "rpy", _vector3(self.rpy, "curobo TCP rpy"))
 
     @classmethod
     def from_mapping(
@@ -226,11 +147,7 @@ class CuroboTcpFrame:
 
 @dataclass(frozen=True)
 class CuroboDeviceConfig:
-    """cuRobo tensor device 与各计算路径 dtype 配置。
-
-    当前项目只验证了明确列入 ``SUPPORTED_CUROBO_DTYPES`` 的 dtype；解析阶段不会让 numpy
-    或 torch 猜测类型，避免 collision distance/gradient 在不同精度间隐式转换。
-    """
+    """从 mode root 投影出的 cuRobo CUDA device 与固定 float32 合同。"""
 
     device: str = "cuda:0"
     tensor_dtype: str = "float32"
@@ -238,33 +155,22 @@ class CuroboDeviceConfig:
     collision_gradient_dtype: str = "float32"
     collision_distance_dtype: str = "float32"
 
-    @classmethod
-    def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuroboDeviceConfig":
-        """解析 ``curobo.device`` 分组。"""
+    def validate(self) -> None:
+        """校验根配置派生的设备事实及项目固定的 dtype 合同。"""
 
-        settings = _mapping_or_empty(data, "curobo.device")
-        _reject_unknown_keys(settings, _DEVICE_KEYS, "curobo.device")
-        return cls(
-            device=_non_empty_str(
-                settings.get("device", cls.device), "curobo.device.device"
-            ),
-            tensor_dtype=_curobo_dtype(
-                settings.get("tensor_dtype", cls.tensor_dtype),
-                "curobo.device.tensor_dtype",
-            ),
-            collision_geometry_dtype=_curobo_dtype(
-                settings.get("collision_geometry_dtype", cls.collision_geometry_dtype),
-                "curobo.device.collision_geometry_dtype",
-            ),
-            collision_gradient_dtype=_curobo_dtype(
-                settings.get("collision_gradient_dtype", cls.collision_gradient_dtype),
-                "curobo.device.collision_gradient_dtype",
-            ),
-            collision_distance_dtype=_curobo_dtype(
-                settings.get("collision_distance_dtype", cls.collision_distance_dtype),
-                "curobo.device.collision_distance_dtype",
-            ),
-        )
+        prefix, separator, index = self.device.partition(":")
+        if prefix != "cuda" or separator != ":" or not index.isdecimal():
+            raise ValueError(
+                "curobo.device.device must be a canonical non-negative CUDA device"
+            )
+        for field_name in (
+            "tensor_dtype",
+            "collision_geometry_dtype",
+            "collision_gradient_dtype",
+            "collision_distance_dtype",
+        ):
+            if getattr(self, field_name) != "float32":
+                raise ValueError(f"curobo.device.{field_name} must be 'float32'")
 
 
 @dataclass(frozen=True)
@@ -392,124 +298,6 @@ class CuroboIkConfig:
     self_collision_check: bool = True
     collision_cache: dict[str, int] = field(default_factory=dict)
 
-    @classmethod
-    def from_mapping(cls, data: Mapping[str, Any] | None) -> "CuroboIkConfig":
-        """解析 ``curobo.kinematics.ik`` 分组。"""
-
-        settings = _mapping_or_empty(data, "curobo.kinematics.ik")
-        _reject_raw_task_paths(
-            settings,
-            _RAW_IK_TASK_KEYS | _GENERIC_RAW_TASK_PATH_KEYS,
-            label="curobo.kinematics.ik",
-        )
-        _reject_unknown_keys(settings, _IK_KEYS, "curobo.kinematics.ik")
-        config = cls(
-            num_seeds=_strict_int(
-                settings.get("num_seeds", cls.num_seeds),
-                "curobo.kinematics.ik.num_seeds",
-            ),
-            position_tolerance=_strict_float(
-                settings.get("position_tolerance", cls.position_tolerance),
-                "curobo.kinematics.ik.position_tolerance",
-            ),
-            orientation_tolerance=_strict_float(
-                settings.get("orientation_tolerance", cls.orientation_tolerance),
-                "curobo.kinematics.ik.orientation_tolerance",
-            ),
-            use_cuda_graph=_strict_bool(
-                settings.get("use_cuda_graph", cls.use_cuda_graph),
-                "curobo.kinematics.ik.use_cuda_graph",
-            ),
-            random_seed=_strict_int(
-                settings.get("random_seed", cls.random_seed),
-                "curobo.kinematics.ik.random_seed",
-            ),
-            optimizer_collision_activation_distance=_strict_float(
-                settings.get(
-                    "optimizer_collision_activation_distance",
-                    cls.optimizer_collision_activation_distance,
-                ),
-                "curobo.kinematics.ik.optimizer_collision_activation_distance",
-            ),
-            store_debug=_strict_bool(
-                settings.get("store_debug", cls.store_debug),
-                "curobo.kinematics.ik.store_debug",
-            ),
-            override_optimizer_num_iters=_parse_optional_int_mapping(
-                settings.get("override_optimizer_num_iters"),
-                default=cls().override_optimizer_num_iters,
-                label="curobo.kinematics.ik.override_optimizer_num_iters",
-            ),
-            override_iters_for_multi_link_ik=_optional_int(
-                settings.get("override_iters_for_multi_link_ik"),
-                "curobo.kinematics.ik.override_iters_for_multi_link_ik",
-            ),
-            optimization_dt=_optional_float(
-                settings.get("optimization_dt"),
-                "curobo.kinematics.ik.optimization_dt",
-            ),
-            velocity_regularization_weight=_optional_float(
-                settings.get("velocity_regularization_weight"),
-                "curobo.kinematics.ik.velocity_regularization_weight",
-            ),
-            acceleration_regularization_weight=_optional_float(
-                settings.get("acceleration_regularization_weight"),
-                "curobo.kinematics.ik.acceleration_regularization_weight",
-            ),
-            success_requires_convergence=_strict_bool(
-                settings.get(
-                    "success_requires_convergence",
-                    cls.success_requires_convergence,
-                ),
-                "curobo.kinematics.ik.success_requires_convergence",
-            ),
-            seed_position_weight=_strict_float(
-                settings.get("seed_position_weight", cls.seed_position_weight),
-                "curobo.kinematics.ik.seed_position_weight",
-            ),
-            seed_orientation_weight=_strict_float(
-                settings.get("seed_orientation_weight", cls.seed_orientation_weight),
-                "curobo.kinematics.ik.seed_orientation_weight",
-            ),
-            seed_velocity_weight=_strict_float(
-                settings.get("seed_velocity_weight", cls.seed_velocity_weight),
-                "curobo.kinematics.ik.seed_velocity_weight",
-            ),
-            seed_acceleration_weight=_strict_float(
-                settings.get(
-                    "seed_acceleration_weight",
-                    cls.seed_acceleration_weight,
-                ),
-                "curobo.kinematics.ik.seed_acceleration_weight",
-            ),
-            seed_solver_num_seeds=_strict_int(
-                settings.get("seed_solver_num_seeds", cls.seed_solver_num_seeds),
-                "curobo.kinematics.ik.seed_solver_num_seeds",
-            ),
-            max_batch_size=_strict_int(
-                settings.get("max_batch_size", cls.max_batch_size),
-                "curobo.kinematics.ik.max_batch_size",
-            ),
-            multi_env=_strict_bool(
-                settings.get("multi_env", cls.multi_env),
-                "curobo.kinematics.ik.multi_env",
-            ),
-            max_goalset=_strict_int(
-                settings.get("max_goalset", cls.max_goalset),
-                "curobo.kinematics.ik.max_goalset",
-            ),
-            self_collision_check=_strict_bool(
-                settings.get("self_collision_check", cls.self_collision_check),
-                "curobo.kinematics.ik.self_collision_check",
-            ),
-            collision_cache=_parse_int_mapping(
-                settings.get("collision_cache"),
-                label="curobo.kinematics.ik.collision_cache",
-            ),
-        )
-        config.validate()
-        return config
-
     def validate(self) -> None:
         """校验 IK 数值参数。"""
 
@@ -555,14 +343,18 @@ class CuroboIkConfig:
             )
         ):
             raise ValueError("curobo IK seed weights cannot be negative")
+        _validate_collision_cache(
+            self.collision_cache,
+            "curobo.kinematics.ik.collision_cache",
+        )
 
 
 @dataclass(frozen=True)
 class CuroboMotionPlannerConfig:
-    """cuRobo MotionPlanner / BatchMotionPlanner 的求解和容量参数。
+    """cuRobo 单请求 MotionPlanner 的求解和容量参数。
 
-    单请求与批量路径共用该配置，``max_batch_size`` 与 ``max_goalset`` 因而是显式资源上限。
-    解析只接受项目公开字段，第三方 task 文件选择由 ``CuroboTaskBundle`` 固定管理。
+    ``max_goalset`` 是显式目标集资源上限。解析只接受项目公开字段，第三方 task 文件选择
+    由 ``CuroboTaskBundle`` 固定管理。
     """
 
     warmup: bool = True
@@ -574,96 +366,17 @@ class CuroboMotionPlannerConfig:
     random_seed: int = 123
     optimizer_collision_activation_distance: float = 0.01
     store_debug: bool = False
-    max_batch_size: int = 256
-    multi_env: bool = False
     max_goalset: int = 1
     self_collision_check: bool = True
     collision_cache: dict[str, int] = field(default_factory=dict)
-
-    @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, Any] | None
-    ) -> "CuroboMotionPlannerConfig":
-        """解析 ``curobo.motion_planner`` 分组。"""
-
-        settings = _mapping_or_empty(data, "curobo.motion_planner")
-        _reject_raw_task_paths(
-            settings,
-            _RAW_MOTION_TASK_KEYS | _GENERIC_RAW_TASK_PATH_KEYS,
-            label="curobo.motion_planner",
-        )
-        _reject_unknown_keys(settings, _MOTION_PLANNER_KEYS, "curobo.motion_planner")
-        config = cls(
-            warmup=_strict_bool(
-                settings.get("warmup", cls.warmup),
-                "curobo.motion_planner.warmup",
-            ),
-            num_ik_seeds=_strict_int(
-                settings.get("num_ik_seeds", cls.num_ik_seeds),
-                "curobo.motion_planner.num_ik_seeds",
-            ),
-            num_trajopt_seeds=_strict_int(
-                settings.get("num_trajopt_seeds", cls.num_trajopt_seeds),
-                "curobo.motion_planner.num_trajopt_seeds",
-            ),
-            position_tolerance=_strict_float(
-                settings.get("position_tolerance", cls.position_tolerance),
-                "curobo.motion_planner.position_tolerance",
-            ),
-            orientation_tolerance=_strict_float(
-                settings.get("orientation_tolerance", cls.orientation_tolerance),
-                "curobo.motion_planner.orientation_tolerance",
-            ),
-            use_cuda_graph=_strict_bool(
-                settings.get("use_cuda_graph", cls.use_cuda_graph),
-                "curobo.motion_planner.use_cuda_graph",
-            ),
-            random_seed=_strict_int(
-                settings.get("random_seed", cls.random_seed),
-                "curobo.motion_planner.random_seed",
-            ),
-            optimizer_collision_activation_distance=_strict_float(
-                settings.get(
-                    "optimizer_collision_activation_distance",
-                    cls.optimizer_collision_activation_distance,
-                ),
-                "curobo.motion_planner.optimizer_collision_activation_distance",
-            ),
-            store_debug=_strict_bool(
-                settings.get("store_debug", cls.store_debug),
-                "curobo.motion_planner.store_debug",
-            ),
-            max_batch_size=_strict_int(
-                settings.get("max_batch_size", cls.max_batch_size),
-                "curobo.motion_planner.max_batch_size",
-            ),
-            multi_env=_strict_bool(
-                settings.get("multi_env", cls.multi_env),
-                "curobo.motion_planner.multi_env",
-            ),
-            max_goalset=_strict_int(
-                settings.get("max_goalset", cls.max_goalset),
-                "curobo.motion_planner.max_goalset",
-            ),
-            self_collision_check=_strict_bool(
-                settings.get("self_collision_check", cls.self_collision_check),
-                "curobo.motion_planner.self_collision_check",
-            ),
-            collision_cache=_parse_int_mapping(
-                settings.get("collision_cache"),
-                label="curobo.motion_planner.collision_cache",
-            ),
-        )
-        config.validate()
-        return config
 
     def validate(self) -> None:
         """校验 MotionPlanner 数值参数。"""
 
         if self.num_ik_seeds <= 0 or self.num_trajopt_seeds <= 0:
             raise ValueError("cuRobo planner seed counts must be positive")
-        if self.max_batch_size <= 0 or self.max_goalset <= 0:
-            raise ValueError("cuRobo planner batch sizes must be positive")
+        if self.max_goalset <= 0:
+            raise ValueError("cuRobo planner max_goalset must be positive")
         if self.random_seed < 0:
             raise ValueError("curobo.motion_planner.random_seed cannot be negative")
         if (
@@ -672,14 +385,18 @@ class CuroboMotionPlannerConfig:
             or self.optimizer_collision_activation_distance < 0
         ):
             raise ValueError("cuRobo planner tolerances cannot be negative")
+        _validate_collision_cache(
+            self.collision_cache,
+            "curobo.motion_planner.collision_cache",
+        )
 
 
 @dataclass(frozen=True)
 class CuroboConfig:
     """项目侧完整且可直接用于 materialize context 的 cuRobo 后端配置。
 
-    只有 ``curobo.enabled: true`` 且 planning group 为当前支持的 ``arm`` 时才能构造。各子段
-    缺省值在这里一次性确定，runtime 不再读取原始 YAML 或执行隐藏覆盖。
+    配置 catalog 先把 robot 与算法 profile 分别解析为 typed 对象；composition 再注入 mode
+    root 的唯一 CUDA 设备并构造本类型。runtime 不读取原始 YAML 或执行隐藏覆盖。
     """
 
     robot: CuroboRobotConfig
@@ -692,90 +409,13 @@ class CuroboConfig:
         default_factory=CuroboMotionPlannerConfig
     )
 
-    @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "CuroboConfig":
-        """从包含顶层 ``curobo`` 段的 canonical 配置解析后端。"""
-
-        settings = _mapping_or_empty(
-            _required_value(data, "curobo", label="config"),
-            "curobo",
-        )
-        _reject_raw_task_paths(
-            settings,
-            _RAW_IK_TASK_KEYS | _RAW_MOTION_TASK_KEYS | _GENERIC_RAW_TASK_PATH_KEYS,
-            label="curobo",
-        )
-        enabled = _strict_bool(
-            _required_value(settings, "enabled", label="curobo"),
-            "curobo.enabled",
-        )
-        if not enabled:
-            raise ValueError(
-                "CuroboConfig cannot be materialized when curobo.enabled is false"
-            )
-        planning_joint_group = _non_empty_str(
-            _required_value(settings, "planning_joint_group", label="curobo"),
-            "curobo.planning_joint_group",
-        ).lower()
-        robot_settings = _mapping_or_empty(
-            _required_value(settings, "robot", label="curobo"),
-            "curobo.robot",
-        )
-        _reject_unknown_keys(settings, _CUROBO_KEYS, "curobo")
-        if planning_joint_group != "arm":
-            raise ValueError("curobo.planning_joint_group must be 'arm'")
-        device_settings = _optional_section_mapping(settings, "device", "curobo")
-        kinematics_settings = _optional_section_mapping(
-            settings, "kinematics", "curobo"
-        )
-        _reject_unknown_keys(kinematics_settings, {"ik"}, "curobo.kinematics")
-        ik_settings = _optional_section_mapping(
-            kinematics_settings,
-            "ik",
-            "curobo.kinematics",
-        )
-        motion_planner_settings = _optional_section_mapping(
-            settings,
-            "motion_planner",
-            "curobo",
-        )
-        config = cls(
-            robot=CuroboRobotConfig.from_mapping(robot_settings),
-            task_bundle=CuroboTaskBundle.named(
-                settings.get("task_bundle", DEFAULT_CUROBO_TASK_BUNDLE)
-            ),
-            device=CuroboDeviceConfig.from_mapping(device_settings),
-            ik=CuroboIkConfig.from_mapping(ik_settings),
-            motion_planner=CuroboMotionPlannerConfig.from_mapping(
-                motion_planner_settings
-            ),
-        )
-        config.validate()
-        return config
-
     def validate(self) -> None:
         """级联校验所有子配置。"""
 
         self.robot.validate()
+        self.device.validate()
         self.ik.validate()
         self.motion_planner.validate()
-
-
-def _reject_raw_task_paths(
-    settings: Mapping[str, Any],
-    keys: frozenset[str],
-    *,
-    label: str,
-) -> None:
-    """拒绝任意 cuRobo 内部 task 文件路径。"""
-
-    raw = sorted(set(settings) & keys)
-    if raw:
-        fields = ", ".join(f"{label}.{name}" for name in raw)
-        raise ValueError(
-            f"raw cuRobo task paths are not configurable ({fields}); "
-            "select the versioned curobo.task_bundle instead"
-        )
 
 
 def _mapping_or_empty(data: Mapping[str, Any] | None, label: str) -> Mapping[str, Any]:
@@ -788,23 +428,6 @@ def _mapping_or_empty(data: Mapping[str, Any] | None, label: str) -> Mapping[str
     return data
 
 
-def _optional_section_mapping(
-    data: Mapping[str, Any], key: str, parent_label: str
-) -> Mapping[str, Any]:
-    """缺少配置段时返回空 mapping，但拒绝显式 ``null`` 或其他类型。
-
-    缺省表示使用 dataclass 当前默认值；显式 ``null`` 往往是拼写或生成配置错误，不能与
-    缺省混为一谈。
-    """
-
-    if key not in data:
-        return {}
-    value = data[key]
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{parent_label}.{key} must be a mapping")
-    return value
-
-
 def _optional_str(value: object | None, label: str) -> str | None:
     """严格读取可选非空字符串。"""
 
@@ -813,32 +436,12 @@ def _optional_str(value: object | None, label: str) -> str | None:
     return _non_empty_str(value, label)
 
 
-def _optional_float(value: object | None, label: str) -> float | None:
-    """严格读取可选有限浮点数。"""
-
-    return None if value is None else _strict_float(value, label)
-
-
-def _optional_int(value: object | None, label: str) -> int | None:
-    """严格读取可选整数。"""
-
-    return None if value is None else _strict_int(value, label)
-
-
 def _strict_bool(value: object, label: str) -> bool:
     """严格解析 bool，不接受 YAML/JSON 中的 truthy string。"""
 
     if not isinstance(value, bool):
         raise ValueError(f"{label} must be a boolean")
     return value
-
-
-def _strict_int(value: object, label: str) -> int:
-    """严格解析整数，不接受 bool、字符串或非整型浮点数。"""
-
-    if isinstance(value, bool) or not isinstance(value, Integral):
-        raise ValueError(f"{label} must be an integer")
-    return int(value)
 
 
 def _strict_float(value: object, label: str) -> float:
@@ -860,17 +463,6 @@ def _non_empty_str(value: object, label: str) -> str:
     return value.strip()
 
 
-def _curobo_dtype(value: object, label: str) -> str:
-    """限制在项目已用 cuRobo 0.8.0 验证过的 tensor dtype。"""
-
-    dtype = _non_empty_str(value, label)
-    if dtype not in SUPPORTED_CUROBO_DTYPES:
-        raise ValueError(
-            f"{label} must be one of {sorted(SUPPORTED_CUROBO_DTYPES)}, got {dtype!r}"
-        )
-    return dtype
-
-
 def _string_sequence(value: object, label: str) -> tuple[str, ...]:
     """严格解析非空字符串序列。"""
 
@@ -881,17 +473,17 @@ def _string_sequence(value: object, label: str) -> tuple[str, ...]:
     )
 
 
-def _vector3(value: object, label: str) -> np.ndarray:
+def _vector3(value: object, label: str) -> tuple[float, float, float]:
     """严格解析长度为三的有限数值向量。"""
 
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError(f"{label} must be a sequence of 3 numbers")
     if len(value) != 3:
         raise ValueError(f"{label} must contain exactly 3 numbers")
-    return np.asarray(
-        [_strict_float(item, f"{label}[{index}]") for index, item in enumerate(value)],
-        dtype=float,
+    parsed = tuple(
+        _strict_float(item, f"{label}[{index}]") for index, item in enumerate(value)
     )
+    return parsed  # type: ignore[return-value]
 
 
 def _required_value(data: Mapping[str, Any], key: str, *, label: str) -> Any:
@@ -956,51 +548,6 @@ def _parse_custom_tcp_frames(
     return frames
 
 
-def _parse_int_mapping(value: object, *, label: str) -> dict[str, int]:
-    """解析 obstacle cache 这类字符串到整数的映射。"""
-
-    if value is None:
-        return {}
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{label} must be a mapping")
-    parsed = {
-        _non_empty_str(key, f"{label} key"): _strict_int(item, f"{label}.{key}")
-        for key, item in value.items()
-    }
-    if any(item < 0 for item in parsed.values()):
-        raise ValueError(f"{label} values cannot be negative")
-    unsupported = set(parsed) - SUPPORTED_COLLISION_CACHE_TYPES
-    if unsupported:
-        names = ", ".join(sorted(unsupported))
-        supported = ", ".join(sorted(SUPPORTED_COLLISION_CACHE_TYPES))
-        raise ValueError(
-            f"{label} contains types unsupported by cuRobo v0.8.0: "
-            f"{names}; supported types: {supported}"
-        )
-    return parsed
-
-
-def _parse_optional_int_mapping(
-    value: object,
-    *,
-    default: Mapping[str, int | None],
-    label: str,
-) -> dict[str, int | None]:
-    """解析 optimizer iteration override，允许显式 ``null`` 表示使用 cuRobo 默认值。"""
-
-    if value is None:
-        return dict(default)
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{label} must be a mapping")
-    _reject_unknown_keys(value, {"particle", "lbfgs"}, label)
-    parsed: dict[str, int | None] = {}
-    for key, item in value.items():
-        parsed[str(key)] = None if item is None else _strict_int(item, f"{label}.{key}")
-    if any(item is not None and item < 0 for item in parsed.values()):
-        raise ValueError(f"{label} values cannot be negative")
-    return parsed
-
-
 def _reject_unknown_keys(
     data: Mapping[Any, Any], allowed: set[str] | frozenset[str], label: str
 ) -> None:
@@ -1024,6 +571,20 @@ def _validate_positive_optional(value: float | int | None, label: str) -> None:
 
     if value is not None and value <= 0:
         raise ValueError(f"{label} must be positive")
+
+
+def _validate_collision_cache(cache: Mapping[str, int], label: str) -> None:
+    """校验 typed config 中传给 cuRobo 0.8.0 的场景缓存容量。"""
+
+    unsupported = sorted(set(cache) - {"cuboid", "mesh"})
+    if unsupported:
+        raise ValueError(
+            f"{label} contains types unsupported by cuRobo v0.8.0: "
+            f"{', '.join(unsupported)}; supported types: cuboid, mesh"
+        )
+    for shape, capacity in cache.items():
+        if type(capacity) is not int or capacity < 0:
+            raise ValueError(f"{label}.{shape} must be a non-negative integer")
 
 
 def _infer_urdf_root_link(urdf_path: Path) -> str:

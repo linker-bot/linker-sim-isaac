@@ -6,11 +6,11 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from linkerbot_sim.backends.curobo.tensor_adapter import tensor_like_to_numpy
 from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
 from linkerbot_sim.trajectories.types import JointTrajectory
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 def joint_trajectory_from_curobo(
@@ -120,11 +120,11 @@ def _trajectory_times(
     for name in ("interpolated_trajectory_dt", "trajectory_dt", "dt"):
         value = getattr(result, name, None)
         if value is not None:
-            dt = float(np.asarray(tensor_like_to_numpy(value)).reshape(-1)[0])
+            dt = float(tensor_like_to_numpy(value, dtype=float).reshape(-1)[0])
             return _times_from_dt(count, dt, source=name)
     value = getattr(trajectory, "dt", None)
     if value is not None:
-        dt = float(np.asarray(tensor_like_to_numpy(value)).reshape(-1)[0])
+        dt = float(tensor_like_to_numpy(value, dtype=float).reshape(-1)[0])
         return _times_from_dt(count, dt, source="trajectory.dt")
     if sample_dt is None:
         raise ValueError(
@@ -160,10 +160,10 @@ def _single_trajectory_matrix(value, *, name: str) -> np.ndarray:
 
     单问题 ``MotionPlanner`` 结果可能保留 batch/seed 等前置单例维度，例如
     ``(1, T, D)`` 或 ``(1, 1, T, D)``。项目侧单条 ``JointTrajectory`` 只消费二维矩阵；
-    如果前置维度不是单例，说明调用方拿到了真正 batched 结果，应在 tiled adapter 中逐行抽取。
+    如果前置维度不是单例，说明调用方拿到了真正 batched 结果，应在 batch adapter 中逐行抽取。
     """
 
-    matrix = tensor_like_to_numpy(value)
+    matrix = tensor_like_to_numpy(value, dtype=float)
     if matrix.ndim < 2:
         raise ValueError(f"cuRobo trajectory {name} must have shape (T,D)")
     if matrix.ndim == 2:
@@ -174,14 +174,6 @@ def _single_trajectory_matrix(value, *, name: str) -> np.ndarray:
             f"batched cuRobo trajectory {name} requires per-row conversion"
         )
     return matrix.reshape(matrix.shape[-2], matrix.shape[-1])
-
-
-def _phase_at_time(trajectory: JointTrajectory, time_s: float) -> str:
-    """按轨迹时间找到最接近的 phase 标签。"""
-
-    index = int(np.searchsorted(trajectory.times, float(time_s), side="left"))
-    index = min(max(index, 0), len(trajectory.phases) - 1)
-    return str(trajectory.phases[index])
 
 
 def _required_attr(value, name: str):

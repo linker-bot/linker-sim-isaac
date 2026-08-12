@@ -1,72 +1,54 @@
-# Foxglove Quick Reference
+# Foxglove Integration
 
 Language: [English](foxglove.md) | [中文](../../zh-CN/guides/foxglove.md)
 
-Install the optional Foxglove SDK with `uv sync --all-extras`. Built-in live
-servers bind only to loopback and provide no authentication or TLS.
+Foxglove is a Mirror visualization/output integration. It is not part of the
+Kaleidoscope environment or its CUDA training loop.
 
-## Single Scene
+## Data Flow
 
-```bash
-export OMNI_KIT_ACCEPT_EULA=Y
-PYTHONPATH=src .venv/bin/python scripts/single_scene_interactive.py \
-  --env scene2 --gui \
-  --stdin-eof-policy keep_alive --idle-physics-policy hold_step \
-  --foxglove-live-port 8766 \
-  --state-rate-hz 30 --state-include-objects
+```text
+Mirror owner thread
+  -> immutable state or camera payload
+  -> bounded output handoff
+  -> Foxglove live server and/or MCAP sink
 ```
 
-In Foxglove, open a connection to `ws://127.0.0.1:8766`. Use Plot or Raw
-Messages for `/joint_states`, Raw Messages for `/linkerbot/state`, and a 3D
-panel for `/scene` when `include_scene_markers` is enabled in the runtime
-profile.
+The sink receives pure owned data. It must never call Isaac, USD, articulation,
+planner, or camera APIs from its worker thread.
 
-JointStates names use `<robot_label>/<joint_name>`. The JSON state preserves
-robot boundaries and contains session `robot_id` plus stable `label`.
+## Typical Channels
 
-## Tiled Scene
+Projects commonly publish:
 
-```bash
-export OMNI_KIT_ACCEPT_EULA=Y
-PYTHONPATH=src .venv/bin/python scripts/tiled_scene_interactive.py \
-  --env scene3_tiled \
-  --stdin-eof-policy keep_alive --idle-physics-policy hold_step \
-  --foxglove-live-port 8767 \
-  --telemetry-env-ids 0,2 --telemetry-rate-hz 10
-```
+- JSON scene state for identity-rich inspection;
+- joint-state messages for standard robot tooling;
+- frame transforms and scene markers;
+- RGB/depth camera messages when enabled.
 
-Connect to `ws://127.0.0.1:8767`. The JSON state keeps both requested envs;
-standard JointStates and SceneUpdate use only `telemetry.primary_env_id`.
+Treat the exact topic names and encodings as an output schema. Change them through a
+versioned sink/profile update, not by silently renaming topics in a worker.
 
-## Topic Quick Reference
+## Live Server Security
 
-Actual state topic names come from `runtime.telemetry.topics`. Camera prefixes
-come from each `sensors.cameras.<name>.output.foxglove_topic_prefix`.
+A visualization listener is an operational network service. Bind it to loopback by
+default, do not assume it provides authentication or TLS, and use an authenticated
+encrypted proxy for remote access. Camera and state streams may expose sensitive
+workspace information.
 
-| Topic | Encoding | Content |
-| --- | --- | --- |
-| `/joint_states` | Foxglove `JointStates` | Standard joint arrays |
-| `/scene` | Foxglove `SceneUpdate` | Scene/runtime markers |
-| `/linkerbot/state` | JSON | Full Single Scene or selected-env state |
-| `<camera-prefix>/rgb` | `RawImage`, `rgb8` | RGB frame |
-| `<camera-prefix>/depth` | `RawImage`, `32FC1` | Float32 depth frame |
-| `<camera-prefix>/info` | JSON | Metadata for every camera modality |
+## MCAP
 
-Segmentation modalities publish `/info` metadata but do not create a RawImage
-channel. Camera live endpoints are configured in the env profile and can use a
-different port from state live.
+MCAP output is persistent experiment data. Apply the selected existing-data policy,
+write metadata that includes the configuration fingerprint, and close the writer
+before destroying the Mirror session. A partial or timed-out close must be reported
+as incomplete output.
 
-## Endpoint And Recording Boundaries
+## Kaleidoscope Metrics
 
-Control TCP JSONL, control WebSocket, state Foxglove live, and camera Foxglove
-live are different protocols. Assign different ports. A Foxglove connection is
-observation-only and cannot execute control JSON.
+For training, reduce task metrics on CUDA and send only small aggregates to an
+external logger at a controlled cadence. Do not attach a Foxglove state or camera sink
+to the environment runtime; doing so would violate the headless GPU-residency
+contract.
 
-`--foxglove-mcap-path` records state telemetry. Camera MCAP paths are configured
-per camera in the env profile. Live and MCAP can be enabled together.
-
-For complete state schemas and sampling behavior, see
-[Realtime State Stream](telemetry.md). For camera configuration and modality
-behavior, see [Camera Types And Sensors](cameras.md). Existing-file, queue,
-quota, and shutdown semantics are centralized in
-[Outputs And Persistence](../reference/outputs.md).
+See [Telemetry](telemetry.md), [Cameras](cameras.md), and
+[Outputs](../reference/outputs.md).

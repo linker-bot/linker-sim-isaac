@@ -1,0 +1,25 @@
+# Mirror/Kaleidoscope 共用的项目自有 Newton CUDA per-world 求解配置。
+# 本 leaf 不声明 world_count：Mirror 在 session 投影时固定为 1，Kaleidoscope 从 mode root
+# environments 的最终 num_envs 派生，避免同一环境数在 physics leaf 中重复声明。
+physics:
+  # 判别字段固定选择项目 Newton/MuJoCo-Warp 后端。
+  engine: newton
+  # solver、状态 tensor 与 world batch 在 mode.compute.cuda_device 指定的 GPU 上执行。
+  execution: cuda
+  # 以下两个容量按单个 world 计；总预分配还会乘以 mode 的最终 world 数。
+  # nconmax 限制同时存在的 contact 数，复杂抓取/堆叠场景需要更高容量。
+  nconmax_per_world: 200
+  # 约束 Jacobian/求解工作区容量；关节、equality 和接触共同消耗该预算。
+  njmax_per_world: 1200
+  # 捕获固定 world batch 的 CUDA graph，降低重复 physics step 的 kernel launch 开销。
+  use_cuda_graph: true
+  # 每个 physics step 的内部子步数，必须 >= 1；增加会按比例提高求解成本。
+  substeps: 1
+  # 每个子步的主约束求解迭代上限。
+  iterations: 100
+  # 每次主更新允许的 line-search 迭代上限。
+  line_search_iterations: 50
+  # 约束求解器：auto/cg/newton；auto 由 runtime 选择当前 CUDA 支持的实现。
+  constraint_solver: auto
+  # 接触流水线：auto/mujoco/newton；auto 根据 execution 与可用实现选择。
+  contact_pipeline: auto

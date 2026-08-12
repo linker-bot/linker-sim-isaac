@@ -1,219 +1,104 @@
-# Asset Naming
+# Naming And Ownership
 
 Language: [English](naming.md) | [中文](../../zh-CN/development/naming.md)
 
-This document defines the identities used by assets, profiles, scene instances,
-runtime protocols, sensors, and outputs. These names are related but are not
-interchangeable.
+Names communicate product scope and resource ownership. New code and documentation
+must use the current public names directly; do not add compatibility aliases.
 
-## General Principles
+## Product Names
 
-- Use stable ASCII names and underscores for repository-owned asset and entity
-  names. Avoid spaces, temporary words such as `new` or `final`, and hyphens
-  that an importer may normalize to underscores.
-- Preserve an upstream URDF/MJCF name when changing it would break a mesh,
-  joint, controller, or planning reference.
-- Keep physical hardware identity separate from reusable profile identity,
-  per-scene instance identity, and session-only numeric IDs.
-- Keep every joint, link, body, TCP, camera, path, and topic name consistent
-  with the layer that owns it; do not infer one identity from another.
+**Mirror** is the reality-mapping product: one simulation world that reflects a
+physical workspace and provides interactive planning, collision, camera, telemetry,
+and transport capabilities.
 
-## Identity Layers
+**Kaleidoscope** is the reinforcement-learning product: many homogeneous environments
+viewed through one GPU-native vector interface.
 
-| Identity | Owner | Example | Contract |
-| --- | --- | --- | --- |
-| Asset | `assets/` directory and primary file prefix | `AR5V2_L6V1_L` | Physical model and variant |
-| Profile | Selector under `configs/<group>/` | `ar5v2_l6v1_l` | Reusable validated configuration |
-| Robot instance | Env `robots[].label` | `left_arm` | Stable scene and snapshot matching identity |
-| Robot session ID | Env `robots[]` list order | `robot_id: 0` | Dense public selector for the current process only |
-| Object instance | Env `objects[].name` | `Tblock` | Stable scene object identity |
-| Camera | Env `sensors.cameras` mapping key | `world_rgbd` | Camera frame and output namespace |
+Use the names as proper nouns in prose and lowercase package/profile values in code:
 
-## Profile Names
+- `linkerbot_sim.mirror`, `mode: mirror`;
+- `linkerbot_sim.kaleidoscope`, `mode: kaleidoscope`.
 
-For ordinary profiles, the selector is the YAML file stem under
-`configs/<group>/`. A directory-style env profile uses its directory name and
-loads `base.yaml`. Profile selectors are one safe stem, not a path.
+## Layer Names
 
-Examples:
+| Layer | Naming rule |
+| --- | --- |
+| Product facade | Product noun at package root |
+| Composition root | `bootstrap`, `create_*_runtime`, or `make_*_env` |
+| Runtime | Product-prefixed owner type |
+| Infrastructure | Backend/engine term under `linkerbot_sim.isaac` |
+| Pure domain | Capability noun without a product prefix when genuinely shared |
+| Framework integration | Framework name under `linkerbot_sim.training` |
 
-```text
-configs/envs/scene1.yaml             -> scene1
-configs/envs/scene3_tiled/base.yaml  -> scene3_tiled
-configs/robots/ar5v2_l6v1_l.yaml     -> ar5v2_l6v1_l
-configs/logging/default_logger.yaml -> default_logger
-```
+Do not call a product object `manager` when it owns the complete lifecycle; use
+`Runtime`, `Session`, `Owner`, or a capability-specific service. Reserve `Adapter` for
+a boundary that changes an interface or representation without taking ownership of
+the underlying engine.
 
-CLI fields such as `--runtime-profile`, `--env`, and profile references inside
-YAML use these selectors. Do not pass `configs/.../*.yaml` where a profile name
-is required. Profile names are case-sensitive filesystem identities; preserve
-the spelling already present in the checkout.
+## Identity Terms
 
-## Hardware And Asset Names
+- A scene selector is a catalog lookup key namespaced by product, such as
+  `mirror/scene3` or `kaleidoscope/tblock_push`.
+- A scene file is its path under the configuration root, such as
+  `configs/scenes/mirror/scene3.yaml`; it is provenance, not a selector.
+- `scene.id` is the unqualified stable scene identity and matches the file basename,
+  such as `scene3`.
+- `task.id` identifies a task profile and matches its basename.
+- A Mirror `robot_id` is a session-local numeric selector; `robot_label` is the stable
+  configured identity assertion.
+- Kaleidoscope `env_ids` are CUDA row selectors, not persistent world identities.
+- Object `name` is the configured logical identity; `prim_path` is the USD namespace.
+- `request_id` is a client-generated protocol identity, not a motion or robot ID.
 
-`AR5V2` and `L6V1` are the actual arm and hand hardware family/version
-identities. `L` and `R` are physical variants, not runtime selectors:
+## Units And Frames
 
-```text
-AR5V2_L
-AR5V2_R
-L6V1_L
-L6V1_R
-AR5V2_L6V1_L
-AR5V2_L6V1_R
-```
+Suffix configuration and DTO fields when the unit is not otherwise fixed:
 
-The current asset tree keeps the hardware identity in the directory and primary
-file prefix:
+- `_m`, `_m_s`, `_s`, `_hz`, `_rad`;
+- `_xyz`, `_rpy`, `_quat_wxyz`;
+- `_mib` for binary-megabyte memory gates.
 
-```text
-assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
-assets/single_system/hand/L6V1_L/L6V1_L.xml
-assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
-assets/single_system/arm/AR5V2_L/AR5V2_L_curobo.yml
-```
+Use `world`, `env`, `robot_base`, and `tcp` exactly for task-space frames. Do not use
+ambiguous `local` without naming the owning local frame.
 
-Robot profile stems use the current configuration convention, for example
-`ar5v2_l`, `l6v1_l`, and `ar5v2_l6v1_l`. Do not add an unrecognized asset
-revision suffix or treat `V1` / `V2` as a configuration schema version.
+## State Terms
 
-## Joint, Link, Body, And TCP Names
+- **state** is the current mutable runtime field set;
+- **snapshot** is an owned point-in-time copy suitable for restore;
+- **clone state** copies selected Kaleidoscope rows within one runtime;
+- **checkpoint** is an explicit persistent cold artifact;
+- **reset** restores task/configured initial semantics, not an arbitrary snapshot.
 
-Repository robot entities retain a complete hardware/category prefix:
+A Mirror snapshot is an owned data copy only; Mirror exposes no clone operation and
+does not create another world.
 
-```text
-AR5V2_L_arm_joint_1
-AR5V2_L_arm_link7
-AR5V2_L_arm_flan_link
-L6V1_L_hand_base_link
-L6V1_L_hand_thumb_cmc_roll
-L6V1_L_hand_index_dip
-L6V1_L_hand_couple_index
-```
+## Configuration Names
 
-The `flan_link` spelling is part of the actual asset identity and must not be
-silently normalized. Joint, link, body, actuator, mesh, mimic/equality, and TCP
-names must remain consistent between:
+Profile references use extension-free category-relative stems such as
+`physx/cuda` or `kaleidoscope/tblock_push_v1`. Every path component excludes dots and
+backslashes; `/` is the only namespace separator. A leaf key names the fact it owns.
+Avoid generic `default` inside a leaf when a product-qualified name communicates its
+scope.
 
-- MJCF/URDF files.
-- Mesh filenames and references.
-- Robot profile joint and rigid-body groups.
-- controller active/follower joints.
-- cuRobo URDF, robot YAML, collision configuration, and tool frames.
-- Motion targets, snapshots, tests, and command examples.
+Scene references additionally require the matching product namespace. Thus
+`mirror/scene3` resolves to `configs/scenes/mirror/scene3.yaml` with
+`scene.id: scene3`; a Mirror root cannot select or symlink to a scene under
+`kaleidoscope/`.
 
-Custom TCP frames are named in the robot profile, for example
-`AR5V2_L_tool_tcp` or `AR5V2_L_pinch_tcp`, and are defined relative to the
-configured `flange_frame`. cuRobo may materialize a derived URDF with those
-fixed links below the resolved cuRobo cache directory. The root comes from
-`runtime.paths.cache_root`, `LINKERBOT_SIM_CACHE_ROOT`, `XDG_CACHE_HOME`, or the
-user cache directory, in that order. The derived file is not a primary asset
-and must not replace the checked-in URDF.
+CUDA device aliases such as `active_gpu`, `physics_gpu`, or policy-specific device
+numbers are prohibited. The canonical field is `compute.cuda_device`.
 
-## Robot Runtime Identity
+## Protocol Names
 
-Each env `robots[]` row selects a reusable `robot_profile` and defines a scene
-instance. `label` must be unique and match `[A-Za-z0-9_]+`; if omitted it becomes
-`<robot_profile>_<robot_id>`. Its default USD path is
-`/World/Robots/<label>`.
+Mirror operations use a capability prefix and verb, for example
+`motion.joint_goal`, `snapshot.get`, and `runtime.status`. Additions require a protocol
+version decision; do not introduce undocumented synonyms.
 
-`robot_id` is generated from zero-based `robots[]` order. IDs are dense and are
-not configurable in YAML. Public Single Scene and Tiled Scene control protocols use the
-session `robot_id`; discover it from `status` after every process start or env
-reorder. Do not cache it as persistent hardware identity and do not select a
-robot by `L` / `R`.
+Kaleidoscope methods use Python verbs (`step`, `reset_idx`, `clone_state`) because it
+has no wire protocol.
 
-The label remains the stable internal, telemetry, and snapshot matching key.
-When a flattened output needs globally unique joint names, prefix the unchanged
-asset joint name with that label:
+## Files And Tests
 
-```text
-left_arm/AR5V2_L_arm_joint_1
-right_arm/AR5V2_R_arm_joint_1
-```
-
-## Object Identity
-
-Object asset, profile, and scene instance names are separate. Current examples
-include:
-
-```text
-asset:    workstationV1_armbase, capsuleropeV1_default, TblockV1_default
-profile:  workstation_armbase, capsule_rope, TblockV1_default
-instance: workstation, rope, Tblock
-```
-
-An env `objects[].name` is unique within the scene and is used by snapshots and
-Tiled per-env pose overrides. It starts with a letter or underscore and then
-uses letters, digits, or underscores. `object_profile` is the reusable profile
-selector. `runtime_handle` is an optional interaction alias; it does not rename
-the profile, asset, or USD prim. Instance names, runtime handles, and effective
-prim paths must be unique; a handle cannot collide with another object's name.
-
-The env instance owns `prim_path` and `root_pose`. If `prim_path` is omitted,
-the runtime derives `/World/Objects/<name>`. Asset source/path, import options,
-physics, planning collision, and a supported asset-internal `root_path` remain
-owned by `configs/objects/<object_profile>.yaml`.
-
-## Camera And Output Names
-
-The key under `sensors.cameras` is the camera name carried by `CameraFrame`,
-offline metadata, and output routing. It must be nonempty and cannot contain a
-path separator. `prim_path` is a separate absolute USD identity; when
-`parent_prim_path` is set, the camera prim must be under that parent.
-
-For Tiled cameras, per-env pose overrides refer to the base camera key. Runtime
-expansion gives each camera an `env_NNN_<name>` identity and appends the same
-`env_NNN` segment to any configured local `save_dir` and Foxglove topic prefix:
-
-```text
-base camera: world_rgbd
-runtime camera: env_000_world_rgbd
-local output: logs/cameras/world_rgbd/env_000/
-topic prefix: /cameras/world_rgbd/env_000
-```
-
-Within one camera output directory, `metadata.jsonl` indexes deterministic
-payload names such as `rgb/000000.png` and `depth/000000.npz`. Foxglove camera
-channels append `/rgb`, `/depth`, and `/info` to the configured prefix.
-
-Other output names keep their configured owners. Single Scene joint CSV treats the
-configured path as a template and adds the session robot ID and label, for
-example `run.0.left_arm.csv`. State topic names come directly from
-`runtime.telemetry.topics`; they are not inferred from robot or asset names. See
-[Outputs And Persistence](../reference/outputs.md) for all destination owners.
-
-## Validation
-
-Validate the full profile graph without starting Isaac:
-
-```bash
-PYTHONPATH=src .venv/bin/python scripts/validate_config.py --runtime-profile default_single_scene
-PYTHONPATH=src .venv/bin/python scripts/validate_config.py --runtime-profile default_tiled_scene
-```
-
-Run identity-sensitive tests after a rename:
-
-```bash
-PYTHONPATH=src .venv/bin/python -m pytest \
-  tests/test_system_configs.py \
-  tests/test_robot_profile_schema.py \
-  tests/test_object_instances.py \
-  tests/test_sensor_camera_config.py \
-  tests/test_tiled_cameras.py -q
-```
-
-Useful stale-name scan:
-
-```bash
-rg "AR5-V2|L6-V1|capsule-rope" assets configs src scripts tests README.md docs
-```
-
-After renaming, verify:
-
-- Primary URDF/MJCF/XML files parse and every referenced mesh exists.
-- Asset paths, profile references, env labels/names, and prim paths remain unique.
-- Joint groups, controller mappings, trajectory targets, TCP frames, cuRobo
-  descriptions, snapshots, and examples are updated together.
-- Camera keys, Tiled per-env overrides, output directories, and topic prefixes
-  still resolve to the intended namespace.
+Use lowercase snake case for Python files and tests, and kebab case for user-facing
+Markdown filenames. Tests should name the invariant, not an implementation accident.
+Configuration fixtures should identify product, capability, and backend where useful.

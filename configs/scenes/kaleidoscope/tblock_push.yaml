@@ -1,0 +1,52 @@
+# Kaleidoscope 的 canonical 单环境模板。这里只描述一个 env 的物理拓扑；
+# 环境数与命名属于 mode root；布局和隔离由所选物理后端的 builder 固定派生。
+# 该 schema 刻意没有 render_frequency、sensor、camera 或 viewport 字段。
+# 所有 xyz 使用 m，rpy 使用固定 XYZ Euler rad；这里的 prim path 会在复制时映射进各 env。
+scene:
+  # 单环境模板标识，必须与文件 stem tblock_push 一致。
+  id: tblock_push
+  # 人类可读说明，不参与环境装配或 observation。
+  description: dual arm T-block GPU reinforcement-learning template
+  # 每个 environment world 的 Z 轴重力加速度，单位 m/s^2。
+  gravity_z: -9.81
+  # false 表示不额外创建默认 Plane；工装/场景资产负责提供所需接触面。
+  add_ground: false
+  # add_ground=true 时 Plane 的 env-local Z 高度，单位 m。
+  ground_height: 0.0
+  # 物理频率，单位 Hz；240 Hz 对应单步 1/240 s，action 可跨多个 physics tick。
+  physics_frequency_hz: 240.0
+
+  # 单环境内机器人模板；列表顺序和 label 在所有复制环境中保持一致。
+  robots:
+    # 左臂实例。robot_profile 绑定组合机器人资产和 joint group；root_pose 为 env-local 位姿。
+    - label: ar5v2_l6v1_0
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        # env-local 平移 xyz，单位 m。
+        xyz: [0.0, 0.09, 0.0]
+        # env-local XYZ Euler 旋转，单位 rad。
+        rpy: [-1.5707, 0.0, 0.0]
+    # 右臂实例，与左臂使用相反 Y 偏移/roll 形成相向工作空间。
+    - label: ar5v2_l6v1_1
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+  # 单环境对象模板；name 是 task/state 标识，prim_path 是源模板中的绝对 USD 路径。
+  objects:
+    # 固定双臂工装，提供机器人基座和接触表面。
+    - name: workstation
+      object_profile: workstation_armbase
+      prim_path: /World/WorkstationArmBase
+      root_pose:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
+    # 任务动态对象；task.dynamic_object 必须引用这里的 name。
+    - name: Tblock
+      object_profile: TblockV1_default
+      prim_path: /World/TBlock
+      root_pose:
+        # nominal reset 位姿；task.randomization 在每个 episode 上叠加局部扰动。
+        xyz: [0.15, 0.0, -0.4]
+        rpy: [0.0, 1.5707, 0.0]

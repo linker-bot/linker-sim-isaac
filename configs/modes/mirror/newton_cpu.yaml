@@ -1,0 +1,21 @@
+# Mirror 固定派生一个 Newton CPU world。根 compute.cuda_device 仍供 cuRobo 与 RTX 使用，
+# 不会被解释为 Newton 的物理设备。
+# 引用值相对 configs/<group>/ 解析且省略 .yaml；本文件只组合 profile，不复制 leaf 参数。
+# 产品根选择单场景交互式 Mirror 配置图。
+mode: mirror
+compute:
+  # cuRobo 与 RTX 共用的 CUDA 设备序号；Newton CPU solver 不消费此字段。
+  cuda_device: 0
+profiles:
+  # 现实映像场景：机器人/对象实例、频率、相机、灯光和 viewport。
+  scene: mirror/scene3
+  # Newton CPU 的 per-world 容量与求解器参数；Mirror 最终只创建一个 world。
+  physics: newton/cpu
+  # 交互命令模式、空闲步进策略以及 ingress 容量/超时。
+  control: mirror
+  # 仍在 GPU 上执行的 cuRobo FK/IK 与 MotionGen 数值配置。
+  curobo: mirror
+  # 单次 motion 请求的时长、采样、超时和碰撞默认策略。
+  planning: mirror
+  # 渲染、相机、CSV 和 telemetry 等 Mirror 冷输出资源。
+  outputs: mirror_default

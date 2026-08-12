@@ -1,611 +1,628 @@
-# YAML Configuration Reference
+# Configuration Reference
 
 Language: [English](configuration.md) | [中文](../../zh-CN/reference/configuration.md)
 
-This page is the field reference for project-owned YAML. It is sufficient to
-author a profile without inferring fields from a bundled example. Every fixed
-mapping rejects unknown keys, booleans are strict YAML booleans, and numeric
-strings are not numbers. Unless a row explicitly says `null`, a present field
-must have the stated type. "Default" means the value produced when the field is
-omitted; it is not an instruction to copy the field into every profile.
+Mirror and Kaleidoscope use a strict profile graph under `configs/`. The configuration catalog
+does not perform last-writer-wins merging: a mode root names canonical leaf profiles,
+and each leaf owns one category of facts.
 
-Empty YAML, a non-mapping document, or a duplicate key at any nesting depth is
-rejected before domain parsing, with the file and duplicate-key locations.
+## Catalog API
 
-## Owners And Resolution
+```python
+from linkerbot_sim.configuration import (
+    load_kaleidoscope_config,
+    load_mirror_config,
+)
 
-| Owner | Location | Owns | Does not own |
-| --- | --- | --- | --- |
-| Runtime profile | `configs/runtime/<name>.yaml` | Entry mode, selected profiles, process resources, execution, transports, planning policy, output, telemetry, and shutdown | scene topology, assets, controller gains, robot model resources |
-| Env profile | `configs/envs/<name>.yaml` or `<name>/base.yaml` | World facts, visuals, sensors, robot/object instances, tiled layout | Robot/object asset properties, controller gains, cuRobo algorithms |
-| Per-env fragment | `configs/envs/<name>/<dir>/*.yaml` | Pose overrides and opaque metadata for an existing tiled env | Topology, assets, physics, controllers, outputs, planning |
-| Robot profile | `configs/robots/<name>.yaml` | One articulation's simulation asset, component groups, physics, and cuRobo model binding | Scene `prim_path`/`root_pose`, cuRobo algorithm defaults |
-| Object profile | `configs/objects/<name>.yaml` | Object asset, import, physics, planning collision, and dynamic-chain summary | Scene `prim_path`/`root_pose` |
-| Controller bundle | `configs/controllers/<name>/` | Arm/hand/default control methods, gains, limits, and follower drives | Contact material and rigid-body damping |
-| cuRobo profile | `configs/curobo/<name>.yaml` | Device, seeds, tolerances, cache capacities, and planner algorithms | Robot URDF, robot YAML, frames, and TCP transforms |
-| Logging profile | `configs/logging/<name>.yaml` | Single Scene joint-tracking CSV path, cadence, and columns | Telemetry MCAP and camera output |
+mirror = load_mirror_config("physx_cpu")
+mirror_newton_cpu = load_mirror_config("newton_cpu")
+mirror_newton_cuda = load_mirror_config("newton_cuda")
+kaleidoscope = load_kaleidoscope_config("physx_cuda")
+kaleidoscope_newton = load_kaleidoscope_config("newton_cuda")
+```
 
-Profile references are simple file stems, not paths. Runtime resolution is
-`code defaults < selected runtime YAML < explicit entry-point CLI overrides`.
-Controller bundle selection is `runtime default < robot profile < env robot
-instance`. A selected cuRobo algorithm profile is the base and each robot's
-`curobo.enabled`, `planning_joint_group`, and `robot` model binding are merged
-over it. Object profile properties and env instance placement have no
-overlapping fields.
+Both functions accept a profile stem, an explicit path below the matching mode
+directory, and an optional `configs_root`. They return frozen typed configuration
+graphs with a read-only `sources` mapping.
 
-## Complete Validator Option Table
+## Resolved Closure, Provenance, And Fingerprints
 
-`scripts/validate_config.py` is the pure-Python preflight entrypoint. It accepts
-exactly these options:
+The selected root must close the entire graph: a mode references leaves and a scene
+references robot and object profiles. The physics engine derives the default controller
+bundle; a robot-profile default or scene-instance override may replace it. Controller
+precedence is scene instance, robot profile, then the physics-derived default.
 
-| Option | Argparse default | Contract |
-| --- | --- | --- |
-| `--help` | n/a | Print argparse help and exit without loading a profile. |
-| `--runtime-profile NAME` | `default_single_scene` | Select the file stem under `configs/runtime/`; paths are not accepted. |
-| `--dump-effective-config` | `false` | On success, include resolved runtime values and each leaf's source instead of the minimal summary. |
+The returned root freezes instance `resolved_profile` values, the read-only
+`controller_bundles`, and `sources`. Runtime builders consume these resolved objects
+and never resolve the same names again under the repository default. A custom
+`configs_root` must therefore provide every referenced mode, leaf, robot, object, and
+controller file. The retired `configs/envs` schema is not a configuration entry point.
 
-Success writes one JSON document to stdout and exits `0`. A missing file,
-invalid type, unknown field, or cross-profile validation error writes a
-`CONFIG_INVALID` line to stderr and exits `1`. The command does not start Isaac,
-create output files, or modify configuration.
+`sources` records absolute provenance for diagnostics but is excluded from semantic
+fingerprints. The configuration layer owns one canonical payload and fingerprint used
+by validation and Kaleidoscope snapshot compatibility. Relocating identical content
+to another absolute root preserves the fingerprint; changing effective robot, object,
+or controller content changes it.
+
+The catalog:
+
+- rejects duplicate YAML keys at any depth;
+- accepts only safe YAML values and string mapping keys;
+- rejects missing and unknown fields;
+- rejects absolute profile references, `..`, empty path components, backslashes, and
+  dots in any selector component (including explicit `.yaml` suffixes);
+- requires a scene selector in the namespace of the selected product, such as
+  `mirror/scene3` or `kaleidoscope/tblock_push`;
+- resolves symbolic links and prevents escape from the configuration root; scene
+  symlinks must additionally remain inside the selected product namespace;
+- checks cross-profile invariants before Kit or CUDA starts.
+
+Validate a graph from the command line:
 
 ```bash
-.venv/bin/python scripts/validate_config.py --runtime-profile default_single_scene
-.venv/bin/python scripts/validate_config.py \
-  --runtime-profile default_tiled_scene \
-  --dump-effective-config
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode mirror --profile physx_cpu
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode mirror --profile newton_cpu
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode mirror --profile newton_cuda
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode kaleidoscope --profile physx_cuda
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode kaleidoscope --profile newton_cuda
 ```
 
-## Runtime Profile
+## Directory Ownership
 
-The document root must contain only a `runtime` mapping. Every subsection is
-optional and recursively fills omitted leaves from the defaults below.
-
-### Mode, Profiles, And Simulation App
-
-| Path | Type and omission default | Rules and meaning |
+| Directory | Root key | Owner |
 | --- | --- | --- |
-| `runtime.mode` | `single_scene | tiled_scene`; `single_scene` | Must match the entry point. `tiled_scene` also requires the selected env to have `tiled.enabled: true`; `single_scene` requires false. |
-| `runtime.profiles.env` | profile stem; `scene1` | Selects a single-file or directory-form env profile. |
-| `runtime.profiles.curobo` | profile stem; `default` | Algorithm profile merged into every planning-enabled robot. |
-| `runtime.profiles.logging` | profile stem; `default_logger` | Always graph-validated; the Single Scene runtime consumes it for joint CSV. |
-| `runtime.profiles.controller_bundle` | bundle stem; `default` | Lowest-priority controller bundle selection. |
-| `runtime.simulation_app.gui` | boolean; `false` | `true` launches the interactive window; `false` is headless. |
-| `runtime.simulation_app.gpu.multi_gpu` | boolean; `false` | Launch intent; validation does not probe installed devices. |
-| `runtime.simulation_app.gpu.max_gpu_count` | positive integer; `1` | Upper bound for both GPU indices. |
-| `runtime.simulation_app.gpu.active_gpu` | integer >= 0; `0` | Must be less than `max_gpu_count`. |
-| `runtime.simulation_app.gpu.physics_gpu` | integer >= 0; `0` | Must be less than `max_gpu_count`. |
-| `runtime.simulation_app.render.gui_size` | `[width, height]`; `[1280, 720]` | Exactly two positive integers. |
-| `runtime.simulation_app.render.headless_size` | `[width, height]`; `[640, 480]` | Exactly two positive integers. |
-| `runtime.simulation_app.render.window_size` | `[width, height]`; `[1440, 900]` | Exactly two positive integers. |
-| `runtime.simulation_app.render.renderer` | non-empty string; `RaytracedLighting` | Isaac renderer name. |
-| `runtime.simulation_app.render.anti_aliasing_gui` | integer >= 0; `3` | Anti-aliasing level used in GUI mode. |
-| `runtime.simulation_app.render.anti_aliasing_headless` | integer >= 0; `0` | Anti-aliasing level used in headless mode. |
-| `runtime.simulation_app.render.samples_per_pixel_per_frame` | positive integer; `1` | Renderer samples per pixel per frame. |
-| `runtime.simulation_app.render.denoiser` | boolean; `false` | Renderer denoiser switch. |
-| `runtime.simulation_app.render.hide_ui` | boolean or `null`; `null` | `null` lets the launch layer choose from GUI/headless context. |
-| `runtime.simulation_app.render.disable_viewport_updates` | boolean or `null`; `null` | `null` delegates the context-dependent choice. |
-| `runtime.simulation_app.render.fast_shutdown` | boolean or `null`; `null` | `null` delegates the context-dependent choice. |
-| `runtime.simulation_app.render.material_sync_loads` | boolean; `false` | Material synchronous-load setting. |
-| `runtime.simulation_app.render.hydra_material_sync_loads` | boolean; `false` | Hydra material synchronous-load setting. |
-| `runtime.simulation_app.render.headless_dt_policy` | `camera_aware | physics`; `camera_aware` | `camera_aware` preserves render cadence when an enabled camera has an output consumer; `physics` always follows physics cadence in headless mode. |
+| `configs/modes/mirror/` | `mode`, `compute`, `profiles` | Mirror composition and shared CUDA device |
+| `configs/modes/kaleidoscope/` | `mode`, `compute`, `environments`, `profiles` | Kaleidoscope composition, CUDA device, environment count, paths, and origin |
+| `configs/scenes/mirror/` | `scene` | Mirror world topology, instances, and optional visual facts |
+| `configs/scenes/kaleidoscope/` | `scene` | Headless Kaleidoscope environment-template topology and instances |
+| `configs/physics/` | `physics` | `engine`, `execution`, solver, and engine-specific capacity facts |
+| `configs/control/mirror.yaml` | `control` | Mirror command, idle-step, wall-clock pacing, interface, and request-default contract |
+| `configs/control/hybrid_force_position.yaml` | `hybrid_force_position` | Explicit Cartesian hybrid-control gains, fixed safety limits, and runtime tuning bounds |
+| `configs/curobo/` | `curobo` | FK/IK capacity and optional MotionPlanner numerical capability |
+| `configs/planning/` | `planning` | Backend-neutral Mirror request defaults only; it does not select or size a numerical backend |
+| `configs/tasks/` | `task` | Kaleidoscope action, observation, reward, reset, and termination |
+| `configs/outputs/` | `outputs` | Mirror render, camera, logging, and telemetry |
+| `configs/training/` | `training` | Downstream trainer settings; not part of environment construction |
+| `configs/visualization/kaleidoscope.yaml` | `viewport` | Launch-only single-environment Kaleidoscope viewport; outside training semantics |
+| `configs/robots/` | asset-specific | Reusable robot asset facts |
+| `configs/objects/` | asset-specific | Reusable object asset facts |
+| `configs/controllers/` | controller bundle | Engine-specific asset drive gains; the default bundle is derived from `physics.engine` |
 
-Detailed camera creation and render behavior are owned by
-[Cameras And Output](../guides/cameras.md).
+Every top-level profile group has one same-named schema owner under
+`linkerbot_sim.configuration`: single-file groups use modules such as `scenes.py`, while
+nested groups use packages such as `modes/`, `tasks/`, `training/`, and `visualization/`.
+Only `catalog.py`, `common.py`, and `fingerprint.py` are configuration infrastructure
+rather than profile groups. Scene visual primitives belong to `scenes.py`; the
+`visualization` package contains only the Kaleidoscope launch profile corresponding to
+`configs/visualization/kaleidoscope.yaml`.
 
-### Execution And Interactive Transport
+A scene has three related but distinct names. The mode root stores the namespaced
+selector (`mirror/scene3`), the catalog resolves that selector to a file path
+(`configs/scenes/mirror/scene3.yaml`), and the file stores the unqualified stable
+identity (`scene.id: scene3`). The same rule gives selector
+`kaleidoscope/tblock_push`, path
+`configs/scenes/kaleidoscope/tblock_push.yaml`, and `scene.id: tblock_push`.
+Flat selectors and cross-product scene references are invalid because the two scene
+schemas are not interchangeable.
 
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `runtime.execution.control_mode` | `position | velocity | effort`; `position` | Tiled Scene mode currently requires `position`. |
-| `runtime.execution.idle_physics_policy` | `pause | hold_step`; `hold_step` | Whether an idle runtime pauses or continues hold steps. |
-| `runtime.execution.idle_step_duration_s` | positive finite number; `0.05` | Duration represented by an idle hold interval. |
-| `runtime.execution.default_decimation` | positive integer; `2` | Default physics-step multiplier for commands that omit decimation. |
-| `runtime.execution.command_defaults.joint_interpolation` | `linear | smoothstep`; `smoothstep` | Used only when a command omits the field. |
-| `runtime.execution.command_defaults.pose_frame` | `env | world`; `env` | Default task-space reference frame. |
-| `runtime.execution.command_defaults.orientation_mode` | `free | current | target`; `current` | Default task-space orientation treatment. |
-| `runtime.interactive.stdin_enabled` | boolean; `true` | Enables the stdin command reader. |
-| `runtime.interactive.stdin_eof_policy` | `exit | keep_alive`; `exit` | Process behavior after stdin closes. |
-| `runtime.interactive.queue_poll_timeout_s` | positive finite number; `0.05` | Internal command queue poll timeout. |
-| `runtime.interactive.snapshot_timeout_s` | positive finite number; `30.0` | Snapshot request completion timeout. |
-| `runtime.interactive.command_history_capacity` | integer >= 0; `256` | In-memory command history; zero disables retention. |
-| `runtime.interactive.snapshot_request_capacity` | positive integer; `32` | Maximum queued snapshot requests. |
-| `runtime.interactive.transport.tcp_jsonl.enabled` | boolean; `false` | Enables the control JSONL TCP listener. |
-| `runtime.interactive.transport.tcp_jsonl.host` | loopback host; `127.0.0.1` | Only `localhost` or a numeric loopback address is accepted. |
-| `runtime.interactive.transport.tcp_jsonl.port` | `null` or integer 1..65535; `null` | Required when this endpoint is enabled. |
-| `runtime.interactive.transport.websocket.enabled` | boolean; `false` | Enables the control WebSocket listener. |
-| `runtime.interactive.transport.websocket.host` | loopback host; `127.0.0.1` | Same loopback-only rule. |
-| `runtime.interactive.transport.websocket.port` | `null` or integer 1..65535; `null` | Required when this endpoint is enabled. |
-| `runtime.interactive.transport.max_message_bytes` | positive integer; `1048576` | Per-message input limit. |
-| `runtime.interactive.transport.max_connections` | positive integer; `16` | Concurrent network connection limit. |
-| `runtime.interactive.transport.request_queue_capacity` | positive integer; `256` | Accepted request queue bound. |
-| `runtime.interactive.transport.event_queue_capacity` | positive integer; `256` | Outbound event queue bound. |
-| `runtime.interactive.transport.overflow_policy` | `reject`; `reject` | A full queue rejects new work. |
-| `runtime.interactive.transport.startup_timeout_s` | positive finite number; `5.0` | Listener startup timeout. |
-| `runtime.interactive.transport.server_poll_interval_s` | positive finite number; `0.1` | Server-side poll interval. |
-| `runtime.interactive.transport.response_poll_interval_s` | positive finite number; `0.5` | Response poll interval. |
+Mirror logging has no separate profile directory. `outputs.logging` is its sole
+configuration owner. The runtime configuration tree also contains no selectable
+`example.yaml` templates; the maintained profiles below and this reference document
+are the schema examples.
 
-Listener endpoints do not provide authentication or TLS. A remote client must
-connect through an authenticated TLS proxy or SSH tunnel; a non-loopback bind is
-invalid configuration. Message schemas are owned by
-[Single Scene JSON Protocol](single-scene-json.md) and [Tiled Scene JSON Protocol](tiled-scene-json.md).
+## Mirror Mode Root
 
-### Planner And Playback
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `runtime.planner.backend` | `curobo | linear`; `curobo` | `linear` cannot satisfy task-space or collision-aware requests. |
-| `runtime.planner.joint_batch_mode` | `auto | per_env | batch_only`; `auto` | cuRobo joint-planning dispatch policy. |
-| `runtime.planner.request_defaults.duration_s` | positive finite number; `1.0` | Default requested motion duration. |
-| `runtime.planner.request_defaults.avoid_collisions` | boolean; `false` | Cannot be true with the `linear` backend. |
-| `runtime.planner.request_defaults.force_collision_refresh` | boolean; `false` | Unsupported in Tiled Scene mode. |
-| `runtime.planner.request_defaults.coordination` | `independent | static_others | coupled`; `independent` | `coupled` is rejected because no coupled backend exists; tiled requires `independent`. |
-| `runtime.planner.request_defaults.load_on_success` | boolean; `true` | Load a successful trajectory into playback. |
-| `runtime.planner.request_defaults.replace` | boolean; `true` | Replace an existing queued trajectory when loading. |
-| `runtime.planner.oversize_request_policy` | `split | reject`; `split` | Handling for requests larger than the batch limit. |
-| `runtime.planner.failure_policy` | `hold_failed_env | reject_request`; `hold_failed_env` | Atomic response behavior when some envs fail. |
-| `runtime.planner.resources.max_workers` | positive integer; `2` | Async planning worker limit. |
-| `runtime.planner.resources.max_pending_requests` | positive integer; `64` | Pending request bound. |
-| `runtime.planner.resources.max_completed_results` | integer >= 0; `256` | Completed-result retention; zero disables retention. |
-| `runtime.planner.resources.max_batch_problems` | positive integer or `auto`; `64` | `auto` resolves to the env count, capped by selected cuRobo capacities. An explicit cuRobo value cannot exceed the smaller IK/planner `max_batch_size`. |
-| `runtime.planner.resources.shutdown_timeout_s` | positive finite number; `30.0` | Planner worker join timeout. |
-| `runtime.playback.max_queue_depth_per_env` | positive integer; `32` | Per-env trajectory queue depth. |
-| `runtime.playback.max_samples_per_env` | positive integer; `100000` | Per-env queued sample bound. |
-| `runtime.playback.max_duration_s_per_env` | positive finite number; `3600.0` | Per-env queued duration bound. |
-| `runtime.playback.overflow_policy` | `reject`; `reject` | Rejects work that would exceed any playback bound. |
-
-Planner capabilities and request semantics are owned by
-[Motion Planning](../guides/motion-planning.md).
-
-### Camera Output, Telemetry, Paths, And Shutdown
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `runtime.camera_output.queue_size` | positive integer; `128` | Shared async camera publication queue bound. |
-| `runtime.camera_output.overflow_policy` | `drop_oldest | drop_newest | block | error`; `block` | Dataset writers should normally use lossless `block` or `error`. |
-| `runtime.camera_output.worker_poll_interval_s` | positive finite number; `0.1` | Publisher worker poll interval. |
-| `runtime.camera_output.existing_data_policy` | `error | truncate | resume | timestamped_dir`; `error` | Existing camera directory policy. |
-| `runtime.camera_output.shutdown_policy` | `drain | abort`; `drain` | Flush or discard pending frames during shutdown. |
-| `runtime.camera_output.rgb_format` | `ppm | png | npy`; `ppm` | Encoding for RGB payloads. |
-| `runtime.camera_output.depth_format` | `npy | npz`; `npy` | Encoding for depth payloads. |
-| `runtime.camera_output.metadata_flush_interval_frames` | positive integer; `1` | Metadata flush cadence. |
-| `runtime.camera_output.max_bytes_per_camera` | positive integer; `10737418240` | Per-camera directory quota, including metadata and modalities. |
-| `runtime.telemetry.primary_env_id` | integer >= 0; `0` | Source env for standard single-env topics. Tiled Scene runtime profiles must declare it explicitly. |
-| `runtime.telemetry.selected_env_ids` | non-empty unique integer list; `[0]` | Values are >= 0. Tiled Scene runtime profiles must declare it explicitly; it must contain `primary_env_id` and stay below `tiled.num_envs`. Single Scene mode requires `[0]`. |
-| `runtime.telemetry.publish_decimation` | positive integer; `1` | Tiled Scene global-step publication decimation; Single Scene mode requires `1`. |
-| `runtime.telemetry.rate_hz` | finite number >= 0; `60.0` | Telemetry sampling rate. |
-| `runtime.telemetry.buffer_size` | positive integer; `1` | State stream buffer bound. |
-| `runtime.telemetry.drop_policy` | `latest | drop_oldest | drop_newest`; `latest` | Buffer overflow behavior. |
-| `runtime.telemetry.on_error` | `stop | continue`; `stop` | Publisher error behavior. |
-| `runtime.telemetry.include_joint_states` | boolean; `true` | Include standard joint state messages. |
-| `runtime.telemetry.include_state_json` | boolean; `true` | Include project state JSON. |
-| `runtime.telemetry.include_scene_markers` | boolean; `false` | Include scene marker messages. |
-| `runtime.telemetry.include_efforts` | boolean; `false` | Read and include effort data. |
-| `runtime.telemetry.include_objects` | boolean; `false` | Include runtime object state. |
-| `runtime.telemetry.joint_effort_field` | `none | commanded | measured | applied`; `none` | A non-`none` value requires `include_efforts: true` and is supported only in Single Scene mode. |
-| `runtime.telemetry.topics.joint_states` | absolute topic; `/joint_states` | Must start with `/`, contain no `//` or `..`, and differ from the other two topics. |
-| `runtime.telemetry.topics.scene` | absolute topic; `/scene` | Same topic rules. |
-| `runtime.telemetry.topics.state` | absolute topic; `/linkerbot/state` | Same topic rules. |
-| `runtime.telemetry.mcap.path` | path string or `null`; `null` | `null` disables this sink; a path cannot contain NUL or a `..` component. |
-| `runtime.telemetry.foxglove_live.enabled` | boolean; `false` | Enables the telemetry live server. |
-| `runtime.telemetry.foxglove_live.host` | loopback host; `127.0.0.1` | Loopback-only. |
-| `runtime.telemetry.foxglove_live.port` | `null` or integer 1..65535; `null` | Required when enabled. |
-| `runtime.output.csv_existing_file_policy` | `error | truncate | resume | timestamped_dir`; `error` | Existing joint CSV policy. |
-| `runtime.output.mcap_existing_file_policy` | same enum; `error` | Existing telemetry MCAP policy. |
-| `runtime.paths.cache_root` | path string or `null`; `null` | `null` delegates cache-root selection; non-null paths cannot contain NUL or `..`. Relative paths use the process working directory. |
-| `runtime.shutdown.state_publisher_timeout_s` | positive finite number; `2.0` | State publisher join timeout. |
-| `runtime.shutdown.camera_publisher_timeout_s` | positive finite number; `2.0` | Camera publisher join timeout. |
-| `runtime.shutdown.transport_timeout_s` | positive finite number; `2.0` | Interactive transport join timeout. |
-
-When a telemetry live or MCAP sink is configured, at least one of joint states,
-state JSON, or scene markers must be enabled. In Single Scene mode, a configured sink
-with scene markers also requires `include_objects: true`. Detailed payload,
-buffer, sink, resume, and file behavior is owned by
-[Realtime State Stream](../guides/telemetry.md).
-
-## Env Profile
-
-An env profile accepts only the sibling top-level keys `env`, `solver`,
-`visuals`, `sensors`, `robots`, `objects`, and `tiled`. `env` and a non-empty
-`robots` list are required. `objects` may be omitted or `null`; all other
-present sections must be mappings or lists of the declared type.
-
-### World And Visual Fields
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `env.name` | required non-empty string | Stable scene name. |
-| `env.description` | optional string | Human/logging context only. |
-| `env.gravity_z` | finite number; `-9.81` | World Z gravity in m/s^2. |
-| `env.add_ground` | boolean; `true` | Add the Isaac default ground. |
-| `env.ground_height` | finite number; `0.0` | Default-ground Z coordinate. |
-| `env.physics_frequency` | positive finite number; `600.0` | Physics steps per second. |
-| `env.render_frequency` | positive finite number; `100.0` | Render frames per second when rendering is required. |
-| `solver.type` | `PGS | TGS | null`; `null` | Scene-level PhysX solver override. Robot iteration counts do not belong here. |
-| `visuals.viewport.enabled` | boolean; `true` | Configure the GUI viewport when enabled. |
-| `visuals.viewport.eye` | finite `[x, y, z]`; `[1.35, -1.65, 1.05]` | Viewport eye position. |
-| `visuals.viewport.target` | finite `[x, y, z]`; `[0.0, -0.1, 0.42]` | Viewport look-at target. |
-| `visuals.viewport.prim_path` | absolute USD path; `/OmniverseKit_Persp` | Viewport camera prim. |
-| `visuals.lights.key.enabled` | boolean; `true` | Distant key-light switch. |
-| `visuals.lights.key.path` | absolute USD path; `/World/KeyLight` | Key-light prim. |
-| `visuals.lights.key.intensity` | finite number >= 0; `1200.0` | Light intensity. |
-| `visuals.lights.key.angle` | finite number >= 0; `0.5` | Distant-light angular size. |
-| `visuals.lights.key.color` | finite RGB triple or `null`; `null` | `null` preserves the light default. |
-| `visuals.lights.key.rotation_rpy` | finite RPY triple or `null`; `null` | Radians. |
-| `visuals.lights.fill.enabled` | boolean; `true` | Dome fill-light switch. |
-| `visuals.lights.fill.path` | absolute USD path; `/World/FillLight` | Fill-light prim. |
-| `visuals.lights.fill.intensity` | finite number >= 0; `250.0` | Light intensity. |
-| `visuals.lights.fill.color` | finite RGB triple or `null`; `null` | `null` preserves the light default. |
-
-### Sensor Cameras
-
-`sensors` accepts only `cameras`; `sensors.cameras` is a mapping whose arbitrary
-keys are camera names. A name must be non-empty and contain no path separator.
-
-| Path under `sensors.cameras.<name>` | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `enabled` | boolean; `true` | Disabled cameras do not create runtime resources. |
-| `prim_path` | required absolute USD path | Camera prim template. |
-| `parent_prim_path` | absolute USD path or `null`; `null` | If set, `prim_path` must be below it. |
-| `pose.xyz`, `pose.rpy` | finite triples; zero triples | Local pose in metres/radians. `pose: null` is equivalent to omission. |
-| `resolution` | two positive integers; `[640, 480]` | `[width, height]`. |
-| `frequency` | positive finite number; `30.0` | Capture frequency in Hz. |
-| `env_ids` | non-empty unique integer list >= 0; omitted | Must be omitted in env profiles selected by Single Scene and explicitly present for every camera in env profiles with `tiled.enabled: true`; values must be below `tiled.num_envs`. |
-| `modalities` | non-empty unique list; `[rgb]` | Values: `rgb`, `depth`, `semantic_segmentation`, `instance_segmentation`. |
-| `clipping_range` | finite `[near, far]`; `[0.01, 5.0]` | Must satisfy `0 < near < far`. |
-| `intrinsics.fx`, `intrinsics.fy` | required positive finite numbers when `intrinsics` is present | Pixel focal lengths. The whole section may be omitted or `null`. |
-| `intrinsics.cx`, `intrinsics.cy` | required finite numbers when `intrinsics` is present | Pixel principal point. |
-| `output.save_dir` | non-empty string or `null`; `null` | Camera dataset directory. |
-| `output.foxglove_topic_prefix` | absolute topic prefix or `null`; `null` | Must start with `/` when present. |
-| `output.foxglove_live_host` | loopback host; `127.0.0.1` | Camera live server bind host. |
-| `output.foxglove_live_port` | positive integer or `null`; `null` | Non-null enables a camera live consumer. |
-| `output.foxglove_mcap_path` | non-empty string or `null`; `null` | Non-null enables camera MCAP output. |
-
-In Tiled Scene mode, the template is expanded only for `env_ids`. Save directories and
-topic prefixes gain an `env_NNN` suffix. A per-env camera pose override is legal
-only when that env is in the camera's `env_ids`. Resolved `save_dir` values must
-be unique per camera. If any camera writes a directory or MCAP, runtime
-`overflow_policy` must be `block` or `error`; lossy policies are live-only.
-Camera MCAP also rejects `existing_data_policy: resume`. See
-[Cameras And Output](../guides/cameras.md) for creation, cadence, encoding, and
-resume behavior.
-
-### Robot And Object Instances
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `robots[].robot_profile` | required profile stem | Selects `configs/robots/<name>.yaml`. |
-| `robots[].label` | string matching `[A-Za-z0-9_]+`; `<robot_profile>_<list-index>` | Must be unique. List order generates the session-local dense `robot_id`; `robot_id` is not configurable. |
-| `robots[].prim_path` | canonical absolute USD path; `/World/Robots/<label>` | Must be unique and disjoint from every robot/object instance subtree. |
-| `robots[].controller_profile` | bundle stem or `null`; `null` | Highest-priority controller bundle selection. |
-| `robots[].root_pose.xyz`, `robots[].root_pose.rpy` | required mapping; omitted vectors are zero triples | Finite world pose in metres/radians. |
-| `objects[].name` | required `[A-Za-z_][A-Za-z0-9_]*` | Stable scene identity; unique. |
-| `objects[].object_profile` | required profile stem | Selects `configs/objects/<name>.yaml`. |
-| `objects[].runtime_handle` | non-empty string or `null`; `null` | Optional interactive alias; unique and cannot collide with another object's name. |
-| `objects[].prim_path` | canonical absolute USD path; `/World/Objects/<name>` | Must be unique and disjoint from every instance subtree. |
-| `objects[].root_pose.xyz`, `objects[].root_pose.rpy` | required mapping; omitted vectors are zero triples | Finite world pose in metres/radians. |
-
-Scene placement never belongs in a robot or object profile.
-
-### Tiled Base
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `tiled.enabled` | boolean; `false` | Directory-form loading forces the effective value to `true`. Must agree with `runtime.mode`. |
-| `tiled.num_envs` | positive integer; `1` | Sole effective env-count owner. A directory loader derives `max(env_id)+1` only when base omits it and fragments exist. |
-| `tiled.base_env_path` | absolute USD path; `/World/envs` | Cannot be `/` or contain `//`. |
-| `tiled.env_prefix` | non-empty string; `env` | Cannot contain `/`; roots become `<base>/<prefix>_<id>`. |
-| `tiled.spacing` | positive finite number; `2.0` | XY grid spacing. |
-| `tiled.num_per_row` | positive integer or `null`; `null` | `null` uses `ceil(sqrt(num_envs))`. |
-| `tiled.per_env_config_dir` | safe relative directory or `null`; `null` | Directory loader uses `envs` when omitted; absolute paths, `.` and `..` are rejected. |
-| `tiled.per_env` | sequence of per-env rows; `[]` | A single-file profile may declare the row schema below inline. A directory loader replaces this value with rows materialized from its fragment directory. |
-| `tiled.layout.origin_xyz` | finite triple; `[0, 0, 0]` | World translation of the tiled grid. |
-| `tiled.clone.replicate_physics` | boolean; `true` | Request PhysX structure replication. |
-| `tiled.clone.copy_from_source` | boolean; `false` | GridCloner copy/inherit behavior. |
-| `tiled.clone.enable_env_ids` | boolean; `false` | GridCloner env-ID authoring. |
-| `tiled.clone.filter_collisions` | boolean; `true` | Enable inter-env collision filtering. |
-| `tiled.clone.collision_filter_strategy` | `collision_groups | filtered_pairs`; `collision_groups` | `collision_groups` is the linear-authoring path; `filtered_pairs` is pairwise. |
-| `tiled.clone.collision_root_path` | absolute USD path; `/World/collisions` | Cannot be `/`. Non-default collision-group fields require filtering enabled with `collision_groups`. |
-| `tiled.clone.physics_scene_path` | absolute USD path or `null`; `null` | `null` discovers the unique PhysicsScene. It is not the string `auto`. Requires active `collision_groups` filtering when explicitly set. |
-| `tiled.clone.global_collision_paths` | `auto` or absolute-path list; `auto` | Explicit paths replace automatic standard-ground discovery and require active `collision_groups` filtering. |
-| `tiled.clone.extra_global_collision_paths` | absolute-path list; `[]` | Appended after automatic/explicit globals; requires active `collision_groups` filtering when non-empty. |
-| `tiled.diagnostics.inspect_env_ids` | unique integer list; `[0]` | Every value must be in `[0, num_envs)`. Affects diagnostics only. |
-
-### Directory Profiles And Per-env Overrides
-
-A directory profile has one shared topology and optional fragments:
-
-```text
-configs/envs/<name>/base.yaml
-configs/envs/<name>/envs/env_000.yaml
-configs/envs/<name>/envs/env_001.yaml
+```yaml
+mode: mirror
+compute:
+  cuda_device: 0
+profiles:
+  scene: mirror/scene3
+  physics: physx/cpu
+  control: mirror
+  curobo: mirror
+  planning: mirror
+  outputs: mirror_default
 ```
 
-The row schema below can be written directly as `tiled.per_env` in a single-file
-profile. In a directory profile, use fragment files: the loader reads
-`per_env_config_dir`, sorts fragments by `env_id`, and replaces any base
-`tiled.per_env` value with those materialized rows before full cross-field
-validation. An explicit base `tiled.num_envs` wins and every fragment ID must
-fit it.
+The keys above are exact. Every Mirror root declares `compute.cuda_device`. PhysX CPU
+does not use it for simulation, but cuRobo IK/planning and rendering consume the same
+canonical device. A Newton root changes only the physics reference; the Mirror
+root derives the `newton` controller bundle from `physics.engine` while sharing one
+control profile:
 
-| Fragment path | Type and requirement | Rules |
-| --- | --- | --- |
-| `env_id` | required integer >= 0 | Unique and less than effective `tiled.num_envs`. |
-| `robots.<label>.root_pose.xyz/rpy` | both required finite triples | Label must already exist in base `robots`; the pose is env-local. |
-| `objects.<name>.root_pose.xyz/rpy` | finite triples; omitted vector becomes zero | Name must already exist in base `objects`. Write both vectors to avoid resetting an omitted component to zero. |
-| `cameras.<name>.pose.xyz/rpy` | finite triples; omitted vector becomes zero | Camera must exist in base and `env_id` must be in that camera's `env_ids`. |
-| `metadata` | JSON-compatible mapping; `{}` | String keys and finite JSON scalar/list/object values only; not interpreted as runtime configuration. |
-
-Fragments cannot add topology or override assets, physics, controllers, output,
-or planner settings.
-
-## Robot Profile
-
-The document root accepts only `robot`, `curobo`, `joint_groups`, optional
-`rigid_body_groups`, and optional `controlled_joints`.
-
-### Simulation Asset And Physics
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `robot.kind` | required `arm | hand | arm_hand` | Requires the corresponding non-empty joint groups. |
-| `robot.name` | non-empty string; `robot` | Logical profile name; an env instance label becomes the runtime articulation name. |
-| `robot.controller_profile` | bundle stem or `null`; `null` | Middle-priority controller bundle selection. |
-| `robot.asset_type` | `mjcf | urdf`; `mjcf` | Simulation importer type. |
-| `robot.asset_path` | required non-empty path string | Repository-relative or absolute asset path. |
-| `robot.urdf_drive_type` | `none | position`; `position` | Legal only for a URDF robot. |
-| `robot.import.collision_approximation` | `convex_decomposition | convex_hull`; `convex_decomposition` | Importer collision geometry. |
-| `robot.import.self_collision` | boolean; `false` | Robot-only articulation self-collision switch. |
-| `robot.import.fix_base` | boolean or `null`; `null` | `null` produces the current robot importer default `true`. |
-| `robot.import.merge_fixed_joints` | boolean or `null`; `null` | Effective default is `false` for MJCF and `true` for URDF. |
-| `robot.import.import_inertia_tensor` | boolean; `true` | Supported by MJCF and URDF. |
-| `robot.import.import_sites` | boolean; `true` | MJCF only. |
-| `robot.import.collision_from_visuals` | boolean; `false` | URDF only. |
-| `robot.physics.gravity.default` | boolean; `false` | Fallback rigid-body gravity policy. |
-| `robot.physics.gravity.arm`, `robot.physics.gravity.hand` | boolean or omitted; inherit `default` | Per-component gravity policy. Explicit `null` is not accepted. |
-| `robot.physics.solver.arm.position_iterations`, `robot.physics.solver.arm.velocity_iterations` | integer >= 0 or omitted | Per-arm rigid-body PhysX overrides. |
-| `robot.physics.solver.hand.position_iterations`, `robot.physics.solver.hand.velocity_iterations` | integer >= 0 or omitted | Per-hand rigid-body PhysX overrides. |
-| `robot.planning_collision.spheres[]` | non-empty list when section exists | Backend-neutral conservative robot-root envelopes. |
-| `...spheres[].name` | non-empty string; `sphere_<index>` | Unique within the list. |
-| `...spheres[].center` | required finite triple | Robot-root-local metres. |
-| `...spheres[].radius` | required positive finite number | Metres. |
-
-`robot.physics.physx` accepts common `material`/`rigid_body` fields and optional
-`default`, `arm`, and `hand` mappings with the same two submappings. Common
-fields are applied first, then `default`, then the component override.
-
-| PhysX leaf below a common/component mapping | Type and omission | Rules |
-| --- | --- | --- |
-| `material` | mapping, `null`, or `preserve`; omitted means inherit | `null`/`preserve` explicitly keeps the asset material binding. A mapping selects an override. |
-| `material.contact_static_friction` | finite number >= 0 or omitted | Robot contact material override. |
-| `material.contact_dynamic_friction` | finite number >= 0 or omitted | Robot contact material override. |
-| `material.contact_restitution` | finite number in `[0, 1]` or omitted | Robot contact material override. |
-| `material.friction_combine_mode` | `average | min | multiply | max | preserve | null`; `average` for a mapping | `preserve`/`null` leaves the combine mode untouched. |
-| `rigid_body.linear_damping` | finite number >= 0 or omitted | Rigid-body damping override. |
-| `rigid_body.angular_damping` | finite number >= 0 or omitted | Rigid-body damping override. |
-
-### Component Groups And Control Selection
-
-| Path | Type and omission default | Rules |
-| --- | --- | --- |
-| `joint_groups.arm` | exact-name list; `[]` | Non-empty exactly when `kind` contains an arm. |
-| `joint_groups.hand` | exact-name list; `[]` | Non-empty exactly when `kind` contains a hand. |
-| `joint_groups.passive` | exact-name list; `[]` | Command-space joints intentionally not written by arm/hand controllers. |
-| `rigid_body_groups.arm`, `rigid_body_groups.hand`, `rigid_body_groups.default` | exact-name lists; omitted mapping | Optional explicit component classification. |
-| `controlled_joints` | non-empty exact-name list; `[all]` | `[all]` must stand alone; otherwise every name must be in arm/hand groups. |
-
-Names cannot repeat within or across component groups. Group order defines
-command-space order. Asset finalization checks names against the articulation;
-planning active joints must exactly match `joint_groups.arm`.
-
-### Robot cuRobo Model Binding
-
-`curobo.enabled` is required. With `false`, it must be the only key in the
-section. With `true`, `planning_joint_group: arm` and a non-empty `robot` mapping
-are required; a hand-only robot cannot enable planning.
-
-| Path under `curobo.robot` | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `robot_config_path` | path string or `null`; `null` | Full cuRobo robot YAML. At least this or `urdf_path` is required. |
-| `urdf_path` | path string or `null`; `null` | Planning URDF. |
-| `base_link` | non-empty string or `null`; inferred | With a URDF, omission requires exactly one inferable root link. |
-| `flange_frame` | non-empty string or `null`; `null` | Default parent candidate for custom TCPs. |
-| `tool_frames` | string list; `[]` | Exact existing model frames; no duplicates. |
-| `default_tcp_frame` | non-empty string or `null`; `null` | At least `tool_frames` or this field is required. |
-| `custom_tcps` | named mapping or frame list; `[]` | Fixed frames materialized before context creation. |
-| `custom_tcps.<name>.parent_frame` | non-empty string or omitted | Defaults to `flange_frame`, then `default_tcp_frame`; required if neither exists. |
-| `custom_tcps.<name>.xyz`, `custom_tcps.<name>.rpy` | finite triples; zero triples | Parent-local metres/radians. In list form, each row also requires `frame_name`. |
-| `load_collision_spheres` | boolean; `true` | Load sphere data from the robot config when present. |
-
-## Object Profile
-
-The root contains only `object`. Instance `prim_path` and `root_pose` are not
-legal here.
-
-| Path | Type and omission default | Rules and meaning |
-| --- | --- | --- |
-| `object.name` | non-empty string; profile stem | Logical asset name. |
-| `object.kind` | required `rigid | dynamic_chain` | Selects the strict consumer schema. |
-| `object.source` | required `usd | urdf` | `dynamic_chain` requires `usd`. |
-| `object.asset_path` | required non-empty path string | Repository-relative or absolute asset path. |
-| `object.root_path` | absolute USD path or `null`; `null` | `dynamic_chain` only; the current capsule-rope consumer defaults to `/CapsuleRope`. |
-| `object.urdf_drive_type` | `none | position`; `none` | Rigid URDF only. |
-| `object.state_summary.reference_body` | required non-empty body name for `dynamic_chain` | A name, not a prim path. Forbidden for rigid objects. |
-
-A rigid URDF accepts `object.import` with the same format-specific fields as the
-robot importer except `self_collision`. A rigid USD does not accept `import`.
-For a rigid object, omitted `fix_base` follows `physics.static`; explicit
-`fix_base: true` conflicts with `physics.static: false`.
-
-| Rigid path | Type and omission default | Rules |
-| --- | --- | --- |
-| `object.physics.static` | boolean; `false` | Freeze/fix the rigid object. |
-| `object.physics.material.static_friction` | finite number >= 0 or omitted | Object material override. |
-| `object.physics.material.dynamic_friction` | finite number >= 0 or omitted | Object material override. |
-| `object.physics.material.restitution` | finite number in `[0, 1]` or omitted | Object material override. |
-| `object.physics.material.friction_combine_mode` | `average | min | multiply | max` or omitted | Object material override. |
-| `object.planning_collision.shape` | required `cuboid | sphere | capsule` | Simplified planning geometry; does not change PhysX colliders. |
-| `object.planning_collision.size` | required positive-number list | Length 3 for cuboid, 1 (radius) for sphere, 2 (`radius`, `length`) for capsule. |
-| `object.planning_collision.xyz`, `object.planning_collision.rpy` | finite triples; zero triples | Object-local collision pose. |
-| `object.planning_collision.enabled` | boolean; `true` | Include in planning world. |
-| `object.planning_collision.padding` | finite number >= 0; `0.0` | Conservative shape padding. |
-
-The current `dynamic_chain` consumer is a generated capsule rope. It forbids
-`import`, `planning_collision`, and `urdf_drive_type`.
-
-| Dynamic-chain path | Type and omission | Rules |
-| --- | --- | --- |
-| `object.physics.material.static_friction` | finite number >= 0 or omitted | Runtime USD material override. |
-| `object.physics.material.dynamic_friction` | finite number >= 0 or omitted | Runtime USD material override. |
-| `object.physics.material.restitution` | finite number in `[0, 1]` or omitted | Runtime USD material override. |
-| `object.physics.material.friction_combine_mode` | `average | min | multiply | max` or omitted | Runtime USD material override. |
-| `object.physics.solver_position_iterations` | positive integer or omitted | Runtime rigid-body position-iteration override. |
-| `object.physics.solver_velocity_iterations` | integer >= 0 or omitted | Runtime rigid-body velocity-iteration override. |
-
-Asset generation versus runtime ownership is described in
-[Object Assets](../development/object-assets.md); collision behavior is owned by
-[Collision Models](../guides/collision-models.md).
-
-## Controller Bundle
-
-A bundle directory must contain `arm_controller.yaml` and
-`hand_controller.yaml`; `default_controller.yaml` is optional. Each file has the
-same schema. `target` defaults to the file role and, when present, must equal
-`arm`, `hand`, or `default` respectively. Bundle names match
-`[A-Za-z0-9][A-Za-z0-9_-]*`.
-
-Each of `position_control`, `velocity_control`, and `effort_control` accepts only
-`method`, `active_joints`, and `follower_joints`. All three modes are parsed when
-the bundle is loaded, not only the selected runtime mode.
-
-| Path pattern | Type and omission default | Rules |
-| --- | --- | --- |
-| `position_control.method` | `implicit | explicit`; `implicit` | PhysX drive or Python PD effort. |
-| `velocity_control.method` | `implicit | explicit`; `implicit` | PhysX velocity drive or Python velocity-error effort. |
-| `effort_control.method` | `direct`; `direct` | Direct bounded effort. |
-| `<mode>.active_joints.stiffness` | joint parameter; `1000.0` | Used by position control; accepted for every mode. |
-| `<mode>.active_joints.damping` | joint parameter; `50.0` | Position/velocity gain. |
-| `<mode>.active_joints.max_force` | joint parameter; `100.0` | Drive/effort bound. |
-| `<mode>.active_joints.effort_limit` | joint parameter or `null`; `null` | Direct effort symmetric bound. |
-| `<mode>.active_joints.joint_friction` | joint parameter; `0.5` | Default joint friction. |
-| `<mode>.follower_joints.stiffness` | joint parameter; `50000.0` | Follower position-drive stiffness in every active mode. |
-| `<mode>.follower_joints.damping` | joint parameter; `50.0` | Follower position-drive damping. |
-| `<mode>.follower_joints.max_force` | joint parameter; `100.0` | Follower drive bound. |
-| `<mode>.follower_joints.joint_friction` | joint parameter; `0.5` | Follower joint friction. |
-
-A joint parameter is either one finite non-negative scalar, a non-empty finite
-non-negative sequence in selected-joint order, or a non-empty exact
-`joint_name: value` mapping. Sequence length and mapping names are resolved
-against the imported articulation before execution.
-
-## cuRobo Algorithm Profile
-
-The document root contains only `curobo`. This owner accepts `task_bundle`,
-`device`, `kinematics`, and `motion_planner`; it does not accept `enabled`,
-`planning_joint_group`, `robot`, or arbitrary task-file paths.
-
-| Path | Type and omission default | Rules |
-| --- | --- | --- |
-| `curobo.task_bundle` | `curobo_v0_8_default`; same | The installed cuRobo runtime must be `0.8.0`. |
-| `curobo.device.device` | non-empty string; `cuda:0` | Torch device used by the backend. |
-| `curobo.device.tensor_dtype` | `float32`; `float32` | Project-validated tensor dtype. |
-| `curobo.device.collision_geometry_dtype` | `float32`; `float32` | Collision geometry dtype. |
-| `curobo.device.collision_gradient_dtype` | `float32`; `float32` | Collision gradient dtype. |
-| `curobo.device.collision_distance_dtype` | `float32`; `float32` | Collision distance dtype. |
-
-### IK Algorithm
-
-All fields below are under `curobo.kinematics.ik`.
-
-| Leaf | Type and omission default | Rules |
-| --- | --- | --- |
-| `num_seeds` | positive integer; `32` | Optimizer seeds per problem. |
-| `position_tolerance` | finite number >= 0; `0.002` | Metres. |
-| `orientation_tolerance` | finite number >= 0; `0.01` | Radians. |
-| `use_cuda_graph` | boolean; `true` | CUDA graph execution switch. |
-| `random_seed` | integer >= 0; `123` | Reproducible seed generation. |
-| `optimizer_collision_activation_distance` | finite number >= 0; `0.01` | Metres. |
-| `store_debug` | boolean; `false` | Retain solver debug data. |
-| `override_optimizer_num_iters.particle`, `override_optimizer_num_iters.lbfgs` | integer >= 0 or `null`; `null` | `null` uses task-bundle defaults. No other keys are accepted. |
-| `override_iters_for_multi_link_ik` | integer >= 0 or `null`; `null` | Multi-link iteration override. |
-| `optimization_dt` | positive finite number or `null`; `null` | Velocity-aware IK timestep. |
-| `velocity_regularization_weight` | finite number >= 0 or `null`; `null` | C-space rollout regularization. |
-| `acceleration_regularization_weight` | finite number >= 0 or `null`; `null` | C-space rollout regularization. |
-| `success_requires_convergence` | boolean; `true` | Require pose-error convergence as well as feasibility. |
-| `seed_position_weight` | finite number >= 0; `1.0` | Seed solver weight. |
-| `seed_orientation_weight` | finite number >= 0; `1.0` | Seed solver weight. |
-| `seed_velocity_weight` | finite number >= 0; `0.0` | Seed solver weight. |
-| `seed_acceleration_weight` | finite number >= 0; `0.0` | Seed solver weight. |
-| `seed_solver_num_seeds` | positive integer; `32` | Seed solver population. |
-| `max_batch_size` | positive integer; `256` | IK resource capacity. |
-| `multi_env` | boolean; `false` | Whether each batch problem owns a distinct collision world. |
-| `max_goalset` | positive integer; `1` | Goal-set capacity per problem. |
-| `self_collision_check` | boolean; `true` | cuRobo model self-collision check. |
-| `collision_cache.cuboid`, `collision_cache.mesh` | integer >= 0; omitted/empty | Preallocated obstacle counts; no other geometry keys are accepted. |
-
-### Motion Planner Algorithm
-
-All fields below are under `curobo.motion_planner`.
-
-| Leaf | Type and omission default | Rules |
-| --- | --- | --- |
-| `warmup` | boolean; `true` | Warm the planner after materialization. |
-| `num_ik_seeds` | positive integer; `32` | Goal IK seed count. |
-| `num_trajopt_seeds` | positive integer; `4` | Trajectory-optimization seed count. |
-| `position_tolerance` | finite number >= 0; `0.002` | Metres. |
-| `orientation_tolerance` | finite number >= 0; `0.01` | Radians. |
-| `use_cuda_graph` | boolean; `true` | CUDA graph execution switch. |
-| `random_seed` | integer >= 0; `123` | Reproducible initialization. |
-| `optimizer_collision_activation_distance` | finite number >= 0; `0.01` | Metres. |
-| `store_debug` | boolean; `false` | Retain solver debug data. |
-| `max_batch_size` | positive integer; `256` | Planner resource capacity. |
-| `multi_env` | boolean; `false` | Distinct collision world per problem. |
-| `max_goalset` | positive integer; `1` | Goal-set capacity per problem. |
-| `self_collision_check` | boolean; `true` | cuRobo model self-collision check. |
-| `collision_cache.cuboid`, `collision_cache.mesh` | integer >= 0; omitted/empty | Preallocated obstacle counts. |
-
-## Logging Profile
-
-The document root contains only `logging`. Omitted leaves use these parser
-defaults; a bundled profile may explicitly select different values.
-
-| Path | Type and omission default | Meaning |
-| --- | --- | --- |
-| `logging.enabled` | boolean; `true` | Whether to open/write the Single Scene joint CSV. |
-| `logging.joint_tracking_path` | non-empty path string or `null`; `logs/joint_tracking/pinch_grasp.csv` | `null` disables the file target. Relative paths resolve from the repository root. |
-| `logging.flush_interval_s` | positive finite number; `0.05` | Simulated-time flush cadence. |
-| `logging.interval_steps` | positive integer; `1` | Physics-step sampling decimation. |
-| `logging.log_actual_position` | boolean; `true` | Actual-position columns. |
-| `logging.log_actual_velocity` | boolean; `true` | Actual-velocity columns. |
-| `logging.log_command_position` | boolean; `true` | Position-command columns. |
-| `logging.log_command_velocity` | boolean; `true` | Velocity-command columns. |
-| `logging.log_command_effort` | boolean; `true` | Semantic effort-command columns. |
-| `logging.log_action_effort` | boolean; `false` | Effort action sent to Isaac. |
-| `logging.log_measured_effort` | boolean; `false` | PhysX measured effort; more expensive to read. |
-| `logging.log_applied_effort` | boolean; `false` | PhysX applied effort; more expensive to read. |
-
-## Complete Graph Validation
-
-Validation follows the actual ownership graph:
-
-```text
-runtime
-  -> env/base + per-env fragments
-  -> robot profiles -> selected controller bundles
-                    -> robot resources + selected cuRobo algorithm profile
-  -> object profiles
-  -> logging profile
+```yaml
+mode: mirror
+compute:
+  cuda_device: 0
+profiles:
+  scene: mirror/scene3
+  physics: newton/cuda
+  control: mirror
+  curobo: mirror
+  planning: mirror
+  outputs: mirror_default
 ```
 
-It also checks runtime/env mode agreement, cross-instance USD subtree overlap,
-controller bundle completeness, every object kind-specific consumer, and the
-merged cuRobo configuration for each planning-enabled robot. Robots with
-`curobo.enabled: false` skip backend materialization checks. Files under
-`configs/curobo/task/` are task-bundle resources rather than standalone project
+Mirror accepts PhysX/CPU, Newton/CPU, and Newton/CUDA. For either CPU execution,
+`physics_device` is `cpu`, while `compute.cuda_device` still selects the GPU used by RTX
+and cuRobo. Newton/CUDA derives `cuda:{compute.cuda_device}`. Both Newton variants derive
+one world in the Mirror session projection; the reusable runtime itself remains capable
+of managing multiple worlds.
+
+The optional `profiles.hybrid_control` slot is accepted only by Mirror. The maintained
+composition selects a dedicated 240 Hz scene and PhysX CPU:
+
+```yaml
+mode: mirror
+compute:
+  cuda_device: 0
+profiles:
+  scene: mirror/scene3_hybrid
+  physics: physx/cpu
+  control: mirror
+  hybrid_control: hybrid_force_position
+  curobo: mirror
+  planning: mirror
+  outputs: mirror_default
+```
+
+Omitting `hybrid_control` leaves all v3 hybrid operations unsupported and fail-closed.
+Selecting it requires initial position mode, PhysX CPU, sufficient scene frequency,
+arm gravity compensation, physical TCP metadata, arm `effort+direct`, and hand/default
+`position+implicit` controller profiles.
+
+## Kaleidoscope Mode Root
+
+```yaml
+mode: kaleidoscope
+compute:
+  cuda_device: 0
+environments:
+  num_envs: 256
+  base_env_path: /World/envs
+  env_prefix: env
+  origin_xyz: [0.0, 0.0, 0.0]
+profiles:
+  scene: kaleidoscope/tblock_push
+  physics: physx/cuda
+  task: kaleidoscope/tblock_push_v1
+```
+
+The root contains exactly `mode`, `compute`, `environments`, and `profiles`. `scene`,
+`physics`, and `task` are the three required profile references. Kaleidoscope has no
+control profile or resolved control object: its action contract belongs to the task,
+and its default controller bundle is derived from `physics.engine`. An optional
+`profiles.curobo` reference is allowed only when the selected task uses an end-effector
+or linear action; the canonical `joint_control` roots must omit it. `environments` contains exactly `num_envs`,
+`base_env_path`, `env_prefix`, and `origin_xyz`. Renderer, camera, transport, planner, planning, playback,
+and telemetry keys are rejected recursively.
+
+The optional viewport is a separate launch profile rather than a mode slot:
+
+```yaml
+viewport:
+  selected_env: 0
+  render_every_n_steps: 1
+  width: 1280
+  height: 720
+  window_width: 1440
+  window_height: 900
+  renderer: RaytracedLighting
+  anti_aliasing: 0
+  samples_per_pixel_per_frame: 1
+  denoiser: false
+  visuals: { ... }
+```
+
+`KaleidoscopeViewportSettings` strictly validates the root and nested scene visuals.
+`make_viewport_env()` selects it with `viewport_profile="kaleidoscope"`, or accepts an
+already loaded object as `viewport`; Gymnasium `render_mode="human"` uses
+`viewport_profile`. It is not attached to `KaleidoscopeConfig`; window, lighting, or
+cadence changes therefore
+do not change episode snapshot/clone fingerprints. `selected_env` must be valid for
+the effective environment count and is the only renderer-facing world. Both viewport
+Kits exclude cameras, SyntheticData, Replicator, recording, and image observations;
+training physics ticks remain `render=False`.
+
+The bundled Newton alternative is:
+
+```yaml
+mode: kaleidoscope
+compute:
+  cuda_device: 0
+environments:
+  num_envs: 256
+  base_env_path: /World/envs
+  env_prefix: env
+  origin_xyz: [0.0, 0.0, 0.0]
+profiles:
+  scene: kaleidoscope/tblock_push
+  physics: newton/cuda
+  task: kaleidoscope/tblock_push_v1
+```
+
+`compute.cuda_device` is the only configured GPU index. The selected physics engine,
+Torch, Warp interop, cuRobo, and the trainer derive their device from this value. Do
+not add `active_gpu`, `physics_gpu`, policy-device, or another CUDA index to leaf
 profiles.
 
-Normal success output contains only the fixed `config_validated` event, runtime
-profile name, and runtime fingerprint. The fingerprint covers the effective
-runtime mapping, not downstream profile file contents; the complete graph is
-still validated first. Use `--dump-effective-config` to inspect effective
-runtime values and their provenance.
+An end-effector or linear composition adds the numerical backend at the mode root,
+not inside the task:
+
+```yaml
+profiles:
+  scene: kaleidoscope/tblock_push
+  physics: physx/cuda
+  task: kaleidoscope/tblock_push_v1
+  curobo: kaleidoscope_batch_ik
+```
+
+The task still owns only action semantics and never selects a backend. The catalog
+requires this optional reference for every EE/linear action and rejects it for
+`joint_control` and `joint_delta`, so a joint-only environment cannot allocate an unused
+cuRobo context.
+
+## Scene Profiles
+
+Common instance shape:
+
+```yaml
+robots:
+  - label: left_arm
+    robot_profile: ar5v2_l6v1_l
+    root_pose:
+      xyz: [0.0, 0.09, 0.0]
+      rpy: [-1.5707, 0.0, 0.0]
+objects:
+  - name: Tblock
+    object_profile: TblockV1_default
+    prim_path: /World/TBlock
+    root_pose:
+      xyz: [0.15, 0.0, -0.4]
+      rpy: [0.0, 1.5707, 0.0]
+```
+
+Robot labels, object names, and object prim paths must be unique. Poses use metres
+and XYZ Euler radians. Object prim paths are absolute.
+
+Mirror scene fields are exactly:
+
+- `id`, `description`, `gravity_z`, `add_ground`, `ground_height`;
+- `physics_frequency_hz`, `render_frequency_hz`;
+- `planning_startup` (`lazy` or `prewarm`);
+- `robots`, `objects`, `cameras`, `viewport`, and `lights`.
+
+`planning_startup: lazy` defers every planning context and planner until its first
+request. `prewarm` creates each planning-capable robot's `interactive` slot-zero
+context in robot-ID order, synchronizes one shared initial collision snapshot, and
+materializes its MotionPlanner before `MIRROR_INTERACTIVE_READY`. The numerical
+`motion_planner.warmup` switch remains owned by the cuRobo profile and runs while that
+planner is materialized; the scene policy controls when materialization happens.
+
+Each camera declares `id`, parent and child absolute prim paths, pose, `[width,
+height]`, positive frequency, unique modalities, and `[near, far]` clipping metres.
+
+Kaleidoscope scene fields stop at `physics_frequency_hz`, `robots`, and `objects`.
+There is no render frequency, camera, viewport, light, or replication count in this
+schema. Its scene describes one environment template only.
+
+The catalog expands every robot/object profile and effective controller bundle from the
+same configuration root before Kit starts. A Kaleidoscope scene may contain any
+number of static rigid objects, but
+must contain exactly one non-static rigid object; that object must be
+`task.dynamic_object`. Dynamic-chain objects are rejected because the current
+`object.*` snapshot schema owns one rigid pose and velocity only.
+
+For both products, `scene.id` must match the selected scene profile basename.
+
+## Physics Profiles
+
+The physics-leaf catalog keeps a regular engine/execution layout:
+
+```text
+configs/physics/
+  physx/{cpu,cuda}.yaml
+  newton/{cpu,cuda}.yaml
+```
+
+Each canonical leaf is independently strict and schema-valid. Product roots then enforce
+their narrower capability matrices: Mirror composes `physx/cpu`, `newton/cpu`, or
+`newton/cuda`; Kaleidoscope composes only the CUDA leaves.
+
+### PhysX CPU
+
+```yaml
+physics:
+  engine: physx
+  execution: cpu
+  solver_type: PGS
+```
+
+`solver_type` is `PGS` or `TGS`. This variant belongs to Mirror.
+
+### PhysX CUDA
+
+```yaml
+physics:
+  engine: physx
+  execution: cuda
+  solver_type: PGS
+  use_fabric: true
+  enable_scene_query_support: false
+  memory: { ... }
+```
+
+This variant belongs to Kaleidoscope. Fabric must be enabled and scene-query support
+must be disabled because the product has no planning collision world. Engine allocation
+capacity is not a project configuration field.
+
+The process-level `memory` mapping is the complete `GpuMemoryBudget`; missing fields
+do not receive defaults:
+
+| Field | Type and range | Gate semantics |
+| --- | --- | --- |
+| `max_simulator_process_mib` | Positive integer MiB | Maximum memory attributed by NVML to the simulator PID, including Kit, PhysX, Torch, and native CUDA allocators |
+| `min_free_floor_mib` | Positive integer MiB | Absolute free-device-memory floor at prelaunch, post-warmup, and both steady samples |
+| `min_free_fraction_after_warmup` | Number in `(0, 1]` | Free-device-memory fraction required at post-warmup and both steady samples |
+| `max_steady_growth_mib` | Nonnegative integer MiB | Maximum simulator-PID growth from steady baseline to steady final |
+
+The auditor maps `compute.cuda_device` to NVML by CUDA UUID, requires the PID to be
+visible after warmup, and reports Torch allocated/reserved for diagnostics. NVML
+process memory remains the budget owner. Run either maintained entrypoint:
+
+```bash
+just smoke-kaleidoscope-memory
+OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
+  scripts/smoke_physx_gpu_memory_budget.py \
+  --profile physx_cuda --num-envs 2 --warmup-steps 8 --steady-steps 16
+```
+
+This gate accepts only the Kaleidoscope `physx_cuda` profile. Newton per-world contact,
+Jacobian, and world-count capacities are a separate contract and cannot be inferred
+from these four fields.
+
+### Newton CPU
+
+`configs/physics/newton/cpu.yaml` declares `engine: newton` and `execution: cpu` and
+is parsed as `NewtonCpuSettings`. Mirror's `newton_cpu` composition runs one world with
+MuJoCo CPU integration, no CUDA stream or graph, and a MuJoCo contact pipeline. The root
+`compute.cuda_device` remains mandatory because cuRobo and optional RTX rendering still
+consume that GPU. Kaleidoscope rejects Newton CPU because its training contract is
+CUDA-resident.
+
+### Newton CUDA
+
+```yaml
+physics:
+  engine: newton
+  execution: cuda
+  nconmax_per_world: 200
+  njmax_per_world: 1200
+  # remaining capacity and integration fields are required by the canonical leaf
+```
+
+The `newton/cpu` and `newton/cuda` leaves declare separate executions. The latter declares `engine: newton`,
+`execution: cuda`, per-world
+contact/Jacobian capacities, CUDA graph use,
+substeps, solver iterations, line search, constraint solver, and contact
+pipeline. It inherits the device from the mode root. Mirror and Kaleidoscope share
+`newton/cuda`; Mirror derives one world while Kaleidoscope derives the runtime world
+count from final `environments.num_envs`. Neither loads the Isaac Newton extension. Robot
+gravity policy is authored as `mjc:gravcomp` before model finalization; runtime
+per-link gravity changes are unsupported. `newton_cuda` is both an explicit Mirror or
+Kaleidoscope selector and the resolved CUDA runtime kind; the implementation module is
+simply `isaac.physics.newton`.
+
+## Robot And Object Physics Leaves
+
+A robot profile separates backend-neutral gravity policy from PhysX-only asset facts:
+
+```yaml
+robot:
+  physics:
+    gravity:
+      default: false
+      arm: false
+      hand: false
+    material:
+      contact_static_friction: 0.8
+      contact_dynamic_friction: 0.6
+      contact_restitution: 0.0
+    physx:
+      material:
+        friction_combine_mode: average
+      rigid_body:
+        linear_damping: 0.0
+        angular_damping: 0.1
+      joint:
+        friction: 0.5
+        follower_friction: 0.5
+      solver:
+        arm: {position_iterations: 32, velocity_iterations: 4}
+        hand: {position_iterations: 32, velocity_iterations: 4}
+```
+
+Both engines consume `gravity` and `material`; only a PhysX composition projects the `physx` leaf.
+Newton still receives backend-neutral `UsdPhysics.DriveAPI` seeds from its
+engine-specific controller bundle, but it neither reads nor emits skip warnings for
+PhysX combine mode, damping, joint-friction, or solver fields. For MJCF, source
+`frictionloss` takes precedence over configured joint friction in PhysX. Newton's
+upstream `SchemaResolverMjc` consumes the importer-authored `mjc:frictionloss`
+directly.
+
+Controller profiles own only control-law values that are actually consumed:
+stiffness, damping, maximum force, effort limit, and follower drive seeds.
+`joint_friction` is no longer a controller field and the parser does not recreate a
+default. The retired `robot.physics.solver` path is invalid; the sole path is
+`robot.physics.physx.solver`.
+
+Object contact coefficients are standard USD material facts. PhysX extensions use a
+separate leaf:
+
+```yaml
+object:
+  physics:
+    material:
+      static_friction: 0.8
+      dynamic_friction: 0.6
+      restitution: 0.0
+    physx:
+      material:
+        friction_combine_mode: average
+```
+
+A dynamic-chain object may also declare PhysX solver tuning in that leaf:
+
+```yaml
+object:
+  physics:
+    physx:
+      solver:
+        position_iterations: 48
+        velocity_iterations: 4
+```
+
+Newton projects only the common object material, does not import `PhysxSchema`, and
+does not report a valid PhysX leaf as compatibility loss. The retired
+`physics.material.friction_combine_mode`, `physics.solver_position_iterations`, and
+`physics.solver_velocity_iterations` paths fail strict validation; there are no
+compatibility aliases.
+
+## Environments And Backend Replication
+
+```yaml
+environments:
+  num_envs: 256
+  base_env_path: /World/envs
+  env_prefix: env
+  origin_xyz: [0.0, 0.0, 0.0]
+```
+
+`environments.num_envs` is the sole persistent configuration owner for the environment
+count. An explicit `num_envs` environment-construction argument may override this default
+without creating a second profile. The other three fields own stable USD path naming and
+the base origin. There is no `profiles.replication` slot and no `configs/replication/`
+directory.
+
+Replication is still implemented internally, but it is inseparable from the physics
+engine. The PhysX builder always uses GridCloner with 3.0 m spacing,
+`replicate_physics=true`, `copy_from_source=true`, and `enable_env_ids=true`. The
+Newton builder always uses the multi-world manager, zero spacing, and one
+separate world per environment. Only the Newton session projection derives
+`world_count`, and it derives it exclusively from the final `num_envs`; physics leaves
+never declare a second world count.
+
+The fixed isolation mechanisms prevent contact across environments. They do not enable motion
+planning or avoidance. Physical robot/object contact remains enabled in both backends.
+
+## Control, cuRobo, And Planning
+
+Kaleidoscope has no `profiles.control` slot or `control` object. Its task fixes the
+action and position-target semantics, while `physics.engine` derives the default
+`physx` or `newton` controller bundle. The Newton bundle supplies its lower arm/hand
+gains and zero follower drives; native equality constraints remain the only follower
+mechanism.
+
+The single `configs/control/mirror.yaml` profile selects Mirror's position, velocity,
+or effort mode and owns idle stepping and `sync_simulation_to_wall_clock`,
+admission and terminal-history capacities, stdin EOF behavior, response and queue-poll
+timeouts, message/connection limits, startup/shutdown timeouts, joint interpolation,
+default pose frame, and orientation mode. Its controller bundle is not configurable;
+the physics engine derives it.
+
+`sync_simulation_to_wall_clock: true` makes idle and motion execution share one pacing
+clock at `scene.physics_frequency_hz`. It does not alter physics dt. If a tick is late,
+Mirror rebases the next deadline instead of burst-running missed ticks, so an overloaded
+runtime may be slower than real time. Set the field to `false` to run physics as fast as
+the host allows. The canonical Mirror control profile enables synchronization.
+
+`configs/control/hybrid_force_position.yaml` is a separate optional profile. Its
+`motion`, `force`, and `posture` sections provide the initial explicit Cartesian gains.
+`tuning` gives immutable per-field maxima for owner-queued updates. `tare`, `contact`,
+`limits`, filter cutoff, supported frame, allowed force axes, maximum duration, and
+minimum frequency are construction-time safety facts and cannot be changed through
+the wire protocol. Runtime updates use their own generation and do not alter the
+semantic configuration fingerprint.
+
+A `configs/curobo/*.yaml` profile is explicitly a numerical-capacity profile. Its root
+contains `kinematics` with positive `max_batch_size`/`seed_count`, `collision_check`,
+and `use_cuda_graph`. The backend fixes the validated cuRobo 0.8.0 task bundle and all
+four numerical dtypes to `float32`; neither is a YAML choice. The mode root remains the
+only CUDA-index owner.
+
+Mirror's `curobo: mirror` profile must additionally contain `motion_planner`.
+`kinematics.max_batch_size` belongs only to FK/IK; it does not size MotionPlanner.
+Mirror's MotionPlanner context is fixed to one request (`max_batch_size=1`), while the
+`motion_planner` section owns warmup, CUDA graph use, IK/trajopt seed counts, collision
+capability, and collision-cache preallocation. Under the pinned runtime,
+`motion_planner.use_cuda_graph` must be `false`; the IK graph may remain enabled.
+Kaleidoscope's
+`curobo: kaleidoscope_batch_ik` profile must omit `motion_planner`, disable kinematics
+collision checks, and cover the final environment count with
+`kinematics.max_batch_size`. The canonical profile omits
+`kinematics.collision_cache`, but validation also permits a well-formed dormant cache
+when `collision_check: false`. Runtime projects either form to an empty backend cache
+and allocates none. Mirror's planner keeps `collision_check: true`, so its planner
+cache remains required. The same rule applies to an optional MotionPlanner cache:
+enabled collision checking requires it; disabled checking may omit or retain it, and
+runtime ignores any retained value.
+
+`configs/planning/mirror.yaml` is deliberately backend-neutral. It contains only
+`planning.request_defaults`: `duration_s`, `sample_dt_s`, `timeout_s`,
+`avoid_collisions`, `force_collision_refresh`, and `coordination: independent`.
+The wire-level planning overrides are `duration_s`, `sample_dt_s`,
+`avoid_collisions`, and `force_collision_refresh`; `coordination` can be overridden
+only at the one-segment wrapper or timeline top level. `timeout_s` is not a wire
+field: every request uses `planning.request_defaults.timeout_s`. This profile is not
+cuRobo solver capacity or a backend selector. If avoidance defaults to true, the
+selected cuRobo profile must provide planner collision capability and cache capacity.
+
+## Kaleidoscope Task
+
+A task profile contains exactly:
+
+- `id`, `dynamic_object`, and unit `heading_axis`;
+- one fixed `action` variant;
+- observation switches;
+- reward coefficients;
+- termination/horizon thresholds;
+- reset randomization ranges.
+
+`task.id` must match the profile basename, and `dynamic_object` must name the selected
+scene's unique non-static rigid object.
+
+Action variants are `joint_control`, `joint_delta`, `ee_delta_position`, `ee_delta_pose`,
+`ee_pose_position`, `ee_pose_full`, `ee_linear_path_position`, and
+`ee_linear_path_full`. Each variant has an exact field set. Linear variants require a
+fixed waypoint count and progress mode. Failure policy is fixed by variant; there is
+no backend, planner, profile reference, or avoidance field in the task action. The
+mode composition supplies the conditional `profiles.curobo` reference described above.
+
+`joint_control` requires `position_delta_scale_rad`, `velocity_scale_rad_s`,
+`effort_limit_fraction`, `clip`, and `physics_ticks_per_action`. It is the canonical
+variant and supports all three runtime control modes without changing action shape.
+Position-reference variants require `reference_velocity_limit_rad_s` for bounded
+velocity conversion and reject effort mode. Initial position mode, active mode, and
+generation are runtime state, not YAML selectors and not semantic configuration
+fingerprint inputs.
+
+## Mirror Outputs
+
+The output profile contains exactly `render`, `camera`, `logging`, and `telemetry`.
+Hybrid diagnostics add `logging.hybrid_control_path`/`log_hybrid_control` and
+`telemetry.include_hybrid_control`/`topics.hybrid_control`; they do not add another
+top-level output section.
+See [Outputs](outputs.md) for field-level behavior. Kaleidoscope has no output profile
+reference.
+
+## Trainer Profiles
+
+Files under `configs/training/` configure a downstream consumer. They do not alter
+physics or environment construction. `device_source: environment` means the trainer
+inherits the canonical environment device and must not add another GPU index.

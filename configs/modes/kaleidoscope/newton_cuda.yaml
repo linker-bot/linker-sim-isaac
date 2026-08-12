@@ -1,0 +1,23 @@
+# Kaleidoscope 只允许 CUDA；Newton world 数从 environments.num_envs 派生。
+# 引用值相对 configs/<group>/ 解析且省略 .yaml；禁止加入 camera/telemetry/planner 冷字段。
+# 产品根选择批量 GPU 强化学习 Kaleidoscope 配置图。
+mode: kaleidoscope
+compute:
+  # Newton、Warp、Torch policy 与训练器共享的唯一 CUDA 设备序号。
+  cuda_device: 0
+environments:
+  # 并行环境数量；Newton builder 会创建等量独立 world，并按该数量扩展 per-world buffer。
+  num_envs: 256
+  # renderer/provenance 使用的绝对 USD 环境 namespace；物理隔离由 Newton multi-world 提供。
+  base_env_path: /World/envs
+  # 环境 prim 的单个 path component 前缀，不可包含 /、. 或 ..。
+  env_prefix: env
+  # 逻辑环境 0 的世界原点 xyz，单位 m；后端负责其它 world 的展示布局。
+  origin_xyz: [0.0, 0.0, 0.0]
+profiles:
+  # 无渲染字段的单环境机器人与对象模板。
+  scene: kaleidoscope/tblock_push
+  # Newton CUDA 的 per-world 容量、CUDA graph 与 solver 配置。
+  physics: newton/cuda
+  # 动作、观测、奖励、终止和 reset 随机化定义。
+  task: kaleidoscope/tblock_push_v1

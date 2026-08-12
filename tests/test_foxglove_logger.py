@@ -64,7 +64,11 @@ def test_foxglove_logger_uses_typed_channels_and_json_state(monkeypatch) -> None
         def __init__(self, topic, **kwargs) -> None:
             self.topic = topic
             self.kwargs = kwargs
+            self.logged = []
             raw_channels.append(self)
+
+        def log(self, message, *, log_time=None) -> None:
+            self.logged.append((message, log_time))
 
     class TypedChannel:
         def __init__(self, kind: str, topic: str) -> None:
@@ -95,6 +99,7 @@ def test_foxglove_logger_uses_typed_channels_and_json_state(monkeypatch) -> None
             joint_states="/test/joints",
             scene="/test/scene",
             state="/test/state",
+            hybrid_control="/test/hybrid",
         ),
     )
 
@@ -107,6 +112,13 @@ def test_foxglove_logger_uses_typed_channels_and_json_state(monkeypatch) -> None
     assert len(raw_channels) == 1
     assert raw_channels[0].topic == "/test/state"
     assert raw_channels[0].kwargs == {"message_encoding": "json"}
+
+    logger.log_hybrid_control_json({"active": False}, time_s=1.25)
+
+    assert len(raw_channels) == 2
+    assert raw_channels[1].topic == "/test/hybrid"
+    assert raw_channels[1].kwargs == {"message_encoding": "json"}
+    assert raw_channels[1].logged == [({"active": False}, 1_250_000_000)]
 
 
 def test_foxglove_logger_logs_with_installed_sdk() -> None:

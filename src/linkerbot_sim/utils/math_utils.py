@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.spatial.transform import Rotation
 
 from linkerbot_sim.utils.rotations import rpy_xyz_to_matrix
 
@@ -34,45 +33,6 @@ def as_vector(
     if length is not None and array.size != length:
         raise ValueError(f"{label} expected {length} values, got {array.size}")
     return array
-
-
-def expand_scalar_or_vector(values, length: int, label: str) -> np.ndarray:
-    """把标量扩展为定长向量，或校验已有向量长度。
-
-    参数:
-        values: 单个数或长度为 ``length`` 的序列。
-        length: 目标向量长度。
-        label: 报错信息中的变量名。
-    返回:
-        shape ``(length,)`` 的 float ndarray。
-    """
-
-    # 控制器配置经常允许“一个标量应用到整组关节”或“逐关节给一个向量”两种写法；
-    # 这里统一展开，调用方后续只处理定长数组。
-    array = as_vector(values, label=label)
-    if array.size == 1:
-        return np.full(length, float(array[0]), dtype=float)
-    if array.size != length:
-        raise ValueError(f"{label} expected 1 or {length} values, got {array.size}")
-    return array.astype(float)
-
-
-def axis_angle_to_matrix(axis, angle: float) -> np.ndarray:
-    """把轴角旋转转换为旋转矩阵。
-
-    参数:
-        axis: 长度 3 的旋转轴，不要求预归一化。
-        angle: 绕轴旋转角，单位 rad。
-    返回:
-        shape ``(3, 3)`` 的旋转矩阵；零轴返回单位矩阵。
-    """
-
-    axis_array = as_vector(axis, length=3, label="axis")
-    norm = float(np.linalg.norm(axis_array))
-    if norm <= 0.0:
-        # 零轴没有明确旋转方向；按“无旋转”处理，方便 MJCF 缺省轴或异常小轴值保持稳定。
-        return np.eye(3, dtype=float)
-    return Rotation.from_rotvec((axis_array / norm) * float(angle)).as_matrix()
 
 
 def make_transform(position=(0.0, 0.0, 0.0), rotation=None) -> np.ndarray:

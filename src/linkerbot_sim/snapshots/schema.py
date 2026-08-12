@@ -1,7 +1,7 @@
 """运行时无关的 canonical simulation snapshot schema。
 
 机器人使用 array，且每个 entry 同时携带会话级 ``robot_id`` 和稳定 ``label``。
-schema 不绑定 SingleSceneRuntime 或 TiledSceneRuntime 的具体 Isaac 对象。所有数值数组在
+schema 不绑定 Mirror/Kaleidoscope 的具体 Isaac 对象。所有数值数组在
 构造时统一转为有限 ``float`` 的 numpy 副本，避免调用方后续修改输入数组而悄悄改变已校验
 快照。
 
@@ -19,15 +19,15 @@ from dataclasses import dataclass, field
 import numpy as np
 
 
-SNAPSHOT_SCHEMA = "linkerbot.snapshot"
+SCENE_SNAPSHOT_SCHEMA = "linkerbot.scene-snapshot.v1"
 
 
 @dataclass(frozen=True)
 class SnapshotMetadata:
     """描述 snapshot 来源的元数据。
 
-    ``coordinate_frame`` 记录位姿数组使用的坐标约定：tiled env 通常保存
-    ``env-local``，SingleSceneRuntime 保存 ``scene-local``。恢复时 adapter 会根据目标 runtime
+    ``coordinate_frame`` 记录位姿数组使用的坐标约定：replicated env 通常保存
+    ``env-local``，MirrorSceneResources 保存 ``scene-local``。恢复时 adapter 会根据目标 runtime
     再转换成需要的 world/env 坐标。
     """
 
@@ -220,6 +220,15 @@ class ObjectSnapshot:
     线/角速度若存在也都是 ``(3,)``。dynamic-chain 一类对象还会保存每个 child
     rigid body 的位姿。这样恢复绳子、链条等多刚体对象时，不会只恢复 root 而丢失
     PhysX 中每段刚体的真实状态。
+
+    Newton dynamic-chain 还可携带 owner 的精确广义状态。这里的五字段
+    ``generalized_signature/q_names/qd_names/q/qd`` 是一个原子协议：必须全部存在或全部
+    缺席。signature 描述 body/joint 拓扑、关节类型与 quaternion/twist ABI，names 则固定
+    q/qd 每一列的含义；只有数值 shape 相同并不足以证明两份状态可以安全互换。
+
+    ``generalized_world_origin`` 不属于这五字段身份本身，它记录 world-frame FREE-root q 的
+    来源原点，供 replicated env 间恢复时只重定位平移坐标。body fields 始终保留为跨 backend、
+    旧快照或部分 body mapping 的 maximal-coordinate fallback。
     """
 
     name: str
@@ -233,6 +242,12 @@ class ObjectSnapshot:
     body_orientations_wxyz: np.ndarray | None = None
     body_linear_velocities: np.ndarray | None = None
     body_angular_velocities: np.ndarray | None = None
+    generalized_signature: tuple[str, ...] = ()
+    generalized_q_names: tuple[str, ...] = ()
+    generalized_qd_names: tuple[str, ...] = ()
+    generalized_q: np.ndarray | None = None
+    generalized_qd: np.ndarray | None = None
+    generalized_world_origin: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         """校验并标准化对象位姿数组。
@@ -240,7 +255,8 @@ class ObjectSnapshot:
         四元数会逐个归一化；如果保存了 ``body_names``，则 body pose 必须同时存在且
         shape 分别为 ``(body_count, 3)``、``(body_count, 4)``，否则恢复 dynamic-chain
         时无法知道每段刚体应该写回到哪里。所有数组都会复制，确保 frozen dataclass 的
-        逻辑不可变性不被外部 numpy 引用绕过。
+        逻辑不可变性不被外部 numpy 引用绕过。广义状态的五字段也在此一次性校验，避免
+        adapter 读到“有 q/qd、却没有可验证列身份”的半份 owner state 后发生静默错列写入。
         """
 
         name = str(self.name)
@@ -276,6 +292,63 @@ class ObjectSnapshot:
             (body_count, 3),
             "body_angular_velocities",
         )
+        generalized_signature = _string_tuple(
+            self.generalized_signature,
+            "generalized_signature",
+        )
+        generalized_q_names = _string_tuple(
+            self.generalized_q_names,
+            "generalized_q_names",
+        )
+        generalized_qd_names = _string_tuple(
+            self.generalized_qd_names,
+            "generalized_qd_names",
+        )
+        generalized_presence = (
+            bool(generalized_signature),
+            bool(generalized_q_names),
+            bool(generalized_qd_names),
+            self.generalized_q is not None,
+            self.generalized_qd is not None,
+        )
+        # 这是一个不可拆分的 owner-state envelope；不允许按字段做向后兼容猜测。
+        if any(generalized_presence) and not all(generalized_presence):
+            raise ValueError(
+                "ObjectSnapshot generalized_signature, generalized_q_names, "
+                "generalized_qd_names, generalized_q, and generalized_qd must "
+                "be provided together"
+            )
+        if len(set(generalized_q_names)) != len(generalized_q_names):
+            raise ValueError("ObjectSnapshot.generalized_q_names contains duplicates")
+        if len(set(generalized_qd_names)) != len(generalized_qd_names):
+            raise ValueError("ObjectSnapshot.generalized_qd_names contains duplicates")
+        generalized_q = (
+            None
+            if not all(generalized_presence)
+            else _vector(
+                self.generalized_q,
+                len(generalized_q_names),
+                "generalized_q",
+            )
+        )
+        generalized_qd = (
+            None
+            if not all(generalized_presence)
+            else _vector(
+                self.generalized_qd,
+                len(generalized_qd_names),
+                "generalized_qd",
+            )
+        )
+        if self.generalized_world_origin is not None and generalized_q is None:
+            raise ValueError(
+                "generalized_world_origin requires a complete generalized state"
+            )
+        generalized_world_origin = _optional_vector(
+            self.generalized_world_origin,
+            3,
+            "generalized_world_origin",
+        )
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "positions_local", position)
         object.__setattr__(self, "orientations_wxyz", orientation)
@@ -286,6 +359,16 @@ class ObjectSnapshot:
         object.__setattr__(self, "body_orientations_wxyz", body_orientations)
         object.__setattr__(self, "body_linear_velocities", body_linear)
         object.__setattr__(self, "body_angular_velocities", body_angular)
+        object.__setattr__(self, "generalized_signature", generalized_signature)
+        object.__setattr__(self, "generalized_q_names", generalized_q_names)
+        object.__setattr__(self, "generalized_qd_names", generalized_qd_names)
+        object.__setattr__(self, "generalized_q", generalized_q)
+        object.__setattr__(self, "generalized_qd", generalized_qd)
+        object.__setattr__(
+            self,
+            "generalized_world_origin",
+            generalized_world_origin,
+        )
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, object]) -> "ObjectSnapshot":
@@ -308,6 +391,20 @@ class ObjectSnapshot:
             body_linear_velocities=_optional_array(data.get("body_linear_velocities")),
             body_angular_velocities=_optional_array(
                 data.get("body_angular_velocities")
+            ),
+            generalized_signature=tuple(
+                str(item) for item in data.get("generalized_signature", ())
+            ),
+            generalized_q_names=tuple(
+                str(item) for item in data.get("generalized_q_names", ())
+            ),
+            generalized_qd_names=tuple(
+                str(item) for item in data.get("generalized_qd_names", ())
+            ),
+            generalized_q=_optional_array(data.get("generalized_q")),
+            generalized_qd=_optional_array(data.get("generalized_qd")),
+            generalized_world_origin=_optional_array(
+                data.get("generalized_world_origin")
             ),
         )
 
@@ -340,14 +437,29 @@ class ObjectSnapshot:
             "body_angular_velocities",
             self.body_angular_velocities,
         )
+        if self.generalized_q is not None:
+            result.update(
+                {
+                    "generalized_signature": list(self.generalized_signature),
+                    "generalized_q_names": list(self.generalized_q_names),
+                    "generalized_qd_names": list(self.generalized_qd_names),
+                    "generalized_q": self.generalized_q.astype(float).tolist(),
+                    "generalized_qd": self.generalized_qd.astype(float).tolist(),
+                }
+            )
+        _put_optional_array(
+            result,
+            "generalized_world_origin",
+            self.generalized_world_origin,
+        )
         return result
 
 
 @dataclass(frozen=True)
-class SimulationSnapshot:
+class SceneSnapshot:
     """一个 scene/env 实例的完整逻辑快照。
 
-    tiled 下表示某一个 env，SingleSceneRuntime 下表示当前 scene。这个对象是跨 runtime 交换的
+    replicated runtime 下表示某一个 env，MirrorSceneResources 下表示当前 scene。这个对象是跨 runtime 交换的
     唯一数据结构，所有 get/set/clone API 都应以它或它的 JSON dict 为边界。外层 mapping
     key 与内部稳定 label/name 必须一致；机器人 ``robot_id`` 也必须唯一，防止兼容性映射
     在恢复目标选择上出现歧义。
@@ -356,15 +468,15 @@ class SimulationSnapshot:
     robots: Mapping[str, RobotSnapshot]
     objects: Mapping[str, ObjectSnapshot] = field(default_factory=dict)
     metadata: SnapshotMetadata = field(default_factory=SnapshotMetadata)
-    schema: str = SNAPSHOT_SCHEMA
+    schema: str = SCENE_SNAPSHOT_SCHEMA
 
     def __post_init__(self) -> None:
         """校验 schema discriminator，并保证 mapping key 与稳定 label 一致。"""
 
-        if str(self.schema) != SNAPSHOT_SCHEMA:
+        if str(self.schema) != SCENE_SNAPSHOT_SCHEMA:
             raise ValueError(
                 f"unsupported snapshot schema: {self.schema!r}; "
-                f"expected {SNAPSHOT_SCHEMA!r}"
+                f"expected {SCENE_SNAPSHOT_SCHEMA!r}"
             )
         robots = _robot_mapping(self.robots)
         objects = _object_mapping(self.objects)
@@ -372,7 +484,7 @@ class SimulationSnapshot:
         object.__setattr__(self, "objects", objects)
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, object]) -> "SimulationSnapshot":
+    def from_mapping(cls, data: Mapping[str, object]) -> "SceneSnapshot":
         """从 canonical JSON-compatible mapping 解析完整快照。"""
 
         if not isinstance(data, Mapping):
@@ -385,9 +497,9 @@ class SimulationSnapshot:
         if "schema" not in data:
             raise ValueError("snapshot.schema is required")
         schema = str(data["schema"])
-        if schema != SNAPSHOT_SCHEMA:
+        if schema != SCENE_SNAPSHOT_SCHEMA:
             raise ValueError(
-                f"unsupported snapshot schema: {schema!r}; expected {SNAPSHOT_SCHEMA!r}"
+                f"unsupported snapshot schema: {schema!r}; expected {SCENE_SNAPSHOT_SCHEMA!r}"
             )
         robots_data = data.get("robots", {})
         objects_data = data.get("objects", {})
@@ -460,19 +572,19 @@ class SnapshotRestoreResult:
 
 
 def _robot_mapping(values: Mapping[str, RobotSnapshot]) -> dict[str, RobotSnapshot]:
-    """校验 ``SimulationSnapshot.robots``，并返回普通 dict 副本。
+    """校验 ``SceneSnapshot.robots``，并返回普通 dict 副本。
 
     key 必须与 ``RobotSnapshot.label`` 一致，避免恢复时把状态写入错误机器人。
     """
 
     if not isinstance(values, Mapping):
-        raise ValueError("SimulationSnapshot.robots must be a mapping")
+        raise ValueError("SceneSnapshot.robots must be a mapping")
     result = {}
     robot_ids: set[int] = set()
     labels: set[str] = set()
     for label, robot in values.items():
         if not isinstance(robot, RobotSnapshot):
-            raise ValueError("SimulationSnapshot.robots values must be RobotSnapshot")
+            raise ValueError("SceneSnapshot.robots values must be RobotSnapshot")
         key = str(label)
         if key != robot.label:
             raise ValueError(
@@ -489,18 +601,18 @@ def _robot_mapping(values: Mapping[str, RobotSnapshot]) -> dict[str, RobotSnapsh
 
 
 def _object_mapping(values: Mapping[str, ObjectSnapshot]) -> dict[str, ObjectSnapshot]:
-    """校验 ``SimulationSnapshot.objects``，并返回普通 dict 副本。
+    """校验 ``SceneSnapshot.objects``，并返回普通 dict 副本。
 
     object 名字同样要求外层 key 与内部 ``ObjectSnapshot.name`` 一致，保证对象恢复按名字
     匹配时没有歧义。
     """
 
     if not isinstance(values, Mapping):
-        raise ValueError("SimulationSnapshot.objects must be a mapping")
+        raise ValueError("SceneSnapshot.objects must be a mapping")
     result = {}
     for name, obj in values.items():
         if not isinstance(obj, ObjectSnapshot):
-            raise ValueError("SimulationSnapshot.objects values must be ObjectSnapshot")
+            raise ValueError("SceneSnapshot.objects values must be ObjectSnapshot")
         key = str(name)
         if key != obj.name:
             raise ValueError(

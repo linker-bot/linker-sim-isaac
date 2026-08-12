@@ -1,4 +1,4 @@
-"""Scene 与 tiled 共享的 motion planner backend contract 和名称校验。"""
+"""标量与批量调用方共享的 motion planner backend contract 和名称校验。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ PlanningRequest: TypeAlias = MotionRequest | LinearPosePathRequest
 
 @runtime_checkable
 class PlannerBackend(Protocol):
-    """Scene 与 tiled runtime 共同依赖的 canonical scalar planner 接口。"""
+    """不同 runtime 共同依赖的 canonical scalar planner 接口。"""
 
     def joint_names(self) -> Sequence[str]:
         """返回 backend 输入和输出采用的 joint order。"""

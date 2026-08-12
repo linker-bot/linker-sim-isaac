@@ -18,7 +18,7 @@ def trajectory_sample_times(
     """生成固定步长执行使用的 canonical 时间网格。
 
     除最后一个不足完整 tick 的端点外，样本都落在 ``sample_dt_s`` 的整数倍上。默认返回每个
-    physics tick 后应执行的时间点；需要描述完整轨迹域的 batch/tiled 调用方可通过
+    physics tick 后应执行的时间点；需要描述完整轨迹域的 batch 调用方可通过
     ``include_start=True`` 在首行加入 ``t=0``。
     """
 
@@ -50,10 +50,10 @@ def retime_joint_trajectory(
 ) -> JointTrajectory:
     """按关节路径累计进度把轨迹重采样到 canonical 执行网格。
 
-    cuRobo single 与 batch planner 可能返回不同 dt、样本数和重复 waypoint。重定时只保留路径
-    几何，并在目标时间网格上重新计算速度、加速度与 jerk，避免把源时间域的导数直接贴到新
-    时间戳。``start_position`` 可显式补上求解前的当前关节位置；batch/tiled 结果使用
-    ``include_start=True``，单条执行轨迹保持默认的“首个 physics tick 后下发第一行”语义。
+    cuRobo 结果可能使用不同 dt、样本数和重复 waypoint。重定时只保留路径几何，并在目标
+    时间网格上重新计算速度、加速度与 jerk，避免把源时间域的导数直接贴到新时间戳。
+    ``start_position`` 可显式补上求解前的当前关节位置；需要包含当前状态的固定网格调用使用
+    ``include_start=True``，普通执行轨迹保持默认的“首个 physics tick 后下发第一行”语义。
     """
 
     if duration_s is None or sample_dt_s is None:

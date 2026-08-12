@@ -13,10 +13,16 @@ import numpy as np
 import pytest
 
 import linkerbot_sim.sensors.camera.recorder as recorder_module
-from linkerbot_sim.configs.runtime import CameraOutputRuntimeSettings
 from linkerbot_sim.sensors import SceneSensorSettings
+from linkerbot_sim.sensors.camera.config import (
+    SensorCameraOutputSettings,
+    SensorCameraSettings,
+)
 from linkerbot_sim.sensors.camera.frame import CameraFrame, sample_camera_frames
-from linkerbot_sim.sensors.camera.observer import CameraFrameObserver
+from linkerbot_sim.sensors.camera.observer import (
+    CameraFrameObserver,
+    CameraPublisherSettings,
+)
 from linkerbot_sim.sensors.camera.observer import open_prepared_camera_output
 from linkerbot_sim.sensors.camera.observer import prepare_camera_output
 from linkerbot_sim.sensors.camera.observer import start_camera_output
@@ -76,6 +82,12 @@ class _NotReadyThenReadyCamera(_FakeCamera):
         return self.depth
 
 
+class _ExperimentalDepthCamera(_FakeCamera):
+    def get_depth(self, *, device: str | None = None):
+        del device
+        return self.depth[:, :, np.newaxis]
+
+
 class _FakeWorld:
     def get_physics_dt(self) -> float:
         return 0.1
@@ -92,20 +104,28 @@ class _CollectingPublisher:
         pass
 
 
+def _camera_settings(
+    *,
+    name: str = "wrist_rgbd",
+    prim_path: str = "/World/Camera",
+    frequency: float = 30.0,
+    modalities: tuple[str, ...] = ("rgb",),
+    save_dir: str | None = None,
+) -> SensorCameraSettings:
+    return SensorCameraSettings(
+        name=name,
+        prim_path=prim_path,
+        frequency=frequency,
+        modalities=modalities,
+        output=SensorCameraOutputSettings(save_dir=save_dir),
+    )
+
+
 def _camera_runtime() -> SensorCameraRuntime:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "wrist_rgbd": {
-                        "prim_path": "/World/Camera",
-                        "frequency": 5.0,
-                        "modalities": ["rgb", "depth"],
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(
+        frequency=5.0,
+        modalities=("rgb", "depth"),
+    )
     return SensorCameraRuntime(settings=settings, camera=_FakeCamera())
 
 
@@ -173,6 +193,21 @@ def test_sample_camera_frames_skips_not_ready_payloads_without_indexing() -> Non
         ("rgb", 0),
         ("depth", 0),
     ]
+
+
+def test_sample_camera_frames_squeezes_experimental_depth_channel() -> None:
+    runtime = _camera_runtime_with_camera(_ExperimentalDepthCamera())
+
+    frames = sample_camera_frames(
+        runtime,
+        frame_indices={},
+        simulation_step=0,
+        time_s=0.1,
+    )
+
+    depth = next(frame for frame in frames if frame.modality == "depth")
+    assert depth.data.shape == (2, 2)
+    assert depth.data.dtype == np.float32
 
 
 def test_offline_camera_frame_sink_writes_rgb_depth_and_metadata() -> None:
@@ -819,7 +854,7 @@ def test_camera_frame_publisher_abort_discards_queued_frames() -> None:
     publisher = CameraFramePublisher(
         sink=_CollectingPublisher(),
         max_queue_size=2,
-        shutdown_policy="abort",
+        shutdown_policy="discard",
     )
     publisher.publish(_rgb_frame(value=1, simulation_step=1))
     publisher.publish(_rgb_frame(value=2, simulation_step=2))
@@ -928,29 +963,18 @@ def test_start_camera_output_returns_none_when_no_outputs() -> None:
 
 
 def test_start_camera_output_injects_queue_and_shutdown_limits(tmp_path: Path) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "camera": {
-                        "prim_path": "/World/Camera",
-                        "output": {"save_dir": "camera"},
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(name="camera", save_dir="camera")
     camera = SensorCameraRuntime(settings=settings, camera=_FakeCamera())
 
     handle = start_camera_output(
         (camera,),
         path_resolver=lambda value: tmp_path / value,
-        settings=CameraOutputRuntimeSettings(
+        settings=CameraPublisherSettings(
             queue_size=7,
             overflow_policy="block",
             worker_poll_interval_s=0.02,
             existing_data_policy="error",
-            shutdown_policy="abort",
+            shutdown_policy="discard",
             rgb_format="npy",
             depth_format="npz",
             metadata_flush_interval_frames=4,
@@ -963,7 +987,7 @@ def test_start_camera_output_injects_queue_and_shutdown_limits(tmp_path: Path) -
     assert handle.publisher.queue.maxsize == 7
     assert handle.publisher.overflow_policy == "block"
     assert handle.publisher.worker_poll_interval_s == pytest.approx(0.02)
-    assert handle.publisher.shutdown_policy == "abort"
+    assert handle.publisher.shutdown_policy == "discard"
     assert handle.publisher.shutdown_timeout_s == pytest.approx(0.25)
     sink = handle.publisher.sink
     assert isinstance(sink, OfflineCameraFrameSink)
@@ -977,23 +1001,12 @@ def test_start_camera_output_injects_queue_and_shutdown_limits(tmp_path: Path) -
 def test_camera_output_prepare_is_read_only_until_joint_apply(
     tmp_path: Path,
 ) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "camera": {
-                        "prim_path": "/World/Camera",
-                        "output": {"save_dir": "camera"},
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(name="camera", save_dir="camera")
     camera = SensorCameraRuntime(settings=settings, camera=_FakeCamera())
     prepared = prepare_camera_output(
         (camera,),
         path_resolver=lambda value: tmp_path / value,
-        settings=CameraOutputRuntimeSettings(),
+        settings=CameraPublisherSettings(),
         shutdown_timeout_s=0.25,
     )
 
@@ -1008,25 +1021,14 @@ def test_camera_output_prepare_is_read_only_until_joint_apply(
 def test_camera_output_validates_publisher_before_mutating_paths(
     tmp_path: Path,
 ) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "camera": {
-                        "prim_path": "/World/Camera",
-                        "output": {"save_dir": "camera"},
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(name="camera", save_dir="camera")
     camera = SensorCameraRuntime(settings=settings, camera=_FakeCamera())
 
     with pytest.raises(ValueError, match="max_queue_size"):
         start_camera_output(
             (camera,),
             path_resolver=lambda value: tmp_path / value,
-            settings=CameraOutputRuntimeSettings(queue_size=0),
+            settings=CameraPublisherSettings(queue_size=0),
         )
 
     assert not (tmp_path / "camera").exists()
@@ -1035,7 +1037,7 @@ def test_camera_output_validates_publisher_before_mutating_paths(
         start_camera_output(
             (camera,),
             path_resolver=lambda value: tmp_path / value,
-            settings=CameraOutputRuntimeSettings(
+            settings=CameraPublisherSettings(
                 overflow_policy=cast(str, []),
             ),
         )
@@ -1047,23 +1049,12 @@ def test_open_prepared_camera_output_rolls_back_when_thread_start_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "camera": {
-                        "prim_path": "/World/Camera",
-                        "output": {"save_dir": "camera"},
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(name="camera", save_dir="camera")
     camera = SensorCameraRuntime(settings=settings, camera=_FakeCamera())
     prepared = prepare_camera_output(
         (camera,),
         path_resolver=lambda value: tmp_path / value,
-        settings=CameraOutputRuntimeSettings(),
+        settings=CameraPublisherSettings(),
         shutdown_timeout_s=0.25,
     )
     apply_output_path_plans(prepared.path_plans)
@@ -1098,25 +1089,14 @@ def test_open_prepared_camera_output_rolls_back_when_thread_start_fails(
 def test_start_camera_output_rejects_lossy_policy_for_offline_sink(
     tmp_path: Path,
 ) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "camera": {
-                        "prim_path": "/World/Camera",
-                        "output": {"save_dir": "camera"},
-                    }
-                }
-            }
-        }
-    ).cameras[0]
+    settings = _camera_settings(name="camera", save_dir="camera")
     camera = SensorCameraRuntime(settings=settings, camera=_FakeCamera())
 
     with pytest.raises(ValueError, match="offline camera output.*block.*error"):
         start_camera_output(
             (camera,),
             path_resolver=lambda value: tmp_path / value,
-            settings=CameraOutputRuntimeSettings(overflow_policy="drop_oldest"),
+            settings=CameraPublisherSettings(overflow_policy="drop_oldest"),
         )
 
     assert not (tmp_path / "camera").exists()
@@ -1132,21 +1112,19 @@ def test_start_camera_output_preflights_all_paths_before_truncate(
     second = tmp_path / "second"
     second.mkdir()
     (second / "metadata.jsonl").write_text("not-json\n", encoding="utf-8")
-    sensors = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "first": {
-                        "prim_path": "/World/First",
-                        "output": {"save_dir": "first"},
-                    },
-                    "second": {
-                        "prim_path": "/World/Second",
-                        "output": {"save_dir": "second"},
-                    },
-                }
-            }
-        }
+    sensors = SceneSensorSettings(
+        cameras=(
+            _camera_settings(
+                name="first",
+                prim_path="/World/First",
+                save_dir="first",
+            ),
+            _camera_settings(
+                name="second",
+                prim_path="/World/Second",
+                save_dir="second",
+            ),
+        )
     )
     cameras = tuple(
         SensorCameraRuntime(settings=item, camera=_FakeCamera())
@@ -1159,7 +1137,7 @@ def test_start_camera_output_preflights_all_paths_before_truncate(
         start_camera_output(
             cameras,
             path_resolver=lambda value: tmp_path / value,
-            settings=CameraOutputRuntimeSettings(
+            settings=CameraPublisherSettings(
                 overflow_policy="block",
                 existing_data_policy="resume",
             ),
@@ -1169,21 +1147,19 @@ def test_start_camera_output_preflights_all_paths_before_truncate(
 
 
 def test_start_camera_output_rejects_shared_offline_directory(tmp_path: Path) -> None:
-    settings = SceneSensorSettings.from_env_config(
-        {
-            "sensors": {
-                "cameras": {
-                    "left": {
-                        "prim_path": "/World/LeftCamera",
-                        "output": {"save_dir": "shared"},
-                    },
-                    "right": {
-                        "prim_path": "/World/RightCamera",
-                        "output": {"save_dir": "shared/../shared"},
-                    },
-                }
-            }
-        }
+    settings = SceneSensorSettings(
+        cameras=(
+            _camera_settings(
+                name="left",
+                prim_path="/World/LeftCamera",
+                save_dir="shared",
+            ),
+            _camera_settings(
+                name="right",
+                prim_path="/World/RightCamera",
+                save_dir="shared/../shared",
+            ),
+        )
     )
     cameras = tuple(
         SensorCameraRuntime(settings=camera, camera=_FakeCamera())

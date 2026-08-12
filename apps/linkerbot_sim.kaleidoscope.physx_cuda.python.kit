@@ -1,0 +1,59 @@
+[package]
+description = "LinkerBot Kaleidoscope headless PhysX CUDA application"
+title = "LinkerBot Kaleidoscope (PhysX CUDA)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "kaleidoscope", "physx", "cuda"]
+
+# Kaleidoscope 不继承 isaacsim.exp.base.python：后者会连带加载 RTX、viewport、camera、
+# SyntheticData、telemetry 与大量 GUI 扩展。这里仅保留 SimulationApp/USD、World/Core
+# raw views、GridCloner、两类资产 importer、PhysX/Fabric tensor pipeline 和 Isaac run loop。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.core.api" = {}
+"isaacsim.core.cloner" = {}
+"isaacsim.core.prims" = {}
+"isaacsim.core.simulation_manager" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.physics.physx" = {}
+"omni.physics.stageupdate" = {}
+"omni.physx.fabric" = {}
+"omni.physx.tensors" = {}
+"omni.warp.core" = {}
+
+[settings]
+# GPU dynamics 与 Torch/Fabric 直接 interop 是产品硬约束；禁止隐式 CPU readback。
+physics.suppressReadback = true
+physics.fabricUseGPUInterop = true
+
+# Kaleidoscope 没有 renderer/Fabric scene delegate consumer。raw physics views 直接读取
+# PhysX tensor owner，下面的输出同步全部关闭，避免为 USD/RTX 维护重复状态。
+physics.fabricUpdateTransformations = false
+physics.fabricUpdateVelocities = false
+physics.fabricUpdateForceSensors = false
+physics.fabricUpdateJointStates = false
+physics.fabricUpdatePoints = false
+
+[settings.app]
+name = "LinkerBot-Kaleidoscope-PhysX-CUDA"
+version = "6.0.1"
+window.title = "LinkerBot Kaleidoscope"
+settings.persistent = false
+useFabricSceneDelegate = false
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+# 无头训练不得等待 IOMMU 信息弹窗。
+renderer.startupMessageDisplayed = true

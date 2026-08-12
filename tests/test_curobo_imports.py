@@ -4,7 +4,12 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import numpy as np
+import pytest
 
+import linkerbot_sim.backends.curobo.context as context_module
+import linkerbot_sim.backends.curobo.runtime_imports as runtime_imports
+from linkerbot_sim.backends.curobo.config import CuroboConfig, CuroboRobotConfig
+from linkerbot_sim.backends.curobo.context import CuroboContext
 from linkerbot_sim.backends.curobo.runtime_imports import ensure_torch_device_usable
 from linkerbot_sim.backends.curobo.warp_compat import (
     ensure_warp_func_module_keyword_compatible,
@@ -73,6 +78,125 @@ def test_ensure_torch_device_usable_accepts_cuda_smoke_success() -> None:
     ensure_torch_device_usable(torch, "cuda:0")
 
 
+def test_require_curobo_kernel_backend_accepts_cuda_core(monkeypatch) -> None:
+    backends = ModuleType("curobo._src.curobolib.backends")
+    backends.get_backend_name = lambda: "cuda_core"
+    monkeypatch.setattr(
+        runtime_imports.importlib,
+        "import_module",
+        lambda _name: backends,
+    )
+
+    assert runtime_imports.require_curobo_kernel_backend() == "cuda_core"
+
+
+def test_require_curobo_kernel_backend_rejects_pybind(monkeypatch) -> None:
+    backends = ModuleType("curobo._src.curobolib.backends")
+    backends.get_backend_name = lambda: "pybind"
+    monkeypatch.setattr(
+        runtime_imports.importlib,
+        "import_module",
+        lambda _name: backends,
+    )
+
+    with pytest.raises(RuntimeError, match="backend is 'pybind'; expected 'cuda_core'"):
+        runtime_imports.require_curobo_kernel_backend()
+
+
+def test_require_curobo_kernel_backend_reports_backend_resolution_failure(
+    monkeypatch,
+) -> None:
+    def fail_import(_name: str):
+        raise ImportError("cuda.core is unavailable")
+
+    monkeypatch.setattr(runtime_imports.importlib, "import_module", fail_import)
+
+    with pytest.raises(
+        RuntimeError,
+        match="failed to resolve cuRobo kernel backend",
+    ) as exc:
+        runtime_imports.require_curobo_kernel_backend()
+
+    assert isinstance(exc.value.__cause__, ImportError)
+
+
+def test_curobo_context_requires_cuda_core_before_cuda_resource_creation(
+    monkeypatch,
+) -> None:
+    calls: list[object] = []
+    config = _fake_context_config(calls)
+    monkeypatch.setattr(
+        context_module,
+        "import_curobo_module",
+        lambda: SimpleNamespace(__version__="0.8.0"),
+    )
+
+    def reject_backend(*, expected: str) -> str:
+        calls.append(("backend", expected))
+        raise RuntimeError("cuRobo kernel backend is 'pybind'; expected 'cuda_core'")
+
+    monkeypatch.setattr(context_module, "require_curobo_kernel_backend", reject_backend)
+    monkeypatch.setattr(
+        context_module,
+        "materialize_curobo_config",
+        lambda *_args, **_kwargs: calls.append("materialize"),
+    )
+    monkeypatch.setattr(
+        context_module,
+        "import_torch_module",
+        lambda: calls.append("torch") or SimpleNamespace(),
+    )
+
+    with pytest.raises(RuntimeError, match="backend is 'pybind'"):
+        CuroboContext(config)
+
+    assert calls == [("version", "0.8.0"), ("backend", "cuda_core")]
+
+
+def test_curobo_context_records_cuda_core_and_allows_repeated_close(
+    monkeypatch,
+) -> None:
+    calls: list[object] = []
+    config = _fake_context_config(calls)
+    torch = SimpleNamespace()
+    monkeypatch.setattr(
+        context_module,
+        "import_curobo_module",
+        lambda: SimpleNamespace(__version__="0.8.0"),
+    )
+    monkeypatch.setattr(
+        context_module,
+        "require_curobo_kernel_backend",
+        lambda *, expected: calls.append(("backend", expected)) or "cuda_core",
+    )
+    monkeypatch.setattr(
+        context_module,
+        "materialize_curobo_config",
+        lambda value, *, cache_root=None: value,
+    )
+    monkeypatch.setattr(context_module, "import_torch_module", lambda: torch)
+    monkeypatch.setattr(
+        context_module,
+        "ensure_torch_device_usable",
+        lambda module, device: calls.append(("device", module, device)),
+    )
+    monkeypatch.setattr(
+        context_module,
+        "import_curobo_public",
+        lambda name: SimpleNamespace(name=name),
+    )
+    monkeypatch.setattr(CuroboContext, "_make_device_cfg", lambda self: object())
+    monkeypatch.setattr(CuroboContext, "_make_kinematics", lambda self: object())
+
+    context = CuroboContext(config)
+    context.close()
+    context.close()
+
+    assert context.kernel_backend == "cuda_core"
+    assert calls[:2] == [("version", "0.8.0"), ("backend", "cuda_core")]
+    assert calls[2] == ("device", torch, "cuda:0")
+
+
 def test_ensure_warp_func_module_keyword_compatible_patches_signature_without_keyword(
     monkeypatch,
 ) -> None:
@@ -119,6 +243,7 @@ def test_ensure_warp_torch_namespace_compatible_maps_top_level_converter(
     monkeypatch.setitem(sys.modules, "warp", warp)
 
     ensure_warp_torch_namespace_compatible()
+    ensure_warp_torch_namespace_compatible()
 
     assert warp.torch.device_from_torch("cuda:0") == "warp:cuda:0"
 
@@ -157,6 +282,22 @@ def _warp_module_without_module_keyword() -> ModuleType:
     )
     warp._modules = modules
     return warp
+
+
+def _fake_context_config(calls: list[object]) -> CuroboConfig:
+    """构造真实 typed config，只替换本测试需要观察的 bundle version hook。"""
+
+    return CuroboConfig(
+        robot=CuroboRobotConfig.from_mapping(
+            {
+                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "default_tcp_frame": "tool",
+            }
+        ),
+        task_bundle=SimpleNamespace(
+            validate_curobo_version=lambda version: calls.append(("version", version))
+        ),
+    )
 
 
 class _FakeWarpModule:

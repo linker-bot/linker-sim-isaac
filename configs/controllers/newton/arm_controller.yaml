@@ -1,0 +1,54 @@
+# newton bundle 的机械臂控制参数。
+#
+# controller bundle 是后端与产品共享的资产 drive 配置：Mirror/Kaleidoscope 的 PhysX 或 Newton
+# 投影都可消费 physics.engine 派生或实例显式覆盖的 bundle。Newton composition 选择本
+# bundle，是因为这些增益按项目 Newton solver 标定；名称本身不在 loader 中限制 consumer。
+# Newton USD parser 读取项目按弧度定义的 drive 增益，replication 层使用 pi/180 的 parser scaling
+# 保持这里的数值不变。
+# 本 bundle 面向 joint_groups.arm；loader 会拒绝把 arm/hand 文件角色写反。
+target: arm
+
+# 主动关节接收位置目标时使用的 drive；follower 不占用上层命令向量。
+position_control:
+  # 位置目标写入当前 Newton execution 的 control buffer；CPU 使用 host buffer，CUDA 使用
+  # device buffer，两者都由同一 Newton force drive 执行。
+  method: implicit
+  active_joints:
+    # 单位分别为 N*m/rad、N*m*s/rad、N*m。相比 PhysX 默认值降低刚度，以适配
+    # 项目 Newton MuJoCo-Warp solver 的积分与 equality follower；具体 physics/action
+    # cadence 分别由 Mirror scene 或 Kaleidoscope task 拥有，不能在共享 bundle 中假定。
+    stiffness: 200.0
+    damping: 20.0
+    max_force: 100.0
+  follower_joints:
+    # Newton equality follower 不允许保留 drive、actuator 或 runtime target writer。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+
+# 三种控制 section 都显式存在，使共享 bundle 在加载时完整校验；当前内置 Newton control
+# profiles 选择 position mode，其余 section 防止外部组合静默回落到通用高增益默认值。
+velocity_control:
+  # explicit 在控制层按速度误差计算 effort，再写入 Newton control buffer。
+  method: explicit
+  active_joints:
+    # 速度残差增益与输出绝对限幅，单位分别为 N*m*s/rad 和 N*m。
+    damping: 20.0
+    max_force: 100.0
+  follower_joints:
+    # equality follower 始终由约束执行，速度模式下同样保持零 drive。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+
+effort_control:
+  # direct 对输入 effort 做对称限幅后直接下发，不计算 PD 项。
+  method: direct
+  active_joints:
+    # 主动机械臂关节的绝对 effort 上限，revolute 关节单位 N*m。
+    effort_limit: 100.0
+  follower_joints:
+    # follower 不接收独立 effort 命令，只保留结构所需的零值 section。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0

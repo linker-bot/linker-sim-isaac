@@ -1,0 +1,69 @@
+[package]
+description = "LinkerBot Kaleidoscope PhysX CUDA debug viewport"
+title = "LinkerBot Kaleidoscope (PhysX CUDA Viewport)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "kaleidoscope", "physx", "cuda", "viewport"]
+
+# 该 Kit 与 headless PhysX Kit 拥有相同的唯一物理闭包，只额外加载 RTX 和 viewport。
+# 相机、SyntheticData、Replicator 与 Newton 仍被排除；训练默认 Kit 因而不会承担渲染显存。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.core.api" = {}
+"isaacsim.core.cloner" = {}
+"isaacsim.core.prims" = {}
+"isaacsim.core.simulation_manager" = {}
+"isaacsim.core.utils" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.physics.physx" = {}
+"omni.physics.stageupdate" = {}
+"omni.physx.fabric" = {}
+"omni.physx.tensors" = {}
+"omni.warp.core" = {}
+"omni.hydra.rtx" = {}
+"omni.kit.viewport.utility" = {}
+"omni.kit.viewport.window" = {}
+
+[settings]
+# viewport 只消费 Fabric transformation；其余训练 tensor 继续由 GPU raw view 直接读取。
+physics.suppressReadback = true
+physics.fabricUseGPUInterop = true
+physics.fabricUpdateTransformations = true
+physics.fabricUpdateVelocities = false
+physics.fabricUpdateForceSensors = false
+physics.fabricUpdateJointStates = false
+physics.fabricUpdatePoints = false
+rtx.hydra.supportMultiTickRate = false
+rtx.rendering.perSensorTickTlas = false
+rtx.post.dlss.execMode = 3
+
+[settings.app]
+name = "LinkerBot-Kaleidoscope-PhysX-CUDA-Viewport"
+version = "6.0.1"
+window.title = "LinkerBot Kaleidoscope (PhysX CUDA Viewport)"
+settings.persistent = false
+useFabricSceneDelegate = true
+settings.fabricDefaultStageFrameHistoryCount = 3
+extensions.excluded = [
+    "isaacsim.pip.newton",
+    "isaacsim.physics.newton",
+    "isaacsim.physics.newton.tensors",
+    "isaacsim.sensors.camera",
+    "omni.replicator.core",
+    "omni.syntheticdata",
+]
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+renderer.startupMessageDisplayed = true

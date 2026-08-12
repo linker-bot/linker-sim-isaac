@@ -1,0 +1,74 @@
+[package]
+description = "LinkerBot Kaleidoscope project-owned Newton debug viewport"
+title = "LinkerBot Kaleidoscope (Newton CUDA Viewport)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "kaleidoscope", "newton", "cuda", "viewport"]
+
+# 该 Kit 复制 physics-only Newton 闭包，再只增加 RTX 与 viewport。项目 wheel 仍直接拥有
+# Newton/MuJoCo-Warp；Isaac Newton、PhysX、Fabric、camera 和 SyntheticData 都不能成为第二 owner。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.warp.core" = {}
+"omni.hydra.rtx" = {}
+"omni.kit.viewport.utility" = {}
+"omni.kit.viewport.window" = {}
+
+[settings]
+rtx.hydra.supportMultiTickRate = false
+rtx.rendering.perSensorTickTlas = false
+rtx.post.dlss.execMode = 3
+
+[settings.app]
+name = "LinkerBot-Kaleidoscope-Newton-CUDA-Viewport"
+version = "6.0.1"
+window.title = "LinkerBot Kaleidoscope (Newton CUDA Viewport)"
+settings.persistent = false
+useFabricSceneDelegate = false
+settings.fabricDefaultStageFrameHistoryCount = 3
+extensions.excluded = [
+    "isaacsim.core.api",
+    "isaacsim.core.cloner",
+    "isaacsim.core.experimental.prims",
+    "isaacsim.core.simulation_manager",
+    "isaacsim.core.utils",
+    "isaacsim.pip.newton",
+    "isaacsim.physics.newton",
+    "isaacsim.physics.newton.tensors",
+    "isaacsim.sensors.camera",
+    "isaacsim.sensors.experimental.physics",
+    "isaacsim.sensors.physx",
+    "isaacsim.sensors.physx.examples",
+    "isaacsim.sensors.physx.ui",
+    "isaacsim.sensors.physics.nodes",
+    "omni.physics.physx",
+    "omni.physics.stageupdate",
+    "omni.physx",
+    "omni.physx.asset_validator",
+    "omni.physx.bundle",
+    "omni.physx.camera",
+    "omni.physx.demos",
+    "omni.physx.fabric",
+    "omni.physx.graph",
+    "omni.physx.pvd",
+    "omni.physx.tensors",
+    "omni.physx.vehicle",
+    "omni.replicator.core",
+    "omni.syntheticdata",
+]
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+renderer.startupMessageDisplayed = true

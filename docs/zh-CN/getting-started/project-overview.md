@@ -1,171 +1,178 @@
-# 项目总览
+# 项目概览
 
 语言：[中文](project-overview.md) | [English](../../en/getting-started/project-overview.md)
 
-LinkerHand Simulation 是一个基于 checkout workspace 运行的 Isaac Sim 应用，用于机器人控制、
-运动规划、并行环境执行、状态捕获和传感器输出。项目提供两套执行契约不同的 runtime：
+LinkerHand Simulation 是面向 Isaac Sim 6.0.1 的 checkout application。它把两类执行目标拆成
+两个互不导入的产品组合根，而不是用一个带大量 optional 字段的通用 runtime：
 
-- Single Scene 模式运行一个物理 World，可以协调所选 env profile 声明的任意数量机器人。
-- Tiled Scene 模式构建克隆环境，并对显式选择的环境行批量执行机器人和对象操作。
-
-两种模式都支持严格 YAML 配置、robot ID 发现、JSON 控制、cuRobo 集成、canonical snapshot、
-Foxglove/MCAP 遥测和传感器相机。Single Scene 还提供共享 tick 的多机器人 timeline 和逐机器人关节跟踪
-CSV；Tiled Scene 还提供 batch step action、逐环境状态操作、trajectory buffer 和具有资源上限的异步规划。
-
-选择入口或 Python 集成面之前，先阅读[选择 Runtime 与接口](choose-runtime-and-api.md)。
+- **Mirror** 表示一个现实工作站在仿真中的映像。一个 World 中可以有多个机器人和对象；产品
+  提供交互协议、共享 tick motion、cuRobo 规划、规划碰撞、相机、遥测、日志和持久快照。
+- **Kaleidoscope** 表示同一任务 scene 的大量隔离变体。它可选择 PhysX CUDA/Fabric 或项目自有
+  multi-world Newton；两个后端的训练入口都以 headless、GPU-native 方式向相同的 Torch CUDA 接口提供
+  批量 reset/state/snapshot/clone、批量 IK 和同步直线动作。产品不拥有批量轨迹 planner、规划
+  避障、相机、SyntheticData、Replicator、录制、transport 或遥测；显式调试入口可显示一个选中环境。
 
 ## 执行模型
 
-| 边界 | Single Scene | Tiled Scene |
+| 边界 | Mirror | Kaleidoscope |
 | --- | --- | --- |
-| Runtime owner | `SingleSceneRuntime` | `TiledSceneRuntime` |
-| 拓扑 | 一个 World，包含配置的机器人和对象实例 | 一个 source env 克隆为 `tiled.num_envs` 行 |
-| 机器人数量 | 同一场景中的一个或多个机器人 | 每个克隆环境中的一个或多个机器人 |
-| 选择器 | 会话级 `robot_id` | 显式 `env_ids`，以及接口要求的会话级 `robot_id` 或 `robot_ids` |
-| 同步执行 | 整数 tick robot timeline，每个 tick 共享一次 `world.step()` | batch 固定 tick `step` action 和 trajectory-buffer 回放 |
-| 规划 | Single Scene compiler 使用 `curobo` 或关节空间 `linear` backend | 末端 action 使用同步 batch IK，另有独立异步 planner manager |
-| 状态操作 | Single Scene reset 和 Single Scene snapshot 读取/恢复 | 逐环境 reset、调试状态、snapshot 广播和 env-to-env clone |
-| 关节 CSV | 通过所选 logging profile 支持 | Tiled Scene 入口不创建该 logger |
+| 稳定入口 | `linkerbot_sim.mirror` | `linkerbot_sim.kaleidoscope` |
+| 环境形状 | 一个 World；一个或多个 robot/object | `num_envs` 个同构、隔离 env |
+| physics | PhysX/CPU、Newton/CPU 或 Newton/CUDA | PhysX/CUDA 或 Newton/CUDA |
+| 数据边界 | JSON/Python 与冷 NumPy/映射状态 | 原生 Torch CUDA；Gymnasium 才转 NumPy |
+| 动作 | 关节、timeline、IK、直线、完整规划 | position target、批量 IK、同步直线 action |
+| 状态 | scene state 与 versioned scene snapshot | GPU state、episode snapshot、env-to-env clone |
+| 输出 | camera、CSV、MCAP、Foxglove | 训练 info tensor；无输出 worker |
+| 碰撞 | 物理接触及 Mirror planning collision | 保留任务物理接触和 env 隔离；无规划碰撞/避障 |
 
-Single Scene 不等于单机器人。Single Scene 所选的 env profile 可以包含多个机器人实例，一条 timeline 可以让它们
-从共同 tick 0 协同执行。Single Scene 没有克隆环境的 `env_id` 维度。
+Mirror 的“一个 World”不表示只能有一个机器人。Kaleidoscope 的“并行”也不表示每个 env
+有一个机器人；scene prototype 可以包含多个机器人，但所有 env 必须保持同构。
 
-Tiled Scene 不是 `SingleSceneRuntime` 的包装层。它有独立的 runtime 类、scene builder、command adapter、
-state shape、trajectory buffer 和 planner manager。一个 Tiled env 仍可包含多个机器人；
-`env_ids` 选择克隆行，robot ID 选择这些行中的机器人。
+## 正式 Kit 入口矩阵
 
-## 共享边界
+产品工厂根据 strict composition 选择且只选择一个正式 Kit；调用方不传入任意 experience 路径，也不
+手工叠加 physics/render extension：
 
-当数据语义一致时，两套 runtime 复用以下领域契约：
+| 产品 | engine / execution | 渲染闭包 | factory 选择的 Kit |
+| --- | --- | --- | --- |
+| Mirror | PhysX / CPU | 由 outputs profile 控制 | `apps/linkerbot_sim.mirror.physx.python.kit` |
+| Mirror | Newton / CPU 或 CUDA | 关闭 | `apps/linkerbot_sim.mirror.newton.python.kit` |
+| Mirror | Newton / CPU 或 CUDA | 开启 | `apps/linkerbot_sim.mirror.newton_render.python.kit` |
+| Kaleidoscope | PhysX / CUDA | 训练 headless | `apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit` |
+| Kaleidoscope | Newton / CUDA | 训练 headless | `apps/linkerbot_sim.kaleidoscope.newton.python.kit` |
+| Kaleidoscope | PhysX / CUDA | 显式单环境 viewport | `apps/linkerbot_sim.kaleidoscope.physx_cuda_viewport.python.kit` |
+| Kaleidoscope | Newton / CUDA | 显式单环境 viewport | `apps/linkerbot_sim.kaleidoscope.newton_viewport.python.kit` |
 
-- Runtime profile 拥有进程策略、所选领域 profile、资源上限、遥测、输出生命周期和关闭超时。
-- Env、robot、controller、object、cuRobo 和 logging profile 使用严格仓库 schema，并在 Isaac
-  启动前校验。
-- 控制使用会话级数字 robot ID，持久匹配使用稳定 label、profile 和 fingerprint。
-- Planning request/result 在进入 `linear` 或 cuRobo adapter 前使用 backend-neutral DTO。
-- `linkerbot.snapshot` 是 Single Scene 和 Tiled Scene adapter 共用的 canonical 逻辑快照 schema。
-- 坐标值使用 m 和 rad；公开四元数统一使用 `wxyz`。
-- 状态遥测、相机输出和文件 target 使用有界队列和显式输出策略。
+Mirror PhysX 使用同一个含 RTX 资源的 experience，并由 session render spec 决定是否实际渲染；Mirror
+Newton 才按 render closure 分成 physics-only 与 Newton-render 两个 experience。Kaleidoscope
+保留两个 physics-only 训练 Kit，显式 viewer 才选择对应 viewport Kit；viewport 只显示
+`selected_env`，不增加 camera/SyntheticData/Replicator。
+公开 mode profile 显式写出 execution：Mirror 为 `physx_cpu/newton_cpu/newton_cuda`，
+Kaleidoscope 为 `physx_cuda/newton_cuda`。
 
-共享这些契约并不表示 runtime-specific JSON 可以互换。必须使用所选 runtime 的消息 schema。
+## 所有权与调用流
 
-## 独立边界
-
-以下能力明确由各 runtime 独立拥有：
-
-- Single Scene timeline 与 Tiled Scene action 使用不同 envelope、selector、response 字段和状态机。
-- Single Scene state 描述一个 World；Tiled Scene state 保留显式 selected-env 行维度。
-- Single Scene 按 command ID 跟踪命令状态；Tiled Scene trajectory playback 和异步 planning 各有独立生命周期接口。
-- Scene collision coordination 可以把其它机器人冻结为静态规划障碍；Tiled Scene planning 把 selected env
-  行作为 request problem，不暴露 Single Scene coordination 字段。
-- Tiled Scene articulation 使用 position control；请求 Tiled Scene velocity 或 effort control 的 runtime profile
-  会在配置解析时被拒绝。
-- Single Scene 与 Tiled Scene 持有不同 Isaac 对象，必须分别通过自己的 lifecycle facade 关闭。
-
-精确消息见 [Single Scene JSON 参考](../reference/single-scene-json.md)和
-[Tiled Scene JSON 参考](../reference/tiled-scene-json.md)。
-
-## Workspace 要求
-
-本仓库是 workspace 应用，不是可独立安装的 Python 库。运行时依赖 checkout 内的 `configs/`、
-`assets/`、`scripts/` 和 cuRobo task 资源。本地 build backend 会拒绝 wheel、source distribution
-和 editable build。
-
-声明的运行环境是 Linux x86-64 和 Python 3.11。从 checkout 根目录创建统一环境：
-
-```bash
-uv sync --all-extras
+```text
+Mirror CLI / embedded API                    Torch / Gymnasium / skrl
+        ↓                                              ↓
+MirrorController → MirrorRuntime          TorchKaleidoscopeEnv → KaleidoscopeRuntime
+                         \                  /
+                          → IsaacSession ←
+                                  ↓
+                  concrete PhysicsRuntime
+          PhysxRuntime(World) | NewtonRuntime(Model/State/Solver)
 ```
 
-项目命令必须在同一根目录以 `PYTHONPATH=src` 运行。启动 Isaac Sim 前，先阅读并接受适用的
-NVIDIA/Kit EULA，再在部署环境记录该接受状态：
+`IsaacSession` 直接拥有 SimulationApp、stage 和一个 concrete physics runtime。PhysX runtime
+再拥有唯一 Isaac World；Newton runtime 直接拥有 Model/State/Control/Solver，不伪造 World。
+产品资源先关闭，session 最后关闭。Kaleidoscope training package 不拥有 Isaac session，只消费
+`KaleidoscopeTrainingPort`。
+
+Mirror 的 Newton composition 在 session 投影时派生一个 world。Kaleidoscope 则从 mode root
+`environments.num_envs` 的最终值派生 `world_count`，由项目 `NewtonRuntime` 为同构环境创建彼此隔离的 world；physics
+leaf 不重复声明环境数，也不加载 `isaacsim.physics.newton`、`isaacsim.physics.newton.tensors` 或其它
+Isaac Newton extension。
+
+## 分层
+
+- `configuration`：纯 Python、不可变的 mode 根和唯一 YAML catalog；不导入 Torch、Isaac 或产品。
+- `isaac`：SimulationApp、stage、physics runtime 和 replicated scene 基础设施；不导入产品层。
+- `backends.curobo`：按能力拆分的数值 backend。Kaleidoscope 只能使用 kinematics/IK 能力；
+  planning/collision 只由 Mirror 组合。
+- `mirror`、`kaleidoscope`：各自拥有状态机、use case 与资源关闭顺序，互不导入。
+- `training.skrl`：只依赖 Kaleidoscope public training port。
+
+完整逐模块 owner 见[源码模块图](../development/module-map.md)。
+
+## 配置图
+
+Mode 文件只保存 profile 引用和唯一 device 事实：
+
+```text
+configs/modes/mirror/{physx_cpu,newton_cpu,newton_cuda}.yaml
+  ├─ compute.cuda_device
+  ├─ scene selector mirror/scene3
+  │    └─ scenes/mirror/scene3.yaml（scene.id: scene3）
+  ├─ physics/physx/cpu.yaml、physics/newton/cpu.yaml 或 physics/newton/cuda.yaml
+  ├─ control/mirror.yaml
+  ├─ curobo/mirror.yaml
+  ├─ planning/mirror.yaml
+  └─ outputs/mirror_default.yaml
+
+configs/modes/kaleidoscope/{physx_cuda,newton_cuda}.yaml
+  ├─ compute.cuda_device
+  ├─ environments.{num_envs,base_env_path,env_prefix,origin_xyz}
+  ├─ scene selector kaleidoscope/tblock_push
+  │    └─ scenes/kaleidoscope/tblock_push.yaml（scene.id: tblock_push）
+  ├─ physics/physx/cuda.yaml 或 physics/newton/cuda.yaml
+  ├─ tasks/kaleidoscope/tblock_push_v1.yaml
+  └─ 可选 curobo/kaleidoscope_batch_ik.yaml（仅 EE/直线 action）
+
+configs/visualization/kaleidoscope.yaml
+  └─ launch-only selected env / window / renderer / scene visuals
+```
+
+Scene selector、文件路径与内部 identity 是三类事实：mode root 分别写 `mirror/scene3` 和
+`kaleidoscope/tblock_push`；catalog 将它们解析到对应产品子目录；文件内只写 `scene.id: scene3` 或
+`scene.id: tblock_push`。两个产品的 scene schema 互不兼容，因此不接受旧平铺 selector 或跨产品引用。
+环境数量与路径命名只由 Kaleidoscope mode root 的 `environments` 持有，training profile 不折回 mode。
+PhysX 固定派生 GridCloner/env IDs，Newton 固定派生 multi-world；这些仍是内部复制实现，不是公开
+selector。配置规则见
+[配置参考](../reference/configuration.md)。
+
+Mirror 两个 engine 共用 `control/mirror.yaml`，默认 controller bundle 由 physics engine 派生；Kaleidoscope
+没有 control profile 或 control 对象。`planning/mirror.yaml` 只拥有后端中立的请求默认策略；cuRobo
+IK batch 容量，以及 MotionPlanner seed、CUDA graph、碰撞能力和 cache 容量统一归
+`configs/curobo/`。MotionPlanner 固定一次处理一个请求，其 cache 容量仍显式配置。已验证的 0.8.0 task bundle 与
+float32 dtype 由后端固定。Kaleidoscope task 不选择 backend：EE/直线 composition 在 mode root 增加
+`profiles.curobo`，纯关节的 `joint_control`/`joint_delta` composition 必须省略它。
+
+## GPU 与冷数据边界
+
+Kaleidoscope 的 observation、action、reward、done、selector、状态、snapshot、clone、RNG 及
+skrl rollout memory 必须位于 `compute.cuda_device`。skrl tokenized 训练热路径不调用 `.cpu()`、
+`.numpy()`、`.tolist()`、`.item()` 或 `nonzero()`。native/debug `step` 刻意同步读取一次 done scalar，
+使未 reset 的可恢复误用在 physics 推进前失败。只有以下显式边界可以读取或离开 GPU：
+
+- native/debug pending-reset guard：每拍最多一次 scalar，只服务直接调试调用；
+- `GymnasiumKaleidoscopeAdapter`：整批转换成 NumPy，换取 Gymnasium 生态兼容；
+- persistent checkpoint：用户显式请求磁盘保存/加载时执行 CPU 序列化。
+- human viewport：只在 `env.render()` 时把选中 world 同步到 renderer-facing USD；不进入训练 step。
+
+Mirror 的 scene snapshot 是版本化冷状态，不可与 Kaleidoscope episode snapshot 混用。
+
+## Workspace 与环境
+
+仓库依赖 checkout 内的 `configs/`、`scripts/`、资产和 cuRobo task，不构建 wheel。仿真环境：
 
 ```bash
+uv sync --extra simulation --extra visualization --extra training
 export OMNI_KIT_ACCEPT_EULA=Y
 ```
 
-应用以大小写不敏感方式接受 `Y`、`YES` 或 `1`。项目不会替用户设置该变量或接受 EULA；缺少
-接受状态时会在创建 `SimulationApp` 之前失败。
+CPU 文档/配置测试使用独立 `.venv-dev`，避免 `usd-core` 与 Kit `pxr` 混装：
 
-## 配置所有权
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-dev uv sync --extra dev --extra visualization
+```
 
-| 位置 | 唯一职责 |
-| --- | --- |
-| `configs/runtime/` | Runtime 模式、所选 profile、GUI/GPU/render、执行默认值、transport、planner/playback 上限、遥测、相机输出策略、路径和 shutdown |
-| `configs/envs/` | World 设置、可视场景、传感器摆放、机器人/对象实例，以及可选 Tiled Scene 拓扑和逐环境 pose override |
-| `configs/robots/` | Isaac model、robot kind、joint group、importer/PhysX 设置，以及可选 cuRobo model/TCP binding |
-| `configs/controllers/` | Position、velocity、effort 控制方法、关节、gain、limit 和 PhysX drive override |
-| `configs/objects/` | Object asset、object kind、运行时 physics/material、state summary 和可选简化 planning collision |
-| `configs/curobo/` | Device、task bundle、IK/planner 算法、seed、tolerance、collision cache 和 batch capacity |
-| `configs/logging/` | Single Scene 关节跟踪 CSV 开关、路径、采样、flush interval 和列 |
-| `tools/object_assets/` | 离线生成资产的几何和写入 USD/PhysX 的属性 |
+## 运行与关闭
 
-Runtime 解析顺序是代码默认值、所选 runtime YAML、最后是本次启动显式提供的 CLI 字段。Env profile
-只拥有场景事实，不拥有 planner、transport、telemetry 或进程资源策略。所有权案例见
-[配置指南](../guides/configuration.md)，校验行为见[配置参考](../reference/configuration.md)。
+Mirror 的 stdin、TCP JSONL 和 WebSocket 只允许 loopback；项目不提供认证或 TLS。后台 ingress
+只解析请求，任何 USD/Isaac mutation 都回到 owner thread。关闭顺序固定为：
 
-## 运行边界
+1. 停止 ingress/admission；
+2. 关闭 outputs、camera、planner；
+3. 关闭 controller 与 view；
+4. 关闭 `IsaacSession`。
 
-### 网络与输入
+Kaleidoscope 没有后台 service。`TorchKaleidoscopeEnv.close()` 关闭 task/view，再关闭 session。
+任何 engine setter 失败会让 runtime fail-stop，不能在 canonical buffer 与物理状态可能分叉时继续训练。
 
-stdin、TCP JSONL 和 WebSocket 控制路径只接受严格 JSON object。未知字段、重复 YAML key、非有限
-JSON 常量、非法 selector 和越界值会被拒绝，不会由运行时猜测。
+## 下一步
 
-所有内置控制、状态遥测和相机 live listener 都限制在 loopback。应用不提供认证或 TLS。远程访问
-必须使用认证 TLS proxy 或 SSH tunnel，并让 upstream 仍绑定 loopback。Foxglove live 是遥测协议，
-不是 JSON 控制 transport。
-
-### 线程所有权
-
-Isaac stage object、articulation/PhysX view、Camera wrapper 和 runtime mutation 只归仿真主线程所有。
-Transport 和 planner worker 可以解析消息或消费冻结的 NumPy/Python snapshot，但不能读写 Isaac
-对象。文件和遥测 publisher 只接收已经捕获的 immutable data。
-
-### 资源与输出上限
-
-Transport connection、request/event queue、snapshot request、planner work、completed planner
-summary、trajectory buffer、telemetry buffer、camera queue 和每相机目录字节数都有显式上限。
-溢出行为是拒绝、背压、替换或已声明的 drop policy，不存在无界队列。
-
-CSV、MCAP 和 camera target 会在任何 writer 打开前联合规划和检查。已有数据必须显式选择
-`error`、`truncate`、`resume` 或 `timestamped_dir`，具体 sink 可以拒绝自身无法安全实现的策略。
-任务流程见[遥测](../guides/telemetry.md)和[相机](../guides/cameras.md)，精确文件与 payload 契约见
-[输出参考](../reference/outputs.md)。
-
-### Mutation 与 Fail-Stop
-
-Reset、Tiled Scene `set_state`、snapshot restore 和 env clone 会在第一次 mutation 前完成校验并捕获
-rollback state。后续 setter 失败时，已完成写入按逆序补偿。完整回滚后 runtime 可以继续使用。
-
-若回滚失败，或不可逆 queue/cache commit 后发生异常，runtime 会记录第一个 fatal reason、请求
-shutdown 并拒绝后续 mutation。此时应重建 runtime，不能在 controller/PhysX 一致性无法证明的
-状态上继续运行。
-
-### Shutdown
-
-入口会先停止新的 transport 和 publisher admission，再有界等待后台工作，按依赖关系关闭 planner、
-camera、logger 及其 sink，释放 IK/planning 资源，最后关闭 `SimulationApp`。独立 timeout 防止一种
-资源消耗另一种资源的 shutdown budget。仍存活的 worker 会保留其 sink 或 runtime dependency，
-避免并发关闭；owner 可以在释放 Kit 前重试清理。
-
-详细不变量见[已知约束](../operations/constraints.md)。
-
-## 继续阅读
-
-- [选择 Runtime 与接口](choose-runtime-and-api.md)
-- [Single Scene 快速入门](single-scene-quickstart.md)
-- [Tiled Scene 快速入门](tiled-scene-quickstart.md)
-- [配置指南](../guides/configuration.md)
-- [Single Scene CLI 参考](../reference/single-scene-cli.md)
-- [Single Scene JSON 参考](../reference/single-scene-json.md)
-- [Tiled Scene CLI 参考](../reference/tiled-scene-cli.md)
-- [Tiled Scene JSON 参考](../reference/tiled-scene-json.md)
-- [控制与轨迹](../guides/control-and-trajectories.md)
-- [运动规划](../guides/motion-planning.md)
-- [碰撞模型](../guides/collision-models.md)
-- [Snapshot 数据与恢复](../reference/snapshots.md)
-- [遥测](../guides/telemetry.md)
-- [相机](../guides/cameras.md)
-- [持久化与 Live 输出](../reference/outputs.md)
-- [故障排查](../operations/troubleshooting.md)
-- [物体资产](../development/object-assets.md)
+- [选择 Mirror 或 Kaleidoscope](choose-runtime-and-api.md)
+- [Mirror 快速入门](mirror-quickstart.md)
+- [Kaleidoscope 快速入门](kaleidoscope-quickstart.md)
+- [状态、快照与克隆](../reference/snapshots.md)
+- [约束与安全边界](../operations/constraints.md)

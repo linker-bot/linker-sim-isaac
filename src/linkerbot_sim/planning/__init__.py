@@ -7,7 +7,6 @@ planning 子包是动作脚本与具体求解后端之间的稳定契约。请�
 约定由各请求/结果类 docstring 说明，调用方应先检查 ``success`` 再消费关节解。
 """
 
-from linkerbot_sim.planning.batch_ik import BatchIKBackend, BatchIKResult
 from linkerbot_sim.planning.backend import (
     PlannerBackend,
     PlannerBackendName,
@@ -34,8 +33,6 @@ from linkerbot_sim.planning.results import (
 )
 
 __all__ = [
-    "BatchIKBackend",
-    "BatchIKResult",
     "CollisionObject",
     "FrameTransformer",
     "IKRequest",

@@ -1,61 +1,62 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
+from linkerbot_sim.assets.instance_paths import validate_disjoint_instance_prim_paths
 from linkerbot_sim.assets.robot_instances import (
     RobotExecutionConfig,
-    robot_instances_from_env_config,
+    RobotSceneInstanceConfig,
     resolve_controller_profile,
+    robot_scene_instances_from_settings,
 )
-from linkerbot_sim.configs.instance_paths import validate_disjoint_instance_prim_paths
-from linkerbot_sim.configs.profiles import load_profile_yaml
+from linkerbot_sim.assets.root_pose import RootPoseConfig
+from linkerbot_sim.configuration.robots import RobotProfileSettings
+from linkerbot_sim.configuration.scenes import PoseSettings, RobotInstanceSettings
+from linkerbot_sim.utils.config import load_yaml
+
+
+def load_robot_profile_by_name(name: str) -> RobotProfileSettings:
+    path = f"configs/robots/{name}.yaml"
+    return RobotProfileSettings.from_mapping(load_yaml(path), source=path)
 
 
 def _instance(
     profile: str,
     *,
-    label: str | None = None,
-    prim_path: str | None = None,
+    label: str,
     controller_profile: str | None = None,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "robot_profile": profile,
-        "root_pose": {"xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0]},
-    }
-    if label is not None:
-        result["label"] = label
-    if prim_path is not None:
-        result["prim_path"] = prim_path
-    if controller_profile is not None:
-        result["controller_profile"] = controller_profile
-    return result
-
-
-def test_robot_instances_parse_list_and_generate_dense_ids() -> None:
-    instances = robot_instances_from_env_config(
-        {
-            "robots": [
-                _instance("ar5v2_l6v1_l", label="work_arm"),
-                _instance("ar5v2_l6v1_r"),
-            ]
-        }
+) -> RobotInstanceSettings:
+    return RobotInstanceSettings(
+        label=label,
+        robot_profile=profile,
+        root_pose=PoseSettings(xyz=(0.0, 0.0, 0.0), rpy=(0.0, 0.0, 0.0)),
+        controller_profile=controller_profile,
     )
 
-    assert [item.robot_id for item in instances] == [0, 1]
-    assert [item.label for item in instances] == [
-        "work_arm",
-        "ar5v2_l6v1_r_1",
+
+def test_typed_robot_instances_preserve_scene_order_and_generate_dense_ids() -> None:
+    instances = robot_scene_instances_from_settings(
+        (
+            _instance("ar5v2_l6v1_l", label="left_arm"),
+            _instance("ar5v2_l6v1_r", label="right_arm"),
+        )
+    )
+
+    assert [(item.robot_id, item.label) for item in instances] == [
+        (0, "left_arm"),
+        (1, "right_arm"),
     ]
-    assert not hasattr(instances[0], "name")
-    assert instances[0].effective_prim_path == "/World/Robots/work_arm"
+    assert instances[0].effective_prim_path == "/World/Robots/left_arm"
 
 
-def test_robot_instances_reordering_changes_ids_not_explicit_labels() -> None:
+def test_typed_robot_instance_reordering_changes_ids_not_labels() -> None:
     first = _instance("profile_a", label="robot_a")
     second = _instance("profile_b", label="robot_b")
 
-    original = robot_instances_from_env_config({"robots": [first, second]})
-    reordered = robot_instances_from_env_config({"robots": [second, first]})
+    original = robot_scene_instances_from_settings((first, second))
+    reordered = robot_scene_instances_from_settings((second, first))
 
     assert [(item.robot_id, item.label) for item in original] == [
         (0, "robot_a"),
@@ -67,31 +68,33 @@ def test_robot_instances_reordering_changes_ids_not_explicit_labels() -> None:
     ]
 
 
-def test_robot_instances_reject_configured_id_duplicate_identity_and_path() -> None:
-    configured_id = _instance("profile_a")
-    configured_id["robot_id"] = 7
-    with pytest.raises(ValueError, match=r"robots\[0\]\.robot_id.*generated"):
-        robot_instances_from_env_config({"robots": [configured_id]})
+def test_typed_robot_instance_factory_rejects_unparsed_values() -> None:
+    with pytest.raises(TypeError, match="RobotInstanceSettings"):
+        robot_scene_instances_from_settings(({"label": "robot"},))  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="Duplicate robot label"):
-        robot_instances_from_env_config(
-            {
-                "robots": [
-                    _instance("profile_a", label="duplicate"),
-                    _instance("profile_b", label="duplicate"),
-                ]
-            }
-        )
 
-    with pytest.raises(ValueError, match="Duplicate robot prim path"):
-        robot_instances_from_env_config(
-            {
-                "robots": [
-                    _instance("profile_a", label="a", prim_path="/World/Same"),
-                    _instance("profile_b", label="b", prim_path="/World/Same"),
-                ]
-            }
-        )
+@pytest.mark.parametrize(
+    "kwargs",
+    (
+        {"robot_id": True},
+        {"robot_id": -1},
+        {"label": "unsafe/name"},
+        {"prim_path": "World/Robot"},
+        {"prim_path": "/World/Robot/"},
+    ),
+)
+def test_robot_scene_instance_rejects_invalid_typed_identity(
+    kwargs: dict[str, object],
+) -> None:
+    values: dict[str, object] = {
+        "robot_profile": "profile_a",
+        "root_pose": RootPoseConfig(),
+        "robot_id": 0,
+        "label": "robot_a",
+    }
+    values.update(kwargs)
+    with pytest.raises(ValueError):
+        RobotSceneInstanceConfig(**values)  # type: ignore[arg-type]
 
 
 def test_robot_and_object_instance_paths_cannot_share_or_nest_prim_trees() -> None:
@@ -134,29 +137,13 @@ def test_same_domain_instance_paths_cannot_nest_prim_trees(
         )
 
 
-@pytest.mark.parametrize(
-    "prim_path", ["World/Robot", "", "/", "/World/Robot/", "/World//Robot"]
-)
-def test_robot_instances_reject_invalid_prim_path(prim_path: str) -> None:
-    with pytest.raises(ValueError, match=r"robots\[0\]\.prim_path"):
-        robot_instances_from_env_config(
-            {"robots": [_instance("profile_a", label="robot_a", prim_path=prim_path)]}
-        )
-
-
-def test_robot_instances_empty_requires_explicit_allow_empty() -> None:
-    with pytest.raises(ValueError, match="robots cannot be empty"):
-        robot_instances_from_env_config({"robots": []})
-    assert robot_instances_from_env_config({"robots": []}, allow_empty=True) == ()
-
-
 def test_robot_execution_applies_instance_label_and_prim_path() -> None:
-    profile = load_profile_yaml("robot", "ar5v2_l6v1_l")
-    instance = robot_instances_from_env_config(
-        {"robots": [_instance("ar5v2_l6v1_l", label="robot_a")]}
+    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    instance = robot_scene_instances_from_settings(
+        (_instance("ar5v2_l6v1_l", label="robot_a"),)
     )[0]
 
-    execution = RobotExecutionConfig.from_mapping(profile, scene_instance=instance)
+    execution = RobotExecutionConfig.from_profile(profile, scene_instance=instance)
 
     assert execution.robot.name == "robot_a"
     assert execution.robot.prim_path == "/World/Robots/robot_a"
@@ -164,39 +151,39 @@ def test_robot_execution_applies_instance_label_and_prim_path() -> None:
 
 
 def test_robot_execution_requires_scene_instance() -> None:
-    profile = load_profile_yaml("robot", "ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
 
     with pytest.raises(TypeError, match="scene_instance"):
-        RobotExecutionConfig.from_mapping(profile)  # type: ignore[call-arg]
+        RobotExecutionConfig.from_profile(profile)  # type: ignore[call-arg]
 
 
 def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -> None:
-    profile = load_profile_yaml("robot", "ar5v2_l6v1_l")
-    profile["robot"]["controller_profile"] = "robot_bundle"
-
-    instance_override = robot_instances_from_env_config(
-        {
-            "robots": [
-                _instance(
-                    "ar5v2_l6v1_l",
-                    label="instance_override",
-                    controller_profile="instance_bundle",
-                )
-            ]
-        }
+    profile = replace(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        controller_profile="robot_bundle",
+    )
+    instance_override = robot_scene_instances_from_settings(
+        (
+            _instance(
+                "ar5v2_l6v1_l",
+                label="instance_override",
+                controller_profile="instance_bundle",
+            ),
+        )
     )[0]
-    execution = RobotExecutionConfig.from_mapping(
-        profile, scene_instance=instance_override
+    execution = RobotExecutionConfig.from_profile(
+        profile,
+        scene_instance=instance_override,
     )
     assert (
         resolve_controller_profile(instance_override, execution.robot, "runtime_bundle")
         == "instance_bundle"
     )
 
-    robot_override = robot_instances_from_env_config(
-        {"robots": [_instance("ar5v2_l6v1_l", label="robot_override")]}
+    robot_override = robot_scene_instances_from_settings(
+        (_instance("ar5v2_l6v1_l", label="robot_override"),)
     )[0]
-    execution = RobotExecutionConfig.from_mapping(
+    execution = RobotExecutionConfig.from_profile(
         profile, scene_instance=robot_override
     )
     assert (
@@ -204,9 +191,10 @@ def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -
         == "robot_bundle"
     )
 
-    profile["robot"].pop("controller_profile")
-    execution = RobotExecutionConfig.from_mapping(
-        profile, scene_instance=robot_override
+    default_profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    execution = RobotExecutionConfig.from_profile(
+        default_profile,
+        scene_instance=robot_override,
     )
     assert (
         resolve_controller_profile(robot_override, execution.robot, "runtime_bundle")
@@ -216,15 +204,10 @@ def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -
 
 @pytest.mark.parametrize("value", ("../escape", "nested/bundle", ""))
 def test_robot_instance_rejects_unsafe_controller_profile(value: str) -> None:
-    with pytest.raises(ValueError, match=r"robots\[0\]\.controller_profile"):
-        robot_instances_from_env_config(
-            {
-                "robots": [
-                    _instance(
-                        "ar5v2_l6v1_l",
-                        label="robot_a",
-                        controller_profile=value,
-                    )
-                ]
-            }
+    with pytest.raises(ValueError, match="controller_profile"):
+        RobotSceneInstanceConfig(
+            robot_profile="ar5v2_l6v1_l",
+            root_pose=RootPoseConfig(),
+            label="robot_a",
+            controller_profile=value,
         )

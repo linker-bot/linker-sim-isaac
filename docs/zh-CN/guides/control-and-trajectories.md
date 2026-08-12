@@ -1,201 +1,86 @@
-# 控制与轨迹选择指南
+# 控制、轨迹与 Action
 
 语言：[中文](control-and-trajectories.md) | [English](../../en/guides/control-and-trajectories.md)
 
-本文帮助应用用户选择正确的控制与轨迹路径，不重新定义消息字段。精确 schema 见
-[Single Scene JSON 参考](../reference/single-scene-json.md)和
-[Tiled Scene JSON 参考](../reference/tiled-scene-json.md)。
+Mirror 面向业务 motion；Kaleidoscope 面向固定 shape RL action。两者不共享 command envelope。只有
+Mirror 拥有 control profile；Kaleidoscope action 语义来自 task，默认 controller bundle 由 physics 派生。
 
-## 选择执行路径
+## Mirror
 
-| 需求 | 使用 | Runtime |
-| --- | --- | --- |
-| 对一个机器人/group 保持、移动关节或执行采样关节曲线 | Single Scene 单 segment 命令 | Single Scene |
-| 让多个机器人和 arm/hand group 在共同 tick 轴上启动 | `plan_timeline` | Single Scene |
-| 通过关节空间或 task space 规划一个 Single Scene arm 目标 | Single Scene planning segment | Single Scene |
-| 对 selected clone env row 应用固定 tick 命令 | `step` | Tiled Scene |
-| 载入已有轨迹并由调用方显式推进 | `load_trajectory` 后接 `step_trajectory` | Tiled Scene |
-| 追加按名称选择的稀疏 hand subtrack | `hand` | Tiled Scene |
-| 不阻塞 physics 地规划，检查完成后再载入和回放 | `plan`、`planner_status`、`step_trajectory` | Tiled Scene |
+Mirror controller 在 owner thread 执行 10 类 motion operation。Timeline 把多个 robot track 编译到
+共同整数 tick；每个 tick 所有 target 写入后只推进一次 physics。Joint trajectory 必须带明确 joint
+顺序和时间，cancel/estop 在每个 tick 检查。
 
-Single Scene timeline 与 Tiled Scene playback 解决不同的同步问题。Single Scene 在执行前原子编译全部 track，并在一次
-World step 前应用所有机器人 target。Tiled Scene playback 为每个 robot/env row 持有队列，只在调用方发送
-`step_trajectory` 时推进。
+v1 的 20 项 operation 保持冻结；v2 增加 `control.get_mode`、`control.set_mode` 与
+`motion.joint_effort`。完整可解析请求维护在
+[Mirror JSON 与运动示例](../reference/mirror-json.md)。
 
-## Command Space 与关节顺序
+Position/velocity/effort 能力由 controller profile 和 backend capability 共同决定。名称 mapping
+允许只写部分 group joints；flat 列表则必须完整覆盖 group，并按 robot profile 的 `joint_groups`
+顺序解释，绝不依赖 articulation 内部 DOF 顺序。IK/规划细节见[运动规划](motion-planning.md)。
+wire planning segment 可覆盖 `duration_s`、`sample_dt_s`、`avoid_collisions` 和
+`force_collision_refresh`；`coordination` 只能在单 segment wrapper 或 timeline 顶层覆盖。`timeout_s`
+不是 wire 字段，每次规划始终读取 `planning.request_defaults.timeout_s`。cuRobo
+`kinematics.max_batch_size` 只属于 IK；Mirror MotionPlanner 固定单请求，同时由单独的
+`profiles.curobo` 持有 warmup、seed、CUDA graph、碰撞能力和 cache 容量。
 
-公开关节向量不是任意 articulation 数组：
+`control.sync_simulation_to_wall_clock` 只控制执行 pacing，不做轨迹重定时。开启后，idle hold 与 motion
+timeline 使用同一个墙钟 deadline 序列；启动或 reset 后的第一 tick 立即执行，后续 tick 只等待剩余的
+physics 间隔。tick 落后时会从当前时间重定位，不会突发补跑。关闭后两条路径都不执行墙钟 sleep，但
+physics dt 保持不变。`idle_physics_policy: pause` 仍会停止仿真时间，因为此时没有 physics tick 可同步。
 
-- Single Scene group 向量遵循 `status.robots[].joint_groups.arm` 或 `.hand`。
-- Tiled Scene command 向量遵循 `status.robots[].command_joints`。
-- Planning 向量遵循所选 backend 的 planning-joint 顺序。
-- `JointTrajectory` 的列顺序严格由 `joint_names` 定义。
+## 运行时关节控制模式
 
-请求有意控制子集时，优先使用名称 mapping 或 `joint_names`。Tiled Scene `step` 的 prefix action 写入前
-`D` 个 command column，其余 target 保持不变。Controller/runtime 负责把 active command joint 扩展
-到 mimic follower；除非接口明确要求，client 不应单独发送 follower target。
+关节控制模式不是 action variant。Mirror v2 与原生 `TorchKaleidoscopeEnv` 可在一次完整运动/decision
+结束后、下一次开始前，把全部 robot/env 一起切换到 `position`、`velocity` 或 `effort`。切换不会重建
+session、physics runtime、robot view、action term、task、IK 或 planner；运动执行中及 SAME_STEP
+事务未完成时拒绝切换。
 
-旋转关节位置单位为 rad，移动关节位置单位为 m；速度使用对应单位每秒。Effort 量纲由 PhysX
-关节类型决定。
+Mirror 的 position/velocity 模式可执行位置型 timeline；effort 模式只允许 hold 与显式、受 profile
+限幅的 effort segment。真实切换使 generation 加一；幂等切换不写 engine，也不增加 generation。
+切换先中和旧通道，再事务式应用全部 controller profile，最后写新通道 neutral：position 使用当前 q，
+velocity/effort 使用零。前向失败且完整补偿后仍可使用旧模式；补偿失败则永久 fail-stop，必须 close
+并由调用方重建。
 
-## Single Scene Timeline 模型
+## 混合力/位控制
 
-Single Scene 使用固定层级：
+专用 `physx_cpu_hybrid` Mirror profile 以 240 Hz 运行。一条
+`motion.hybrid_force_position` 执行期间，目标 robot 的全部 arm joint 临时使用 direct effort drive；
+`force_axes=false` 的笛卡尔方向执行显式位姿阻抗（`Kp/Kd`），`force_axes=true` 的方向执行显式力 PI
+（`Kf/Ki`）。hand 继续使用 position/implicit，其它 robot 保持原模式。不能在 arm 上把某个笛卡尔
+方向的 implicit position drive 与另一个方向的 explicit effort drive 直接混用，因为 PhysX drive mode
+属于 joint，不属于笛卡尔轴。
 
-```text
-timeline
-  robot track                 从全局 tick 0 并行
-    motion unit               同一机器人内串行
-      arm/hand group track    同一 unit 内并行
-        segment               同一 group 内串行
-```
+`force_axes` 属于每条 motion request，相邻运动可选择不同方向。六组增益是运行时 tuning 状态；Mirror
+v3 把 `control.get_hybrid_parameters`、`control.set_hybrid_parameters` 与 motion 放在同一 owner queue。
+motion 必须携带 `hybrid_parameter_generation`，并在 preflight 时冻结唯一一份不可变增益 snapshot；后续
+更新不能改变正在运行的 loop，下一条 motion 必须使用更新结果的新 generation。filter、contact、sensor、
+effort/rate/displacement 等安全限幅仍由 YAML 固定，不允许通过 wire 修改。
 
-一个 unit 在最长 group track 结束时结束，较短 group 保持末端 target；整条 timeline 在最长 robot
-track 结束时结束。编译是原子的：任一规划或校验失败都会阻止全部 track 启动。
+运动前还必须为相同 robot、物理 TCP 和 world frame 成功执行 `control.tare_wrench`。PhysX raw feedback
+采用 environment-on-tool；减 tare、滤波后再换号，对 target、result、CSV 与 telemetry 暴露统一的
+tool-on-environment 语义。reset 会失效 tare。正常完成、cancel 或异常都会先把 effort 渐降到零，再恢复
+原 position controller，并以最终实测关节位置 handover；恢复失败是 fatal，必须关闭并重建 runtime。
 
-最小协同请求：
+## Kaleidoscope
 
-```json
-{
-  "type": "plan_timeline",
-  "id": "arm-and-hand",
-  "tracks": [
-    {
-      "robot_id": 0,
-      "units": [
-        {
-          "group_tracks": [
-            {
-              "group": "arm",
-              "segments": [
-                {
-                  "kind": "joint_goal",
-                  "joint_positions": {"AR5V2_L_arm_joint_1": 0.2},
-                  "duration_s": 0.5
-                }
-              ]
-            },
-            {
-              "group": "hand",
-              "segments": [
-                {"kind": "hold", "duration_s": 0.5}
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+Action 是 `(num_envs, action_dim)` float32 CUDA tensor，全部 env 同步推进固定
+`physics_ticks_per_action`。Canonical task 使用 `joint_control`；其 position 分支保持原 joint-delta
+累加语义，velocity 分支输出有界 rad/s，effort 分支按 controller profile limit 的配置比例输出。
+已有 `joint_delta` 与 EE/linear variant 支持 position 及 position reference 的有界速度差分，但拒绝
+effort。action variant 在构造期冻结，切换 control mode 不改变 action shape 或 tick 数。
 
-单 track 使用 Single Scene 单 segment 命令；只要需求包含同 tick 协同，就使用 `plan_timeline`。分别发送
-多条 JSONL 请求不会让它们同时开始。
+Kaleidoscope 没有 Python trajectory list、逐 env playback queue 或异步 planner。固定 tick target buffer
+在同一 GPU 上预分配，step 内不做 CPU selector、JSON parsing 或动态 action mode 切换。
 
-## Tiled Scene 同步 `step`
+Gymnasium、skrl 与 `KaleidoscopeTrainingPort` 不暴露 mode setter，训练 rollout 固定使用初始 position
+语义。Schema 2 snapshot 记录 mode 与来源 generation；restore 不自动切换 mode，只能恢复到相同 active
+mode，且不会回退 runtime generation。
 
-`step` 会完成 target 转换并推进固定 physics tick 后再返回。所有 env-scoped 请求都显式提供
-`env_ids`；多机器人场景还必须提供该接口要求的 robot selector。
+## Hold 与 reset
 
-```json
-{
-  "type": "step",
-  "kind": "joint_delta_pos",
-  "robot_id": 0,
-  "env_ids": [0, 1],
-  "values": [[0.05, 0.0], [-0.05, 0.0]],
-  "decimation": 4,
-  "interpolation": "smoothstep"
-}
-```
+Mirror `motion.hold` 保持当前 target，`runtime.reset` 可清 queue 并在 reset 后 hold。Kaleidoscope done
+行由 `reset_idx` 或 training SAME_STEP handshake 重置；失败 action 行 hold 并产生 mask/penalty。
 
-闭环 policy 根据最新观测生成下一 target 时使用 `step`。Joint action 支持绝对/相对 command-space
-prefix。末端 action 使用 batch IK；`ee_linear_path` 会在第一次 physics 写入前算完全部 waypoint。
-
-所有 env 共享同一个 World step，因此未选 env 也会在保持最新 target 的同时推进时间。
-
-## Tiled Scene Trajectory Buffer
-
-已有轨迹采样，或异步 planner 结果需要稍后回放时使用 buffer：
-
-1. `load_trajectory` 原子校验并 stage 全部 selected row。
-2. `step_trajectory` 按显式 physics tick 推进 playback。
-3. `trajectory_status` 返回 active、queued、completed、capacity 和 rejection 数据。
-4. `clear_trajectory` 删除 selected robot/env entry。
-
-Buffer 按 env 限制 queue depth、sample 数和 duration。`replace` 只校验 replacement sequence；append
-校验 existing 与 new 的总和。容量不足会拒绝完整 selected-env load，不会淘汰 active trajectory。
-
-`hand` 是稀疏 named-joint 便利接口，可以追加 hand subtrack，并在 playback 真正开始时避免覆盖 arm
-末端。它不能替代 Single Scene 中同 tick 的 arm/hand timeline。
-
-## Tiled Scene 异步规划
-
-异步请求具有独立的 planning 与 playback 生命周期：
-
-```text
-plan submission
-  -> queued planner request
-  -> planner_status dispatch/collect
-  -> optional atomic playback load
-  -> step_trajectory playback
-```
-
-`plan` 只入队。`planner_status` 和 `step_trajectory` 会 dispatch/collect ready work。
-`load_on_success=true` 的成功结果只有在 buffer admission 通过后才会载入。必须同时检查 `ready`、
-`loaded` 和 `load_rejected`；planner success 不代表 playback 一定有容量。
-
-取消和 completed-result 管理应使用 request ID。Reset、状态恢复等重叠 mutation 会取消受影响
-robot/env row 的 stale planning work。
-
-## 时间与插值
-
-- Single Scene 将 `duration_s` 转成 `ceil(duration_s / physics_dt)` 个 tick。
-- Single Scene `sample_dt_s` 控制 planning grid，不改变 World physics dt。
-- Tiled Scene joint `step` 使用正整数 `decimation` physics tick。
-- Tiled Scene `ee_linear_path` 接受逻辑 `duration_s` 或显式 `decimation`，两者不能同时提供。
-- Tiled Scene trajectory 多采样数据的时间必须有限且严格递增。
-- `linear` 使用均匀 progress；`smoothstep` 平滑 progress，但不改变请求的几何端点。
-
-响应中的实际 tick 数是权威结果。不要用 wall clock 推导完成，也不要假设十进制 duration 能被
-physics dt 整除。
-
-## Frame、Orientation 与 TCP
-
-公开位置单位为 m，四元数顺序统一为 `wxyz`。Frame 字段由具体接口定义：
-
-- Single Scene task-space 命令显式声明 `world`、`env`、`robot_base` 或文档规定的 offset frame。
-- Tiled Scene 同步 named end-effector target 解析 `env`、`base` 或 `world`。
-- Tiled Scene 异步 linear pose goal 直接使用 robot-base-local，不接受 `pose_reference_frame` 字段。
-
-`free` 只约束位置，`current` 保持起始姿态，`target` 必须提供目标四元数。通过 status 确认机器人注册
-的 `tcp_frame_name`，不要从 link 名称推断 TCP。
-
-## 控制模式
-
-Single Scene controller profile 可以按 component 配置 position、velocity 或 effort 控制，以及对应支持的
-implicit、explicit 或 direct method；所选 runtime mode 与 controller bundle 必须一致。Tiled Scene runtime
-只接受 position control，velocity 或 effort 会在配置解析时被拒绝。
-
-Mimic follower 始终是 controller 所有的 position drive。Planning 通常只针对 arm group；hand motion
-使用 direct command-space control。
-
-## 失败与恢复
-
-- 被拒绝的 JSON 请求不会产生 command mutation。
-- Single Scene timeline 在执行前全量原子编译。
-- Tiled Scene `reject_request` IK policy 会在 selected robot target 或 physics 写入前拒绝。
-- Tiled Scene `hold_failed_env` 保留失败 row 的最后成功 target，并返回诊断。
-- 轨迹载入失败不会只填充部分 selected env buffer。
-- Fail-stop runtime 会拒绝后续 mutation；应重建 runtime，而不是重试控制。
-
-使用与所选生命周期对应的 `status`、`trajectory_status` 或 `planner_status`。Submission response 只证明
-admission，不证明执行终态。
-
-## 相关文档
-
-- [Single Scene JSON 参考](../reference/single-scene-json.md)
-- [Tiled Scene JSON 参考](../reference/tiled-scene-json.md)
-- [运动规划](motion-planning.md)
-- [配置](configuration.md)
-- [已知约束](../operations/constraints.md)
+继续阅读：[Mirror JSON 与运动示例](../reference/mirror-json.md)及
+[运动规划](motion-planning.md)。

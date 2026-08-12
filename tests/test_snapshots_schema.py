@@ -3,17 +3,19 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from linkerbot_sim.snapshots import (
-    ObjectSnapshot,
+from linkerbot_sim.snapshots.compatibility import (
     ObjectTargetDescriptor,
-    RobotSnapshot,
     RobotTargetDescriptor,
-    SimulationSnapshot,
     SnapshotCompatibilityError,
-    SnapshotMetadata,
     SnapshotTargetDescriptor,
     check_snapshot_compatibility,
     require_snapshot_compatibility,
+)
+from linkerbot_sim.snapshots.schema import (
+    ObjectSnapshot,
+    RobotSnapshot,
+    SceneSnapshot,
+    SnapshotMetadata,
 )
 
 
@@ -38,9 +40,9 @@ def _robot(
 
 
 def test_snapshot_round_trips_json_mapping() -> None:
-    snapshot = SimulationSnapshot(
+    snapshot = SceneSnapshot(
         metadata=SnapshotMetadata(
-            source_runtime="tiled_scene",
+            source_runtime="mirror",
             source_env_id=0,
             step=12,
             time_s=0.5,
@@ -72,18 +74,27 @@ def test_snapshot_round_trips_json_mapping() -> None:
                     [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
                     dtype=float,
                 ),
+                generalized_signature=(
+                    "newton-generalized-state-v1",
+                    "joint=@root/body0;type=4;q_width=7;qd_width=6",
+                ),
+                generalized_q_names=tuple(f"root.q[{index}]" for index in range(7)),
+                generalized_qd_names=tuple(f"root.qd[{index}]" for index in range(6)),
+                generalized_q=np.asarray([0.3, 0.0, -0.4, 0.0, 0.0, 0.0, 1.0]),
+                generalized_qd=np.asarray([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+                generalized_world_origin=np.asarray([2.0, 0.0, 0.0]),
             )
         },
     )
 
     payload = snapshot.as_dict()
-    restored = SimulationSnapshot.from_mapping(payload)
+    restored = SceneSnapshot.from_mapping(payload)
 
-    assert payload["schema"] == "linkerbot.snapshot"
+    assert payload["schema"] == "linkerbot.scene-snapshot.v1"
     assert isinstance(payload["robots"], list)
     assert payload["robots"][0]["robot_id"] == 3
     assert "role" not in payload["robots"][0]
-    assert restored.metadata.source_runtime == "tiled_scene"
+    assert restored.metadata.source_runtime == "mirror"
     assert restored.robots["workcell_robot"].robot_profile == "arm_hand"
     np.testing.assert_allclose(
         restored.robots["workcell_robot"].joint_positions, [0.1, 0.2]
@@ -92,19 +103,33 @@ def test_snapshot_round_trips_json_mapping() -> None:
         restored.objects["block"].orientations_wxyz,
         [1.0, 0.0, 0.0, 0.0],
     )
+    assert restored.objects["block"].generalized_signature == (
+        "newton-generalized-state-v1",
+        "joint=@root/body0;type=4;q_width=7;qd_width=6",
+    )
+    np.testing.assert_array_equal(
+        restored.objects["block"].generalized_q,
+        [0.3, 0.0, -0.4, 0.0, 0.0, 0.0, 1.0],
+    )
+    np.testing.assert_array_equal(
+        restored.objects["block"].generalized_world_origin,
+        [2.0, 0.0, 0.0],
+    )
 
 
 def test_snapshot_reader_rejects_invalid_schema_shape_and_fields() -> None:
     with pytest.raises(ValueError, match="unsupported snapshot schema"):
-        SimulationSnapshot.from_mapping({"schema": "another.snapshot", "robots": []})
+        SceneSnapshot.from_mapping({"schema": "another.snapshot", "robots": []})
     with pytest.raises(ValueError, match="snapshot.schema is required"):
-        SimulationSnapshot.from_mapping({"robots": []})
+        SceneSnapshot.from_mapping({"robots": []})
     with pytest.raises(ValueError, match="robots must be an array"):
-        SimulationSnapshot.from_mapping({"schema": "linkerbot.snapshot", "robots": {}})
+        SceneSnapshot.from_mapping(
+            {"schema": "linkerbot.scene-snapshot.v1", "robots": {}}
+        )
     with pytest.raises(ValueError, match="unsupported fields"):
-        SimulationSnapshot.from_mapping(
+        SceneSnapshot.from_mapping(
             {
-                "schema": "linkerbot.snapshot",
+                "schema": "linkerbot.scene-snapshot.v1",
                 "robots": [
                     {
                         "unexpected_identity": "robot",
@@ -159,8 +184,44 @@ def test_object_snapshot_requires_body_pose_when_body_names_present() -> None:
         )
 
 
+def test_object_snapshot_generalized_fields_are_grouped_and_old_payload_stays_valid() -> (
+    None
+):
+    with pytest.raises(ValueError, match="must be provided together"):
+        ObjectSnapshot(
+            name="rope",
+            positions_local=np.zeros(3),
+            orientations_wxyz=np.asarray([1.0, 0.0, 0.0, 0.0]),
+            generalized_signature=("abi",),
+            generalized_q_names=("q",),
+            generalized_qd_names=("qd",),
+            generalized_q=np.asarray([0.0]),
+        )
+    with pytest.raises(ValueError, match="generalized_q.*finite"):
+        ObjectSnapshot(
+            name="rope",
+            positions_local=np.zeros(3),
+            orientations_wxyz=np.asarray([1.0, 0.0, 0.0, 0.0]),
+            generalized_signature=("abi",),
+            generalized_q_names=("q",),
+            generalized_qd_names=("qd",),
+            generalized_q=np.asarray([np.nan]),
+            generalized_qd=np.asarray([0.0]),
+        )
+
+    old = ObjectSnapshot.from_mapping(
+        {
+            "name": "legacy_rope",
+            "positions_local": [0.0, 0.0, 0.0],
+            "orientations_wxyz": [1.0, 0.0, 0.0, 0.0],
+        }
+    )
+    assert old.generalized_q is None
+    assert "generalized_q" not in old.as_dict()
+
+
 def test_compatibility_matches_label_and_allows_joint_reordering() -> None:
-    snapshot = SimulationSnapshot(
+    snapshot = SceneSnapshot(
         robots={
             "robot_a": _robot(
                 "robot_a",
@@ -173,7 +234,7 @@ def test_compatibility_matches_label_and_allows_joint_reordering() -> None:
         }
     )
     target = SnapshotTargetDescriptor(
-        runtime_kind="single_scene",
+        runtime_kind="mirror",
         robots={
             "robot_a": RobotTargetDescriptor(
                 label="robot_a",
@@ -194,12 +255,44 @@ def test_compatibility_matches_label_and_allows_joint_reordering() -> None:
     np.testing.assert_array_equal(mapping.joints.target_indices, [0, 1])
 
 
+def test_non_strict_joint_subset_is_reported_as_partial() -> None:
+    snapshot = SceneSnapshot(
+        robots={
+            "robot": RobotSnapshot(
+                label="robot",
+                robot_id=0,
+                joint_names=("j0",),
+                joint_positions=np.asarray([0.1]),
+                joint_velocities=np.asarray([0.2]),
+                command_joint_names=("j0",),
+                command_targets=np.asarray([0.3]),
+            )
+        }
+    )
+    target = SnapshotTargetDescriptor(
+        runtime_kind="mirror",
+        robots={
+            "robot": RobotTargetDescriptor(
+                label="robot",
+                joint_names=("j0", "j1"),
+                command_joint_names=("j0", "j1"),
+            )
+        },
+    )
+
+    result = require_snapshot_compatibility(snapshot, target, strict=False)
+
+    assert result.partial is True
+    assert result.robot_mappings["robot"].joints.names == ("j0",)
+    assert result.robot_mappings["robot"].command_joints is not None
+
+
 def test_compatibility_rejects_profile_mismatch() -> None:
-    snapshot = SimulationSnapshot(
+    snapshot = SceneSnapshot(
         robots={"robot": _robot("robot", 0, robot_profile="arm-a")}
     )
     target = SnapshotTargetDescriptor(
-        runtime_kind="single_scene",
+        runtime_kind="mirror",
         robots={
             "robot": RobotTargetDescriptor(
                 label="robot", robot_profile="arm-b", joint_names=("j0",)
@@ -214,9 +307,9 @@ def test_compatibility_rejects_profile_mismatch() -> None:
 
 
 def test_compatibility_requires_exact_label_or_explicit_label_map() -> None:
-    snapshot = SimulationSnapshot(robots={"source": _robot("source", 0)})
+    snapshot = SceneSnapshot(robots={"source": _robot("source", 0)})
     target = SnapshotTargetDescriptor(
-        runtime_kind="single_scene",
+        runtime_kind="mirror",
         robots={"target": RobotTargetDescriptor(label="target", joint_names=("j0",))},
     )
 
@@ -232,9 +325,9 @@ def test_compatibility_requires_exact_label_or_explicit_label_map() -> None:
 
 
 def test_compatibility_rejects_duplicate_label_map_targets() -> None:
-    snapshot = SimulationSnapshot(robots={"a": _robot("a", 0), "b": _robot("b", 1)})
+    snapshot = SceneSnapshot(robots={"a": _robot("a", 0), "b": _robot("b", 1)})
     target = SnapshotTargetDescriptor(
-        runtime_kind="single_scene",
+        runtime_kind="mirror",
         robots={"target": RobotTargetDescriptor(label="target", joint_names=("j0",))},
     )
 
@@ -247,7 +340,7 @@ def test_compatibility_rejects_duplicate_label_map_targets() -> None:
 
 
 def test_compatibility_checks_dynamic_body_names() -> None:
-    snapshot = SimulationSnapshot(
+    snapshot = SceneSnapshot(
         robots={"robot": _robot("robot", 0)},
         objects={
             "rope": ObjectSnapshot(
@@ -264,7 +357,7 @@ def test_compatibility_checks_dynamic_body_names() -> None:
         },
     )
     target = SnapshotTargetDescriptor(
-        runtime_kind="single_scene",
+        runtime_kind="mirror",
         robots={"robot": RobotTargetDescriptor(label="robot", joint_names=("j0",))},
         objects={
             "rope": ObjectTargetDescriptor(name="rope", body_names=("body1", "body0")),
@@ -277,3 +370,35 @@ def test_compatibility_checks_dynamic_body_names() -> None:
     assert body_mapping is not None
     assert body_mapping.names == ("body1", "body0")
     np.testing.assert_array_equal(body_mapping.source_indices, [1, 0])
+
+
+def test_non_strict_body_subset_is_reported_as_partial() -> None:
+    snapshot = SceneSnapshot(
+        robots={},
+        objects={
+            "rope": ObjectSnapshot(
+                name="rope",
+                positions_local=np.zeros(3),
+                orientations_wxyz=np.asarray([1.0, 0.0, 0.0, 0.0]),
+                body_names=("body1",),
+                body_positions_local=np.asarray([[0.2, 0.0, 0.0]]),
+                body_orientations_wxyz=np.asarray([[1.0, 0.0, 0.0, 0.0]]),
+            )
+        },
+    )
+    target = SnapshotTargetDescriptor(
+        runtime_kind="mirror",
+        robots={},
+        objects={
+            "rope": ObjectTargetDescriptor(
+                name="rope",
+                body_names=("body0", "body1"),
+            )
+        },
+    )
+
+    result = require_snapshot_compatibility(snapshot, target, strict=False)
+
+    assert result.partial is True
+    assert result.object_mappings["rope"].bodies is not None
+    assert result.object_mappings["rope"].bodies.names == ("body1",)

@@ -175,6 +175,7 @@ class FoxgloveTopicConfig:
     joint_states: str = "/joint_states"
     scene: str = "/scene"
     state: str = "/linkerbot/state"
+    hybrid_control: str = "/linkerbot/mirror/hybrid_control"
 
 
 class FoxgloveLogger:
@@ -209,6 +210,9 @@ class FoxgloveLogger:
             self.topics.state,
             message_encoding="json",
         )
+        # Hybrid diagnostics are optional. Creating this channel only on the
+        # first publish keeps a disabled modality absent from live/MCAP output.
+        self.hybrid_control_channel = None
 
     @classmethod
     def open_mcap(
@@ -373,6 +377,24 @@ class FoxgloveLogger:
 
         self.state_channel.log(
             dict(state), log_time=None if time_s is None else _ns_time(time_s)
+        )
+
+    def log_hybrid_control_json(
+        self,
+        diagnostics: Mapping[str, object],
+        *,
+        time_s: float | None = None,
+    ) -> None:
+        """按需创建并写入混合力/位控制诊断 JSON channel。"""
+
+        if self.hybrid_control_channel is None:
+            self.hybrid_control_channel = self.foxglove.Channel(
+                self.topics.hybrid_control,
+                message_encoding="json",
+            )
+        self.hybrid_control_channel.log(
+            dict(diagnostics),
+            log_time=None if time_s is None else _ns_time(time_s),
         )
 
     def log_scene_spheres(

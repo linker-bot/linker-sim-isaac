@@ -14,65 +14,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from linkerbot_sim.objects.physics import (
-    ObjectMaterialConfig,
-    optional_mapping,
-    optional_non_negative_int,
-    optional_positive_int,
+from linkerbot_sim.assets.robot_import import (
+    prepare_session_newton_render_reference_asset,
 )
+from linkerbot_sim.assets.root_pose import RootPoseConfig
+from linkerbot_sim.configuration.objects import (
+    CapsuleRopePhysicsConfig,
+    ObjectMaterialConfig,
+    ObjectPhysxMaterialConfig,
+)
+from linkerbot_sim.isaac.physics.backend import (
+    active_physics_backend,
+    normalize_physics_backend,
+)
+from linkerbot_sim.objects.physics import apply_root_pose_to_prim
 from linkerbot_sim.utils.paths import repo_path
-
-
-@dataclass(frozen=True)
-class CapsuleRopePhysicsConfig:
-    """``src`` 运行时需要读取并写入当前 stage 的绳体物理属性。"""
-
-    material: ObjectMaterialConfig | None = None
-    solver_position_iterations: int | None = None
-    solver_velocity_iterations: int | None = None
-
-    @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None, *, label: str
-    ) -> "CapsuleRopePhysicsConfig":
-        """解析 capsule rope 运行时物理覆盖。"""
-
-        if data is None:
-            return cls()
-        allowed = {
-            "material",
-            "solver_position_iterations",
-            "solver_velocity_iterations",
-        }
-        unsupported = set(data) - allowed
-        if unsupported:
-            paths = ", ".join(f"{label}.{key}" for key in sorted(unsupported))
-            raise ValueError(f"unsupported configuration field(s): {paths}")
-        return cls(
-            material=ObjectMaterialConfig.from_mapping(
-                optional_mapping(data, "material", label),
-                label=f"{label}.material",
-            ),
-            solver_position_iterations=optional_positive_int(
-                data, "solver_position_iterations", label
-            ),
-            solver_velocity_iterations=optional_non_negative_int(
-                data, "solver_velocity_iterations", label
-            ),
-        )
-
-    def has_overrides(self) -> bool:
-        """返回是否有任何需要写入 stage 的运行时物理覆盖。"""
-
-        return (
-            self.material is not None
-            or self.solver_position_iterations is not None
-            or self.solver_velocity_iterations is not None
-        )
 
 
 @dataclass(frozen=True)
@@ -85,36 +44,6 @@ class CapsuleRopeConfig:
     prim_path: str = "/World/CapsuleRope"
     root_path: str = "/CapsuleRope"
     physics: CapsuleRopePhysicsConfig = CapsuleRopePhysicsConfig()
-
-    @classmethod
-    def from_mapping(cls, data: Mapping[str, object]) -> "CapsuleRopeConfig":
-        """从 ``configs/objects/*.yaml`` 映射构造绳体运行时对象配置。"""
-
-        if not isinstance(data, Mapping):
-            raise ValueError("capsule rope profile must be a mapping")
-        canonical = dict(data)
-        if "object" not in canonical:
-            raise ValueError(
-                "Capsule rope config must contain top-level object section"
-            )
-        if not isinstance(canonical["object"], Mapping):
-            raise ValueError("object section must be a mapping")
-        unsupported_top_level = sorted(str(key) for key in canonical if key != "object")
-        if unsupported_top_level:
-            paths = ", ".join(f"profile.{key}" for key in unsupported_top_level)
-            raise ValueError(f"unsupported configuration field(s): {paths}")
-
-        object_cfg = dict(canonical["object"])
-        _reject_generation_fields(object_cfg, label="object")
-        return cls(
-            asset_path=str(object_cfg.get("asset_path", cls.asset_path)),
-            prim_path=str(object_cfg.get("prim_path", cls.prim_path)),
-            root_path=str(object_cfg.get("root_path", cls.root_path)),
-            physics=CapsuleRopePhysicsConfig.from_mapping(
-                optional_mapping(object_cfg, "physics", "object"),
-                label="object.physics",
-            ),
-        )
 
     def asset_file(self) -> Path:
         """返回引用绳体 USD 资产时使用的绝对路径。"""
@@ -152,7 +81,14 @@ def collect_rope_model_prims(stage, root_path: str) -> dict[str, object]:
     return {"root": root, "segments": segments, "joints": joints, "bodies": bodies}
 
 
-def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, object]:
+def add_capsule_rope_reference(
+    stage,
+    config: CapsuleRopeConfig,
+    *,
+    physics_backend: object,
+    root_pose: RootPoseConfig | None = None,
+    prepare_newton_render_topology: bool = False,
+) -> dict[str, object]:
     """把已生成的 capsule rope USD 资产引用到当前 stage。"""
 
     from pxr import Sdf, UsdGeom
@@ -164,31 +100,85 @@ def add_capsule_rope_reference(stage, config: CapsuleRopeConfig) -> dict[str, ob
             f"Capsule rope asset does not exist: {asset_path}. "
             "Run tools/object_assets/flexible/rope/build_asset.py to generate it."
         )
+    backend = _resolved_physics_backend(physics_backend)
+    if prepare_newton_render_topology:
+        if backend != "newton":
+            raise RuntimeError(
+                "Newton render topology intent requires physics_backend='newton'"
+            )
+        if not isinstance(root_pose, RootPoseConfig):
+            raise TypeError(
+                "Newton render capsule rope requires a resolved RootPoseConfig"
+            )
+        # 先在离线 wrapper 中冻结所有 segment/body 的最终 world-matrix op，避免
+        # AddReference 后 Hydra 短暂观察源资产的 translate/scale xformOpOrder。
+        reference_asset = prepare_session_newton_render_reference_asset(
+            asset_path,
+            source_path=config.root_path,
+            root_pose=root_pose,
+            physics_backend=backend,
+        )
+    else:
+        reference_asset = asset_path
     prim_path = Sdf.Path(config.prim_path)
     rope_xform = UsdGeom.Xform.Define(stage, prim_path)
-    rope_xform.GetPrim().GetReferences().AddReference(str(asset_path))
+    if root_pose is not None and prepare_newton_render_topology:
+        apply_root_pose_to_prim(
+            stage,
+            str(prim_path),
+            root_pose,
+            prepare_newton_render_topology=True,
+        )
+    if (
+        not rope_xform.GetPrim()
+        .GetReferences()
+        .AddReference(str(reference_asset), config.root_path)
+    ):
+        raise RuntimeError(
+            "Failed to reference capsule rope USD root: "
+            f"{reference_asset}:{config.root_path}"
+        )
+    if root_pose is not None and not prepare_newton_render_topology:
+        apply_root_pose_to_prim(stage, str(prim_path), root_pose)
     return collect_rope_model_prims(stage, str(prim_path))
 
 
 def apply_capsule_rope_runtime_physics(
-    stage, config: CapsuleRopeConfig
+    stage,
+    config: CapsuleRopeConfig,
+    *,
+    physics_backend: object | None = None,
 ) -> dict[str, int]:
     """按 object profile 对已引用的 capsule rope 写入运行时物理覆盖。"""
 
-    from pxr import PhysxSchema, Sdf, Usd, UsdPhysics, UsdShade
+    backend = _resolved_physics_backend(physics_backend)
+
+    from pxr import Sdf, Usd, UsdPhysics, UsdShade
+
+    # 后端 leaf 在这里一次性裁剪；Newton 后续逻辑不会读取任何 PhysX 配置。
+    physx_config = config.physics.physx if backend == "physx" else None
+    physx_material = physx_config.material if physx_config is not None else None
+    physx_solver = physx_config.solver if physx_config is not None else None
+    if physx_solver is not None:
+        from pxr import PhysxSchema
 
     root = stage.GetPrimAtPath(Sdf.Path(config.prim_path))
     if not root.IsValid():
         raise RuntimeError(
             f"Cannot apply capsule rope physics; prim not found: {config.prim_path}"
         )
-    counts = {"collision_prims": 0, "rigid_bodies": 0}
+    counts = {
+        "collision_prims": 0,
+        "rigid_bodies": 0,
+    }
     material = None
-    if config.physics.material is not None:
+    if config.physics.material is not None or physx_material is not None:
         material = _define_runtime_material(
             stage,
             Sdf.Path(config.prim_path).AppendPath("RuntimePhysicsMaterial"),
             config.physics.material,
+            physx_material_config=physx_material,
+            physics_backend=backend,
         )
 
     for prim in Usd.PrimRange(root):
@@ -203,10 +193,7 @@ def apply_capsule_rope_runtime_physics(
 
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
-        if (
-            config.physics.solver_position_iterations is None
-            and config.physics.solver_velocity_iterations is None
-        ):
+        if physx_solver is None:
             counts["rigid_bodies"] += 1
             continue
         rigid_api = (
@@ -214,89 +201,56 @@ def apply_capsule_rope_runtime_physics(
             if prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI)
             else PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
         )
-        if config.physics.solver_position_iterations is not None:
+        if physx_solver.position_iterations is not None:
             rigid_api.CreateSolverPositionIterationCountAttr().Set(
-                int(config.physics.solver_position_iterations)
+                int(physx_solver.position_iterations)
             )
-        if config.physics.solver_velocity_iterations is not None:
+        if physx_solver.velocity_iterations is not None:
             rigid_api.CreateSolverVelocityIterationCountAttr().Set(
-                int(config.physics.solver_velocity_iterations)
+                int(physx_solver.velocity_iterations)
             )
         counts["rigid_bodies"] += 1
     return counts
 
 
-def _define_runtime_material(stage, path, config: ObjectMaterialConfig):
-    """在 stage 中创建绳体运行时物理材质 prim。"""
+def _define_runtime_material(
+    stage,
+    path,
+    config: ObjectMaterialConfig | None,
+    *,
+    physx_material_config: ObjectPhysxMaterialConfig | None = None,
+    physics_backend: object | None = None,
+):
+    """把通用字段与当前 PhysX leaf 写入同一个绳体物理材质。"""
 
-    from pxr import PhysxSchema, UsdPhysics, UsdShade
+    backend = _resolved_physics_backend(physics_backend)
+    if backend != "physx":
+        physx_material_config = None
+    from pxr import UsdPhysics, UsdShade
+
+    if physx_material_config is not None:
+        from pxr import PhysxSchema
 
     material = UsdShade.Material.Define(stage, path)
     prim = material.GetPrim()
     material_api = UsdPhysics.MaterialAPI.Apply(prim)
-    if config.static_friction is not None:
+    if config is not None and config.static_friction is not None:
         material_api.CreateStaticFrictionAttr().Set(float(config.static_friction))
-    if config.dynamic_friction is not None:
+    if config is not None and config.dynamic_friction is not None:
         material_api.CreateDynamicFrictionAttr().Set(float(config.dynamic_friction))
-    if config.restitution is not None:
+    if config is not None and config.restitution is not None:
         material_api.CreateRestitutionAttr().Set(float(config.restitution))
-    if config.friction_combine_mode is not None:
+    if physx_material_config is not None:
         physx_material_api = PhysxSchema.PhysxMaterialAPI.Apply(prim)
         physx_material_api.CreateFrictionCombineModeAttr().Set(
-            config.friction_combine_mode
+            physx_material_config.friction_combine_mode
         )
     return material
 
 
-def _reject_generation_fields(data: Mapping[str, object], *, label: str) -> None:
-    """拒绝把资产生成期字段写进运行时 object profile。"""
+def _resolved_physics_backend(value: object | None) -> str:
+    """解析显式后端；省略时读取 Isaac 当前 active engine。"""
 
-    generation_fields = {
-        "segments",
-        "length",
-        "radius",
-        "center",
-        "shape",
-        "total_mass",
-        "endpoint_box_mass",
-        "endpoint_box_size",
-        "endpoint_linear_damping",
-        "endpoint_angular_damping",
-        "segment_linear_damping",
-        "segment_angular_damping",
-        "bend_limit",
-        "bend_limit_deg",
-        "bend_stiffness",
-        "bend_damping",
-        "lock_twist",
-        "twist_limit",
-        "twist_limit_deg",
-        "twist_stiffness",
-        "twist_damping",
-        "disable_adjacent_collisions",
-        "endpoint_color",
-        "rope_color",
-        "env_static_friction",
-        "env_dynamic_friction",
-        "env_restitution",
-    }
-    intrinsic = set(data) & generation_fields
-    if intrinsic:
-        names = ", ".join(sorted(intrinsic))
-        raise ValueError(
-            f"{label} contains asset-generation field(s): {names}; "
-            "move them to tools/object_assets/flexible/rope"
-        )
-    unsupported = set(data) - {
-        "name",
-        "kind",
-        "source",
-        "asset_path",
-        "prim_path",
-        "root_path",
-        "physics",
-        "state_summary",
-    }
-    if unsupported:
-        names = ", ".join(sorted(unsupported))
-        raise ValueError(f"{label} contains unsupported keys: {names}")
+    return (
+        active_physics_backend() if value is None else normalize_physics_backend(value)
+    )

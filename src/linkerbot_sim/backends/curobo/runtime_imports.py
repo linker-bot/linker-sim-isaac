@@ -57,6 +57,22 @@ def import_torch_module():
         ) from exc
 
 
+def require_curobo_kernel_backend(expected: str = "cuda_core") -> str:
+    """触发 cuRobo kernel backend 选择，并拒绝意外的 pybind 回退。"""
+
+    try:
+        module = importlib.import_module("curobo._src.curobolib.backends")
+        get_backend_name = getattr(module, "get_backend_name")
+        actual = str(get_backend_name())
+    except Exception as exc:
+        raise RuntimeError("failed to resolve cuRobo kernel backend") from exc
+    if actual != str(expected):
+        raise RuntimeError(
+            f"cuRobo kernel backend is {actual!r}; expected {expected!r}"
+        )
+    return actual
+
+
 def ensure_torch_device_usable(torch_module: object, device: str) -> None:
     """在构建 context 前用一个 tensor kernel 验证目标 CUDA device。"""
 

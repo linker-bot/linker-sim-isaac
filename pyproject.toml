@@ -7,11 +7,11 @@ backend-path = ["."]
 name = "linkerbot-sim"
 version = "0.3.0"
 description = "Isaac Sim manipulation utilities for AR5 and LinkerHand L6 experiments"
-requires-python = ">=3.11,<3.12"
+requires-python = "==3.12.*"
 dependencies = [
-  "numpy==1.26.0",
-  "PyYAML==6.0.2",
-  "scipy==1.15.3",
+  "numpy>=2,<3",
+  "PyYAML==6.0.3",
+  "scipy==1.17.0",
   "websockets==12.0",
 ]
 
@@ -20,39 +20,41 @@ dev = [
   "coverage==7.4.4",
   "pytest==9.1.1",
   "ruff==0.15.21",
+  # CPU-only USD tests use PyPI USD. Never combine this extra with simulation:
+  # Isaac runtime must load pxr from Kit's isaacsim-kernel distribution.
   "usd-core==26.5",
 ]
 visualization = [
   "foxglove-sdk==0.25.2",
 ]
+training = [
+  # Gymnasium is deliberately kept at the NumPy process boundary. Native
+  # Kaleidoscope and skrl paths exchange CUDA tensors directly.
+  "gymnasium==1.3.0",
+  "skrl[torch]==2.1.0",
+]
 simulation = [
   # Core simulator, its offline extension cache, and matching PyTorch release.
-  "isaacsim[all,extscache]==5.1.0.0",
-  "packaging==23.0",
-  "torch==2.7.0",
-  "torchvision==0.22.0",
-  "torchaudio==2.7.0",
-
-  # The published Linux isaacsim-core wheel requires these exact versions;
-  # declare them explicitly because index-side metadata is less restrictive.
-  "filelock==3.13.1",
-  "fsspec==2024.6.1",
-  "networkx==3.3",
-  # trimesh[easy] otherwise selects chardet>=6, which requests 2.32 rejects.
-  "chardet==5.2.0",
+  "isaacsim[all,extscache]==6.0.1.0",
+  # isaacsim-core pins this release candidate; declaring it directly lets uv
+  # admit the exact candidate without enabling unrelated pre-release packages.
+  "tinyobjloader==2.0.0rc13",
+  "torch==2.11.0",
+  "torchvision==0.26.0",
+  "torchaudio==2.11.0",
+  # GPU memory acceptance reads the simulator process through the official
+  # CUDA NVML bindings; keep this a direct dependency instead of relying on
+  # cuRobo's transitive CUDA toolchain.
+  "cuda-bindings[all]==12.9.7",
 
   # PyPI's nvidia-curobo 0.1 is an unrelated placeholder package. Pin the
-  # immutable v0.8.0 commit; the installed Python import name is `curobo`.
-  "nvidia-curobo @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
-
-  # cuRobo runtime compilation. Keep the validated CUDA 13 combination
-  # instead of using cuRobo's cu12-torch extra.
-  "cuda-bindings==13.3.1",
-  "cuda-core==1.0.1",
+  # immutable v0.8.0 commit. Its cu12 extra selects the cuda-core CUDA 12
+  # runtime compilation stack while Torch remains pinned to Isaac's cu128 build.
+  "nvidia-curobo[cu12] @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
 
   # Runtime libraries used outside the Kit-managed Python path as well.
-  "usd-core==26.5",
-  "warp-lang==1.15.0",
+  # Isaac Sim 6.0.1's Newton 1.2.1 dependency requires Warp 1.13.x.
+  "warp-lang==1.13.0",
 ]
 
 [tool.uv]
@@ -61,13 +63,6 @@ package = false
 # NVIDIA publishes Linux Isaac wheels separately from PyPI. Searching both
 # trusted indexes is required because the placeholder metadata differs.
 index-strategy = "unsafe-best-match"
-# Match the dependency metadata embedded in NVIDIA's installed Linux wheel;
-# index-side metadata for the same isaacsim-core version pins newer releases.
-override-dependencies = [
-  "filelock==3.13.1",
-  "fsspec==2024.6.1",
-  "networkx==3.3",
-]
 environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]

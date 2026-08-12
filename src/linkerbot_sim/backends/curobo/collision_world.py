@@ -2,10 +2,10 @@
 
 cuRobo 的 collision world 更新入口是 ``solver.update_world(SceneCfg)``，公开 API 不暴露
 World/WorldView/ObstacleHandle 增量对象。因此本模块采用“按当前规划快照重建 SceneCfg，
-再整体推送给 IK / MotionPlanner / BatchMotionPlanner”的策略。
+再整体推送给 IK / MotionPlanner”的策略。
 
-这比逐 obstacle handle 复杂度低，也更贴近 cuRobo 的公开 API。后续如果需要 tiled
-``multi_env=True`` 的每 env 不同障碍物，可以在这个模块上扩展成 scene list / env-indexed
+这比逐 obstacle handle 复杂度低，也更贴近 cuRobo 的公开 API。后续如果需要 replicated
+    ``multi_env=True`` 的每 env 不同障碍物，可以在这个模块上扩展成 scene list / env-indexed
 SceneCfg，而不影响上层 context API。
 """
 
@@ -34,12 +34,6 @@ class CuroboCollisionWorld:
         self.update_solvers()
 
     @property
-    def num_enabled_obstacles(self) -> int:
-        """返回 materialize 后真实进入 checker 的 obstacle 数量。"""
-
-        return sum(materialized_obstacle_counts(self.scene_cfg).values())
-
-    @property
     def num_canonical_obstacles(self) -> int:
         """返回启用的后端无关输入 obstacle 数量。"""
 
@@ -59,7 +53,7 @@ class CuroboCollisionWorld:
         self.update_solvers()
 
     def update_solvers(self) -> None:
-        """把当前 SceneCfg 同步给 IK、单轨迹 planner 和 batch planner。
+        """把当前 SceneCfg 同步给已创建的 IK 与单轨迹 planner。
 
         基础 URDF fallback 通常没有 collision spheres，也可能没有创建
         ``scene_collision_checker``。这种情况下调用 cuRobo ``update_world`` 会在后端内部访问
@@ -72,7 +66,7 @@ class CuroboCollisionWorld:
             if callable(solver_provider)
             else tuple(
                 getattr(self.context, name, None)
-                for name in ("ik_solver", "motion_planner", "batch_motion_planner")
+                for name in ("ik_solver", "motion_planner")
             )
         )
         for solver in solvers:

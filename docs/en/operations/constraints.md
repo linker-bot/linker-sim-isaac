@@ -1,71 +1,131 @@
-# Known Risks And Design Constraints
+# Runtime Constraints
 
 Language: [English](constraints.md) | [中文](../../zh-CN/operations/constraints.md)
 
-This document defines the current runtime, resource, configuration, and safety
-boundaries.
+These constraints are product contracts, not temporary tuning advice.
 
-## Runtime And Resource Boundaries
+## Shared Constraints
 
-- Execution code plays already-generated targets or trajectories. It does not perform IK or planning during physics-step playback.
-- cuRobo backend code operates in cuRobo C-space. Full articulation command-space mapping belongs to runtime/controller layers.
-- Mimic follower expansion belongs to controller/runtime logic, not the cuRobo backend.
-- In Tiled Scene, `TiledCommandAdapter` is a synchronous command-step adapter. Graph search and trajectory optimization belong to async planner workers or backend planning layers.
-- Reset, `set_state`, and snapshot restore capture rollback state before the first write. An incomplete rollback or a failure after an irreversible cache/queue reset makes the runtime fail-stop; rebuild it instead of issuing more mutations.
-- Shutdown closes transport and publisher threads before planner/camera/IK resources and closes the SimulationApp last. A timeout is an incomplete shutdown, and a live child resource retains ownership of its sink or runtime dependency so shutdown can be retried.
+- Run from the checkout with Python 3.12 and the pinned dependency graph.
+- Accept the Isaac EULA before process startup.
+- Keep `usd-core` out of the Isaac environment so it cannot shadow Kit's `pxr`.
+- Validate the complete mode graph before creating Kit, physics, or CUDA resources.
+- An `IsaacSession` is the only owner allowed to close its app, stage, and concrete
+  physics runtime.
+- Lengths use metres, angles use radians, and public quaternions use `wxyz`.
+- Joint column order comes from explicit names/discovery, never asset-file accident.
 
-## Threading Boundaries
+## Mirror Constraints
 
-- Isaac stage, articulation, PhysX views, and camera wrappers are accessed only on the main simulation thread.
-- Background threads may publish serialized snapshots, write files, or serve transport responses.
-- Foxglove and camera output consume data captured on the main thread; their publisher threads do not access Isaac objects directly.
+- One `MirrorRuntime` owns one reality-mapped world and one session. The world may
+  contain several robots and objects.
+- Supported physics variants are PhysX CPU, Newton CPU, and Newton CUDA. Both Newton
+  compositions derive exactly one world; CPU physics still retains the root CUDA device
+  for cuRobo and RTX.
+- Isaac, USD, physics, camera, and planner access stays on the owner thread.
+- Ingress threads may parse JSON, enqueue work, and wait for owned responses only.
+- Admission is bounded and request IDs remain unique while retained in terminal
+  history.
+- Motion cancellation is cooperative and does not imply rollback.
+- Emergency stop freezes idle physics and blocks new motion until reset.
+- Runtime control mode switches apply to every robot and are legal only between complete
+  motion requests. Mirror v1 has no mode operations; v2 effort motion is direct and
+  profile-limited.
+- A mode-switch rollback failure is permanent fail-stop state. Reset cannot clear it;
+  close and recreate the runtime.
+- Hybrid force/position control is limited to Mirror PhysX CPU at the configured
+  minimum 200 Hz (the maintained profile uses 240 Hz), one selected robot per request,
+  a physical TCP binding, and `reference_frame: world`. The selected arm uses explicit
+  effort control on every joint; its position axes are explicit Cartesian impedance,
+  not implicit per-axis joint drives. Hand position drives and other robots are not
+  overridden.
+- Hybrid gains may change only as a separate owner-queued operation between complete
+  motions. Every motion freezes one `hybrid_parameter_generation`; `force_axes` is
+  selected independently by each motion. Filter and safety limits are not wire-tunable.
+- Hybrid motion requires a current tare generation. Reset invalidates tare. A controller
+  restore failure is permanent fail-stop state and requests runtime shutdown.
+- Output/camera/planner resources must stop before controllers/views and before the
+  session. A timeout preserves the live owner.
+- A Newton robot profile maps per-component `gravity: false` to body-frequency
+  `mjc:gravcomp=1` before model finalization. Runtime per-link gravity switching is
+  unsupported; changing that policy requires rebuilding the runtime.
 
-## Config Boundaries
+## Kaleidoscope Constraints
 
-- Robot placement belongs in env profiles, not robot profiles.
-- Robot model resources for cuRobo belong in robot profiles.
-- Planner algorithm defaults belong in `configs/curobo/`.
-- Object asset identity, import options, physics, and planning collision belong in object profiles; per-scene placement belongs in env profiles.
-- Runtime process, resource, transport, telemetry, output, and shutdown policies belong in runtime profiles; env profiles do not accept those fields.
-- This checkout is a workspace application. Distribution and editable builds are intentionally rejected because configs, scripts, assets, and vendored task resources are required at runtime.
+- Accepted backends are PhysX CUDA/Fabric and the project's multi-world Newton
+  runtime. Both training compositions are headless and GPU-native; either backend may
+  use the explicit single-environment debug viewport.
+- PhysX scene-query support is disabled; physical contact remains enabled. Newton
+  uses one isolated world per environment.
+- `mode.compute.cuda_device` is the only GPU-index fact.
+- State, actions, observations, rewards, done flags, reset buffers, snapshots, and
+  skrl rollout data remain on that CUDA device in the native path.
+- Explicit selectors are unique, in-range CUDA `int64` tensors on the same device.
+- Actions are finite CUDA `float32` with shape `(num_envs, action_dim)`.
+- A fixed task profile selects one action variant and one physics tick count.
+- The default training closure has no renderer. The explicit viewport closure still
+  has no camera, SyntheticData, Replicator, recording, transport, telemetry, batch
+  trajectory planner, planning collision world, avoidance service, or playback queue.
+- End-effector and linear modes must select a kinematics-only `profiles.curobo` with
+  collision checks disabled. The canonical profile omits
+  `kinematics.collision_cache`; a retained valid cache is ignored, so no collision
+  cache is allocated;
+  joint-only `joint_control` and `joint_delta` modes must omit that reference and
+  allocate no cuRobo context. Tasks do not select a numerical backend.
+- The action variant and action shape are construction-time facts. Native mode switches
+  affect all robots and environments, are legal only between complete decisions, and
+  are rejected while either SAME_STEP phase is outstanding.
+- Kaleidoscope starts in position mode. Gymnasium, skrl, and
+  `KaleidoscopeTrainingPort` do not expose the setter.
+- Snapshot restore never changes control mode. Schema 2 requires the same active mode;
+  schema 1 is position-only. Generation is not restored.
+- Native callers reset done rows before the next step. skrl uses the maintained
+  same-decision handshake.
+- An engine state-writer failure poisons the runtime; close and recreate it.
+- Viewport configuration is a launch-only object outside episode fingerprints. Only
+  `selected_env` is renderer-facing; training physics ticks stay `render=False`, and
+  explicit `env.render()` must not advance simulation time.
 
-## Fixed-Base Boundaries
+## Gymnasium Boundary
 
-- For a URDF rigid object, an omitted `import.fix_base` follows
-  `physics.static`: static objects import fixed and dynamic objects import
-  floating.
-- A fixed URDF object is not also frozen through kinematic rigid-body
-  overrides. A static object with explicit `import.fix_base: false` imports
-  floating and is then frozen through kinematic bodies with gravity disabled.
-- `physics.static: false` with `import.fix_base: true` is rejected because the
-  dynamic and fixed-base declarations conflict.
-- A static USD object is frozen through kinematic bodies with gravity disabled;
-  USD object references do not accept an `import` section.
+Gymnasium accepts NumPy and therefore performs host/device transfer every step. It is
+not a GPU-residency reference. Supported autoreset modes are `disabled` and
+`same_step`; the deferred mode is rejected.
 
-## Tiled Scene Constraints
+## GPU Capacity
 
-- All envs advance physics synchronously.
-- Env-specific commands update selected env target rows only; they do not pause other envs.
-- All tiled envs in one profile share the same robot/object set.
-- Per-env object differences are pose overrides for same-name objects.
+PhysX CUDA buffer sizes and Newton per-world contact/Jacobian capacities are fixed
+before runtime creation and cannot be assumed to grow safely. Newton derives
+`world_count` from the final mode-root `environments.num_envs`. The memory budget applies to the
+simulator process, not just Torch. Warm-up and steady-state gates must include the
+selected backend, representative environment count, contact load, task buffers, and
+any optional batch IK context.
 
-## Network And Telemetry Safety
+The `physics.memory` mapping in `configs/physics/physx/cuda.yaml` is the complete
+`GpuMemoryBudget`; all four fields are required:
 
-- Foxglove state streams are observation-only.
-- Built-in control, state, and camera listeners accept only `localhost` or a
-  numeric loopback address. They provide neither authentication nor TLS; remote
-  access requires an authenticated TLS proxy or SSH tunnel terminating on the
-  loopback endpoint.
-- Command ports, Foxglove state live ports, and camera live ports are distinct
-  services and must use separate ports.
-- Camera output ports are configured in env profiles, not in interactive state-stream CLI flags.
+| Field | Constraint |
+| --- | --- |
+| `max_simulator_process_mib` | Upper bound for memory attributed by NVML to the simulator PID, including Kit, PhysX, Torch, and native CUDA allocators |
+| `min_free_floor_mib` | Absolute free-device-memory floor at prelaunch, post-warmup, and steady-state samples |
+| `min_free_fraction_after_warmup` | Required free-device-memory fraction at post-warmup and both steady-state samples; range `(0, 1]` |
+| `max_steady_growth_mib` | Maximum simulator-PID growth from the steady baseline to steady final; zero is valid |
 
-## Verification
-
-Useful checks:
+This gate is specific to the Kaleidoscope `physx_cuda` profile; it does not replace Newton's
+capacity smoke. Probe failure, an invisible PID, or a budget violation fails closed.
+Run either the maintained recipe or its underlying entrypoint in an Isaac/CUDA
+environment:
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_tiled_*.py -q
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_env_profile_directory.py tests/test_controller_configs.py tests/test_robot_loader_import_config.py -q
-git diff --check
+just smoke-kaleidoscope-memory
+OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
+  scripts/smoke_physx_gpu_memory_budget.py \
+  --profile physx_cuda --num-envs 2 --warmup-steps 8 --steady-steps 16
 ```
+
+`just test-simulation` also runs the seven formal Kit closures, all four Mirror profiles,
+both Kaleidoscope backends, Newton capacity, and this memory gate. CPU `quality` does
+not start it implicitly.
+
+See [Troubleshooting](troubleshooting.md) and the
+[Configuration Reference](../reference/configuration.md).

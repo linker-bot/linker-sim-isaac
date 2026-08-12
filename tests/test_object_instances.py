@@ -1,137 +1,170 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from linkerbot_sim.objects.runtime import runtime_objects_from_env_config
-from linkerbot_sim.objects.config import (
+from linkerbot_sim.configuration.objects import (
+    CapsuleRopePhysicsConfig,
+    DynamicChainObjectProfileConfig,
     ObjectProfileConfig,
-    expanded_object_mapping,
-    load_object_profile,
-    object_scene_instances_from_env_config,
-    validate_object_profile,
+    RigidObjectPhysicsConfig,
+    RigidObjectPlanningCollisionConfig,
+    RigidObjectProfileConfig,
+    object_profile_from_mapping,
+)
+from linkerbot_sim.configuration.catalog import _ConfigurationGraphReader
+from linkerbot_sim.configuration.scenes import ObjectInstanceSettings
+from linkerbot_sim.objects import runtime as object_runtime
+from linkerbot_sim.objects.runtime import (
+    runtime_object_prim_path,
+    runtime_objects_from_settings,
 )
 from linkerbot_sim.utils.config import load_yaml
 
 
-def _instance(
-    name: str,
-    *,
-    profile: str = "fixture",
-    prim_path: str | None = None,
-    runtime_handle: str | None = None,
-) -> dict[str, object]:
-    result: dict[str, object] = {
-        "name": name,
-        "object_profile": profile,
-        "root_pose": {"xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0]},
-    }
-    if prim_path is not None:
-        result["prim_path"] = prim_path
-    if runtime_handle is not None:
-        result["runtime_handle"] = runtime_handle
-    return result
-
-
 def _profile() -> ObjectProfileConfig:
-    object_config: dict[str, object] = {
-        "name": "fixture",
-        "kind": "rigid",
-        "source": "usd",
-        "asset_path": "fixture.usd",
-    }
-    return ObjectProfileConfig.from_mapping(
-        {"object": object_config}, profile_name="fixture"
-    )
-
-
-def test_object_instances_use_explicit_or_name_derived_paths() -> None:
-    instances = object_scene_instances_from_env_config(
+    return object_profile_from_mapping(
         {
-            "objects": [
-                _instance("fixture_a"),
-                _instance("fixture_b", prim_path="/World/Fixtures/custom"),
-            ]
-        }
+            "object": {
+                "name": "fixture",
+                "kind": "rigid",
+                "source": "usd",
+                "asset_path": "fixture.usd",
+            }
+        },
+        profile_name="fixture",
     )
 
-    assert instances[0].prim_path is None
-    assert instances[0].default_prim_path == "/World/Objects/fixture_a"
-    assert instances[0].effective_prim_path == "/World/Objects/fixture_a"
-    assert instances[1].effective_prim_path == "/World/Fixtures/custom"
+
+def _instance(profile: ObjectProfileConfig | None = None) -> ObjectInstanceSettings:
+    parsed = ObjectInstanceSettings.from_mapping(
+        {
+            "name": "fixture",
+            "object_profile": "fixture",
+            "prim_path": "/World/Scene/Fixture",
+            "root_pose": {"xyz": [0.0, 0.0, 0.0], "rpy": [0.0, 0.0, 0.0]},
+        },
+        label="scene.objects[0]",
+    )
+    return replace(parsed, resolved_profile=profile)
 
 
-def test_dynamic_chain_profile_parses_reference_body_state_summary() -> None:
-    profile = ObjectProfileConfig.from_mapping(
+def _dynamic_profile() -> DynamicChainObjectProfileConfig:
+    profile = object_profile_from_mapping(
         {
             "object": {
                 "name": "rope",
                 "kind": "dynamic_chain",
                 "source": "usd",
                 "asset_path": "rope.usda",
+                "root_path": "/Rope",
                 "state_summary": {"reference_body": "left_box"},
-            },
+            }
         },
         profile_name="rope",
     )
-
-    assert profile.state_summary.reference_body == "left_box"
-
-
-def test_all_bundled_object_profiles_load_strictly() -> None:
-    for path in sorted(Path("configs/objects").glob("*.yaml")):
-        load_object_profile(path)
+    assert isinstance(profile, DynamicChainObjectProfileConfig)
+    return profile
 
 
-def test_object_example_fields_are_consumed_by_runtime_parsers() -> None:
-    profile = ObjectProfileConfig.from_profile("example")
+def test_all_bundled_object_profiles_parse_strictly() -> None:
+    paths = sorted(Path("configs/objects").glob("*.yaml"))
 
-    assert profile.kind == "dynamic_chain"
-    assert profile.source == "usd"
+    assert paths
+    for path in paths:
+        profile = object_profile_from_mapping(
+            load_yaml(path), profile_name=path.stem, source=str(path)
+        )
+        assert profile.profile_name == path.stem
+
+
+def test_rigid_profile_keeps_typed_import_physics_and_planning_settings() -> None:
+    path = Path("configs/objects/TblockV1_default.yaml")
+    profile = object_profile_from_mapping(
+        load_yaml(path), profile_name=path.stem, source=str(path)
+    )
+
+    assert isinstance(profile, RigidObjectProfileConfig)
+    assert isinstance(profile.physics, RigidObjectPhysicsConfig)
+    assert profile.physics.material is not None
+    assert profile.physics.material.static_friction == 0.8
+    assert isinstance(profile.planning_collision, RigidObjectPlanningCollisionConfig)
+    assert profile.planning_collision.shape == "cuboid"
+    assert not hasattr(profile, "raw")
+
+
+def test_capsule_rope_profile_keeps_typed_state_summary() -> None:
+    path = Path("configs/objects/capsule_rope.yaml")
+    profile = object_profile_from_mapping(
+        load_yaml(path), profile_name=path.stem, source=str(path)
+    )
+
+    assert isinstance(profile, DynamicChainObjectProfileConfig)
     assert profile.root_path == "/CapsuleRope"
     assert profile.state_summary.reference_body == "left_box"
-    assert profile.physics is not None
-    assert profile.physics["solver_position_iterations"] == 48
+    assert isinstance(profile.physics, CapsuleRopePhysicsConfig)
+    assert profile.physics.physx is not None
+    assert profile.physics.physx.material is not None
+    assert profile.physics.physx.material.friction_combine_mode == "average"
+    assert profile.physics.physx.solver is not None
+    assert profile.physics.physx.solver.position_iterations == 48
+    assert profile.physics.physx.solver.velocity_iterations == 4
 
 
-def test_object_profile_rejects_unknown_prim_path() -> None:
-    with pytest.raises(
-        ValueError,
-        match=r"object\.prim_path",
-    ):
-        validate_object_profile(
+def test_catalog_projects_object_profile_to_discriminated_type() -> None:
+    reader = _ConfigurationGraphReader(Path("configs"))
+
+    rigid = reader.object_profile(
+        instance_name="fixture",
+        reference="workstation_armbase",
+    )
+    chain = reader.object_profile(
+        instance_name="rope",
+        reference="capsule_rope",
+    )
+
+    assert isinstance(rigid, RigidObjectProfileConfig)
+    assert rigid.import_config.collision_approximation == "convex_decomposition"
+    assert isinstance(chain, DynamicChainObjectProfileConfig)
+    assert reader.sources["object.fixture"].name == "workstation_armbase.yaml"
+    assert reader.sources["object.rope"].name == "capsule_rope.yaml"
+
+
+def test_object_profile_rejects_scene_prim_path() -> None:
+    with pytest.raises(ValueError, match=r"object\.prim_path"):
+        object_profile_from_mapping(
             {
                 "object": {
                     "kind": "rigid",
                     "source": "usd",
                     "asset_path": "fixture.usd",
                     "prim_path": "/World/Fixture",
-                },
+                }
             },
+            profile_name="fixture",
             source="object.yaml",
         )
 
 
 @pytest.mark.parametrize(
-    "section",
-    ("import", "physics", "planning_collision", "state_summary"),
+    "section", ("import", "physics", "planning_collision", "state_summary")
 )
-def test_object_rejects_null_non_nullable_mapping_sections(section: str) -> None:
-    profile = {
-        "object": {
-            "kind": "rigid",
-            "source": "usd",
-            "asset_path": "fixture.usd",
-            section: None,
-        },
-    }
-
-    with pytest.raises(
-        ValueError,
-        match=rf"object\.{section} must be a mapping",
-    ):
-        validate_object_profile(profile, source="null-section.yaml")
+def test_object_rejects_null_mapping_sections(section: str) -> None:
+    with pytest.raises(ValueError, match=rf"object\.{section} must be a mapping"):
+        object_profile_from_mapping(
+            {
+                "object": {
+                    "kind": "rigid",
+                    "source": "usd",
+                    "asset_path": "fixture.usd",
+                    section: None,
+                }
+            },
+            profile_name="fixture",
+        )
 
 
 @pytest.mark.parametrize(
@@ -149,202 +182,234 @@ def test_object_rejects_null_non_nullable_mapping_sections(section: str) -> None
         ),
     ),
 )
-def test_object_rejects_nested_typos_with_complete_path(
-    mutation: dict[str, object], path: str
-) -> None:
+def test_object_rejects_nested_typos(mutation: dict[str, object], path: str) -> None:
     profile = load_yaml("configs/objects/TblockV1_default.yaml")
-    if "object" in mutation:
+    if "object" not in mutation:
+        profile.update(mutation)
+    else:
         object_mutation = mutation["object"]
         assert isinstance(object_mutation, dict)
         for key, value in object_mutation.items():
-            if isinstance(value, dict) and isinstance(profile["object"].get(key), dict):
-                profile["object"][key].update(value)
+            current = profile["object"].get(key)
+            if isinstance(value, dict) and isinstance(current, dict):
+                current.update(value)
             else:
                 profile["object"][key] = value
-    else:
-        profile.update(mutation)
 
     with pytest.raises(ValueError, match=path.replace(".", r"\.")):
-        validate_object_profile(profile, source="typo.yaml", profile_name="fixture")
+        object_profile_from_mapping(profile, profile_name="fixture", source="typo.yaml")
 
 
-@pytest.mark.parametrize(
-    ("profile", "path"),
-    (
-        (
-            {
-                "object": {
-                    "kind": "rigid",
-                    "source": "usd",
-                    "asset_path": "fixture.usd",
-                    "physics": {"static": "true"},
-                },
-            },
-            "object.physics.static",
-        ),
-        (
-            {
-                "object": {
-                    "kind": "rigid",
-                    "source": "usd",
-                    "asset_path": "fixture.usd",
-                    "physics": {"material": {"static_friction": "0.5"}},
-                },
-            },
-            "object.physics.material.static_friction",
-        ),
-        (
-            {
-                "object": {
-                    "kind": "rigid",
-                    "source": "usd",
-                    "asset_path": "fixture.usd",
-                    "physics": {"material": {"restitution": 1.1}},
-                },
-            },
-            "object.physics.material.restitution",
-        ),
-        (
-            {
-                "object": {
-                    "kind": "dynamic_chain",
-                    "source": "usd",
-                    "asset_path": "rope.usd",
-                    "root_path": "/Rope",
-                    "state_summary": {"reference_body": "body"},
-                    "physics": {"solver_position_iterations": 1.5},
-                },
-            },
-            "object.physics.solver_position_iterations",
-        ),
-    ),
-)
-def test_object_uses_strict_types_and_ranges(
-    profile: dict[str, object], path: str
-) -> None:
-    with pytest.raises(ValueError, match=path.replace(".", r"\.")):
-        validate_object_profile(profile, source="invalid.yaml")
-
-
-@pytest.mark.parametrize(
-    ("kind", "state_summary", "message"),
-    [
-        ("dynamic_chain", {"reference_body": "/Bodies/left"}, "body name"),
-        ("dynamic_chain", {"position_reduction": "mean"}, "unsupported"),
-        ("rigid", {"reference_body": "body"}, "only supported"),
-    ],
-)
-def test_object_profile_rejects_invalid_state_summary(
-    kind: str,
-    state_summary: dict[str, object],
-    message: str,
-) -> None:
-    with pytest.raises(ValueError, match=message):
-        ObjectProfileConfig.from_mapping(
-            {
-                "object": {
-                    "name": "object",
-                    "kind": kind,
-                    "source": "usd",
-                    "asset_path": "object.usda",
-                    "state_summary": state_summary,
-                },
-            },
-            profile_name="object",
-        )
-
-
-def test_dynamic_chain_profile_requires_reference_body() -> None:
+def test_dynamic_chain_requires_named_reference_body() -> None:
     with pytest.raises(ValueError, match=r"state_summary\.reference_body is required"):
-        ObjectProfileConfig.from_mapping(
+        object_profile_from_mapping(
             {
                 "object": {
                     "name": "rope",
                     "kind": "dynamic_chain",
                     "source": "usd",
                     "asset_path": "rope.usda",
-                },
+                    "root_path": "/Rope",
+                }
             },
             profile_name="rope",
         )
 
 
-def test_object_instances_reject_duplicate_identity_handle_and_path() -> None:
-    with pytest.raises(ValueError, match="Duplicate object name"):
-        object_scene_instances_from_env_config(
-            {"objects": [_instance("fixture"), _instance("fixture")]}
-        )
-
-    with pytest.raises(ValueError, match="Duplicate object runtime_handle"):
-        object_scene_instances_from_env_config(
+def test_dynamic_chain_requires_explicit_asset_root_path() -> None:
+    with pytest.raises(ValueError, match=r"object\.root_path is required"):
+        object_profile_from_mapping(
             {
-                "objects": [
-                    _instance("fixture_a", runtime_handle="target"),
-                    _instance("fixture_b", runtime_handle="target"),
-                ]
-            }
+                "object": {
+                    "name": "rope",
+                    "kind": "dynamic_chain",
+                    "source": "usd",
+                    "asset_path": "rope.usda",
+                    "state_summary": {"reference_body": "left_box"},
+                }
+            },
+            profile_name="rope",
         )
 
-    with pytest.raises(ValueError, match="Duplicate object prim path"):
-        object_scene_instances_from_env_config(
+
+def test_rigid_profile_rejects_conflicting_fixed_dynamic_semantics() -> None:
+    with pytest.raises(ValueError, match=r"fix_base=true conflicts"):
+        object_profile_from_mapping(
             {
-                "objects": [
-                    _instance("fixture_a", prim_path="/World/Fixtures/shared"),
-                    _instance("fixture_b", prim_path="/World/Fixtures/shared"),
-                ]
-            }
+                "object": {
+                    "name": "fixture",
+                    "kind": "rigid",
+                    "source": "urdf",
+                    "asset_path": "fixture.urdf",
+                    "import": {"fix_base": True},
+                    "physics": {"static": False},
+                }
+            },
+            profile_name="fixture",
         )
-
-    with pytest.raises(ValueError, match="runtime_handle.*conflicts"):
-        object_scene_instances_from_env_config(
-            {
-                "objects": [
-                    _instance("fixture_a", runtime_handle="fixture_b"),
-                    _instance("fixture_b"),
-                ]
-            }
-        )
-
-
-@pytest.mark.parametrize("name", ["", "fixture-a", "fixtures/a", "two words"])
-def test_object_instances_reject_names_that_cannot_form_prim_paths(name: str) -> None:
-    with pytest.raises(ValueError, match=r"objects\[0\]\.name"):
-        object_scene_instances_from_env_config({"objects": [_instance(name)]})
 
 
 @pytest.mark.parametrize(
-    "prim_path",
-    [None, "World/Fixture", "", "/", "/World//Fixture", "/World/Fixture/"],
+    "import_settings",
+    ({}, {"collision_approximation": "convex_hull"}),
 )
-def test_object_instances_reject_invalid_explicit_paths(prim_path: str | None) -> None:
-    item = _instance("fixture")
-    item["prim_path"] = prim_path
-    with pytest.raises(ValueError, match=r"objects\[0\]\.prim_path"):
-        object_scene_instances_from_env_config({"objects": [item]})
+def test_usd_object_profile_rejects_importer_settings(
+    import_settings: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="not supported for USD assets"):
+        object_profile_from_mapping(
+            {
+                "object": {
+                    "name": "fixture",
+                    "kind": "rigid",
+                    "source": "usd",
+                    "asset_path": "fixture.usda",
+                    "import": import_settings,
+                }
+            },
+            profile_name="fixture",
+        )
 
 
-def test_expanded_object_mapping_uses_instance_path() -> None:
-    instance = object_scene_instances_from_env_config(
-        {"objects": [_instance("fixture", prim_path="/World/Scene/Fixture")]}
-    )[0]
-    profile = _profile()
+def test_runtime_projection_requires_catalog_bound_profile() -> None:
+    unresolved = _instance()
+    with pytest.raises(TypeError, match="resolved ObjectProfileConfig"):
+        runtime_objects_from_settings((unresolved,))
 
-    expanded = expanded_object_mapping(instance, profile)
+    instance = replace(unresolved, resolved_profile=_profile())
+    runtime = runtime_objects_from_settings((instance,))[0]
 
-    assert expanded["prim_path"] == "/World/Scene/Fixture"
+    assert runtime.prim_path == "/World/Scene/Fixture"
 
 
-def test_runtime_object_keeps_resolved_path_separate_from_profile() -> None:
-    runtime_object = runtime_objects_from_env_config(
-        {
-            "objects": [
-                _instance(
-                    "fixture",
-                    profile="workstation_armbase",
-                    prim_path="/World/Scene/Fixture",
-                )
-            ]
-        }
-    )[0]
+def test_runtime_object_prim_path_prefers_canonical_stage_path() -> None:
+    handle = SimpleNamespace(
+        model=SimpleNamespace(
+            prim_path="/World/canonical",
+            imported_path="/World/imported",
+        ),
+        config=SimpleNamespace(prim_path="/World/configured"),
+    )
 
-    assert runtime_object.prim_path == "/World/Scene/Fixture"
+    assert runtime_object_prim_path(handle) == "/World/canonical"
+
+
+def test_runtime_object_prim_path_reads_dynamic_chain_root() -> None:
+    root = SimpleNamespace(GetPath=lambda: "/World/rope")
+
+    assert (
+        runtime_object_prim_path(SimpleNamespace(model={"root": root}, config=None))
+        == "/World/rope"
+    )
+
+
+@pytest.mark.parametrize(
+    ("profile", "factory_name"),
+    (
+        (_profile(), "_add_rigid_object"),
+        (_dynamic_profile(), "_add_capsule_rope_object"),
+    ),
+)
+def test_newton_object_import_prepares_render_topology_after_asset_author(
+    monkeypatch: pytest.MonkeyPatch,
+    profile: ObjectProfileConfig,
+    factory_name: str,
+) -> None:
+    events: list[object] = []
+    handle = SimpleNamespace(
+        model=SimpleNamespace(prim_path="/World/Object"),
+        config=None,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        factory_name,
+        lambda *_args, **_kwargs: events.append("asset_author") or handle,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        "prepare_newton_render_subtree",
+        lambda **kwargs: events.append(
+            ("render_topology", kwargs["stage"], kwargs["subtree_root"])
+        ),
+    )
+    stage = object()
+
+    actual = object_runtime.add_runtime_object(
+        stage,
+        config=SimpleNamespace(
+            kind=profile.kind,
+            source=profile.source,
+            name="object",
+            profile=profile,
+        ),
+        physics_backend="newton",
+        prepare_newton_render_topology=True,
+    )
+
+    assert actual is handle
+    assert events == [
+        "asset_author",
+        ("render_topology", stage, "/World/Object"),
+    ]
+
+
+def test_physx_object_import_does_not_author_newton_render_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handle = SimpleNamespace(
+        model=SimpleNamespace(prim_path="/World/Object"),
+        config=None,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        "_add_rigid_object",
+        lambda *_args, **_kwargs: handle,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        "prepare_newton_render_subtree",
+        lambda **_kwargs: pytest.fail("PhysX must not author Newton render topology"),
+    )
+
+    actual = object_runtime.add_runtime_object(
+        object(),
+        config=SimpleNamespace(
+            kind="rigid", source="usd", name="object", profile=_profile()
+        ),
+        physics_backend="physx",
+        prepare_newton_render_topology=False,
+    )
+
+    assert actual is handle
+
+
+def test_headless_newton_object_import_keeps_original_xform_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    handle = SimpleNamespace(
+        model=SimpleNamespace(prim_path="/World/Object"),
+        config=None,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        "_add_rigid_object",
+        lambda *_args, **_kwargs: handle,
+    )
+    monkeypatch.setattr(
+        object_runtime,
+        "prepare_newton_render_subtree",
+        lambda **_kwargs: pytest.fail(
+            "headless Newton must keep the asset xform topology"
+        ),
+    )
+
+    actual = object_runtime.add_runtime_object(
+        object(),
+        config=SimpleNamespace(
+            kind="rigid", source="usd", name="object", profile=_profile()
+        ),
+        physics_backend="newton",
+        prepare_newton_render_topology=False,
+    )
+
+    assert actual is handle

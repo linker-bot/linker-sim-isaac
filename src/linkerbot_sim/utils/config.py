@@ -6,7 +6,7 @@
 职责边界:
     * 读取 YAML 并保证顶层是 mapping。
     * 递归合并默认配置和用户覆盖配置。
-    * 提供常用的必填字段、嵌套 mapping 和路径读取 helper。
+    * 严格校验只允许本机监听的网络 host。
 
 错误统一抛 ``ValueError``/``FileNotFoundError``，让脚本入口决定如何展示。这里不把配置
 转换成具体 dataclass；各领域模块负责解释自己的字段含义和单位。
@@ -17,16 +17,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 import yaml
 from yaml.constructor import ConstructorError
 from yaml.nodes import MappingNode
 
 from linkerbot_sim.utils.paths import repo_path
-
-
-T = TypeVar("T")
 
 
 class _StrictSafeLoader(yaml.SafeLoader):
@@ -147,57 +144,3 @@ def deep_merge(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[str
         else:
             merged[key] = value
     return merged
-
-
-def require_mapping(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
-    """获取必需的嵌套 mapping。
-
-    参数:
-        config: 配置 mapping。
-        key: 需要读取的键。
-    返回:
-        ``config[key]``，类型保证为 ``Mapping``。
-    """
-
-    value = config.get(key)
-    if not isinstance(value, Mapping):
-        raise ValueError(f"Config key {key!r} must be a mapping")
-    return value
-
-
-def get_required(
-    config: Mapping[str, Any],
-    key: str,
-    expected_type: type[T] | tuple[type, ...] | None = None,
-) -> T:
-    """读取必需配置项，并可选校验类型。
-
-    参数:
-        config: 配置 mapping。
-        key: 必需键名。
-        expected_type: 可选类型或类型元组。
-    返回:
-        配置值；缺失或类型不匹配时抛出 ``ValueError``。
-    """
-
-    if key not in config:
-        raise ValueError(f"Missing required config key: {key}")
-    value = config[key]
-    if expected_type is not None and not isinstance(value, expected_type):
-        raise ValueError(
-            f"Config key {key!r} must be {expected_type}, got {type(value).__name__}"
-        )
-    return value  # type: ignore[return-value]
-
-
-def resolve_config_path(config: Mapping[str, Any], key: str) -> Path:
-    """读取配置路径并解析为绝对路径。
-
-    参数:
-        config: 配置 mapping。
-        key: 存放路径字符串的键名。
-    返回:
-        ``Path``；相对路径会按仓库根目录解析。
-    """
-
-    return repo_path(get_required(config, key, (str, Path)))

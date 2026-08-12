@@ -1,55 +1,39 @@
 inventory:
   source_root: src/linkerbot_sim
   source_python_glob: src/linkerbot_sim/**/*.py
-  source_python_count: 207
-  reviewed_on: 2026-07-12
+  source_python_count: 247
+  reviewed_on: 2026-07-15
   candidate_scan:
     engine: python_ast
     assignment_scope: module
     name_regex: ^_?[A-Z][A-Z0-9_]+$
-    reviewed_candidate_count: 75
-    reviewed_candidate_sha256: 032b1a7c3fff69dda00dfa0d94bf17cdb82c59694f88ca7fc37b08c4d04948f5
+    reviewed_candidate_count: 115
+    reviewed_candidate_sha256: fbea3bafacf37943333927a0a10a2c5d31168c5e4301e5551e54cb95b005dd8a
     review_dispositions:
       - yaml_or_request_owned
       - allowlisted_retained
   project_yaml_glob: configs/**/*.yaml
-  project_yaml_count: 42
-  third_party_task_glob: configs/curobo/task/**/*.yml
+  project_yaml_count: 36
+  third_party_task_glob: src/linkerbot_sim/backends/curobo/resources/task/**/*.yml
   third_party_task_count: 8
 
 # This file is an exception register, not a list of ordinary dataclass defaults.
 # Values already supplied by a strict current profile/request are deliberately absent.
 entries:
-  - id: single_scene_interactive_wire_vocabulary
-    path: src/linkerbot_sim/app/interactive/single_scene/protocol.py
-    symbol: _SINGLE_TRACK_WRAPPER_FIELDS and InteractiveMotionCommand wire defaults
+  - id: mirror_v1_wire_vocabulary
+    path: src/linkerbot_sim/mirror/interface/protocol.py
+    symbol: MIRROR_V1_OPERATIONS, MOTION_OPERATIONS, and _OUT_OF_BAND_OPERATIONS
     category: protocol_contract
     decision: retain_in_code
     reason: >-
-      Message names, reset/snapshot defaults, and request field ownership are the JSON
-      wire contract. Loading them from deployment YAML would let two
-      processes silently speak different protocols; request values remain configurable
-      in each JSON message instead.
-    owner: runtime-protocol
+      Mirror v1 的 operation 集合决定 wire 解析、主线程运动分派和可由 ingress 线程立即
+      执行的安全操作边界。它们必须随同一个协议版本发布，不能由部署 YAML 改写，否则
+      client、admission queue 与 controller 会对同一请求产生不一致的所有权判断。
+    owner: mirror-interface
     sites:
-      - app/interactive/single_scene/protocol.py:_SINGLE_TRACK_WRAPPER_FIELDS
-      - app/interactive/single_scene/queue.py:TERMINAL_COMMAND_STATES
-
-  - id: tiled_scene_interactive_wire_vocabulary
-    path: src/linkerbot_sim/app/interactive/tiled_scene/action_messages.py
-    symbol: CONTROL_MESSAGE_TYPES, _CONTROL_FIELDS, and _ENV_IDS_REQUIRED_MESSAGE_TYPES
-    category: protocol_contract
-    decision: retain_in_code
-    reason: >-
-      These sets define the canonical command vocabulary, each control command's
-      accepted fields, and which commands require an explicit environment selector.
-      They are protocol rules rather than simulation or deployment preferences, so
-      YAML must not alter them.
-    owner: runtime-protocol
-    sites:
-      - app/interactive/tiled_scene/action_messages.py:CONTROL_MESSAGE_TYPES
-      - app/interactive/tiled_scene/protocol.py:_CONTROL_FIELDS
-      - app/interactive/tiled_scene/protocol.py:_ENV_IDS_REQUIRED_MESSAGE_TYPES
+      - mirror/controller.py:_OUT_OF_BAND_OPERATIONS
+      - mirror/interface/protocol.py:MIRROR_V1_OPERATIONS
+      - mirror/motion/owner.py:MOTION_OPERATIONS
 
   - id: snapshot_schema_contract
     path: src/linkerbot_sim/snapshots/schema.py
@@ -62,6 +46,9 @@ entries:
       requires a coordinated snapshot writer and reader schema change, not a profile
       override.
     owner: state-and-snapshots
+    sites:
+      - snapshots/runtime_objects.py:COMMAND_TARGET_MODES_INFO_KEY
+      - snapshots/runtime_objects.py:_COMMAND_TARGET_MODES
 
   - id: quaternion_units_and_dimensions
     path: src/linkerbot_sim/utils/rotations.py
@@ -85,16 +72,12 @@ entries:
       experiment tolerances; user-facing IK/planning tolerances remain in cuRobo YAML.
     owner: simulation-core
     sites:
-      - app/motion/timeline/builders.py:duration_to_ticks
-      - app/motion/timeline/executor.py:execute_robot_timeline
-      - app/interactive/tiled_scene/command_utils.py:_action_decimation
-      - app/interactive/tiled_scene/transport.py:_runtime_idle_step_count
-      - tiled/playback/buffer.py:TiledTrajectoryBuffer.load
-      - tiled/playback/models.py:_Playback.sample
+      - mirror/motion/timeline/builders.py:duration_to_ticks
+      - mirror/motion/timeline/executor.py:execute_robot_timeline
       - trajectories/retiming.py:retime_joint_trajectory
       - sensors/camera/observer.py:CameraFrameObserver.observe
       - backends/curobo/linear_pose_path.py:_validate_line_start_position
-      - app/runtime/collision/registry.py:_geometry_fingerprint
+      - mirror/collision/registry.py:_geometry_fingerprint
       - utils/timing.py:differentiate_samples
 
   - id: urdf_mjcf_omitted_attribute_defaults
@@ -111,42 +94,72 @@ entries:
     sites:
       - robots/mimic/urdf.py:parse_urdf_joint_mimics
       - robots/mimic/mjcf.py:parse_mjcf_joint_equalities
-      - app/runtime/collision/urdf_kinematics.py:_UrdfKinematics.__init__
-      - app/runtime/collision/urdf_kinematics.py:_urdf_origin
-      - app/runtime/collision/urdf_kinematics.py:_urdf_axis
+      - mirror/collision/urdf_kinematics.py:_UrdfKinematics.__init__
+      - mirror/collision/urdf_kinematics.py:_urdf_origin
+      - mirror/collision/urdf_kinematics.py:_urdf_axis
 
   - id: usd_physx_schema_tokens
     path: src/linkerbot_sim/assets/usd_overrides.py
-    symbol: apply_physx_overrides USD/PhysX token and binding semantics
+    symbol: apply_robot_usd_overrides USD/PhysX token and binding semantics
     category: third_party_contract
     decision: retain_in_code
     reason: >-
       USD schema names, PhysX API tokens, material purpose, and binding strength are fixed
-      integration contracts. Robot physics values are YAML-owned, while the schema used to
+      integration contracts. Robot PhysX values are owned by robot.physics.physx, while the schema used to
       author those values must stay code-owned and version-tested.
     owner: assets-and-physics
 
-  - id: urdf_import_bootstrap_contract
-    path: src/linkerbot_sim/assets/robot_import.py
-    symbol: configure_urdf_import distance_scale, mimic parsing, and drive bootstrap seeds
+  - id: physx_gpu_pipeline_api_bindings
+    path: src/linkerbot_sim/isaac/physics/physx_pipeline.py
+    symbol: _GPU_BUFFER_BINDINGS and _FABRIC_OUTPUT_SETTING_PATHS
     category: third_party_contract
     decision: retain_in_code
     reason: >-
-      Unit scale 1.0 and native mimic parsing are importer correctness contracts. The
-      position-drive strength/damping values only bootstrap Isaac's URDF importer and are
-      overwritten by the resolved controller/robot physics settings, so exposing a second
+      These tables bind diagnostic buffer names to PhysicsContext readback methods and Fabric
+      output names to fixed Carb setting paths. Buffer capacities remain owned by the active
+      Isaac/PhysX version; stable API spellings keep its resolved defaults observable while
+      deployment configuration owns only the rendering consumer decision.
+    owner: simulation-runtime
+    sites:
+      - isaac/physics/physx_pipeline.py:_GPU_BUFFER_BINDINGS
+      - isaac/physics/physx_pipeline.py:_FABRIC_OUTPUT_SETTING_PATHS
+
+  - id: physx_grid_clone_contract
+    path: src/linkerbot_sim/isaac/replicated_scene/physx_builder.py
+    symbol: _PHYSX_GRID_SPACING_M and PhysxGridClonePlan fixed clone flags
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      Kaleidoscope 的公开配置只拥有环境数量、USD 命名和逻辑原点。当前 canonical scene
+      经过真实 PhysX smoke 验证的 3 m GridCloner 间距，以及 replicate_physics、
+      copy_from_source、enable_env_ids 三个必需标志，属于 PhysX adapter 的固定接入合同；
+      允许 YAML 覆盖会重新制造可与 Newton multi-world 错配的复制策略 selector。
+    owner: simulation-runtime
+    sites:
+      - isaac/replicated_scene/physx_builder.py:PhysxGridClonePlan
+
+  - id: urdf_import_bootstrap_contract
+    path: src/linkerbot_sim/assets/robot_import.py
+    symbol: configure_urdf_import public target type and drive bootstrap seeds
+    category: third_party_contract
+    decision: retain_in_code
+    reason: >-
+      Importer 3.0 authors native mimic relations and meter units without legacy toggles. The
+      public target type and position-drive strength/damping only bootstrap the generated USD
+      and are overwritten by resolved controller/robot physics settings, so exposing a second
       YAML owner would create conflicting gain sources.
     owner: assets-and-control
 
   - id: curobo_v0_8_task_bundle
-    path: configs/curobo/task
+    path: src/linkerbot_sim/backends/curobo/resources/task
     symbol: CuroboTaskBundle.named("curobo_v0_8_default")
     category: third_party_contract
     decision: retain_pinned
     reason: >-
       The nvidia-curobo 0.8.0 package omits task resources required by its solver factories.
-      LinkerBot therefore vendors the exact upstream bundle and exposes only its tested
-      name; arbitrary task paths remain rejected to prevent cross-version solver drift.
+      LinkerBot therefore vendors the exact upstream bundle and selects it internally;
+      public mode YAML cannot choose a bundle name or arbitrary task path, preventing
+      cross-version solver drift.
     owner: motion-planning
     bundle_version: 0.8.0
     upstream_commit: 4ea77366ca48ee453e7df139e39fa6532af49f3b
@@ -166,12 +179,13 @@ entries:
     category: third_party_contract
     decision: retain_in_code
     reason: >-
-      Collision cache shapes, supported tensor dtypes, and exact compatible package
-      versions describe capabilities of the pinned cuRobo implementation. YAML selects
-      among validated capabilities but cannot declare an unsupported capability valid.
+      Collision cache shapes, fixed float32 tensor dtypes, and exact compatible package
+      versions describe capabilities of the pinned cuRobo implementation. Public YAML owns
+      only meaningful solver capacities; the backend fixes bundle/dtypes and rejects raw
+      task paths or unsupported capabilities.
     owner: motion-planning
     sites:
-      - app/runtime/collision/registry.py:PlanningSceneSnapshot.view_fingerprint
+      - mirror/collision/registry.py:PlanningSceneSnapshot.view_fingerprint
 
   - id: curobo_conservative_geometry_adapter
     path: src/linkerbot_sim/backends/curobo/collision_world.py
@@ -185,7 +199,7 @@ entries:
     owner: motion-planning
 
   - id: kit_eula_acceptance
-    path: src/linkerbot_sim/app/launch.py
+    path: src/linkerbot_sim/isaac/app.py
     symbol: _EULA_ENV_VAR and _ACCEPTED_EULA_VALUES
     category: safety_invariant
     decision: retain_in_code
@@ -196,64 +210,27 @@ entries:
     owner: runtime-platform
 
   - id: reset_velocity_and_observer_semantics
-    path: src/linkerbot_sim/app/runtime/single_scene_reset.py
-    symbol: reset_single_scene_runtime velocity clearing and observer reset
+    path: src/linkerbot_sim/mirror/reset_runtime.py
+    symbol: reset_mirror_scene velocity clearing and observer reset
     category: safety_invariant
     decision: retain_in_code
     reason: >-
       A reset must not carry velocity, queued targets, derivative history, or stale effort
       state into the next episode. Making this optional would violate snapshot/reset
       determinism and create unsafe motion, so it remains a protocol-level invariant.
-    owner: simulation-runtime
-
-  - id: mjcf_replication_safety_downgrade
-    path: src/linkerbot_sim/tiled/scene/clone.py
-    symbol: _clone_config_compatible_with_robots
-    category: safety_invariant
-    decision: retain_in_code
-    reason: >-
-      PhysX replication is forcibly disabled when an MJCF world-fixed joint lacks body0,
-      because replication otherwise produces incorrect clone transforms. YAML may request
-      replication but cannot bypass this detected safety guard.
-    owner: tiled-scene-runtime
-
-  - id: tiled_scene_control_retry_and_idle_safety
-    path: src/linkerbot_sim/app/interactive/tiled_scene/transport.py
-    symbol: _CONTROL_QUEUE_RETRY_TIMEOUT_S and _MAX_IDLE_STEPS_PER_CHUNK
-    category: internal_scheduling
-    decision: retain_in_code
-    reason: >-
-      The retry interval wakes a blocked Queue while preserving a non-droppable control
-      event. The 10,000-tick cap prevents one configured idle chunk from monopolizing the
-      main simulation thread; both are non-bypassable resource guards, not tuning knobs.
-    owner: runtime-transport
-    sites:
-      - app/interactive/tiled_scene/transport.py:_CONTROL_QUEUE_RETRY_TIMEOUT_S
-      - app/interactive/tiled_scene/transport.py:_MAX_IDLE_STEPS_PER_CHUNK
-
-  - id: tiled_single_response_slots
-    path: src/linkerbot_sim/app/interactive/tiled_scene/transport.py
-    symbol: _InteractiveRequest.response_queue and per-request Queue(maxsize=1)
-    category: protocol_contract
-    decision: retain_in_code
-    reason: >-
-      Each accepted TCP or WebSocket request has exactly one main-thread response. A
-      private one-slot queue represents that one-to-one handoff and prevents response
-      buffering; deployment throughput is bounded separately by the configured shared
-      request queue and connection admission limits, so this protocol slot is not a YAML
-      capacity.
-    owner: runtime-transport
+    owner: mirror-runtime
 
   - id: websocket_framing_and_close_codes
-    path: src/linkerbot_sim/app/interactive/single_scene/transports.py
-    symbol: bounded frame sentinels, inbound max_queue=1, and RFC 6455 close codes
+    path: src/linkerbot_sim/mirror/interface/transport.py
+    symbol: WebSocketTransport max_size and RFC 6455 text-frame close code
     category: protocol_contract
     decision: retain_in_code
     reason: >-
-      Extra sentinel bytes detect oversized frames without unbounded allocation, one
-      library-level inbound slot prevents duplicate buffering behind the configured request
-      queue, and close codes 1009/1013 are RFC interoperability values.
-    owner: runtime-transport
+      The websockets max_size guard rejects oversized frames before an unbounded payload can
+      enter Mirror admission, while close code 1003 is the RFC interoperability value for
+      a binary frame on this text-only protocol. These are wire/resource invariants rather
+      than deployment preferences; the configured byte limit remains runtime-owned.
+    owner: mirror-interface
 
   - id: repository_resource_roots
     path: src/linkerbot_sim/utils/paths.py
@@ -275,7 +252,7 @@ entries:
       Marker radius and RGBA define the stable Foxglove presentation emitted by the
       project runtime. Specialized publishers can already pass explicit values to the
       logger API, while deployment profiles must not make recorded visualization semantics
-      differ silently between Scene and Tiled processes.
+      differ silently between Mirror runs or output sinks.
     owner: telemetry
 
   - id: camera_payload_format_contracts

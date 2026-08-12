@@ -72,13 +72,20 @@ def markdown_files_from_paths(
     return tuple(sorted(files))
 
 
-def git_tracked_paths(repo_root: Path = REPO_ROOT) -> frozenset[Path]:
-    """Return absolute paths tracked by the repository index."""
+def _git_paths(
+    repo_root: Path,
+    *,
+    include_untracked: bool,
+) -> frozenset[Path]:
+    """Return index paths and, when requested, non-ignored worktree additions."""
 
     root = repo_root.resolve()
+    command = ["git", "-C", str(root), "ls-files", "-z"]
+    if include_untracked:
+        command.extend(("--cached", "--others", "--exclude-standard"))
     try:
         completed = subprocess.run(
-            ("git", "-C", str(root), "ls-files", "-z"),
+            command,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -97,6 +104,18 @@ def git_tracked_paths(repo_root: Path = REPO_ROOT) -> frozenset[Path]:
         for relative_path in completed.stdout.split(b"\0")
         if relative_path
     )
+
+
+def git_tracked_paths(repo_root: Path = REPO_ROOT) -> frozenset[Path]:
+    """Return absolute paths tracked by the repository index."""
+
+    return _git_paths(repo_root, include_untracked=False)
+
+
+def git_worktree_paths(repo_root: Path = REPO_ROOT) -> frozenset[Path]:
+    """Return tracked plus untracked, non-ignored paths without changing the index."""
+
+    return _git_paths(repo_root, include_untracked=True)
 
 
 def _is_escaped(text: str, index: int) -> bool:
@@ -280,11 +299,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=REPO_ROOT,
         help=argparse.SUPPRESS,
     )
+    parser.add_argument(
+        "--allow-untracked-existing",
+        action="store_true",
+        help=(
+            "also accept existing Git-unignored worktree targets; useful while a "
+            "multi-file documentation change has not been staged"
+        ),
+    )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
     try:
         files = markdown_files_from_paths(args.paths, repo_root=repo_root)
-        tracked = git_tracked_paths(repo_root)
+        tracked = (
+            git_worktree_paths(repo_root)
+            if args.allow_untracked_existing
+            else git_tracked_paths(repo_root)
+        )
     except ValueError as exc:
         parser.error(str(exc))
 
@@ -299,9 +330,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if issues:
         print(f"Found {len(issues)} broken repository-local Markdown link(s).")
         return 1
-    print(
-        f"Checked {len(files)} Markdown file(s); local targets exist and are Git-tracked."
+    ownership = (
+        "Git-tracked or visible non-ignored worktree files"
+        if args.allow_untracked_existing
+        else "Git-tracked files"
     )
+    print(f"Checked {len(files)} Markdown file(s); local targets are {ownership}.")
     return 0
 
 

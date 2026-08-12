@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import ast
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import re
 
 import pytest
+import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -15,42 +15,13 @@ DOCUMENT_PATHS = (
     REPO_ROOT / "docs" / "en" / "development" / "module-map.md",
     REPO_ROOT / "docs" / "zh-CN" / "development" / "module-map.md",
 )
-GROUP_ORDER = (
-    "root",
-    "app",
-    "assets",
-    "backends",
-    "configs",
-    "controllers",
-    "envs",
-    "execution",
-    "logging",
-    "objects",
-    "planning",
-    "robots",
-    "sensors",
-    "snapshots",
-    "telemetry",
-    "tiled",
-    "trajectories",
-    "utils",
-    "visualization",
-)
+MANIFEST_PATH = REPO_ROOT / "architecture" / "module_disposition.yaml"
+MANIFEST = yaml.safe_load(MANIFEST_PATH.read_text(encoding="utf-8"))
+DECLARED_GROUP_ORDER = tuple(MANIFEST["module_map"]["group_order"])
+GROUP_LAYERS = dict(MANIFEST["module_map"]["group_layers"])
 RUNTIME_LABELS = {"pure", "Isaac main thread", "cuRobo/CUDA"}
 CLASSIFICATIONS = {"documented facade", "owner path", "internal"}
-DOCUMENTED_FACADES = {
-    "linkerbot_sim",
-    "linkerbot_sim.app.interactive.single_scene",
-    "linkerbot_sim.app.interactive.tiled_scene",
-    "linkerbot_sim.backends.curobo",
-    "linkerbot_sim.controllers",
-    "linkerbot_sim.execution",
-    "linkerbot_sim.objects",
-    "linkerbot_sim.planning",
-    "linkerbot_sim.robots",
-    "linkerbot_sim.sensors",
-    "linkerbot_sim.snapshots",
-}
+DOCUMENTED_FACADES = set(MANIFEST["public_facades"])
 LINK_RE = re.compile(r"^\[[^]]+\]\((?P<target>[^)]+)\)$")
 
 
@@ -58,6 +29,7 @@ LINK_RE = re.compile(r"^\[[^]]+\]\((?P<target>[^)]+)\)$")
 class ModuleEntry:
     group: str
     module: str
+    layer: str
     responsibility: str
     runtime: str
     classification: str
@@ -88,20 +60,21 @@ def _parse_inventory(path: Path) -> list[ModuleEntry]:
     entries: list[ModuleEntry] = []
     for line in section.splitlines():
         cells = _table_cells(line)
-        if len(cells) != 6:
+        if len(cells) != 7:
             continue
         module = _module_name(cells[1])
         if module is None:
             continue
-        link = LINK_RE.fullmatch(cells[5])
-        assert link is not None, (path, module, cells[5])
+        link = LINK_RE.fullmatch(cells[6])
+        assert link is not None, (path, module, cells[6])
         entries.append(
             ModuleEntry(
                 group=cells[0],
                 module=module,
-                responsibility=cells[2],
-                runtime=cells[3],
-                classification=cells[4],
+                layer=cells[2],
+                responsibility=cells[3],
+                runtime=cells[4],
+                classification=cells[5],
                 documentation_target=link.group("target"),
             )
         )
@@ -144,19 +117,25 @@ def test_module_inventory_exactly_covers_source(document_path: Path) -> None:
     documented_modules = [entry.module for entry in entries]
     source_modules = _source_modules()
     source_group_counts = Counter(_module_group(module) for module in source_modules)
+    expected_group_order = tuple(
+        group for group in DECLARED_GROUP_ORDER if source_group_counts[group]
+    )
 
     assert len(documented_modules) == len(set(documented_modules))
     assert set(documented_modules) == source_modules
 
     assert Counter(entry.group for entry in entries) == source_group_counts
-    assert list(dict.fromkeys(entry.group for entry in entries)) == list(GROUP_ORDER)
+    assert (
+        tuple(dict.fromkeys(entry.group for entry in entries)) == expected_group_order
+    )
     assert all(entry.group == _module_group(entry.module) for entry in entries)
+    assert all(entry.layer == GROUP_LAYERS[entry.group] for entry in entries)
 
     text = document_path.read_text(encoding="utf-8")
     section = _marked_section(text, "module-inventory")
     headings = re.findall(r"^### ([a-z]+) \(([0-9]+)\)$", section, re.MULTILINE)
     assert headings == [
-        (group, str(source_group_counts[group])) for group in GROUP_ORDER
+        (group, str(source_group_counts[group])) for group in expected_group_order
     ]
 
     for entry in entries:
@@ -188,21 +167,17 @@ def test_registry_matches_inventory_classification(document_path: Path) -> None:
         entry.module for entry in entries if entry.classification == "documented facade"
     }
     assert facades == DOCUMENTED_FACADES
-    assert not {
-        module
-        for module in facades
-        if module == "linkerbot_sim.tiled" or module.startswith("linkerbot_sim.tiled.")
-    }
 
 
 def test_bilingual_module_maps_have_identical_facts() -> None:
     english = _parse_inventory(DOCUMENT_PATHS[0])
     chinese = _parse_inventory(DOCUMENT_PATHS[1])
 
-    def facts(entry: ModuleEntry) -> tuple[str, str, str, str, str]:
+    def facts(entry: ModuleEntry) -> tuple[str, str, str, str, str, str]:
         return (
             entry.group,
             entry.module,
+            entry.layer,
             entry.runtime,
             entry.classification,
             entry.documentation_target,
@@ -210,18 +185,3 @@ def test_bilingual_module_maps_have_identical_facts() -> None:
 
     assert [facts(entry) for entry in english] == [facts(entry) for entry in chinese]
     assert _parse_registry(DOCUMENT_PATHS[0]) == _parse_registry(DOCUMENT_PATHS[1])
-
-
-def test_tiled_package_declares_no_top_level_exports() -> None:
-    path = SOURCE_ROOT / "tiled" / "__init__.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    assignments = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.AnnAssign)
-        and isinstance(node.target, ast.Name)
-        and node.target.id == "__all__"
-    ]
-    assert len(assignments) == 1
-    value = assignments[0].value
-    assert isinstance(value, ast.List) and value.elts == []

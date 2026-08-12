@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 import numpy as np
 
 from .runtime import SensorCameraRuntime
@@ -61,7 +59,7 @@ def sample_camera_frames(
     """从一个 sensor camera runtime 采样当前配置的 modalities。"""
 
     intrinsics = _optional_array(camera_runtime.get_intrinsics_matrix)
-    position, orientation = _optional_world_pose(camera_runtime.camera)
+    position, orientation = _optional_world_pose(camera_runtime)
     frames: list[CameraFrame] = []
     for modality in camera_runtime.settings.modalities:
         key = (camera_runtime.name, modality)
@@ -90,17 +88,17 @@ def sample_camera_frames(
 def _sample_modality(camera_runtime: SensorCameraRuntime, modality: str) -> np.ndarray:
     """读取单个 modality 并规范化为可序列化数组。"""
 
+    data = camera_runtime.get_modality_data(modality, device="cpu", clone=True)
     if modality == "rgb":
-        return _rgb_uint8(camera_runtime.get_rgb(device="cpu"))
+        return _rgb_uint8(data)
     if modality == "depth":
-        return _depth_float32(camera_runtime.get_depth(device="cpu"))
-    frame = camera_runtime.get_current_frame(clone=True)
-    if isinstance(frame, dict) and modality in frame:
-        array = np.asarray(frame[modality])
-        if array.ndim == 0 or array.size == 0:
-            raise CameraFrameNotReady(f"{modality} frame is not ready")
-        return array
-    raise CameraFrameNotReady(f"{modality} frame is not ready")
+        return _depth_float32(data)
+    array = np.asarray(data)
+    if array.ndim == 0 or array.size == 0:
+        raise CameraFrameNotReady(f"{modality} frame is not ready")
+    if array.ndim == 3 and array.shape[2] == 1:
+        array = array[:, :, 0]
+    return array
 
 
 def _rgb_uint8(data: object) -> np.ndarray:
@@ -126,6 +124,8 @@ def _depth_float32(data: object) -> np.ndarray:
     array = np.asarray(data, dtype=np.float32)
     if array.ndim == 0 or array.size == 0:
         raise CameraFrameNotReady("depth frame is not ready")
+    if array.ndim == 3 and array.shape[2] == 1:
+        array = array[:, :, 0]
     if array.ndim != 2:
         raise ValueError(f"depth frame must have shape HxW, got {array.shape}")
     return np.ascontiguousarray(array)
@@ -141,19 +141,16 @@ def _optional_array(callable_obj) -> np.ndarray | None:
 
 
 def _optional_world_pose(
-    camera: Any,
+    camera_runtime: SensorCameraRuntime,
 ) -> tuple[
     tuple[float, float, float] | None,
     tuple[float, float, float, float] | None,
 ]:
     """读取 camera world pose；不可用时返回空 pose。"""
 
-    get_world_pose = getattr(camera, "get_world_pose", None)
-    if get_world_pose is None:
-        return None, None
     try:
-        position, orientation = get_world_pose()
-    except (TypeError, ValueError, RuntimeError):
+        position, orientation = camera_runtime.get_world_pose()
+    except (AttributeError, TypeError, ValueError, RuntimeError):
         return None, None
     return _tuple_or_none(position, 3), _tuple_or_none(orientation, 4)
 

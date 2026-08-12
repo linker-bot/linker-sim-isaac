@@ -1,0 +1,23 @@
+# Kaleidoscope 只组合 GPU RL 热路径消费的 profile；PhysX、Torch 与 trainer 共享根设备。
+# 引用值相对 configs/<group>/ 解析且省略 .yaml；禁止在此加入 camera/telemetry/planner 冷字段。
+# 产品根选择批量 GPU 强化学习 Kaleidoscope 配置图。
+mode: kaleidoscope
+compute:
+  # PhysX、Torch policy 与训练器共享的唯一 CUDA 设备序号。
+  cuda_device: 0
+environments:
+  # 并行环境数量；PhysX GridCloner 会据此复制单环境 scene template。
+  num_envs: 256
+  # 所有环境实例所在的绝对 USD namespace，不得为 / 或以 / 结尾。
+  base_env_path: /World/envs
+  # 单个环境 prim 的名称前缀，最终形成 env_0、env_1 等后端派生名称。
+  env_prefix: env
+  # 逻辑环境 0 的世界原点 xyz，单位 m；其它环境偏移由 PhysX builder 固定派生。
+  origin_xyz: [0.0, 0.0, 0.0]
+profiles:
+  # 无相机、无 viewport 的单环境物理拓扑模板。
+  scene: kaleidoscope/tblock_push
+  # PhysX CUDA 求解与进程级显存门禁配置。
+  physics: physx/cuda
+  # 动作、观测、奖励、终止和 reset 随机化定义。
+  task: kaleidoscope/tblock_push_v1

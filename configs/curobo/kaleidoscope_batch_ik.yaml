@@ -1,0 +1,15 @@
+# Kaleidoscope EE/直线 action 专用的 kinematics-only profile。该文件故意没有
+# motion_planner；产品根还会强制关闭碰撞。固定 task bundle 与 float32 dtype 由后端拥有。
+curobo:
+  # Kaleidoscope 只创建批量 FK/IK context，不创建 MotionGen/轨迹规划 context。
+  kinematics:
+    # 单次 FK/IK 调用允许的环境 batch 上限；必须覆盖实际并行求解 batch。
+    max_batch_size: 1024
+    # 每个 IK goal 并行尝试的初值数量；更多 seed 提高收敛率，也增加计算和显存成本。
+    seed_count: 32
+    # false 表示 IK 只检查运动学可达性，不加载世界碰撞 cache，也不做避障。canonical profile
+    # 省略 collision_cache；即使保留合法 cache 配置，运行时也不会传给后端或分配它。
+    collision_check: false
+    # 捕获固定形状的 FK/IK CUDA 工作流，减少每步 kernel launch 开销。
+    # 输入 batch 形状需保持在 max_batch_size 合同内。
+    use_cuda_graph: true

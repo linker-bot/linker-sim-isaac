@@ -25,6 +25,7 @@ import numpy as np
 from linkerbot_sim.controllers.types import ControlTargets, JointControlSettings
 from linkerbot_sim.execution.runtime import ExecutionRuntime
 from linkerbot_sim.trajectories.types import JointTrajectory
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 class CommandExecutionInterrupted(RuntimeError):
@@ -162,8 +163,11 @@ class SwitchControlModeStep:
     def run(self, runtime: ExecutionRuntime, step: int) -> int:
         """切换控制器模式并返回未改变的累计 step。"""
 
-        runtime.joint_controller.settings = self.settings
-        runtime.joint_controller.configure_runtime()
+        prepared = runtime.joint_controller.prepare_runtime(self.settings)
+        runtime.joint_controller.apply_prepared_runtime(
+            prepared,
+            clear_target_cache=True,
+        )
         return step
 
 
@@ -299,7 +303,9 @@ def execute_smooth_command_position_target(
     target = np.asarray(target_command, dtype=float).reshape(-1)
     delta = target - start
     full_position = (
-        np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
+        tensor_like_to_numpy(articulation.get_joint_positions(), dtype=float).reshape(
+            -1
+        )
         if base_positions is None
         else np.asarray(base_positions, dtype=float).reshape(-1)
     )
@@ -357,9 +363,9 @@ def execute_command_position_trajectory(
     ``hold=True`` 只在存在至少一个轨迹样本时保持最后完整控制目标。
     """
 
-    full_position = np.asarray(articulation.get_joint_positions(), dtype=float).reshape(
-        -1
-    )
+    full_position = tensor_like_to_numpy(
+        articulation.get_joint_positions(), dtype=float
+    ).reshape(-1)
     targets: ControlTargets | None = None
     for sample_index in range(len(trajectory)):
         if simulation_app is not None and not simulation_app.is_running():
@@ -440,7 +446,9 @@ def execute_command_position_hold(
     physics_dt = float(simulation_world.get_physics_dt())
     total_steps = max(1, int(round(duration / physics_dt))) if duration > 0 else None
     full_position = (
-        np.asarray(articulation.get_joint_positions(), dtype=float).reshape(-1)
+        tensor_like_to_numpy(articulation.get_joint_positions(), dtype=float).reshape(
+            -1
+        )
         if base_positions is None
         else np.asarray(base_positions, dtype=float).reshape(-1)
     )

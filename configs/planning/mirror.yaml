@@ -1,0 +1,17 @@
+# Mirror motion 请求的后端中立默认值。cuRobo seed、batch、cache 与 CUDA graph 已归
+# configs/curobo/mirror.yaml；这里不选择也不配置数值后端。
+planning:
+  # 单次 motion JSON 未显式给值时采用这些默认项；请求中的合法字段可逐项覆盖。
+  request_defaults:
+    # 关节插值或无规划 fallback 轨迹的目标时长，单位 s，必须大于 0。
+    duration_s: 1.0
+    # 输出轨迹采样间隔，单位 s；0.02 对应 50 Hz 的命令采样点。
+    sample_dt_s: 0.02
+    # 单次规划请求允许占用的最长墙钟时间，单位 s。
+    timeout_s: 30.0
+    # true 默认使用 cuRobo world collision；可由请求显式关闭以进行无碰撞约束规划。
+    avoid_collisions: true
+    # true 会在每次请求前强制从 scene registry 刷新碰撞世界；false 允许复用未失效缓存。
+    force_collision_refresh: false
+    # 多机器人协调语义；independent 表示各臂分别规划，不执行联合时空去冲突。
+    coordination: independent

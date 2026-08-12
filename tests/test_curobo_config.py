@@ -17,6 +17,7 @@ from linkerbot_sim.backends.curobo.config import (
     CuroboMotionPlannerConfig,
     CuroboRobotConfig,
     CuroboTaskBundle,
+    CuroboTcpFrame,
 )
 from linkerbot_sim.backends.curobo.context import CuroboContext
 from linkerbot_sim.backends.curobo.robot_model import (
@@ -25,67 +26,71 @@ from linkerbot_sim.backends.curobo.robot_model import (
     write_curobo_tcp_urdf_with_frames,
 )
 from linkerbot_sim.backends.curobo.profile_merge import (
-    load_curobo_profile,
-    merged_robot_config_with_curobo_profile,
-    robot_curobo_config,
-    validate_curobo_profile,
+    curobo_config_from_profiles,
 )
-from linkerbot_sim.backends.curobo.joint_mapping import CuroboJointMapping
-from linkerbot_sim.configs.profiles import load_profile_yaml, profile_path
+from linkerbot_sim.configuration.robots import RobotProfileSettings
+from linkerbot_sim.configuration import load_mirror_config
+from linkerbot_sim.configuration.curobo import CuroboProfileSettings
 from linkerbot_sim.utils.config import load_yaml
 
 
-def test_curobo_complete_config_parses_robot_and_algorithm_sections() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "task_bundle": "curobo_v0_8_default",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "urdf_path": "assets/robots/ar5v2_l/urdf/ar5v2_l.urdf",
-                    "base_link": "base",
-                    "default_tcp_frame": "tool",
-                    "custom_tcps": [
-                        {
-                            "frame_name": "pinch_tcp",
-                            "parent_frame": "tool",
-                            "xyz": [0.0, 0.0, 0.1],
-                            "rpy": [0.0, 0.0, 0.0],
-                        }
-                    ],
-                },
-                "kinematics": {
-                    "ik": {
-                        "random_seed": 999,
-                        "optimizer_collision_activation_distance": 0.025,
-                        "store_debug": True,
-                        "override_optimizer_num_iters": {
-                            "particle": 12,
-                            "lbfgs": None,
-                        },
-                        "optimization_dt": 0.02,
-                        "velocity_regularization_weight": 0.1,
-                        "success_requires_convergence": False,
-                        "num_seeds": 16,
-                        "seed_solver_num_seeds": 8,
-                        "max_batch_size": 128,
-                        "collision_cache": {"cuboid": 4},
+def load_robot_profile_mapping(name: str) -> dict[str, object]:
+    path = Path("configs/robots") / f"{name}.yaml"
+    return load_yaml(path)
+
+
+def load_robot_profile_by_name(name: str) -> RobotProfileSettings:
+    path = Path("configs/robots") / f"{name}.yaml"
+    return RobotProfileSettings.from_mapping(load_yaml(path), source=str(path))
+
+
+def _mirror_curobo_settings() -> CuroboProfileSettings:
+    """复用正式 Mirror 配置图已经严格解析的 cuRobo 设置。"""
+
+    return load_mirror_config("physx_cpu").curobo
+
+
+def test_curobo_complete_typed_config_validates_backend_sections() -> None:
+    config = CuroboConfig(
+        robot=CuroboRobotConfig.from_mapping(
+            {
+                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "urdf_path": "assets/robots/ar5v2_l/urdf/ar5v2_l.urdf",
+                "base_link": "base",
+                "default_tcp_frame": "tool",
+                "custom_tcps": [
+                    {
+                        "frame_name": "pinch_tcp",
+                        "parent_frame": "tool",
+                        "xyz": [0.0, 0.0, 0.1],
+                        "rpy": [0.0, 0.0, 0.0],
                     }
-                },
-                "motion_planner": {
-                    "warmup": False,
-                    "random_seed": 321,
-                    "optimizer_collision_activation_distance": 0.03,
-                    "store_debug": True,
-                    "num_ik_seeds": 16,
-                    "num_trajopt_seeds": 2,
-                    "max_batch_size": 128,
-                },
+                ],
             }
-        }
+        ),
+        ik=CuroboIkConfig(
+            random_seed=999,
+            optimizer_collision_activation_distance=0.025,
+            store_debug=True,
+            override_optimizer_num_iters={"particle": 12, "lbfgs": None},
+            optimization_dt=0.02,
+            velocity_regularization_weight=0.1,
+            success_requires_convergence=False,
+            num_seeds=16,
+            seed_solver_num_seeds=8,
+            max_batch_size=128,
+            collision_cache={"cuboid": 4},
+        ),
+        motion_planner=CuroboMotionPlannerConfig(
+            warmup=False,
+            random_seed=321,
+            optimizer_collision_activation_distance=0.03,
+            store_debug=True,
+            num_ik_seeds=16,
+            num_trajopt_seeds=2,
+        ),
     )
+    config.validate()
 
     assert config.robot.default_tcp_frame == "tool"
     assert config.robot.resolved_tool_frames == ("tool",)
@@ -119,77 +124,185 @@ def test_curobo_complete_config_parses_robot_and_algorithm_sections() -> None:
     assert config.motion_planner.num_trajopt_seeds == 2
 
 
-def test_curobo_default_profile_contains_valid_algorithm_defaults() -> None:
-    profile = load_profile_yaml("curobo", "default")
-    assert profile_path("curobo", "default").name == "default.yaml"
-    settings = profile["curobo"]
-
-    ik = CuroboIkConfig.from_mapping(settings["kinematics"]["ik"])
-    planner = CuroboMotionPlannerConfig.from_mapping(settings["motion_planner"])
-    task_bundle = CuroboTaskBundle.named(settings["task_bundle"])
+def test_mirror_curobo_profile_contains_valid_algorithm_defaults() -> None:
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        curobo_settings=_mirror_curobo_settings(),
+        cuda_device=0,
+    )
+    ik = config.ik
+    planner = config.motion_planner
 
     assert ik.num_seeds == 32
-    assert ik.max_batch_size == 256
-    assert task_bundle.ik_optimizer_configs == (
-        "ik/particle_ik.yml",
-        "ik/lbfgs_ik.yml",
-    )
+    assert ik.max_batch_size == 8
     assert ik.random_seed == 123
     assert ik.optimizer_collision_activation_distance == 0.01
     assert ik.seed_solver_num_seeds == 32
     assert planner.num_ik_seeds == 32
     assert planner.num_trajopt_seeds == 4
-    assert task_bundle.motion_ik_optimizer_configs == ("ik/lbfgs_ik.yml",)
-    assert task_bundle.trajopt_optimizer_configs == (
-        "trajopt/lbfgs_bspline_trajopt.yml",
-    )
     assert planner.warmup is True
+    assert planner.use_cuda_graph is False
     assert planner.random_seed == 123
     assert planner.optimizer_collision_activation_distance == 0.01
     assert planner.collision_cache["cuboid"] == 48
 
 
-def test_curobo_profile_merge_preserves_robot_resources() -> None:
-    robot_profile = load_profile_yaml("robot", "ar5v2_l6v1_l")
-    curobo_profile = load_profile_yaml("curobo", "default")
+def test_typed_curobo_composition_preserves_robot_resources() -> None:
+    robot_profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    curobo_settings = _mirror_curobo_settings()
 
-    merged = merged_robot_config_with_curobo_profile(robot_profile, curobo_profile)
-    config = CuroboConfig.from_mapping(merged)
+    config = curobo_config_from_profiles(
+        robot_profile,
+        curobo_settings=curobo_settings,
+        cuda_device=0,
+    )
 
-    assert merged["curobo"]["robot"]["urdf_path"].endswith("AR5V2_L.urdf")
     assert config.robot.urdf_path is not None
     assert config.robot.urdf_path.name == "AR5V2_L.urdf"
-    assert config.ik.max_batch_size == 256
-    assert config.ik.collision_cache["cuboid"] == 48
+    assert config.ik.max_batch_size == 8
+    assert config.ik.collision_cache == {}
     assert config.motion_planner.collision_cache == {"cuboid": 48, "mesh": 4}
+    assert config.device.device == "cuda:0"
 
 
-def test_robot_curobo_config_applies_profile_defaults() -> None:
-    config = robot_curobo_config(
-        load_profile_yaml("robot", "ar5v2_l6v1_l"),
-        curobo_profile=load_profile_yaml("curobo", "default"),
+def test_curobo_config_from_profiles_applies_profile_defaults() -> None:
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        curobo_settings=_mirror_curobo_settings(),
+        cuda_device=0,
     )
 
     assert config.robot.default_tcp_frame == "AR5V2_L_pinch_tcp"
-    assert config.motion_planner.max_batch_size == 256
+    assert config.device.device == "cuda:0"
+    assert config.device.tensor_dtype == "float32"
+    assert config.device.collision_geometry_dtype == "float32"
+    assert config.device.collision_gradient_dtype == "float32"
+    assert config.device.collision_distance_dtype == "float32"
+    assert config.task_bundle.name == "curobo_v0_8_default"
 
 
-def test_curobo_example_profile_is_loadable_yaml() -> None:
-    profile = load_curobo_profile("configs/curobo/example.yaml")
-    assert "curobo" in profile
-    assert profile["curobo"]["motion_planner"]["max_batch_size"] == 256
-    assert profile["curobo"]["kinematics"]["ik"]["random_seed"] == 123
-    assert "graph_planner_config" not in profile["curobo"]["motion_planner"]
-    assert "optimizer_configs" not in profile["curobo"]["kinematics"]["ik"]
+def test_curobo_profile_root_device_is_projected_into_backend_config() -> None:
+    settings = _mirror_curobo_settings()
+
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        curobo_settings=settings,
+        cuda_device=3,
+    )
+
+    assert config.device.device == "cuda:3"
+    assert not hasattr(settings, "device")
+    assert not hasattr(settings, "task_bundle")
+
+
+def test_curobo_mirror_profile_is_loadable_yaml() -> None:
+    document = load_yaml("configs/curobo/mirror.yaml")
+    assert set(document) == {"curobo"}
+    settings = CuroboProfileSettings.from_mapping(document["curobo"])
+
+    assert settings.kinematics.max_batch_size == 8
+    assert settings.kinematics.seed_count == 32
+    assert settings.motion_planner is not None
+    assert settings.motion_planner.trajectory_seed_count == 4
+    assert not hasattr(settings.motion_planner, "max_batch_size")
+    assert settings.kinematics.collision_cache is None
+    assert not hasattr(settings, "device")
+    assert not hasattr(settings, "task_bundle")
 
 
 def test_all_bundled_curobo_profiles_load_strictly() -> None:
-    for path in sorted(Path("configs/curobo").glob("*.yaml")):
-        load_curobo_profile(path)
+    expected = {
+        "kaleidoscope_batch_ik": False,
+        "mirror": True,
+    }
+    paths = sorted(Path("configs/curobo").glob("*.yaml"))
+    assert {path.stem for path in paths} == set(expected)
+    for path in paths:
+        document = load_yaml(path)
+        assert set(document) == {"curobo"}
+        settings = CuroboProfileSettings.from_mapping(document["curobo"])
+        assert (settings.motion_planner is not None) is expected[path.stem]
+        assert settings.kinematics.collision_cache is None
+        assert "task_bundle" not in document["curobo"]
+        assert "device" not in document["curobo"]
+        assert "compute" not in document
+
+
+def test_kinematics_collision_disabled_may_retain_collision_cache() -> None:
+    document = load_yaml("configs/curobo/mirror.yaml")
+    curobo = document["curobo"]
+    curobo["kinematics"]["collision_cache"] = {"cuboid": 4, "mesh": 2}
+
+    settings = CuroboProfileSettings.from_mapping(curobo)
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        curobo_settings=settings,
+        cuda_device=0,
+    )
+
+    assert settings.kinematics.collision_cache is not None
+    assert settings.kinematics.collision_cache.as_backend_mapping() == {
+        "cuboid": 4,
+        "mesh": 2,
+    }
+    assert config.ik.self_collision_check is False
+    assert config.ik.collision_cache == {}
+
+
+def test_kinematics_collision_enabled_requires_collision_cache() -> None:
+    document = load_yaml("configs/curobo/mirror.yaml")
+    curobo = document["curobo"]
+    curobo["kinematics"]["collision_check"] = True
+
+    with pytest.raises(ValueError, match="collision_cache"):
+        CuroboProfileSettings.from_mapping(curobo)
+
+
+@pytest.mark.parametrize(
+    "cache",
+    [None, {"cuboid": 4, "mesh": 2}],
+)
+def test_motion_planner_collision_disabled_may_omit_or_retain_collision_cache(
+    cache: dict[str, int] | None,
+) -> None:
+    document = load_yaml("configs/curobo/mirror.yaml")
+    curobo = document["curobo"]
+    planner = curobo["motion_planner"]
+    planner["collision_check"] = False
+    if cache is None:
+        planner.pop("collision_cache")
+    else:
+        planner["collision_cache"] = cache
+
+    settings = CuroboProfileSettings.from_mapping(curobo)
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        curobo_settings=settings,
+        cuda_device=0,
+    )
+
+    assert settings.motion_planner is not None
+    if cache is None:
+        assert settings.motion_planner.collision_cache is None
+    else:
+        retained = settings.motion_planner.collision_cache
+        assert retained is not None
+        assert retained.as_backend_mapping() == cache
+    assert config.motion_planner.self_collision_check is False
+    assert config.motion_planner.collision_cache == {}
+
+
+def test_motion_planner_collision_enabled_requires_collision_cache() -> None:
+    document = load_yaml("configs/curobo/mirror.yaml")
+    curobo = document["curobo"]
+    curobo["motion_planner"].pop("collision_cache")
+
+    with pytest.raises(ValueError, match="collision_cache"):
+        CuroboProfileSettings.from_mapping(curobo)
 
 
 def test_curobo_task_resources_are_owned_exactly_by_versioned_bundle() -> None:
-    task_root = Path("configs/curobo/task")
+    task_root = Path("src/linkerbot_sim/backends/curobo/resources/task")
     task_paths = {
         path.relative_to(task_root).as_posix() for path in task_root.rglob("*.yml")
     }
@@ -212,86 +325,40 @@ def test_curobo_task_resources_are_owned_exactly_by_versioned_bundle() -> None:
     assert referenced_paths == task_paths
 
 
-@pytest.mark.parametrize("section", ("device", "kinematics", "motion_planner"))
-def test_curobo_rejects_null_non_nullable_mapping_sections(
-    section: str,
-) -> None:
-    profile = {"curobo": {section: None}}
-
-    with pytest.raises(
-        ValueError,
-        match=rf"curobo\.{section} must be a mapping",
-    ):
-        validate_curobo_profile(profile, source="null-section.yaml")
+@pytest.mark.parametrize("value", (-1, True, 1.5, "0", None))
+def test_curobo_profile_requires_strict_root_cuda_device(value: object) -> None:
+    with pytest.raises(ValueError, match="cuda_device"):
+        curobo_config_from_profiles(
+            load_robot_profile_by_name("ar5v2_l6v1_l"),
+            curobo_settings=_mirror_curobo_settings(),
+            cuda_device=value,  # type: ignore[arg-type]
+        )
 
 
 @pytest.mark.parametrize(
-    ("mapping", "path"),
+    ("robot_override", "path"),
     (
-        ({"curobo": {}, "typo": True}, "profile.typo"),
+        ({"compute": {"cuda_device": 2}}, r"profile\.compute"),
+        ({"curobo": {"device": {"device": "cuda:2"}}}, r"curobo\.device"),
         (
-            {"curobo": {"devcie": {}}},
-            "curobo.devcie",
-        ),
-        (
-            {
-                "curobo": {"kinematics": {"ikk": {}}},
-            },
-            "curobo.kinematics.ikk",
-        ),
-        (
-            {
-                "curobo": {"kinematics": {"ik": {"num_seed": 4}}},
-            },
-            "curobo.kinematics.ik.num_seed",
-        ),
-        (
-            {
-                "curobo": {"motion_planner": {"max_batch_szie": 4}},
-            },
-            "curobo.motion_planner.max_batch_szie",
+            {"curobo": {"device": {"tensor_dtype": "float32"}}},
+            r"curobo\.device",
         ),
     ),
 )
-def test_curobo_rejects_unknown_keys_with_complete_path(
-    mapping: dict[str, object], path: str
+def test_curobo_composition_rejects_robot_device_ownership(
+    robot_override: dict[str, object],
+    path: str,
 ) -> None:
-    with pytest.raises(ValueError, match=path.replace(".", r"\.")):
-        validate_curobo_profile(mapping, source="typo.yaml")
+    robot = load_robot_profile_mapping("ar5v2_l6v1_l")
+    for key, value in robot_override.items():
+        if key == "curobo":
+            robot["curobo"] = {**robot["curobo"], **value}
+        else:
+            robot[key] = value
 
-
-@pytest.mark.parametrize(
-    ("parser", "mapping", "path"),
-    (
-        (CuroboIkConfig.from_mapping, {"num_seeds": "32"}, "num_seeds"),
-        (CuroboIkConfig.from_mapping, {"num_seeds": True}, "num_seeds"),
-        (
-            CuroboIkConfig.from_mapping,
-            {"position_tolerance": "0.1"},
-            "position_tolerance",
-        ),
-        (
-            CuroboIkConfig.from_mapping,
-            {"position_tolerance": float("inf")},
-            "position_tolerance",
-        ),
-        (
-            CuroboMotionPlannerConfig.from_mapping,
-            {"max_batch_size": 1.5},
-            "max_batch_size",
-        ),
-        (
-            CuroboMotionPlannerConfig.from_mapping,
-            {"collision_cache": {"cuboid": False}},
-            "collision_cache.cuboid",
-        ),
-    ),
-)
-def test_curobo_numeric_fields_use_strict_types(
-    parser, mapping: dict[str, object], path: str
-) -> None:
-    with pytest.raises(ValueError, match=path.replace(".", r"\.")):
-        parser(mapping)
+    with pytest.raises(ValueError, match=path):
+        RobotProfileSettings.from_mapping(robot)
 
 
 @pytest.mark.parametrize(
@@ -305,29 +372,35 @@ def test_curobo_numeric_fields_use_strict_types(
 )
 def test_curobo_device_rejects_unvalidated_tensor_dtypes(field: str) -> None:
     with pytest.raises(ValueError, match=rf"curobo\.device\.{field}"):
-        CuroboDeviceConfig.from_mapping({field: "typo"})
+        replace(CuroboDeviceConfig(), **{field: "typo"}).validate()
 
 
-@pytest.mark.parametrize(
-    ("parser", "mapping", "path"),
-    (
-        (
-            CuroboIkConfig.from_mapping,
-            {"optimizer_configs": ["ik/custom.yml"]},
-            "curobo.kinematics.ik.optimizer_configs",
-        ),
-        (
-            CuroboMotionPlannerConfig.from_mapping,
-            {"graph_planner_config": "graph_planner/custom.yml"},
-            "curobo.motion_planner.graph_planner_config",
-        ),
-    ),
-)
-def test_curobo_raw_task_paths_are_rejected(
-    parser, mapping: dict[str, object], path: str
-) -> None:
-    with pytest.raises(ValueError, match=path.replace(".", r"\.")):
-        parser(mapping)
+def test_backend_algorithm_and_device_configs_have_no_mapping_parser() -> None:
+    """YAML 只能在 configuration 层解释，backend 不提供第二条配置入口。"""
+
+    assert not hasattr(CuroboConfig, "from_mapping")
+    assert not hasattr(CuroboDeviceConfig, "from_mapping")
+    assert not hasattr(CuroboIkConfig, "from_mapping")
+    assert not hasattr(CuroboMotionPlannerConfig, "from_mapping")
+    assert not hasattr(CuroboProfileSettings, "as_backend_profile")
+    assert hasattr(CuroboRobotConfig, "from_mapping")
+    assert hasattr(CuroboTcpFrame, "from_mapping")
+
+
+def test_curobo_context_validates_typed_config_before_runtime_imports() -> None:
+    valid = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
+    invalid = replace(
+        valid,
+        device=replace(valid.device, device="cpu"),
+    )
+
+    with pytest.raises(ValueError, match="canonical non-negative CUDA device"):
+        CuroboContext(invalid)
+    with pytest.raises(TypeError, match="config must be CuroboConfig"):
+        CuroboContext({"curobo": {}})  # type: ignore[arg-type]
 
 
 def test_curobo_task_bundle_rejects_unknown_name_and_version() -> None:
@@ -346,69 +419,49 @@ def test_curobo_task_bundle_rejects_unvalidated_patch_versions(version: str) -> 
         bundle.validate_curobo_version(version)
 
 
-@pytest.mark.parametrize("value", ("false", 0, 1, None))
-def test_curobo_motion_planner_warmup_is_strict(value: object) -> None:
-    with pytest.raises(ValueError, match="motion_planner.warmup"):
-        CuroboMotionPlannerConfig.from_mapping({"warmup": value})
-
-
-@pytest.mark.parametrize(
-    ("parser", "field"),
-    (
-        (CuroboRobotConfig.from_mapping, "load_collision_spheres"),
-        (CuroboIkConfig.from_mapping, "use_cuda_graph"),
-        (CuroboIkConfig.from_mapping, "store_debug"),
-        (CuroboIkConfig.from_mapping, "success_requires_convergence"),
-        (CuroboIkConfig.from_mapping, "multi_env"),
-        (CuroboIkConfig.from_mapping, "self_collision_check"),
-        (CuroboMotionPlannerConfig.from_mapping, "use_cuda_graph"),
-        (CuroboMotionPlannerConfig.from_mapping, "store_debug"),
-        (CuroboMotionPlannerConfig.from_mapping, "multi_env"),
-        (CuroboMotionPlannerConfig.from_mapping, "self_collision_check"),
-    ),
-)
-def test_curobo_boolean_fields_reject_truthy_strings(parser, field: str) -> None:
-    with pytest.raises(ValueError, match=field):
-        parser({field: "false"})
+def test_curobo_robot_boolean_field_rejects_truthy_string() -> None:
+    with pytest.raises(ValueError, match="load_collision_spheres"):
+        CuroboRobotConfig.from_mapping(
+            {
+                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "default_tcp_frame": "tool",
+                "load_collision_spheres": "false",
+            }
+        )
 
 
 def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {
-                    "ik": {
-                        "random_seed": 77,
-                        "optimizer_collision_activation_distance": 0.04,
-                        "store_debug": True,
-                        "override_optimizer_num_iters": {"lbfgs": 5},
-                        "optimization_dt": 0.02,
-                        "velocity_regularization_weight": 0.2,
-                        "acceleration_regularization_weight": 0.3,
-                        "success_requires_convergence": False,
-                        "seed_position_weight": 2.0,
-                        "seed_orientation_weight": 3.0,
-                        "seed_velocity_weight": 0.4,
-                        "seed_acceleration_weight": 0.5,
-                        "seed_solver_num_seeds": 12,
-                        "collision_cache": {"cuboid": 4},
-                    }
-                },
-                "motion_planner": {
-                    "random_seed": 88,
-                    "optimizer_collision_activation_distance": 0.05,
-                    "store_debug": True,
-                    "collision_cache": {"cuboid": 4},
-                },
+    config = CuroboConfig(
+        robot=CuroboRobotConfig.from_mapping(
+            {
+                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "default_tcp_frame": "tool",
             }
-        }
+        ),
+        ik=CuroboIkConfig(
+            random_seed=77,
+            optimizer_collision_activation_distance=0.04,
+            store_debug=True,
+            override_optimizer_num_iters={"lbfgs": 5},
+            optimization_dt=0.02,
+            velocity_regularization_weight=0.2,
+            acceleration_regularization_weight=0.3,
+            success_requires_convergence=False,
+            seed_position_weight=2.0,
+            seed_orientation_weight=3.0,
+            seed_velocity_weight=0.4,
+            seed_acceleration_weight=0.5,
+            seed_solver_num_seeds=12,
+            collision_cache={"cuboid": 4},
+        ),
+        motion_planner=CuroboMotionPlannerConfig(
+            random_seed=88,
+            optimizer_collision_activation_distance=0.05,
+            store_debug=True,
+            collision_cache={"cuboid": 4},
+        ),
     )
+    config.validate()
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.device_cfg = object()
@@ -417,7 +470,7 @@ def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
     context._collision_cache_for_solver = lambda cache: dict(cache) if cache else None
     ik_calls = []
     planner_calls = []
-    warmups: list[str] = []
+    warmups: list[int] = []
     context.ik_module = SimpleNamespace(
         InverseKinematicsCfg=SimpleNamespace(
             create=lambda **kwargs: ik_calls.append(kwargs) or "ik-cfg"
@@ -430,25 +483,18 @@ def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
         ),
         MotionPlanner=lambda cfg: SimpleNamespace(
             cfg=cfg,
-            warmup=lambda: warmups.append("single"),
+            warmup=lambda *, num_warmup_iterations: warmups.append(
+                num_warmup_iterations
+            ),
         ),
     )
-    context.batch_motion_module = SimpleNamespace(
-        BatchMotionPlanner=lambda cfg: SimpleNamespace(
-            cfg=cfg,
-            warmup=lambda: warmups.append("batch"),
-        )
-    )
-
     ik_solver = context._make_ik_solver()
-    planner = context._make_motion_planner(batch=False)
-    batch_planner = context._make_motion_planner(batch=True)
+    planner = context._make_motion_planner()
 
     assert ik_solver.cfg == "ik-cfg"
     assert planner.cfg == "planner-cfg"
-    assert batch_planner.cfg == "planner-cfg"
-    assert warmups == ["single", "batch"]
-    task_root = Path("configs/curobo/task").resolve()
+    assert warmups == [1]
+    task_root = Path("src/linkerbot_sim/backends/curobo/resources/task").resolve()
 
     def assert_task_path(value: str, relative_path: str) -> None:
         path = Path(value)
@@ -501,202 +547,58 @@ def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
     assert planner_calls[0]["optimizer_collision_activation_distance"] == 0.05
     assert planner_calls[0]["store_debug"] is True
     assert planner_calls[0]["max_batch_size"] == 1
-    assert planner_calls[1]["max_batch_size"] == 256
 
     context.config = replace(
         config,
         motion_planner=replace(config.motion_planner, warmup=False),
     )
-    context._make_motion_planner(batch=False)
-    context._make_motion_planner(batch=True)
-    assert warmups == ["single", "batch"]
-
-
-def test_curobo_joint_mapping_extracts_and_scatter_by_name() -> None:
-    mapping = CuroboJointMapping.from_joint_names(
-        cspace_joint_names=("j1", "j3"),
-        command_joint_names=("j0", "j1", "j2", "j3"),
-    )
-    command = np.asarray([[0.0, 1.0, 2.0, 3.0], [4.0, 5.0, 6.0, 7.0]])
-
-    cspace = mapping.command_to_cspace(command)
-    np.testing.assert_allclose(cspace, [[1.0, 3.0], [5.0, 7.0]])
-    assert cspace.flags.c_contiguous
-
-    scattered = mapping.cspace_to_command(
-        np.asarray([[10.0, 30.0], [50.0, 70.0]]),
-        base_command_positions=command,
-    )
-    np.testing.assert_allclose(
-        scattered,
-        [[0.0, 10.0, 2.0, 30.0], [4.0, 50.0, 6.0, 70.0]],
-    )
-
-
-def test_curobo_joint_mapping_rejects_missing_command_joint() -> None:
-    try:
-        CuroboJointMapping.from_joint_names(
-            cspace_joint_names=("j1", "missing"),
-            command_joint_names=("j0", "j1"),
-        )
-    except ValueError as exc:
-        assert "missing" in str(exc)
-    else:
-        raise AssertionError("missing command joint was accepted")
+    context._make_motion_planner()
+    assert warmups == [1]
 
 
 def test_curobo_config_rejects_missing_robot_resources() -> None:
-    try:
-        CuroboConfig.from_mapping(
-            {
-                "curobo": {
-                    "enabled": True,
-                    "planning_joint_group": "arm",
-                    "robot": {"default_tcp_frame": "tool"},
-                    "kinematics": {"ik": {}},
-                }
-            }
-        )
-    except ValueError as exc:
-        assert "robot_config_path or urdf_path" in str(exc)
-    else:
-        raise AssertionError("invalid cuRobo config was accepted")
+    with pytest.raises(ValueError, match="robot_config_path or urdf_path"):
+        CuroboRobotConfig.from_mapping({"default_tcp_frame": "tool"})
 
 
 def test_curobo_config_rejects_scene_cache_types_ignored_by_v080() -> None:
     for shape in ("sphere", "capsule", "voxel", "unknown"):
-        try:
-            CuroboIkConfig.from_mapping({"collision_cache": {shape: 1}})
-        except ValueError as exc:
-            assert "unsupported by cuRobo v0.8.0" in str(exc)
-            assert shape in str(exc)
-        else:
-            raise AssertionError(f"unsupported collision cache {shape!r} was accepted")
+        with pytest.raises(ValueError, match=shape):
+            CuroboIkConfig(collision_cache={shape: 1}).validate()
 
 
 def test_curobo_tcp_frame_uses_default_parent_when_omitted() -> None:
-    config = CuroboConfig.from_mapping(
+    robot = CuroboRobotConfig.from_mapping(
         {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "flange",
-                    "custom_tcps": [
-                        {
-                            "frame_name": "tool",
-                            "xyz": [0.0, 0.0, 0.0],
-                            "rpy": [0.0, 0.0, 0.0],
-                        }
-                    ],
-                },
-            }
+            "robot_config_path": "configs/robots/ar5v2_l.yaml",
+            "default_tcp_frame": "flange",
+            "custom_tcps": [
+                {
+                    "frame_name": "tool",
+                    "xyz": [0.0, 0.0, 0.0],
+                    "rpy": [0.0, 0.0, 0.0],
+                }
+            ],
         }
     )
-    assert config.robot.custom_tcp_frames[0].parent_frame == "flange"
+    assert robot.custom_tcp_frames[0].parent_frame == "flange"
 
 
-def test_curobo_config_accepts_nested_robot_section() -> None:
-    config = CuroboConfig.from_mapping(
+def test_curobo_robot_config_accepts_tool_frames() -> None:
+    robot = CuroboRobotConfig.from_mapping(
         {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "tool_frames": ["tool"],
-                },
-            }
+            "robot_config_path": "configs/robots/ar5v2_l.yaml",
+            "tool_frames": ["tool"],
         }
     )
-    assert config.robot.resolved_tool_frames == ("tool",)
+    assert robot.resolved_tool_frames == ("tool",)
 
 
-@pytest.mark.parametrize("section", ("device", "kinematics", "motion_planner"))
-def test_curobo_config_rejects_null_canonical_mapping_sections(section: str) -> None:
-    mapping = {
-        "curobo": {
-            "enabled": True,
-            "planning_joint_group": "arm",
-            "robot": {
-                "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                "tool_frames": ["tool"],
-            },
-            section: None,
-        }
-    }
-
-    with pytest.raises(
-        ValueError,
-        match=rf"curobo\.{section} must be a mapping",
-    ):
-        CuroboConfig.from_mapping(mapping)
-
-
-@pytest.mark.parametrize(
-    ("mapping", "error"),
-    (
-        (
-            {
-                "curobo": {
-                    "enabled": True,
-                    "planning_joint_group": "arm",
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "tool_frames": ["tool"],
-                }
-            },
-            "curobo.robot is required",
-        ),
-        (
-            {
-                "curobo": {
-                    "planning_joint_group": "arm",
-                    "robot": {
-                        "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                        "tool_frames": ["tool"],
-                    },
-                }
-            },
-            "curobo.enabled is required",
-        ),
-        (
-            {
-                "curobo": {
-                    "enabled": True,
-                    "robot": {
-                        "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                        "tool_frames": ["tool"],
-                    },
-                }
-            },
-            "curobo.planning_joint_group is required",
-        ),
-        (
-            {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "tool_frames": ["tool"],
-                },
-            },
-            "config.curobo is required",
-        ),
-    ),
-)
-def test_curobo_config_rejects_noncanonical_layouts(
-    mapping: dict[str, object],
-    error: str,
-) -> None:
-    with pytest.raises(ValueError, match=error):
-        CuroboConfig.from_mapping(mapping)
-
-
-def test_curobo_config_parses_robot_profile_with_collision_model() -> None:
-    profile = load_profile_yaml("robot", "ar5v2_l6v1_l")
-
-    config = CuroboConfig.from_mapping(profile)
+def test_typed_robot_profile_projects_curobo_collision_model() -> None:
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
 
     assert config.robot.robot_config_path is not None
     assert config.robot.robot_config_path.name == "AR5V2_L_curobo.yml"
@@ -727,7 +629,10 @@ def test_curobo_solver_input_materializes_profile_paths_and_tcp(
     profile_name: str,
     tmp_path: Path,
 ) -> None:
-    config = robot_curobo_config(load_profile_yaml("robot", profile_name))
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name(profile_name),
+        cuda_device=0,
+    )
     source_urdf_path = config.robot.urdf_path
     assert source_urdf_path is not None
     materialized = materialize_curobo_config(config, cache_root=tmp_path)
@@ -759,7 +664,10 @@ def test_curobo_materialization_uses_environment_cache_root(
 ) -> None:
     cache_root = tmp_path / "external-cache"
     monkeypatch.setenv("LINKERBOT_SIM_CACHE_ROOT", str(cache_root))
-    config = robot_curobo_config(load_profile_yaml("robot", "ar5v2_l6v1_l"))
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
 
     materialized = materialize_curobo_config(config)
 
@@ -770,7 +678,10 @@ def test_curobo_materialization_uses_environment_cache_root(
 
 
 def test_curobo_materialization_rebuilds_corrupted_cache(tmp_path: Path) -> None:
-    config = robot_curobo_config(load_profile_yaml("robot", "ar5v2_l6v1_l"))
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
     expected_frame = config.robot.custom_tcp_frames[0].frame_name
     first = materialize_curobo_config(config, cache_root=tmp_path)
     output_path = first.robot.urdf_path
@@ -790,7 +701,10 @@ def test_curobo_materialization_rebuilds_valid_xml_with_tampered_robot_body(
     tmp_path: Path,
     element_tag: str,
 ) -> None:
-    config = robot_curobo_config(load_profile_yaml("robot", "ar5v2_l6v1_l"))
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
     materialized = materialize_curobo_config(config, cache_root=tmp_path)
     output_path = materialized.robot.urdf_path
     assert output_path is not None
@@ -826,7 +740,10 @@ def test_curobo_materialization_is_atomic_under_concurrency(
 ) -> None:
     from linkerbot_sim.backends.curobo import robot_model
 
-    config = robot_curobo_config(load_profile_yaml("robot", "ar5v2_l6v1_l"))
+    config = curobo_config_from_profiles(
+        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        cuda_device=0,
+    )
     expected_frame = config.robot.custom_tcp_frames[0].frame_name
     initial = materialize_curobo_config(config, cache_root=tmp_path)
     output_path = initial.robot.urdf_path
@@ -888,30 +805,24 @@ def test_curobo_materialization_is_atomic_under_concurrency(
     assert not list(output_path.parent.glob(f".{output_path.name}.*.tmp"))
 
 
-def test_curobo_config_accepts_mapping_custom_tcp_frames() -> None:
-    config = CuroboConfig.from_mapping(
+def test_curobo_robot_config_accepts_mapping_custom_tcp_frames() -> None:
+    robot = CuroboRobotConfig.from_mapping(
         {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "urdf_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
-                    "flange_frame": "AR5V2_L_arm_flan_link",
-                    "default_tcp_frame": "pinch_tcp",
-                    "custom_tcps": {
-                        "pinch_tcp": {
-                            "xyz": [0.0, 0.0, 0.1],
-                            "rpy": [0.0, 0.0, 0.0],
-                        }
-                    },
-                },
-            }
+            "urdf_path": "assets/single_system/arm/AR5V2_L/AR5V2_L.urdf",
+            "flange_frame": "AR5V2_L_arm_flan_link",
+            "default_tcp_frame": "pinch_tcp",
+            "custom_tcps": {
+                "pinch_tcp": {
+                    "xyz": [0.0, 0.0, 0.1],
+                    "rpy": [0.0, 0.0, 0.0],
+                }
+            },
         }
     )
 
-    assert config.robot.base_link == "world"
-    assert config.robot.custom_tcp_frames[0].frame_name == "pinch_tcp"
-    assert config.robot.custom_tcp_frames[0].parent_frame == "AR5V2_L_arm_flan_link"
+    assert robot.base_link == "world"
+    assert robot.custom_tcp_frames[0].frame_name == "pinch_tcp"
+    assert robot.custom_tcp_frames[0].parent_frame == "AR5V2_L_arm_flan_link"
 
 
 def test_curobo_cache_root_precedence_avoids_repository_cache(tmp_path: Path) -> None:
@@ -953,26 +864,20 @@ def test_write_curobo_tcp_urdf_with_frames_adds_fixed_link(tmp_path) -> None:
 """.strip(),
         encoding="utf-8",
     )
-    tcp = CuroboConfig.from_mapping(
+    tcp = CuroboRobotConfig.from_mapping(
         {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "urdf_path": str(source),
-                    "base_link": "base",
-                    "default_tcp_frame": "pinch",
-                    "custom_tcps": [
-                        {
-                            "frame_name": "pinch",
-                            "parent_frame": "tool",
-                            "xyz": [0.0, 0.0, 0.1],
-                        }
-                    ],
-                },
-            }
+            "urdf_path": str(source),
+            "base_link": "base",
+            "default_tcp_frame": "pinch",
+            "custom_tcps": [
+                {
+                    "frame_name": "pinch",
+                    "parent_frame": "tool",
+                    "xyz": [0.0, 0.0, 0.1],
+                }
+            ],
         }
-    ).robot.custom_tcp_frames[0]
+    ).custom_tcp_frames[0]
 
     write_curobo_tcp_urdf_with_frames(source, output, (tcp,))
 
@@ -981,15 +886,6 @@ def test_write_curobo_tcp_urdf_with_frames_adds_fixed_link(tmp_path) -> None:
     fixed_joint = root.find("joint[@name='pinch_joint']")
     assert fixed_joint is not None
     assert fixed_joint.find("parent").get("link") == "tool"
-
-
-def test_profile_path_rejects_unknown_group() -> None:
-    try:
-        profile_path("not_a_group", "default")
-    except ValueError as exc:
-        assert "Unknown" in str(exc)
-    else:
-        raise AssertionError("unknown profile group was accepted")
 
 
 def test_fake_namespace_keeps_import_side_effect_free() -> None:

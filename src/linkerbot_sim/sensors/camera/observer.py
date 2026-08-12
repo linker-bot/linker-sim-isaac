@@ -13,7 +13,6 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
-from linkerbot_sim.configs.runtime import CameraOutputRuntimeSettings
 from linkerbot_sim.utils.output_paths import (
     OutputPathPlan,
     apply_output_path_plans,
@@ -35,6 +34,26 @@ from .runtime import SensorCameraRuntime
 
 
 PathResolver = Callable[[str], Path]
+
+
+@dataclass(frozen=True)
+class CameraPublisherSettings:
+    """产品无关的 camera publisher 资源策略。
+
+    Mirror 的 strict ``CameraOutputSettings`` 具有相同字段，可以直接以结构化方式传入；
+    本地默认对象只服务独立 sensor API。sensor 层因此不再反向依赖全局 runtime 配置，
+    也不会复制 Mirror 的路径或 endpoint 事实。
+    """
+
+    queue_size: int = 128
+    overflow_policy: str = "block"
+    worker_poll_interval_s: float = 0.1
+    existing_data_policy: str = "error"
+    shutdown_policy: str = "drain"
+    rgb_format: str = "ppm"
+    depth_format: str = "npy"
+    metadata_flush_interval_frames: int = 1
+    max_bytes_per_camera: int = 1_073_741_824
 
 
 class CameraFrameObserver:
@@ -123,37 +142,15 @@ class PreparedCameraOutput:
     live_groups: tuple[tuple[str, int, Mapping[str, str]], ...]
     mcap_groups: tuple[tuple[OutputPathPlan, Mapping[str, str]], ...]
     path_plans: tuple[OutputPathPlan, ...]
-    settings: CameraOutputRuntimeSettings
+    settings: CameraPublisherSettings
     shutdown_timeout_s: float
-
-
-def start_offline_camera_output(
-    cameras: Sequence[SensorCameraRuntime],
-    *,
-    path_resolver: PathResolver | None = None,
-    settings: CameraOutputRuntimeSettings | None = None,
-    shutdown_timeout_s: float = 2.0,
-) -> CameraOutputHandle | None:
-    """根据 ``camera.output.save_dir`` 启动纯离线保存。
-
-    未配置任何离线目录时返回 ``None``；即使 camera 配有 Foxglove，本入口也不会打开网络
-    或 MCAP 输出。
-    """
-
-    return _start_camera_output(
-        cameras,
-        path_resolver=path_resolver,
-        include_foxglove=False,
-        settings=settings or CameraOutputRuntimeSettings(),
-        shutdown_timeout_s=shutdown_timeout_s,
-    )
 
 
 def start_camera_output(
     cameras: Sequence[SensorCameraRuntime],
     *,
     path_resolver: PathResolver | None = None,
-    settings: CameraOutputRuntimeSettings | None = None,
+    settings: CameraPublisherSettings | None = None,
     shutdown_timeout_s: float = 2.0,
 ) -> CameraOutputHandle | None:
     """根据 camera output 配置统一启动离线、Foxglove live 和 MCAP 输出。"""
@@ -162,7 +159,7 @@ def start_camera_output(
         cameras,
         path_resolver=path_resolver,
         include_foxglove=True,
-        settings=settings or CameraOutputRuntimeSettings(),
+        settings=settings or CameraPublisherSettings(),
         shutdown_timeout_s=shutdown_timeout_s,
     )
 
@@ -172,7 +169,7 @@ def _start_camera_output(
     *,
     path_resolver: PathResolver | None,
     include_foxglove: bool,
-    settings: CameraOutputRuntimeSettings,
+    settings: CameraPublisherSettings,
     shutdown_timeout_s: float,
 ) -> CameraOutputHandle | None:
     """为独立调用方顺序执行预检、路径应用和 sink 打开。"""
@@ -193,7 +190,7 @@ def prepare_camera_output(
     *,
     path_resolver: PathResolver | None = None,
     include_foxglove: bool = True,
-    settings: CameraOutputRuntimeSettings,
+    settings: CameraPublisherSettings,
     shutdown_timeout_s: float,
 ) -> PreparedCameraOutput:
     """预检全部相机输出，不打开资源或修改任何目标。

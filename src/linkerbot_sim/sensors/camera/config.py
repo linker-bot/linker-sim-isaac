@@ -1,12 +1,12 @@
-"""从 env profile 解析 sensor camera settings。
+"""Mirror camera runtime 使用的 typed settings。
 
-本模块只解析纯 Python 配置，不导入 Isaac/Omni。实际创建 camera prim、render product 和
-采样数据由 sensor runtime 完成。
+YAML 只由 ``configuration.scenes`` 与 ``configuration.outputs`` 解析；本模块不做第二次
+mapping 解析，也不导入 Isaac/Omni。实际创建 camera prim、render product 和采样数据由
+sensor runtime 完成。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from math import isfinite
 
@@ -17,13 +17,11 @@ Vec2i = tuple[int, int]
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
 
-# 支持集合是所有相机共享的校验约束，不属于某个实例的默认配置。
 SUPPORTED_CAMERA_MODALITIES = frozenset(
     {"rgb", "depth", "semantic_segmentation", "instance_segmentation"}
 )
 
 
-# 实例默认值归属各 settings dataclass；解析器通过类字段复用同一来源。
 @dataclass(frozen=True)
 class SensorCameraIntrinsicsSettings:
     """以 pixel 为单位的 pinhole camera intrinsics。"""
@@ -33,23 +31,11 @@ class SensorCameraIntrinsicsSettings:
     cx: float
     cy: float
 
-    @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None, *, label: str
-    ) -> "SensorCameraIntrinsicsSettings | None":
-        """解析可选 camera intrinsics；省略时保留 Isaac 默认参数。"""
-
-        if data is None:
-            return None
-        if not isinstance(data, Mapping):
-            raise ValueError(f"{label} must be a mapping")
-        _reject_keys(data, {"fx", "fy", "cx", "cy"}, label=label)
-        return cls(
-            fx=_required_positive_finite_float(data, "fx", label=label),
-            fy=_required_positive_finite_float(data, "fy", label=label),
-            cx=_required_finite_float(data, "cx", label=label),
-            cy=_required_finite_float(data, "cy", label=label),
-        )
+    def __post_init__(self) -> None:
+        _require_positive_finite(self.fx, label="camera intrinsics fx")
+        _require_positive_finite(self.fy, label="camera intrinsics fy")
+        _require_finite(self.cx, label="camera intrinsics cx")
+        _require_finite(self.cy, label="camera intrinsics cy")
 
     def matrix(self) -> tuple[tuple[float, float, float], ...]:
         """返回 row-major 3x3 camera intrinsic matrix。"""
@@ -71,6 +57,34 @@ class SensorCameraOutputSettings:
     foxglove_live_port: int | None = None
     foxglove_mcap_path: str | None = None
 
+    def __post_init__(self) -> None:
+        _require_optional_non_empty_string(
+            self.save_dir,
+            label="camera output save_dir",
+        )
+        _require_optional_non_empty_string(
+            self.foxglove_topic_prefix,
+            label="camera output foxglove_topic_prefix",
+        )
+        if (
+            self.foxglove_topic_prefix is not None
+            and not self.foxglove_topic_prefix.startswith("/")
+        ):
+            raise ValueError("camera output foxglove_topic_prefix must start with /")
+        require_loopback_host(
+            self.foxglove_live_host,
+            label="camera output foxglove_live_host",
+        )
+        if self.foxglove_live_port is not None:
+            _require_positive_int(
+                self.foxglove_live_port,
+                label="camera output foxglove_live_port",
+            )
+        _require_optional_non_empty_string(
+            self.foxglove_mcap_path,
+            label="camera output foxglove_mcap_path",
+        )
+
     @property
     def has_consumer(self) -> bool:
         """返回是否配置了会实际消费 camera frame 的输出端。"""
@@ -82,44 +96,6 @@ class SensorCameraOutputSettings:
                 self.foxglove_live_port,
                 self.foxglove_mcap_path,
             )
-        )
-
-    @classmethod
-    def from_mapping(
-        cls, data: Mapping[str, object] | None, *, label: str
-    ) -> "SensorCameraOutputSettings":
-        """解析单个 camera 的 output 分组。"""
-
-        if data is None:
-            return cls()
-        if not isinstance(data, Mapping):
-            raise ValueError(f"{label} must be a mapping")
-        _reject_keys(
-            data,
-            {
-                "save_dir",
-                "foxglove_topic_prefix",
-                "foxglove_live_host",
-                "foxglove_live_port",
-                "foxglove_mcap_path",
-            },
-            label=label,
-        )
-        return cls(
-            save_dir=_optional_non_empty_str(data, "save_dir", label=label),
-            foxglove_topic_prefix=_optional_topic_prefix(
-                data, "foxglove_topic_prefix", label=label
-            ),
-            foxglove_live_host=require_loopback_host(
-                data.get("foxglove_live_host", cls.foxglove_live_host),
-                label=f"{label}.foxglove_live_host",
-            ),
-            foxglove_live_port=_optional_positive_int_or_none(
-                data, "foxglove_live_port", label=label
-            ),
-            foxglove_mcap_path=_optional_non_empty_str(
-                data, "foxglove_mcap_path", label=label
-            ),
         )
 
 
@@ -135,7 +111,7 @@ class SensorCameraSettings:
     pose_rpy: Vec3 = (0.0, 0.0, 0.0)
     resolution: Vec2i = (640, 480)
     frequency: float = 30.0
-    # None means no tiled selector was declared; tiled validation rejects it.
+    # None 表示没有声明复制环境 selector；Mirror 配置会拒绝非空 selector。
     env_ids: tuple[int, ...] | None = None
     modalities: tuple[str, ...] = ("rgb",)
     clipping_range: Vec2 = (0.01, 5.0)
@@ -145,374 +121,133 @@ class SensorCameraSettings:
     )
 
     def __post_init__(self) -> None:
-        """校验跨字段约束。"""
+        """校验 runtime typed camera 的字段与跨字段约束。"""
 
-        if self.parent_prim_path is None:
-            return
-        parent_prefix = self.parent_prim_path.rstrip("/") + "/"
-        if not self.prim_path.startswith(parent_prefix):
+        _require_camera_name(self.name)
+        _require_path(self.prim_path, label=f"camera {self.name} prim_path")
+        if not isinstance(self.enabled, bool):
+            raise TypeError(f"camera {self.name} enabled must be a boolean")
+        if self.parent_prim_path is not None:
+            _require_path(
+                self.parent_prim_path,
+                label=f"camera {self.name} parent_prim_path",
+            )
+        _require_vec3(self.pose_xyz, label=f"camera {self.name} pose_xyz")
+        _require_vec3(self.pose_rpy, label=f"camera {self.name} pose_rpy")
+        _require_resolution(self.resolution, label=f"camera {self.name} resolution")
+        _require_positive_finite(self.frequency, label=f"camera {self.name} frequency")
+        _require_env_ids(self.env_ids, label=f"camera {self.name} env_ids")
+        _require_modalities(self.modalities, label=f"camera {self.name} modalities")
+        _require_clipping_range(
+            self.clipping_range,
+            label=f"camera {self.name} clipping_range",
+        )
+        if self.intrinsics is not None and not isinstance(
+            self.intrinsics, SensorCameraIntrinsicsSettings
+        ):
+            raise TypeError(f"camera {self.name} intrinsics has invalid type")
+        if not isinstance(self.output, SensorCameraOutputSettings):
+            raise TypeError(f"camera {self.name} output has invalid type")
+        if self.parent_prim_path is not None and not self.prim_path.startswith(
+            self.parent_prim_path.rstrip("/") + "/"
+        ):
             raise ValueError(
                 f"sensors.cameras.{self.name}.prim_path must be under "
                 "parent_prim_path when parent_prim_path is set"
             )
 
-    @classmethod
-    def from_mapping(
-        cls, name: object, data: object, *, label: str
-    ) -> "SensorCameraSettings":
-        """解析 sensors.cameras.<name>。"""
 
-        camera_name = _camera_name(name, label=label)
-        camera_label = f"{label}.{camera_name}"
-        if not isinstance(data, Mapping):
-            raise ValueError(f"{camera_label} must be a mapping")
-        _reject_keys(
-            data,
-            {
-                "enabled",
-                "prim_path",
-                "parent_prim_path",
-                "pose",
-                "resolution",
-                "frequency",
-                "env_ids",
-                "modalities",
-                "clipping_range",
-                "intrinsics",
-                "output",
-            },
-            label=camera_label,
-        )
-        pose = data.get("pose", {})
-        if pose is None:
-            pose = {}
-        if not isinstance(pose, Mapping):
-            raise ValueError(f"{camera_label}.pose must be a mapping")
-        _reject_keys(pose, {"xyz", "rpy"}, label=f"{camera_label}.pose")
-        return cls(
-            name=camera_name,
-            enabled=_optional_bool(
-                data, "enabled", default=cls.enabled, label=camera_label
-            ),
-            prim_path=_required_path(data, "prim_path", label=camera_label),
-            parent_prim_path=_optional_path_or_none(
-                data, "parent_prim_path", label=camera_label
-            ),
-            pose_xyz=_optional_vec3(
-                pose, "xyz", cls.pose_xyz, label=f"{camera_label}.pose"
-            ),
-            pose_rpy=_optional_vec3(
-                pose, "rpy", cls.pose_rpy, label=f"{camera_label}.pose"
-            ),
-            resolution=_optional_resolution(
-                data, "resolution", cls.resolution, label=camera_label
-            ),
-            frequency=_positive_float(
-                data.get("frequency", cls.frequency),
-                label=f"{camera_label}.frequency",
-            ),
-            env_ids=_optional_env_ids(data, label=camera_label),
-            modalities=_optional_modalities(
-                data, "modalities", cls.modalities, label=camera_label
-            ),
-            clipping_range=_optional_clipping_range(
-                data,
-                "clipping_range",
-                cls.clipping_range,
-                label=camera_label,
-            ),
-            intrinsics=SensorCameraIntrinsicsSettings.from_mapping(
-                data.get("intrinsics"), label=f"{camera_label}.intrinsics"
-            ),
-            output=SensorCameraOutputSettings.from_mapping(
-                data.get("output"), label=f"{camera_label}.output"
-            ),
-        )
-
-
-def _camera_name(value: object, *, label: str) -> str:
-    """校验 camera mapping key。"""
-
+def _require_camera_name(value: object) -> None:
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{label} keys must be non-empty strings")
+        raise ValueError("camera name must be a non-empty string")
     if "/" in value or "\\" in value:
-        raise ValueError(f"{label}.{value} name must not contain path separators")
-    return value
+        raise ValueError("camera name must not contain path separators")
 
 
-def _required_path(data: Mapping[str, object], key: str, *, label: str) -> str:
-    """读取必填 USD prim path。"""
-
-    if key not in data:
-        raise ValueError(f"{label}.{key} is required")
-    return _path(data[key], label=f"{label}.{key}")
-
-
-def _optional_path_or_none(
-    data: Mapping[str, object], key: str, *, label: str
-) -> str | None:
-    """读取可选 USD prim path。"""
-
-    value = data.get(key)
-    if value is None:
-        return None
-    return _path(value, label=f"{label}.{key}")
-
-
-def _path(value: object, *, label: str) -> str:
-    """校验绝对 USD prim path。"""
-
+def _require_path(value: object, *, label: str) -> None:
     if not isinstance(value, str) or not value.startswith("/"):
         raise ValueError(f"{label} must be an absolute USD prim path string")
-    return value
 
 
-def _optional_vec3(
-    data: Mapping[str, object],
-    key: str,
-    default: Vec3,
-    *,
-    label: str,
-) -> Vec3:
-    """读取可选三维向量。"""
-
-    return _vec3(data.get(key, default), label=f"{label}.{key}")
+def _require_vec3(value: object, *, label: str) -> None:
+    if not isinstance(value, tuple) or len(value) != 3:
+        raise ValueError(f"{label} must be a length-3 tuple")
+    for index, item in enumerate(value):
+        _require_finite(item, label=f"{label}[{index}]")
 
 
-def _vec3(value: object, *, label: str) -> Vec3:
-    """把配置值解析为长度为 3 的 float tuple。"""
-
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label} must be a length-3 sequence")
-    if len(value) != 3:
-        raise ValueError(f"{label} must contain exactly 3 values")
-    values = tuple(
-        _finite_number(item, label=f"{label}[{index}]")
-        for index, item in enumerate(value)
-    )
-    return values[0], values[1], values[2]
+def _require_resolution(value: object, *, label: str) -> None:
+    if not isinstance(value, tuple) or len(value) != 2:
+        raise ValueError(f"{label} must be a length-2 tuple")
+    for item in value:
+        _require_positive_int(item, label=label)
 
 
-def _optional_resolution(
-    data: Mapping[str, object],
-    key: str,
-    default: Vec2i,
-    *,
-    label: str,
-) -> Vec2i:
-    """读取图像分辨率。"""
-
-    value = data.get(key, default)
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label}.{key} must be a length-2 integer sequence")
-    values = tuple(_positive_int(item, label=f"{label}.{key}") for item in value)
-    if len(value) != 2:
-        raise ValueError(f"{label}.{key} must contain exactly 2 values")
-    return values[0], values[1]
-
-
-def _positive_int(value: object, *, label: str) -> int:
-    """解析正整数，拒绝 bool。"""
-
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{label} values must be positive integers")
-    if value <= 0:
-        raise ValueError(f"{label} values must be positive integers")
-    return value
-
-
-def _positive_float(value: object, *, label: str) -> float:
-    """解析正浮点数。"""
-
-    parsed = _finite_number(value, label=label)
-    if parsed <= 0.0:
-        raise ValueError(f"{label} must be positive and finite")
-    return parsed
-
-
-def _required_finite_float(
-    data: Mapping[str, object], key: str, *, label: str
-) -> float:
-    """读取必填有限浮点数。"""
-
-    if key not in data:
-        raise ValueError(f"{label}.{key} is required")
-    return _finite_number(data[key], label=f"{label}.{key}")
-
-
-def _required_positive_finite_float(
-    data: Mapping[str, object], key: str, *, label: str
-) -> float:
-    """读取必填正有限浮点数。"""
-
-    parsed = _required_finite_float(data, key, label=label)
-    if parsed <= 0.0:
-        raise ValueError(f"{label}.{key} must be positive")
-    return parsed
-
-
-def _optional_clipping_range(
-    data: Mapping[str, object],
-    key: str,
-    default: Vec2,
-    *,
-    label: str,
-) -> Vec2:
-    """读取 near/far clipping range。"""
-
-    value = data.get(key, default)
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label}.{key} must be a length-2 sequence")
-    if len(value) != 2:
-        raise ValueError(f"{label}.{key} must contain exactly 2 values")
-    values = tuple(
-        _finite_number(item, label=f"{label}.{key}[{index}]")
-        for index, item in enumerate(value)
-    )
-    near, far = values
-    if near <= 0.0 or far <= near:
-        raise ValueError(f"{label}.{key} must satisfy 0 < near < far")
-    return near, far
-
-
-def _optional_modalities(
-    data: Mapping[str, object],
-    key: str,
-    default: tuple[str, ...],
-    *,
-    label: str,
-) -> tuple[str, ...]:
-    """读取并校验 camera output modalities。"""
-
-    value = data.get(key, default)
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label}.{key} must be a non-empty sequence")
-    if any(not isinstance(item, str) for item in value):
-        raise ValueError(f"{label}.{key} must contain strings")
-    modalities = tuple(value)
-    if not modalities:
-        raise ValueError(f"{label}.{key} must be non-empty")
-    seen: set[str] = set()
-    for modality in modalities:
-        if modality not in SUPPORTED_CAMERA_MODALITIES:
-            raise ValueError(
-                f"{label}.{key} contains unsupported modality {modality!r}"
-            )
-        if modality in seen:
-            raise ValueError(f"{label}.{key} contains duplicate modality {modality!r}")
-        seen.add(modality)
-    return modalities
-
-
-def _optional_env_ids(
-    data: Mapping[str, object], *, label: str
-) -> tuple[int, ...] | None:
-    """解析可选的 tiled camera 环境范围，要求序列非空、元素为整数且不重复。"""
-
-    if "env_ids" not in data:
-        return None
-    value = data["env_ids"]
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label}.env_ids must be a non-empty sequence of integers")
-    env_ids: list[int] = []
+def _require_env_ids(value: object, *, label: str) -> None:
+    if value is None:
+        return
+    if not isinstance(value, tuple) or not value:
+        raise ValueError(f"{label} must be a non-empty tuple of integers")
     for index, item in enumerate(value):
         if isinstance(item, bool) or not isinstance(item, int):
-            raise ValueError(f"{label}.env_ids[{index}] must be an integer")
+            raise ValueError(f"{label}[{index}] must be an integer")
         if item < 0:
-            raise ValueError(f"{label}.env_ids[{index}] must be nonnegative")
-        env_ids.append(item)
-    if not env_ids:
-        raise ValueError(f"{label}.env_ids must be non-empty")
-    if len(set(env_ids)) != len(env_ids):
-        raise ValueError(f"{label}.env_ids cannot contain duplicates")
-    return tuple(env_ids)
+            raise ValueError(f"{label}[{index}] must be nonnegative")
+    if len(set(value)) != len(value):
+        raise ValueError(f"{label} cannot contain duplicates")
 
 
-def _optional_non_empty_str(
-    data: Mapping[str, object],
-    key: str,
-    *,
-    label: str,
-    default: str | None = None,
-) -> str | None:
-    """读取可选非空字符串。"""
+def _require_modalities(value: object, *, label: str) -> None:
+    if not isinstance(value, tuple) or not value:
+        raise ValueError(f"{label} must be a non-empty tuple")
+    if len(set(value)) != len(value):
+        raise ValueError(f"{label} cannot contain duplicates")
+    for modality in value:
+        if not isinstance(modality, str):
+            raise ValueError(f"{label} must contain strings")
+        if modality not in SUPPORTED_CAMERA_MODALITIES:
+            raise ValueError(f"{label} contains unsupported modality {modality!r}")
 
-    value = data.get(key, default)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{label}.{key} must be a non-empty string")
+
+def _require_clipping_range(value: object, *, label: str) -> None:
+    if not isinstance(value, tuple) or len(value) != 2:
+        raise ValueError(f"{label} must be a length-2 tuple")
+    near = _require_finite(value[0], label=f"{label}[0]")
+    far = _require_finite(value[1], label=f"{label}[1]")
+    if near <= 0.0 or far <= near:
+        raise ValueError(f"{label} must satisfy 0 < near < far")
+
+
+def _require_positive_int(value: object, *, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{label} must be a positive integer")
     return value
 
 
-def _non_empty_str_with_default(
-    data: Mapping[str, object],
-    key: str,
-    *,
-    label: str,
-    default: str,
-) -> str:
-    value = _optional_non_empty_str(data, key, label=label, default=default)
-    assert value is not None
-    return value
+def _require_positive_finite(value: object, *, label: str) -> float:
+    number = _require_finite(value, label=label)
+    if number <= 0.0:
+        raise ValueError(f"{label} must be positive")
+    return number
 
 
-def _finite_number(value: object, *, label: str) -> float:
-    """解析有限 YAML 数值，不接受布尔值或数值字符串的隐式转换。"""
-
+def _require_finite(value: object, *, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{label} must be a finite number")
-    parsed = float(value)
-    if not isfinite(parsed):
+    number = float(value)
+    if not isfinite(number):
         raise ValueError(f"{label} must be a finite number")
-    return parsed
+    return number
 
 
-def _optional_topic_prefix(
-    data: Mapping[str, object], key: str, *, label: str
-) -> str | None:
-    """读取可选 topic prefix。"""
-
-    value = _optional_non_empty_str(data, key, label=label)
-    if value is not None and not value.startswith("/"):
-        raise ValueError(f"{label}.{key} must start with /")
-    return value
+def _require_optional_non_empty_string(value: object, *, label: str) -> None:
+    if value is not None and (not isinstance(value, str) or not value):
+        raise ValueError(f"{label} must be a non-empty string")
 
 
-def _optional_positive_int_or_none(
-    data: Mapping[str, object], key: str, *, label: str
-) -> int | None:
-    """读取可选正整数。"""
-
-    value = data.get(key)
-    if value is None:
-        return None
-    return _positive_int(value, label=f"{label}.{key}")
-
-
-def _optional_bool(
-    data: Mapping[str, object],
-    key: str,
-    *,
-    default: bool,
-    label: str,
-) -> bool:
-    """读取布尔字段，拒绝字符串形式的 true/false。"""
-
-    value = data.get(key, default)
-    if not isinstance(value, bool):
-        raise ValueError(f"{label}.{key} must be a boolean")
-    return value
-
-
-def _reject_keys(data: Mapping[str, object], allowed: set[str], *, label: str) -> None:
-    """拒绝未知键，防止 camera scope 拼写错误意外退化为选择全部环境。"""
-
-    unsupported = set(data) - allowed
-    if unsupported:
-        names = sorted(str(key) for key in unsupported)
-        keys = ", ".join(names)
-        paths = ", ".join(f"{label}.{key}" for key in names)
-        raise ValueError(
-            f"{label} contains unsupported keys: {keys} (full paths: {paths})"
-        )
+__all__ = [
+    "SUPPORTED_CAMERA_MODALITIES",
+    "SensorCameraIntrinsicsSettings",
+    "SensorCameraOutputSettings",
+    "SensorCameraSettings",
+]

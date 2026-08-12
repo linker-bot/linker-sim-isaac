@@ -21,26 +21,27 @@ from linkerbot_sim.backends.curobo.runtime_imports import (
     import_curobo_module,
     import_curobo_public,
     import_torch_module,
+    require_curobo_kernel_backend,
 )
 from linkerbot_sim.backends.curobo.robot_model import (
     materialize_curobo_config,
     materialized_robot_mapping,
 )
+from linkerbot_sim.backends.curobo.resources import curobo_task_resource_path
 from linkerbot_sim.backends.curobo.tool_pose import goal_tool_pose_from_arrays
 from linkerbot_sim.planning.collision_objects import CollisionObject
-from linkerbot_sim.utils.paths import repo_path
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 _COLLISION_CONSUMER_SOLVER_ATTRIBUTES = {
     "ik": "_ik_solver",
     "planner": "_motion_planner",
-    "batch_planner": "_batch_motion_planner",
 }
 _COLLISION_CONSUMER_LABELS = {
     "ik": "IK",
     "planner": "MotionPlanner",
-    "batch_planner": "BatchMotionPlanner",
 }
+_MOTION_PLANNER_WARMUP_ITERATIONS = 1
 
 
 @dataclass(frozen=True)
@@ -101,11 +102,17 @@ class CuroboContext:
     ) -> None:
         """加载 cuRobo public modules，并创建 kinematics / solvers。"""
 
+        if not isinstance(config, CuroboConfig):
+            raise TypeError("config must be CuroboConfig")
+        # Context 是最终 runtime 边界；即使调用方绕过正式 profile composition 直接构造
+        # typed dataclass，也必须在导入 cuRobo 或创建 CUDA 资源前完成完整校验。
+        config.validate()
         source_urdf_path = config.robot.urdf_path
         curobo_module = import_curobo_module()
         config.task_bundle.validate_curobo_version(
             getattr(curobo_module, "__version__", "unknown")
         )
+        self.kernel_backend = require_curobo_kernel_backend(expected="cuda_core")
         self.config = materialize_curobo_config(config, cache_root=cache_root)
         self._robot_asset_root_path = (
             None if source_urdf_path is None else source_urdf_path.parent
@@ -116,7 +123,6 @@ class CuroboContext:
         self.kinematics_module = import_curobo_public("kinematics")
         self.ik_module = import_curobo_public("inverse_kinematics")
         self.motion_module = import_curobo_public("motion_planner")
-        self.batch_motion_module = import_curobo_public("batch_motion_planner")
         self.scene_module = import_curobo_public("scene")
         self.robot_module = import_curobo_public("_src.types.robot")
         self.device_cfg = self._make_device_cfg()
@@ -126,14 +132,11 @@ class CuroboContext:
         )
         self.tool_frames = tuple(self.config.robot.resolved_tool_frames)
         self.kinematics = self._make_kinematics()
-        # cuRobo planner warmup 会捕获 CUDA graph，并可能为 256 batch 预分配大量显存。
-        # 因此 solver/planner 不能在 context 构造时全部创建；按实际调用入口 lazy 创建，
-        # 可以让 IK-only、FK-only 和 tiled batch planning 避免额外占用另一套 planner 缓存。
+        # cuRobo planner warmup 会创建求解缓存，因此 solver/planner 不能在 context 构造时
+        # 全部创建；按实际调用入口 lazy 创建，让 IK-only/FK-only 调用不承担 planner 显存。
         self._ik_solver = None
         self._motion_planner = None
-        self._batch_motion_planner = None
         self._collision_world = None
-        self._empty_collision_world = None
         self._synced_scene_version = None
         self._materialized_view_fingerprint = None
         self._local_scene_version = 0
@@ -152,24 +155,12 @@ class CuroboContext:
         """按需创建单问题 ``MotionPlanner``。"""
 
         if self._motion_planner is None:
-            self._motion_planner = self._make_motion_planner(batch=False)
+            self._motion_planner = self._make_motion_planner()
             self._sync_solver_world_if_available(
                 self._motion_planner,
                 consumer="planner",
             )
         return self._motion_planner
-
-    @property
-    def batch_motion_planner(self):
-        """按需创建 tiled/MPC 使用的 ``BatchMotionPlanner``。"""
-
-        if self._batch_motion_planner is None:
-            self._batch_motion_planner = self._make_motion_planner(batch=True)
-            self._sync_solver_world_if_available(
-                self._batch_motion_planner,
-                consumer="batch_planner",
-            )
-        return self._batch_motion_planner
 
     def existing_solvers(self) -> tuple[object, ...]:
         """返回已经创建的 cuRobo solver/planner，不触发 lazy 初始化。"""
@@ -179,7 +170,6 @@ class CuroboContext:
             for solver in (
                 self._ik_solver,
                 self._motion_planner,
-                self._batch_motion_planner,
             )
             if solver is not None
         )
@@ -188,7 +178,7 @@ class CuroboContext:
         """逐个释放 CUDA graph；失败 solver 保留所有权，允许再次关闭。"""
 
         first_error: BaseException | None = None
-        for name in ("_motion_planner", "_batch_motion_planner", "_ik_solver"):
+        for name in ("_motion_planner", "_ik_solver"):
             solver = getattr(self, name, None)
             destroy = getattr(solver, "destroy", None)
             try:
@@ -235,22 +225,6 @@ class CuroboContext:
         )
         return self._collision_world
 
-    def clear_collision_world(self):
-        """清空 context 当前环境，并同步空 cuRobo Scene。"""
-
-        return self.sync_collision_world(())
-
-    def empty_collision_world(self):
-        """返回复用的空 collision world，不修改当前真实环境缓存。"""
-
-        from linkerbot_sim.backends.curobo.collision_world import (
-            CuroboCollisionWorld,
-        )
-
-        if self._empty_collision_world is None:
-            self._empty_collision_world = CuroboCollisionWorld(self, ())
-        return self._empty_collision_world
-
     def joint_names(self) -> list[str]:
         """返回 cuRobo active C-space 关节名顺序。"""
 
@@ -273,10 +247,8 @@ class CuroboContext:
         normalized = _normalize_collision_consumer(consumer)
         if normalized == "ik":
             self.ik_solver
-        elif normalized == "planner":
-            self.motion_planner
         else:
-            self.batch_motion_planner
+            self.motion_planner
         return self.collision_capability(consumer=normalized)
 
     def collision_capability(
@@ -353,7 +325,18 @@ class CuroboContext:
         consumers = (
             (_normalize_collision_consumer(consumer),)
             if consumer is not None
-            else self._existing_collision_consumers()
+            else tuple(
+                normalized
+                for normalized in self._existing_collision_consumers()
+                if any(
+                    callable(getattr(solver, "update_world", None))
+                    and (
+                        not hasattr(solver, "scene_collision_checker")
+                        or getattr(solver, "scene_collision_checker") is not None
+                    )
+                    for solver in self._collision_solvers(normalized)
+                )
+            )
         )
         for normalized in consumers:
             label = _collision_consumer_label(normalized)
@@ -366,15 +349,25 @@ class CuroboContext:
                         f"for {shape}: required={int(count)}, configured={capacity}"
                     )
 
-    def joint_state_from_positions(self, positions: np.ndarray):
-        """把 numpy C-space 矩阵转换成 cuRobo ``JointState``。"""
+    def joint_state_from_positions(self, positions: object):
+        """把 C-space 数组或 device tensor 转换成 cuRobo ``JointState``。
 
-        array = np.ascontiguousarray(positions, dtype=float)
-        tensor = self.torch.as_tensor(
-            array,
-            device=self.device_cfg.device,
-            dtype=self.device_cfg.dtype,
-        )
+        已位于 cuRobo device/dtype 的 tensor 保持在设备上；NumPy/序列输入只在这个
+        外部边界上传一次。这样顺序 IK 可以直接复用上一 waypoint 的 CUDA 解。
+        """
+
+        if self.torch.is_tensor(positions):
+            tensor = positions.to(
+                device=self.device_cfg.device,
+                dtype=self.device_cfg.dtype,
+            )
+        else:
+            array = np.ascontiguousarray(positions, dtype=float)
+            tensor = self.torch.as_tensor(
+                array,
+                device=self.device_cfg.device,
+                dtype=self.device_cfg.dtype,
+            )
         if hasattr(tensor, "contiguous"):
             tensor = tensor.contiguous()
         return self.types.JointState.from_position(
@@ -412,7 +405,10 @@ class CuroboContext:
             self.joint_state_from_positions(joint_positions)
         )
         pose = state.tool_poses.get_link_pose(frame_name)
-        return _tensor_to_numpy(pose.position), _tensor_to_numpy(pose.quaternion)
+        return (
+            tensor_like_to_numpy(pose.position, dtype=float),
+            tensor_like_to_numpy(pose.quaternion, dtype=float),
+        )
 
     def make_forward_kinematics(self):
         """创建正运动学组件。"""
@@ -565,8 +561,8 @@ class CuroboContext:
         )
         return self.ik_module.InverseKinematics(ik_cfg)
 
-    def _make_motion_planner(self, *, batch: bool):
-        """创建单问题或批量 ``MotionPlanner``。"""
+    def _make_motion_planner(self):
+        """创建 Mirror 单请求 ``MotionPlanner``。"""
 
         robot_input = self._robot_input_for_solver()
         task_bundle = self.config.task_bundle
@@ -617,21 +613,16 @@ class CuroboContext:
             collision_cache=self._collision_cache_for_solver(
                 self.config.motion_planner.collision_cache
             ),
-            max_batch_size=(
-                int(self.config.motion_planner.max_batch_size) if batch else 1
-            ),
-            multi_env=bool(self.config.motion_planner.multi_env) if batch else False,
+            max_batch_size=1,
+            multi_env=False,
             max_goalset=int(self.config.motion_planner.max_goalset),
         )
-        planner_type = (
-            self.batch_motion_module.BatchMotionPlanner
-            if batch
-            else self.motion_module.MotionPlanner
-        )
-        planner = planner_type(planner_cfg)
+        planner = self.motion_module.MotionPlanner(planner_cfg)
         warmup = getattr(planner, "warmup", None)
         if self.config.motion_planner.warmup and callable(warmup):
-            warmup()
+            warmup(
+                num_warmup_iterations=_MOTION_PLANNER_WARMUP_ITERATIONS,
+            )
         return planner
 
     def _sync_solver_world_if_available(
@@ -753,7 +744,7 @@ class CuroboContext:
 
         return tuple(
             consumer
-            for consumer in ("ik", "planner", "batch_planner")
+            for consumer in ("ik", "planner")
             if getattr(
                 self,
                 _collision_consumer_solver_attribute(consumer),
@@ -807,15 +798,9 @@ def _collision_cache_capacity_sufficient(
 
 
 def _curobo_task_config_path(relative_path: str) -> str:
-    """返回项目 task config 的绝对路径，让每个 cuRobo consumer 独立加载。"""
+    """返回锁定版本的后端 task 资源绝对路径。"""
 
-    root = repo_path("configs/curobo/task").resolve()
-    path = (root / str(relative_path)).resolve()
-    if not path.is_relative_to(root):
-        raise ValueError(f"cuRobo task config escapes project root: {relative_path!r}")
-    if not path.is_file():
-        raise FileNotFoundError(f"cuRobo task config does not exist: {path}")
-    return str(path)
+    return curobo_task_resource_path(relative_path)
 
 
 def _torch_dtype(torch, name: str):
@@ -825,18 +810,6 @@ def _torch_dtype(torch, name: str):
     if dtype is None:
         raise ValueError(f"Unknown torch dtype for cuRobo: {name}")
     return dtype
-
-
-def _tensor_to_numpy(value) -> np.ndarray:
-    """把 torch tensor-like 转为 numpy。"""
-
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        return np.asarray(value.numpy(), dtype=float)
-    return np.asarray(value, dtype=float)
 
 
 def _collision_objects_fingerprint(

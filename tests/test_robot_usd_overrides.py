@@ -4,7 +4,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 from linkerbot_sim.assets import usd_overrides
-from linkerbot_sim.assets.usd_overrides import PhysxOverrideConfig
+from linkerbot_sim.assets.usd_overrides import RobotUsdOverrideConfig
 from linkerbot_sim.robots.classification import RobotComponentMapping
 
 
@@ -27,7 +27,12 @@ def test_robot_usd_overrides_isolate_material_prims_per_robot(
     ):
         usd_overrides.apply_robot_usd_overrides(
             robot_root,
-            PhysxOverrideConfig(contact_static_friction=static_friction),
+            RobotUsdOverrideConfig(
+                contact_static_friction=static_friction,
+                contact_material_override=True,
+                friction_combine_mode="average",
+            ),
+            physics_backend="physx",
         )
 
     assert material_calls == [
@@ -56,7 +61,8 @@ def test_robot_usd_overrides_rejects_missing_root_before_creating_material(
     try:
         usd_overrides.apply_robot_usd_overrides(
             "/World/Robots/missing",
-            PhysxOverrideConfig(),
+            RobotUsdOverrideConfig(),
+            physics_backend="physx",
         )
     except ValueError as exc:
         assert "root prim does not exist" in str(exc)
@@ -85,18 +91,24 @@ def test_robot_usd_overrides_bind_distinct_material_values_per_robot(
 
     usd_overrides.apply_robot_usd_overrides(
         "/World/Robots/left",
-        PhysxOverrideConfig(
+        RobotUsdOverrideConfig(
             contact_static_friction=0.2,
             contact_dynamic_friction=0.1,
+            contact_material_override=True,
+            friction_combine_mode="average",
         ),
+        physics_backend="physx",
     )
     left_material = bindings[0][1]
     usd_overrides.apply_robot_usd_overrides(
         "/World/Robots/right",
-        PhysxOverrideConfig(
+        RobotUsdOverrideConfig(
             contact_static_friction=0.9,
             contact_dynamic_friction=0.7,
+            contact_material_override=True,
+            friction_combine_mode="average",
         ),
+        physics_backend="physx",
     )
 
     assert [path for path, _material in bindings] == [
@@ -125,7 +137,8 @@ def test_robot_usd_overrides_preserves_asset_material_binding(monkeypatch) -> No
 
     usd_overrides.apply_robot_usd_overrides(
         "/World/Robots/preserved",
-        PhysxOverrideConfig(contact_material_override=False),
+        RobotUsdOverrideConfig(contact_material_override=False),
+        physics_backend="physx",
     )
 
     assert material_paths == []
@@ -159,9 +172,9 @@ def test_nonstandard_collision_and_joint_usd_overrides_use_exact_groups() -> Non
     active = _Prim("axis_b", "PhysicsRevoluteJoint")
     follower = _Prim("axis_shadow", "PhysicsRevoluteJoint")
     configs = {
-        "default": PhysxOverrideConfig(drive_stiffness_seed=1.0),
-        "arm": PhysxOverrideConfig(drive_stiffness_seed=2.0),
-        "hand": PhysxOverrideConfig(
+        "default": RobotUsdOverrideConfig(drive_stiffness_seed=1.0),
+        "arm": RobotUsdOverrideConfig(drive_stiffness_seed=2.0),
+        "hand": RobotUsdOverrideConfig(
             drive_stiffness_seed={"axis_b": 22.0},
             follower_drive_stiffness_seed={"axis_shadow": 33.0},
             drive_damping_seed={"axis_b": 2.0},
@@ -194,18 +207,155 @@ def test_nonstandard_collision_and_joint_usd_overrides_use_exact_groups() -> Non
     }
 
 
-def _install_empty_usd_stage(monkeypatch, *, root_valid: bool = True) -> None:
-    prims_module = ModuleType("isaacsim.core.utils.prims")
-    prims_module.get_prim_at_path = lambda _path: SimpleNamespace(
-        IsValid=lambda: root_valid
-    )
-    monkeypatch.setitem(sys.modules, "isaacsim", ModuleType("isaacsim"))
-    monkeypatch.setitem(sys.modules, "isaacsim.core", ModuleType("isaacsim.core"))
-    monkeypatch.setitem(
-        sys.modules, "isaacsim.core.utils", ModuleType("isaacsim.core.utils")
-    )
-    monkeypatch.setitem(sys.modules, "isaacsim.core.utils.prims", prims_module)
+def test_newton_gravity_policy_projects_per_body_mujoco_gravcomp(
+    monkeypatch,
+) -> None:
+    authored: dict[str, object] = {}
+    rigid_body_api = object()
 
+    class _Attr:
+        def __init__(self, path: str, name: str) -> None:
+            self.path = path
+            self.name = name
+
+        def Set(self, value: object) -> None:
+            authored[f"{self.path}.{self.name}"] = value
+
+    class _Body:
+        def __init__(self, name: str, path: str) -> None:
+            self.name = name
+            self.path = path
+
+        def GetName(self) -> str:
+            return self.name
+
+        def HasAPI(self, schema: object) -> bool:
+            return schema is rigid_body_api
+
+        def CreateAttribute(self, name: str, value_type: object) -> _Attr:
+            assert value_type is float_type
+            return _Attr(self.path, name)
+
+    bodies = (
+        _Body("arm_body", "/World/Robot/arm_body"),
+        _Body("hand_body", "/World/Robot/hand_body"),
+    )
+    root = SimpleNamespace(IsValid=lambda: True)
+    stage = SimpleNamespace(GetPrimAtPath=lambda _path: root)
+    float_type = object()
+
+    pxr_module = ModuleType("pxr")
+    pxr_module.Sdf = SimpleNamespace(ValueTypeNames=SimpleNamespace(Float=float_type))
+    pxr_module.Usd = SimpleNamespace(PrimRange=lambda _root: bodies)
+    pxr_module.UsdPhysics = SimpleNamespace(RigidBodyAPI=rigid_body_api)
+    monkeypatch.setitem(sys.modules, "pxr", pxr_module)
+
+    usd_module = ModuleType("omni.usd")
+    usd_module.get_context = lambda: SimpleNamespace(get_stage=lambda: stage)
+    omni_module = ModuleType("omni")
+    omni_module.usd = usd_module
+    monkeypatch.setitem(sys.modules, "omni", omni_module)
+    monkeypatch.setitem(sys.modules, "omni.usd", usd_module)
+
+    mapping = RobotComponentMapping.from_profile(
+        {"rigid_body_groups": {"arm": ["arm_body"], "hand": ["hand_body"]}}
+    )
+    policy = SimpleNamespace(enabled_for_component=lambda component: component == "arm")
+
+    counts = usd_overrides.apply_robot_gravity_policy(
+        "/World/Robot",
+        policy,
+        component_mapping=mapping,
+        physics_backend="newton",
+    )
+
+    assert authored == {
+        "/World/Robot/arm_body.mjc:gravcomp": 0.0,
+        "/World/Robot/hand_body.mjc:gravcomp": 1.0,
+    }
+    assert counts == {
+        "enabled": 1,
+        "disabled": 1,
+        "newton_gravcomp": 1,
+        "skipped_physx_fields": 0,
+    }
+
+
+def test_native_mimic_follower_drive_is_zeroed() -> None:
+    authored: dict[str, object] = {}
+
+    class _Attr:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def Set(self, value: object) -> None:
+            authored[self.name] = value
+
+    class _Drive:
+        def CreateTypeAttr(self) -> _Attr:
+            return _Attr("type")
+
+        def CreateStiffnessAttr(self) -> _Attr:
+            return _Attr("stiffness")
+
+        def CreateDampingAttr(self) -> _Attr:
+            return _Attr("damping")
+
+        def CreateMaxForceAttr(self) -> _Attr:
+            return _Attr("max_force")
+
+    class _DriveAPI:
+        @staticmethod
+        def Apply(_prim, name: str) -> _Drive:
+            authored["drive_name"] = name
+            return _Drive()
+
+    prim = SimpleNamespace(GetTypeName=lambda: "PhysicsRevoluteJoint")
+
+    usd_overrides._disable_native_mimic_follower_drive(
+        prim,
+        SimpleNamespace(DriveAPI=_DriveAPI),
+    )
+
+    assert authored == {
+        "drive_name": "angular",
+        "type": "force",
+        "stiffness": 0.0,
+        "damping": 0.0,
+        "max_force": 0.0,
+    }
+
+
+def test_newton_native_mimic_follower_drive_api_is_removed() -> None:
+    removed: list[tuple[object, str]] = []
+    drive_api = object()
+    prim = SimpleNamespace(
+        GetTypeName=lambda: "PhysicsRevoluteJoint",
+        RemoveAPI=lambda schema, name: removed.append((schema, name)),
+    )
+
+    usd_overrides._disable_native_mimic_follower_drive(
+        prim,
+        SimpleNamespace(DriveAPI=drive_api),
+        physics_backend="newton",
+    )
+
+    assert removed == [(drive_api, "angular")]
+
+
+def test_remove_usd_drive_uses_multiple_apply_instance_name() -> None:
+    removed: list[tuple[object, str]] = []
+    drive_api = object()
+    prim = SimpleNamespace(
+        RemoveAPI=lambda schema, name: removed.append((schema, name))
+    )
+
+    usd_overrides._remove_usd_drive(prim, SimpleNamespace(DriveAPI=drive_api), "linear")
+
+    assert removed == [(drive_api, "linear")]
+
+
+def _install_empty_usd_stage(monkeypatch, *, root_valid: bool = True) -> None:
     pxr_module = ModuleType("pxr")
     pxr_module.PhysxSchema = SimpleNamespace()
     pxr_module.Usd = SimpleNamespace(PrimRange=lambda _root: ())
@@ -213,8 +363,11 @@ def _install_empty_usd_stage(monkeypatch, *, root_valid: bool = True) -> None:
     pxr_module.UsdShade = SimpleNamespace()
     monkeypatch.setitem(sys.modules, "pxr", pxr_module)
 
+    stage = SimpleNamespace(
+        GetPrimAtPath=lambda _path: SimpleNamespace(IsValid=lambda: root_valid)
+    )
     usd_module = ModuleType("omni.usd")
-    usd_module.get_context = lambda: SimpleNamespace(get_stage=lambda: object())
+    usd_module.get_context = lambda: SimpleNamespace(get_stage=lambda: stage)
     omni_module = ModuleType("omni")
     omni_module.usd = usd_module
     monkeypatch.setitem(sys.modules, "omni", omni_module)
@@ -244,18 +397,6 @@ def _install_collision_usd_stage(monkeypatch, *, bindings) -> None:
         def HasAPI(self, schema) -> bool:
             return schema is collision_api
 
-    def get_prim_at_path(path: str):
-        return _Root(path)
-
-    prims_module = ModuleType("isaacsim.core.utils.prims")
-    prims_module.get_prim_at_path = get_prim_at_path
-    monkeypatch.setitem(sys.modules, "isaacsim", ModuleType("isaacsim"))
-    monkeypatch.setitem(sys.modules, "isaacsim.core", ModuleType("isaacsim.core"))
-    monkeypatch.setitem(
-        sys.modules, "isaacsim.core.utils", ModuleType("isaacsim.core.utils")
-    )
-    monkeypatch.setitem(sys.modules, "isaacsim.core.utils.prims", prims_module)
-
     def prim_range(root):
         return (_Collision(f"{root.path}/collision"),)
 
@@ -279,8 +420,9 @@ def _install_collision_usd_stage(monkeypatch, *, bindings) -> None:
     )
     monkeypatch.setitem(sys.modules, "pxr", pxr_module)
 
+    stage = SimpleNamespace(GetPrimAtPath=lambda path: _Root(path))
     usd_module = ModuleType("omni.usd")
-    usd_module.get_context = lambda: SimpleNamespace(get_stage=lambda: object())
+    usd_module.get_context = lambda: SimpleNamespace(get_stage=lambda: stage)
     omni_module = ModuleType("omni")
     omni_module.usd = usd_module
     monkeypatch.setitem(sys.modules, "omni", omni_module)

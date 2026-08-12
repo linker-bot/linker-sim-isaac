@@ -334,10 +334,11 @@
                       name="AR5V2_L_arm_flan_link"
                       pos="0 0 0.09"
                     >
-                      <!-- 占位惯性：避免 PhysX 对零质量 fixed link 使用 fallback 小球惯量。 -->
+                      <!-- 占位惯性：1 mg、等效半径 50 mm；对机构动力学影响可忽略，并高于 Newton 惯量校验下限。 -->
                       <inertial
-                        mass="1e-016"
-                        diaginertia="1e-18 1e-18 1e-18"
+                        pos="0 0 0"
+                        mass="1e-6"
+                        diaginertia="1e-9 1e-9 1e-9"
                       />
                     </body>
                   </body>

@@ -1,4 +1,4 @@
-"""关节 effort 读取和 CSV 日志。
+"""关节 effort 采样辅助函数。
 
 Isaac 的 position/velocity drive 最终也会在 PhysX 中产生关节力/力矩，因此 effort 日志不只
 服务 direct effort 控制。这里区分三种值：
@@ -15,12 +15,11 @@ Isaac 的 position/velocity drive 最终也会在 PhysX 中产生关节力/力�
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from linkerbot_sim.logging.csv_writer import CsvWriter
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 @dataclass(frozen=True)
@@ -63,16 +62,8 @@ def _to_numpy_vector(values: Any, expected_size: int) -> np.ndarray | None:
 
     if values is None:
         return None
-    # Isaac 可能返回 torch tensor；不在模块顶部导入 torch，避免给普通日志测试增加依赖。
-    if hasattr(values, "detach"):
-        values = values.detach().cpu().numpy()
-    elif hasattr(values, "numpy") and not isinstance(values, np.ndarray):
-        try:
-            values = values.numpy()
-        except Exception:
-            pass
     try:
-        array = np.asarray(values, dtype=float).reshape(-1)
+        array = tensor_like_to_numpy(values, dtype=float).reshape(-1)
     except Exception:
         return None
     if array.size != expected_size:
@@ -184,105 +175,8 @@ def commanded_efforts_from_controller(
     return efforts[indices]
 
 
-class EffortLogger:
-    """记录每个关节的 commanded/measured/applied effort。
-
-    输入:
-        path: CSV 输出路径；为 ``None`` 时禁用写文件。
-        joint_names: 记录的关节名顺序，必须和传入数组顺序一致。
-        flush_interval_steps: 每隔多少个写入步 flush 一次。
-    输出:
-        CSV 列名使用 ``tau_cmd``、``tau_measured`` 和 ``tau_applied`` 区分三类 effort。
-    """
-
-    def __init__(
-        self,
-        path: str | Path | None,
-        joint_names: list[str],
-        *,
-        flush_interval_steps: int = 1,
-        existing_data_policy: str = "error",
-        timestamped_run_name: str | None = None,
-    ) -> None:
-        """创建 effort CSV writer，并按关节名展开三类 effort 列。"""
-
-        self.joint_names = list(joint_names)
-        fieldnames = ["step", "time_s", "phase", "drive_update"]
-        for name in self.joint_names:
-            fieldnames.extend(
-                [
-                    f"tau_cmd_{name}",
-                    f"tau_measured_{name}",
-                    f"tau_applied_{name}",
-                ]
-            )
-        self.writer = CsvWriter(
-            path,
-            fieldnames,
-            flush_interval_rows=flush_interval_steps,
-            existing_data_policy=existing_data_policy,
-            timestamped_run_name=timestamped_run_name,
-        )
-
-    def _vector(self, values: np.ndarray | None, label: str) -> np.ndarray:
-        """校验或补齐一类 effort 数组。"""
-
-        if values is None:
-            return _nan_vector(len(self.joint_names))
-        vector = np.asarray(values, dtype=float).reshape(-1)
-        if vector.size != len(self.joint_names):
-            raise ValueError(
-                f"{label} expected {len(self.joint_names)} values, got {vector.size}"
-            )
-        return vector
-
-    def write(
-        self,
-        *,
-        step: int,
-        time_s: float,
-        phase: str,
-        drive_update: bool,
-        commanded_effort: np.ndarray | None = None,
-        measured_effort: np.ndarray | None = None,
-        applied_effort: np.ndarray | None = None,
-    ) -> None:
-        """写入一个仿真步的 effort 数据。
-
-        三类 effort 数组都按 ``joint_names`` 顺序展开。未提供的数组会写为 ``nan``，长度不匹配
-        则抛错，避免 CSV 列和值悄悄错位。
-        """
-
-        commanded = self._vector(commanded_effort, "commanded_effort")
-        measured = self._vector(measured_effort, "measured_effort")
-        applied = self._vector(applied_effort, "applied_effort")
-        row: dict[str, float | int | str] = {
-            "step": int(step),
-            "time_s": f"{float(time_s):.9f}",
-            "phase": phase,
-            "drive_update": str(bool(drive_update)).lower(),
-        }
-        for index, name in enumerate(self.joint_names):
-            row[f"tau_cmd_{name}"] = f"{commanded[index]:.12g}"
-            row[f"tau_measured_{name}"] = f"{measured[index]:.12g}"
-            row[f"tau_applied_{name}"] = f"{applied[index]:.12g}"
-        self.writer.write(row)
-
-    def close(self) -> None:
-        """关闭内部 CSV writer。
-
-        底层 ``CsvWriter`` 会处理禁用日志和重复关闭，因此调用方可以在任务清理阶段无条件
-        调用本方法。
-        """
-
-        self.writer.close()
-
-    def __enter__(self) -> "EffortLogger":
-        """进入上下文管理器。"""
-
-        return self
-
-    def __exit__(self, *_exc_info) -> None:
-        """退出上下文时关闭日志文件。"""
-
-        self.close()
+__all__ = [
+    "JointEffortSample",
+    "commanded_efforts_from_controller",
+    "read_joint_efforts",
+]

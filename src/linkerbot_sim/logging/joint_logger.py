@@ -15,17 +15,18 @@ from pathlib import Path
 
 import numpy as np
 
+from linkerbot_sim.configuration.outputs import LoggingOutputSettings
 from linkerbot_sim.logging.csv_writer import CsvOutputPlan, CsvWriter
-from linkerbot_sim.logging.config import JointLoggingConfig
 from linkerbot_sim.logging.effort_logger import (
     commanded_efforts_from_controller,
     read_joint_efforts,
 )
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 def joint_tracking_fieldnames(
     joint_names: list[str],
-    config: JointLoggingConfig,
+    settings: LoggingOutputSettings,
 ) -> list[str]:
     """按配置构造稳定 CSV schema，但不打开输出文件。
 
@@ -35,25 +36,25 @@ def joint_tracking_fieldnames(
 
     fieldnames = ["step", "time_s", "phase", "drive_update"]
     for name in joint_names:
-        if config.log_command_position:
+        if settings.log_command_position:
             fieldnames.append(f"qd_{name}_rad")
-        if config.log_actual_position:
+        if settings.log_actual_position:
             fieldnames.append(f"q_{name}_rad")
-        if config.log_command_velocity:
+        if settings.log_command_velocity:
             fieldnames.append(f"vd_{name}_rad_s")
-        if config.log_actual_velocity:
+        if settings.log_actual_velocity:
             fieldnames.append(f"v_{name}_rad_s")
-        if config.log_command_position and config.log_actual_position:
+        if settings.log_command_position and settings.log_actual_position:
             fieldnames.append(f"pos_err_{name}_rad")
-        if config.log_command_velocity and config.log_actual_velocity:
+        if settings.log_command_velocity and settings.log_actual_velocity:
             fieldnames.append(f"vel_err_{name}_rad_s")
-        if config.log_command_effort:
+        if settings.log_command_effort:
             fieldnames.append(f"tau_cmd_{name}")
-        if config.log_action_effort:
+        if settings.log_action_effort:
             fieldnames.append(f"tau_action_{name}")
-        if config.log_measured_effort:
+        if settings.log_measured_effort:
             fieldnames.append(f"tau_measured_{name}")
-        if config.log_applied_effort:
+        if settings.log_applied_effort:
             fieldnames.append(f"tau_applied_{name}")
     return fieldnames
 
@@ -75,9 +76,8 @@ class JointTrackingLogger:
         path: str | Path | None,
         joint_names: list[str],
         *,
-        flush_interval_steps: int = 1,
-        config: JointLoggingConfig | None = None,
-        existing_data_policy: str = "error",
+        settings: LoggingOutputSettings,
+        flush_interval_steps: int,
         timestamped_run_name: str | None = None,
         output_plan: CsvOutputPlan | None = None,
         paths_applied: bool = False,
@@ -88,19 +88,19 @@ class JointTrackingLogger:
             path: CSV 输出路径或 ``None``。
             joint_names: 需要记录的关节名，定义数组和列的顺序。
             flush_interval_steps: 自动 flush 的仿真步间隔。
-            config: 日志列和采样开关；为空时使用默认配置。
+            settings: 已由 Mirror 根配置严格解析的日志设置。
         返回:
             无返回值；内部会创建 ``CsvWriter``。
         """
 
         self.joint_names = joint_names
-        self.config = config or JointLoggingConfig()
-        fieldnames = joint_tracking_fieldnames(self.joint_names, self.config)
+        self.settings = settings
+        fieldnames = joint_tracking_fieldnames(self.joint_names, self.settings)
         self.writer = CsvWriter(
             path,
             fieldnames,
             flush_interval_rows=flush_interval_steps,
-            existing_data_policy=existing_data_policy,
+            existing_data_policy=self.settings.existing_data_policy,
             timestamped_run_name=timestamped_run_name,
             output_plan=output_plan,
             paths_applied=paths_applied,
@@ -109,11 +109,11 @@ class JointTrackingLogger:
     def should_write(self, step: int) -> bool:
         """判断当前 step 是否需要写日志。
 
-        只是转发 ``JointLoggingConfig`` 的采样策略，调用方应在返回 ``True`` 时再读取实际状态，
+        只是转发 ``LoggingOutputSettings`` 的采样策略，调用方应在返回 ``True`` 时再读取实际状态，
         以免降采样配置失效。
         """
 
-        return self.config.should_write_step(step)
+        return self.settings.should_write_step(step)
 
     def collect_efforts(
         self, robot, controller, joint_indices: np.ndarray
@@ -130,22 +130,22 @@ class JointTrackingLogger:
             "measured_effort": None,
             "applied_effort": None,
         }
-        if self.config.log_command_effort or self.config.log_action_effort:
+        if self.settings.log_command_effort or self.settings.log_action_effort:
             action_effort = commanded_efforts_from_controller(controller, joint_indices)
-            if self.config.log_command_effort:
+            if self.settings.log_command_effort:
                 result["commanded_effort"] = action_effort
-            if self.config.log_action_effort:
+            if self.settings.log_action_effort:
                 result["action_effort"] = action_effort
-        if self.config.log_measured_effort or self.config.log_applied_effort:
+        if self.settings.log_measured_effort or self.settings.log_applied_effort:
             sample = read_joint_efforts(
                 robot,
                 joint_indices,
-                measured=self.config.log_measured_effort,
-                applied=self.config.log_applied_effort,
+                measured=self.settings.log_measured_effort,
+                applied=self.settings.log_applied_effort,
             )
-            if self.config.log_measured_effort:
+            if self.settings.log_measured_effort:
                 result["measured_effort"] = sample.measured
-            if self.config.log_applied_effort:
+            if self.settings.log_applied_effort:
                 result["applied_effort"] = sample.applied
         return result
 
@@ -161,20 +161,20 @@ class JointTrackingLogger:
         indices = np.asarray(joint_indices, dtype=int).reshape(-1)
         values: dict[str, np.ndarray | None] = {
             "desired_position": targets.positions[indices]
-            if self.config.log_command_position
+            if self.settings.log_command_position
             else None,
             "actual_position": None,
             "desired_velocity": targets.velocities[indices]
-            if self.config.log_command_velocity
+            if self.settings.log_command_velocity
             else None,
             "actual_velocity": None,
         }
-        if self.config.log_actual_position:
-            values["actual_position"] = np.asarray(
+        if self.settings.log_actual_position:
+            values["actual_position"] = tensor_like_to_numpy(
                 robot.get_joint_positions(), dtype=float
             ).reshape(-1)[indices]
-        if self.config.log_actual_velocity:
-            values["actual_velocity"] = np.asarray(
+        if self.settings.log_actual_velocity:
+            values["actual_velocity"] = tensor_like_to_numpy(
                 robot.get_joint_velocities(), dtype=float
             ).reshape(-1)[indices]
         values.update(self.collect_efforts(robot, controller, indices))
@@ -232,25 +232,25 @@ class JointTrackingLogger:
         position_error = desired_position - actual_position
         velocity_error = desired_velocity - actual_velocity
         for index, name in enumerate(self.joint_names):
-            if self.config.log_command_position:
+            if self.settings.log_command_position:
                 row[f"qd_{name}_rad"] = f"{desired_position[index]:.12g}"
-            if self.config.log_actual_position:
+            if self.settings.log_actual_position:
                 row[f"q_{name}_rad"] = f"{actual_position[index]:.12g}"
-            if self.config.log_command_velocity:
+            if self.settings.log_command_velocity:
                 row[f"vd_{name}_rad_s"] = f"{desired_velocity[index]:.12g}"
-            if self.config.log_actual_velocity:
+            if self.settings.log_actual_velocity:
                 row[f"v_{name}_rad_s"] = f"{actual_velocity[index]:.12g}"
-            if self.config.log_command_position and self.config.log_actual_position:
+            if self.settings.log_command_position and self.settings.log_actual_position:
                 row[f"pos_err_{name}_rad"] = f"{position_error[index]:.12g}"
-            if self.config.log_command_velocity and self.config.log_actual_velocity:
+            if self.settings.log_command_velocity and self.settings.log_actual_velocity:
                 row[f"vel_err_{name}_rad_s"] = f"{velocity_error[index]:.12g}"
-            if self.config.log_command_effort:
+            if self.settings.log_command_effort:
                 row[f"tau_cmd_{name}"] = f"{commanded_effort[index]:.12g}"
-            if self.config.log_action_effort:
+            if self.settings.log_action_effort:
                 row[f"tau_action_{name}"] = f"{action_effort[index]:.12g}"
-            if self.config.log_measured_effort:
+            if self.settings.log_measured_effort:
                 row[f"tau_measured_{name}"] = f"{measured_effort[index]:.12g}"
-            if self.config.log_applied_effort:
+            if self.settings.log_applied_effort:
                 row[f"tau_applied_{name}"] = f"{applied_effort[index]:.12g}"
         self.writer.write(row)
 

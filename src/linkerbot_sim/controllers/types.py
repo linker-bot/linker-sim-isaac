@@ -84,10 +84,8 @@ class ComponentControlSettings:
             ``damping``；effort 直通模式不使用这两个字段。
         max_force: 主动关节 implicit drive 最大力/力矩，也是显式 PD effort 的限幅默认值。
         effort_limit: effort 直通模式和显式 effort 的限幅；为 ``None`` 时沿用 ``max_force``。
-        joint_friction: 主动关节默认摩擦；MJCF frictionloss 会覆盖同名关节。
         follower_stiffness/follower_damping: mimic follower 的 Isaac position drive 增益。
         follower_max_force: follower drive 最大力/力矩；为 ``None`` 时沿用 ``max_force``。
-        follower_joint_friction: follower 默认摩擦；为 ``None`` 时沿用 ``joint_friction``。
     输出:
         作为 ``JointControlSettings`` 的 arm/hand/default 子配置。
     """
@@ -98,22 +96,9 @@ class ComponentControlSettings:
     damping: JointParameter = (50.0,)
     max_force: JointParameter = 100.0
     effort_limit: JointParameter | None = None
-    joint_friction: JointParameter = 0.5
     follower_stiffness: JointParameter = (50000.0,)
     follower_damping: JointParameter = (50.0,)
     follower_max_force: JointParameter | None = None
-    follower_joint_friction: JointParameter | None = None
-
-    def active_effort_limit(self) -> float:
-        """返回主动关节 effort 限幅。
-
-        返回:
-            effort 限幅；``effort_limit`` 缺省时使用 ``max_force``。
-        """
-
-        value = self.max_force if self.effort_limit is None else self.effort_limit
-        resolved = resolve_joint_parameter(value, ("joint",), label="effort_limit")
-        return float(resolved[0])
 
     def active_effort_limits(self, joint_names: Sequence[str]) -> np.ndarray:
         """按 selected joint 顺序返回每个主动关节的 effort 限幅向量。"""

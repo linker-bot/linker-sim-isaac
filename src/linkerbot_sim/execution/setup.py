@@ -13,31 +13,35 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 
-from linkerbot_sim.assets.robot_config import RobotGravityPolicy
+from linkerbot_sim.configuration.robots import RobotGravityPolicy
 from linkerbot_sim.assets.robot_import import import_robot_asset
 from linkerbot_sim.assets.robot_instances import RobotExecutionConfig
 from linkerbot_sim.assets.root_pose import apply_root_pose
 from linkerbot_sim.assets.solver_overrides import (
+    SolverIterationConfig,
     apply_solver_iteration_overrides,
     merge_solver_configs,
-    scene_solver_settings,
 )
 from linkerbot_sim.assets.usd_overrides import (
     apply_robot_gravity_policy,
     apply_robot_usd_overrides,
 )
-from linkerbot_sim.controllers.config import (
-    ControllerProfiles,
+from linkerbot_sim.configuration.controllers import ControllerProfiles
+from linkerbot_sim.controllers.projection import (
     joint_control_settings,
-    physx_override_configs,
+    robot_usd_override_configs,
 )
 from linkerbot_sim.controllers.joint_controller import JointController
+from linkerbot_sim.isaac.physics.backend import (
+    normalize_physics_backend,
+    warn_unsupported_physics_fields,
+)
+from linkerbot_sim.isaac.physics.newton.render import prepare_newton_render_subtree
 from linkerbot_sim.robots.classification import RobotComponentMapping
 
 
@@ -49,7 +53,7 @@ class ImportedRobot:
     ``solver_counts`` 和 ``gravity_counts`` 用于脚本打印诊断信息，确认 env/robot 配置实际命中。
     """
 
-    articulation: object
+    articulation: object | None
     articulation_path: str
     imported_root_path: str
     asset_path: Path
@@ -79,6 +83,7 @@ class PreparedRobotRuntime:
     joint_controller: JointController
     asset_path: Path
     gravity_policy: RobotGravityPolicy
+    gravity_counts: dict[str, int]
 
 
 def import_execution_robot_to_stage(
@@ -88,40 +93,74 @@ def import_execution_robot_to_stage(
     single_articulation_type: object,
     robot_execution: RobotExecutionConfig,
     controller_profiles: ControllerProfiles,
-    env_config: Mapping[str, object],
+    scene_solver: SolverIterationConfig | None,
+    physics_backend: object,
+    prepare_newton_render_topology: bool,
+    defer_articulation_binding: bool = False,
 ) -> ImportedRobot:
     """导入一个机器人 articulation，并写入 reset 前的 stage 级覆盖。
 
     参数中的 ``robot_execution`` 合并了 robot profile 的资产/物理属性和 env scene 的 root pose；
     robot profile 决定资产路径、受控关节选择、重力策略和刚体 solver iteration。
-    env YAML 还提供世界级设置，例如 scene solver type。
+    ``scene_solver`` 是产品 composition 已解析的 PhysX scene solver 事实。
     """
 
+    backend = normalize_physics_backend(physics_backend)
     articulation_path, asset_path, imported_root_path = import_robot_asset(
-        robot_execution.robot
+        robot_execution.robot,
+        physics_backend=backend,
+        prepare_newton_render_topology=prepare_newton_render_topology,
+        root_pose=robot_execution.root_pose,
     )
     # root_pose 写在导入根 prim 上，保证 Isaac 执行模型和 cuRobo 双臂生成模型使用同一安装位姿。
-    apply_root_pose(stage, imported_root_path, robot_execution.root_pose)
-    controlled_joints = tuple(robot_execution.controlled_joints)
-    # USD 层写入 joint friction 和 drive seed，并叠加 robot YAML 中的材料与刚体阻尼；
-    # reset 后 controller 只更新运行时 gain、effort limit 和控制模式。
-    physx_configs = robot_execution.robot.physx_overrides.apply_to_configs(
-        physx_override_configs(controller_profiles)
+    apply_root_pose(
+        stage,
+        imported_root_path,
+        robot_execution.root_pose,
+        prepare_newton_render_topology=prepare_newton_render_topology,
     )
+    if prepare_newton_render_topology:
+        if backend != "newton":
+            raise RuntimeError(
+                "Newton render topology intent requires physics_backend='newton'"
+            )
+        # importer/reference 与最终 root pose 已全部 author；必须在后续 renderer tracking
+        # 前冻结 body op order，manager finalize 阶段只能审计，不能再替换拓扑。
+        prepare_newton_render_subtree(
+            stage=stage,
+            subtree_root=imported_root_path,
+        )
+    controlled_joints = tuple(robot_execution.controlled_joints)
+    # 两个后端共享 USD drive seed 与标准接触材质；只有 PhysX composition 才叠加
+    # combine mode、刚体阻尼和关节摩擦。reset 后 controller 只更新运行时控制属性。
+    usd_configs = robot_usd_override_configs(controller_profiles)
+    if robot_execution.robot.contact_material is not None:
+        usd_configs = robot_execution.robot.contact_material.apply_to_configs(
+            usd_configs
+        )
+    if backend == "physx":
+        usd_configs = robot_execution.robot.physx.overrides.apply_to_configs(
+            usd_configs
+        )
     apply_robot_usd_overrides(
         imported_root_path,
-        physx_configs,
+        usd_configs,
         driven_joint_names=controlled_joints,
         mjcf_path=asset_path if robot_execution.robot.asset_type == "mjcf" else None,
         mimic_path=(
             asset_path if robot_execution.robot.asset_type in {"mjcf", "urdf"} else None
         ),
         component_mapping=robot_execution.robot.component_mapping,
-        native_mimic=robot_execution.robot.asset_type == "urdf",
+        native_mimic=robot_execution.robot.asset_type in {"mjcf", "urdf"},
+        physics_backend=backend,
     )
-    solver_config = merge_solver_configs(
-        scene_solver_settings(env_config),
-        robot_execution.robot.solver_iterations,
+    solver_config = (
+        merge_solver_configs(
+            scene_solver,
+            robot_execution.robot.physx.solver_iterations,
+        )
+        if backend == "physx"
+        else None
     )
     solver_counts = (
         apply_solver_iteration_overrides(
@@ -129,22 +168,28 @@ def import_execution_robot_to_stage(
             articulation_path,
             solver_config,
             component_mapping=robot_execution.robot.component_mapping,
+            physics_backend=backend,
         )
         if solver_config is not None
         else {"configured": 0}
     )
-    # 机器人重力策略只来自 robot YAML。这里写 USD disableGravity，reset 后还会按策略处理 runtime。
+    # 机器人重力策略只来自 robot YAML。这里在 model finalize 前写入 PhysX disableGravity
+    # 或 Newton MuJoCo gravcomp；前者 reset 后还会通过 articulation runtime 再确认一次。
     gravity_policy = robot_execution.robot.gravity_policy
     gravity_counts = apply_robot_gravity_policy(
         imported_root_path,
         gravity_policy,
         component_mapping=robot_execution.robot.component_mapping,
+        physics_backend=backend,
     )
-    articulation = world.scene.add(
-        single_articulation_type(
-            prim_path=articulation_path, name=robot_execution.robot.name
+    articulation = None
+    if not defer_articulation_binding:
+        articulation = _create_single_articulation(
+            world=world,
+            single_articulation_type=single_articulation_type,
+            articulation_path=articulation_path,
+            name=robot_execution.robot.name,
         )
-    )
     return ImportedRobot(
         articulation=articulation,
         articulation_path=articulation_path,
@@ -159,6 +204,46 @@ def import_execution_robot_to_stage(
     )
 
 
+def bind_imported_robot_articulation(
+    imported: ImportedRobot,
+    *,
+    world: object,
+    single_articulation_type: object,
+    name: str,
+) -> ImportedRobot:
+    """Bind a deferred Mirror articulation after Newton model finalization."""
+
+    if imported.articulation is not None:
+        raise RuntimeError(
+            f"robot articulation is already bound: {imported.articulation_path}"
+        )
+    articulation = _create_single_articulation(
+        world=world,
+        single_articulation_type=single_articulation_type,
+        articulation_path=imported.articulation_path,
+        name=name,
+    )
+    return replace(imported, articulation=articulation)
+
+
+def _create_single_articulation(
+    *,
+    world: object,
+    single_articulation_type: object,
+    articulation_path: str,
+    name: str,
+) -> object:
+    """Create one backend-specific articulation and register legacy views only."""
+
+    articulation = single_articulation_type(
+        prim_path=articulation_path,
+        name=name,
+    )
+    if getattr(articulation, "requires_scene_registration", True):
+        articulation = world.scene.add(articulation)
+    return articulation
+
+
 def finalize_robot_controller(
     *,
     imported: ImportedRobot,
@@ -168,28 +253,48 @@ def finalize_robot_controller(
     """在 ``world.reset()`` 后创建并配置 ``JointController``。
 
     这个阶段可以安全读取 articulation 的 DOF 数量、名称和 runtime controller。若 robot YAML
-    表示所有已知部件都关闭重力，则同步调用 Isaac runtime 的 ``disable_gravity()``，与 reset
-    前写入的 USD ``disableGravity`` 保持一致。
+    表示所有已知部件都关闭重力，PhysX 会同步调用 runtime ``disable_gravity()``；项目 Newton
+    Newton 则核对 model finalize 前已为全部禁用刚体投影 ``mjc:gravcomp``，避免把构建期能力
+    误报成运行期逐 link setter。
     """
 
+    articulation = imported.articulation
+    if articulation is None:
+        raise RuntimeError(
+            "robot articulation must be bound before controller finalization: "
+            f"{imported.articulation_path}"
+        )
     gravity_policy = imported.gravity_policy
     if gravity_policy.disables_all_known_components():
-        imported.articulation.disable_gravity()
-    imported.articulation.set_joint_velocities(
-        np.zeros(imported.articulation.num_dof, dtype=float)
-    )
+        if getattr(articulation, "supports_per_link_gravity", True):
+            articulation.disable_gravity()
+        elif imported.gravity_counts.get(
+            "newton_gravcomp", 0
+        ) != imported.gravity_counts.get("disabled", -1):
+            warn_unsupported_physics_fields(
+                backend="newton",
+                feature="robot per-link gravity",
+                fields=("robot.physics.gravity",),
+                reason=(
+                    "Newton gravity compensation was not projected before "
+                    f"articulation binding for {imported.articulation_path!r}"
+                ),
+                stacklevel=2,
+            )
+    articulation.set_joint_velocities(np.zeros(articulation.num_dof, dtype=float))
     controller = JointController(
-        imported.articulation,
+        articulation,
         joint_names=list(imported.controlled_joints),
         settings=joint_control_settings(controller_profiles, mode=control_mode),
         mimic_path=imported.mimic_path,
         component_mapping=imported.component_mapping,
-        native_mimic=imported.asset_type == "urdf",
+        native_mimic=imported.asset_type in {"mjcf", "urdf"},
     )
     controller.configure_runtime()
     return PreparedRobotRuntime(
-        articulation=imported.articulation,
+        articulation=articulation,
         joint_controller=controller,
         asset_path=imported.asset_path,
         gravity_policy=gravity_policy,
+        gravity_counts=imported.gravity_counts,
     )

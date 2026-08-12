@@ -1,0 +1,37 @@
+# Mirror 唯一的 cuRobo 数值 profile。CUDA 设备由 mode root 的 compute.cuda_device 注入；
+# cuRobo 0.8.0 task bundle 与 float32 dtype 是后端固定合同，不在 profile 重复声明。
+# 机器人 URDF、collision spheres 与 TCP 仍由 configs/robots/*.yaml 拥有。
+curobo:
+  # Mirror 的低批量 FK/IK 能力。direct IK 不启用碰撞约束，canonical profile 因此省略 cache；
+  # collision_check=false 时也允许保留合法 cache 配置，但后端不会接收或分配它。
+  kinematics:
+    # 单次 direct FK/IK 请求的最大 batch；Mirror 当前以少量机器人为主，避免大块预分配。
+    max_batch_size: 8
+    # 每个 IK goal 同时尝试的初始关节 seed 数；更大通常更稳，但耗时和临时 tensor 更大。
+    seed_count: 32
+    # direct IK 不查询场景碰撞；需要避障的请求由下方 motion_planner 处理。
+    collision_check: false
+    # 为固定形状的 direct FK/IK 捕获 CUDA graph，降低重复调用的 launch 开销。
+    use_cuda_graph: true
+
+  # 这里只保存 cuRobo solver 能力与预分配；请求 timeout、采样周期和默认避障策略属于
+  # configs/planning/mirror.yaml，不能用请求默认值隐式决定 solver 资源。
+  motion_planner:
+    # true 在 MIRROR_INTERACTIVE_READY 前执行 planner warmup，预建 kernel、tensor 和缓存。
+    warmup: true
+    # 项目固定的 cuRobo 0.8 runtime 默认未启用实验性 solver graph reset；Mirror 共用
+    # 一个 planner 处理 pose/cspace 请求，不依赖全局开关，因此必须关闭 planner graph。
+    use_cuda_graph: false
+    # MotionGen 内部 IK 阶段的并行初值数量；直接影响候选解数量和预分配规模。
+    ik_seed_count: 32
+    # 轨迹优化阶段并行保留的 seed 数；增加可提高复杂路径成功率，但会增加耗时/显存。
+    trajectory_seed_count: 4
+    # true 为规划轨迹启用机器人自碰撞与 world collision 查询。
+    collision_check: true
+    # 固定形状的世界碰撞 cache 容量；collision_check=true 时必填。关闭碰撞时可省略或保留，
+    # 保留值仍会严格校验，但不会传给后端或触发 cache 分配。
+    collision_cache:
+      # 可缓存的 cuboid 障碍物数量，包含对象 profile 的规划 cuboid 和运行时更新。
+      cuboid: 48
+      # 可缓存的 triangle-mesh 障碍物数量；mesh 通常比 cuboid 占用更多资源。
+      mesh: 4

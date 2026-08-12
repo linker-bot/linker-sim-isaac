@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -15,27 +14,32 @@ class RootPoseConfig:
     xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)
     rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
-    @classmethod
-    def from_mapping(cls, data: Mapping[str, object] | None) -> "RootPoseConfig":
-        """从可选 ``root_pose`` mapping 解析弧度制 xyz/rpy。"""
-
-        if data is None:
-            return cls()
-        if not isinstance(data, Mapping):
-            raise ValueError("root_pose must be a mapping")
-        return cls(
-            xyz=_vec3_from_mapping(data, "xyz"),
-            rpy=_vec3_from_mapping(data, "rpy"),
-        )
-
     def is_identity(self) -> bool:
         """是否为零平移、零旋转。"""
 
         return self.xyz == (0.0, 0.0, 0.0) and self.rpy == (0.0, 0.0, 0.0)
 
 
-def apply_root_pose(stage, root_path: str, pose: RootPoseConfig) -> None:
-    """写入 root prim 的世界位姿，并同步 MJCF fixed-base world anchor。"""
+def apply_root_pose_transform(
+    stage,
+    root_path: str,
+    pose: RootPoseConfig,
+    *,
+    prepare_newton_render_topology: bool = False,
+) -> None:
+    """按显式 render intent 写 root xform，不混用两套 op topology。"""
+
+    if prepare_newton_render_topology:
+        from linkerbot_sim.isaac.physics.newton.render import (
+            author_newton_render_root_pose,
+        )
+
+        author_newton_render_root_pose(
+            stage=stage,
+            root_path=root_path,
+            pose=pose,
+        )
+        return
 
     from pxr import Gf, Sdf, UsdGeom
 
@@ -46,6 +50,23 @@ def apply_root_pose(stage, root_path: str, pose: RootPoseConfig) -> None:
     xform.ClearXformOpOrder()
     xform.AddTranslateOp().Set(Gf.Vec3d(*pose.xyz))
     xform.AddRotateXYZOp().Set(Gf.Vec3f(*tuple(np.degrees(pose.rpy))))
+
+
+def apply_root_pose(
+    stage,
+    root_path: str,
+    pose: RootPoseConfig,
+    *,
+    prepare_newton_render_topology: bool = False,
+) -> None:
+    """写入 root prim 的世界位姿，并同步 MJCF fixed-base world anchor。"""
+
+    apply_root_pose_transform(
+        stage,
+        root_path,
+        pose,
+        prepare_newton_render_topology=prepare_newton_render_topology,
+    )
     apply_mjcf_fixed_root_joint_pose(stage, root_path, pose)
 
 
@@ -88,23 +109,10 @@ def mjcf_fixed_root_joint_paths_without_body0(stage, root_path: str) -> tuple[st
     return tuple(result)
 
 
-def _vec3_from_mapping(
-    data: Mapping[str, object], key: str
-) -> tuple[float, float, float]:
-    """读取缺省为零的 xyz/rpy 三元组，并拒绝非 sequence 或错误长度。"""
-
-    value = data.get(key, (0.0, 0.0, 0.0))
-    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{key} must be a length-3 sequence")
-    values = tuple(float(item) for item in value)
-    if len(values) != 3:
-        raise ValueError(f"{key} must contain exactly 3 values")
-    return values
-
-
 __all__ = [
     "RootPoseConfig",
     "apply_mjcf_fixed_root_joint_pose",
     "apply_root_pose",
+    "apply_root_pose_transform",
     "mjcf_fixed_root_joint_paths_without_body0",
 ]

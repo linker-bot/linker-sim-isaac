@@ -1,0 +1,20 @@
+# Mirror 固定派生一个 Newton CUDA world；Newton、Warp、cuRobo 与 RTX 共享根设备。
+# 引用值相对 configs/<group>/ 解析且省略 .yaml；本文件只负责选择，不覆盖 leaf 内容。
+# 产品根选择单场景交互式 Mirror 配置图。
+mode: mirror
+compute:
+  # Newton CUDA、cuRobo、Warp 与 RTX 必须共同使用的唯一 CUDA 设备序号。
+  cuda_device: 0
+profiles:
+  # 现实映像场景：机器人/对象实例、频率、相机、灯光和 viewport。
+  scene: mirror/scene3
+  # Newton CUDA 的 per-world 容量、graph 与求解器设置；Mirror 派生一个 world。
+  physics: newton/cuda
+  # 交互命令模式、空闲步进策略以及 ingress 容量/超时。
+  control: mirror
+  # cuRobo FK/IK、MotionGen seed、warmup 与碰撞 cache 数值配置。
+  curobo: mirror
+  # 与后端无关的单次 motion 请求默认策略。
+  planning: mirror
+  # 主渲染、相机落盘/直播、关节 CSV 和 telemetry 输出策略。
+  outputs: mirror_default

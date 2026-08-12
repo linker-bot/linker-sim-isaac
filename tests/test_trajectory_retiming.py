@@ -103,7 +103,7 @@ def test_include_start_uses_same_samples_as_single_execution_grid() -> None:
         sample_dt_s=0.05,
         start_position=np.asarray([0.0]),
     )
-    batch = retime_joint_trajectory(
+    anchored = retime_joint_trajectory(
         source,
         duration_s=0.2,
         sample_dt_s=0.05,
@@ -111,9 +111,9 @@ def test_include_start_uses_same_samples_as_single_execution_grid() -> None:
         include_start=True,
     )
 
-    np.testing.assert_allclose(batch.times, [0.0, *single.times])
-    np.testing.assert_allclose(batch.positions[0], [0.0])
-    np.testing.assert_allclose(batch.positions[1:], single.positions)
+    np.testing.assert_allclose(anchored.times, [0.0, *single.times])
+    np.testing.assert_allclose(anchored.positions[0], [0.0])
+    np.testing.assert_allclose(anchored.positions[1:], single.positions)
 
 
 def test_sample_times_keep_tick_grid_and_exact_non_divisible_endpoint() -> None:

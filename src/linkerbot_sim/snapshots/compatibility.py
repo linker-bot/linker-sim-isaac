@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from linkerbot_sim.snapshots.schema import ObjectSnapshot, SimulationSnapshot
+from linkerbot_sim.snapshots.schema import ObjectSnapshot, SceneSnapshot
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ class ObjectTargetDescriptor:
 class SnapshotTargetDescriptor:
     """目标 runtime 的完整快照恢复能力描述。
 
-    SingleSceneRuntime 与 TiledSceneRuntime 都表达成这个结构，后续检查逻辑不需要访问
+    Mirror 与 Kaleidoscope 的冷存储 adapter 都表达成这个结构，后续检查逻辑不需要访问
     具体 Isaac runtime 类型。
     """
 
@@ -173,7 +173,7 @@ class SnapshotCompatibilityError(ValueError):
 
 
 def check_snapshot_compatibility(
-    snapshot: SimulationSnapshot,
+    snapshot: SceneSnapshot,
     target: SnapshotTargetDescriptor,
     *,
     label_map: Mapping[str, str] | None = None,
@@ -259,6 +259,35 @@ def check_snapshot_compatibility(
     partial = len(robot_mappings) < len(snapshot.robots) or len(object_mappings) < len(
         snapshot.objects
     )
+    if not partial:
+        for mapping in robot_mappings.values():
+            source_robot = snapshot.robots[mapping.source_label]
+            target_robot = target.robots[mapping.target_label]
+            if _name_mapping_is_partial(
+                mapping.joints,
+                source_names=source_robot.joint_names,
+                target_names=target_robot.joint_names,
+            ) or (
+                mapping.command_joints is not None
+                and _name_mapping_is_partial(
+                    mapping.command_joints,
+                    source_names=source_robot.command_joint_names,
+                    target_names=target_robot.command_joint_names,
+                )
+            ):
+                partial = True
+                break
+    if not partial:
+        for object_name, mapping in object_mappings.items():
+            if mapping.bodies is None:
+                continue
+            if _name_mapping_is_partial(
+                mapping.bodies,
+                source_names=snapshot.objects[mapping.source_name].body_names,
+                target_names=target.objects[object_name].body_names,
+            ):
+                partial = True
+                break
     return SnapshotCompatibilityResult(
         compatible=not issues,
         issues=tuple(issues),
@@ -269,7 +298,7 @@ def check_snapshot_compatibility(
 
 
 def require_snapshot_compatibility(
-    snapshot: SimulationSnapshot,
+    snapshot: SceneSnapshot,
     target: SnapshotTargetDescriptor,
     *,
     label_map: Mapping[str, str] | None = None,
@@ -289,7 +318,7 @@ def require_snapshot_compatibility(
 
 
 def _resolve_label_map(
-    snapshot: SimulationSnapshot,
+    snapshot: SceneSnapshot,
     target: SnapshotTargetDescriptor,
     label_map: Mapping[str, str] | None,
     issues: list[str],
@@ -378,6 +407,18 @@ def _name_mapping(
         ),
         names=common_names,
     )
+
+
+def _name_mapping_is_partial(
+    mapping: JointMapping,
+    *,
+    source_names: tuple[str, ...],
+    target_names: tuple[str, ...],
+) -> bool:
+    """判断一个已接受的非 strict 名称映射是否只覆盖了两侧子集。"""
+
+    mapped = len(mapping.names)
+    return mapped != len(source_names) or mapped != len(target_names)
 
 
 def _object_body_mapping(

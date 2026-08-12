@@ -1,13 +1,13 @@
 # T block 运行时对象配置。
 #
-# env objects[].object_profile 通过文件名 TblockV1_default 选择本 profile；实例 name、prim_path
-# 与 root_pose 由 env 管理。本文件负责可复用的对象类别、资产路径、运行时物理属性和规划几何。
+# scene objects[].object_profile 通过文件名 TblockV1_default 选择本 profile；实例 name、prim_path
+# 与 root_pose 由 scene 管理。本文件负责可复用的对象类别、资产路径、运行时物理属性和规划几何。
 # T 形块几何、质量、阻尼和可视材质属于资产固有属性，
 # 放在 tools/object_assets/rigid/tblock/config.yaml。
 
 
 object:
-  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份则使用 objects[].name。
+  # 资产逻辑名称；scene 按 YAML 文件名选择 profile，场景实例身份则使用 objects[].name。
   name: TblockV1_default
 
   # 对象能力类别。rigid 允许 USD/URDF 资产、static 策略及可选规划简化几何。
@@ -23,7 +23,7 @@ object:
     # true 会把子树刚体设为 kinematic 并关闭重力；false 不强制冻结，保留 USD 写入的动力学属性。
     static: false
 
-    # T block 接触材质覆盖；运行时创建 PhysX material，并以强绑定应用到子树 collision prim。
+    # T block 通用接触材质；运行时创建 UsdPhysics material，并强绑定到子树 collision prim。
     # 摩擦系数与恢复系数均无量纲，只影响物理接触，不影响下面的规划几何。
     material:
       # 静摩擦系数：影响接触面开始滑动前的摩擦。
@@ -32,12 +32,16 @@ object:
       dynamic_friction: 0.6
       # 恢复系数：0 表示接触基本不反弹。
       restitution: 0.0
-      # 摩擦合成模式；average 表示与接触另一方材质取平均。
-      friction_combine_mode: average
+
+    # PhysX-only leaf 不会投影给 Newton；通用摩擦/恢复系数仍由上方 material 统一提供。
+    physx:
+      material:
+        # 摩擦合成模式；average 表示与接触另一方材质取平均。
+        friction_combine_mode: average
 
   planning_collision:
     # 后端无关的规划障碍物描述；运行时用对象实时 world pose 乘以下方局部 pose，
-    # 再交给 cuRobo 等规划适配器。它不读取、创建或修改 USD/PhysX collider。
+    # 再交给 cuRobo 等规划适配器。它不读取、创建或修改 USD 物理 collider。
     # 这里用覆盖 stem+cap 的包围 cuboid：x/y/z 尺寸来自 tools/object_assets/rigid/tblock/config.yaml。
     shape: cuboid
     # cuboid 沿自身局部 x/y/z 轴的全尺寸，单位 m。
@@ -46,7 +50,7 @@ object:
     # TBlock 资产根在局部原点，几何中心约在 x=-0.02, z=0.11。
     xyz: [-0.02, 0.0, 0.11]
     rpy: [0.0, 0.0, 0.0]
-    # 规划安全膨胀量，单位 m；cuboid 每个轴的全尺寸会增加 2*padding，不改变 PhysX 几何。
+    # 规划安全膨胀量，单位 m；cuboid 每个轴的全尺寸会增加 2*padding，不改变物理几何。
     padding: 0.0
     # false 会保留配置但不把该 shape 作为有效规划障碍物。
     enabled: true

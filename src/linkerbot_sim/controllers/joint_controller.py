@@ -19,10 +19,12 @@ position drive 目标互相覆盖。关节数组顺序始终以 Isaac articulati
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from linkerbot_sim.controllers.runtime_projection import project_command_runtime
 from linkerbot_sim.controllers.types import (
     ControlMethod,
     ControlMode,
@@ -37,6 +39,41 @@ from linkerbot_sim.robots.mimic.assets import (
     parse_asset_mimic_relations,
 )
 from linkerbot_sim.robots.mimic.runtime import MimicFollowerTargetMapper
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
+
+
+def _readonly_array(values: np.ndarray) -> np.ndarray:
+    result = np.ascontiguousarray(values, dtype=float).copy()
+    result.setflags(write=False)
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedJointControllerRuntime:
+    """Validated runtime writes that have not yet touched the articulation."""
+
+    owner_id: int
+    settings: JointControlSettings
+    stiffness: np.ndarray
+    damping: np.ndarray
+    max_efforts: np.ndarray
+    active_stiffness: np.ndarray
+    active_damping: np.ndarray
+    active_effort_limits: np.ndarray
+    active_specs: tuple[tuple[int, ControlMode, ControlMethod], ...]
+    effort_indices: tuple[int, ...]
+    runtime_modes: tuple[tuple[int, ControlMode], ...]
+
+    def __post_init__(self) -> None:
+        for name in (
+            "stiffness",
+            "damping",
+            "max_efforts",
+            "active_stiffness",
+            "active_damping",
+            "active_effort_limits",
+        ):
+            object.__setattr__(self, name, _readonly_array(getattr(self, name)))
 
 
 class JointController:
@@ -124,12 +161,13 @@ class JointController:
         self._active_effort_limits = np.zeros(self.robot.num_dof, dtype=float)
         self._active_specs: dict[int, tuple[ControlMode, ControlMethod]] = {}
         self.last_commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
+        self._last_control_targets: ControlTargets | None = None
 
     @property
     def runtime_follower_indices(self) -> np.ndarray:
         """返回需要 Python 驱动的 follower index。
 
-        native URDF mimic 已由 PhysX 约束拥有 follower，运行时不得再次下发；其余资产格式
+        native importer mimic 已由物理约束拥有 follower，运行时不得再次下发；其余资产格式
         返回解析出的 follower indices，由 controller 每帧根据 master 补齐目标。
         """
 
@@ -148,33 +186,246 @@ class JointController:
 
         return tuple(self.dof_names[int(index)] for index in self.command_indices)
 
-    def configure_runtime(self) -> None:
-        """写入 runtime 控制模式、增益和 max effort。
+    @property
+    def command_target_modes(self) -> tuple[ControlMode, ...]:
+        """返回每个 command joint 的逻辑 target 模式。
 
-        参数:
-            无，使用初始化时保存的 robot/settings/mimic_path。
-        返回:
-            无返回值；副作用是修改 articulation controller、max efforts 和控制模式。
+        顺序与 ``command_indices`` / ``command_joint_names`` 完全一致。显式 position 或
+        velocity 控制虽然最终向 Isaac 下发 effort，快照中的 command target 仍分别表示
+        位置或速度，而不是 Python PD 计算后的 effort。
         """
 
+        return tuple(
+            self._active_spec_for_index(int(index))[0] for index in self.command_indices
+        )
+
+    @property
+    def last_control_targets(self) -> ControlTargets | None:
+        """返回最后一次完整成功下发的控制目标副本。"""
+
+        return self.snapshot_control_targets_cache()
+
+    def snapshot_control_targets_cache(self) -> ControlTargets | None:
+        """深拷贝控制目标缓存，供快照捕获和事务回滚使用。"""
+
+        if self._last_control_targets is None:
+            return None
+        return self._copy_control_targets(self._last_control_targets)
+
+    def restore_control_targets_cache(self, targets: ControlTargets | None) -> None:
+        """精确恢复控制目标缓存；``None`` 表示尚未成功下发过目标。"""
+
+        if targets is None:
+            self._last_control_targets = None
+            return
+        self._validate_targets_for_apply(targets)
+        self._last_control_targets = self._copy_control_targets(targets)
+
+    def prepare_runtime(
+        self,
+        settings: JointControlSettings | None = None,
+    ) -> PreparedJointControllerRuntime:
+        """Resolve and validate a complete runtime configuration without writes."""
+
+        candidate = self.settings if settings is None else settings
+        if not isinstance(candidate, JointControlSettings):
+            raise TypeError("settings must be JointControlSettings")
         controller = self.robot.get_articulation_controller()
         stiffness, damping = self._runtime_gains(controller)
-        # 每次 configure 都重新构造 runtime 缓存，避免修改 YAML/配置后复用旧控制器对象时
-        # 残留上一轮模式、增益或 effort limit。
-        self._active_stiffness = np.zeros(self.robot.num_dof, dtype=float)
-        self._active_damping = np.zeros(self.robot.num_dof, dtype=float)
-        self._active_effort_limits = np.zeros(self.robot.num_dof, dtype=float)
-        self._active_specs = {}
+        active_stiffness = np.zeros(self.robot.num_dof, dtype=float)
+        active_damping = np.zeros(self.robot.num_dof, dtype=float)
+        active_effort_limits = np.zeros(self.robot.num_dof, dtype=float)
+        command_names = self.command_joint_names
+        command_components = tuple(
+            self._component_for_joint(name) for name in command_names
+        )
+        projection = project_command_runtime(
+            candidate,
+            joint_names=command_names,
+            components=command_components,
+        )
+        command_indices = np.asarray(self.command_indices, dtype=int)
+        active_stiffness[command_indices] = projection.stiffness
+        active_damping[command_indices] = projection.damping
+        active_effort_limits[command_indices] = projection.effort_limits
+        stiffness[command_indices] = projection.drive_stiffness
+        damping[command_indices] = projection.drive_damping
+        self._assign_follower_runtime_parameters_for(
+            candidate,
+            stiffness,
+            damping,
+        )
+        active_specs = tuple(
+            (int(index), mode, method)
+            for index, mode, method in zip(
+                command_indices,
+                projection.modes,
+                projection.methods,
+                strict=True,
+            )
+        )
+        runtime_modes = tuple(
+            (int(index), mode)
+            for index, mode in zip(
+                command_indices,
+                projection.physical_modes,
+                strict=True,
+            )
+        ) + tuple((int(index), "position") for index in self.runtime_follower_indices)
+        effort_indices = tuple(
+            int(index) for index, _mode, method in active_specs if method != "implicit"
+        )
+        return PreparedJointControllerRuntime(
+            owner_id=id(self),
+            settings=candidate,
+            stiffness=stiffness,
+            damping=damping,
+            max_efforts=self._runtime_max_efforts_for(
+                controller,
+                settings=candidate,
+                active_effort_limits=active_effort_limits,
+            ),
+            active_stiffness=active_stiffness,
+            active_damping=active_damping,
+            active_effort_limits=active_effort_limits,
+            active_specs=active_specs,
+            effort_indices=effort_indices,
+            runtime_modes=runtime_modes,
+        )
 
-        self._assign_active_runtime_parameters(stiffness, damping)
-        self._assign_follower_runtime_parameters(stiffness, damping)
+    def apply_prepared_runtime(
+        self,
+        prepared: PreparedJointControllerRuntime,
+        *,
+        clear_target_cache: bool,
+    ) -> None:
+        """Apply one prevalidated configuration and commit host caches last."""
 
-        # Isaac controller 接收完整 DOF gain 数组；上面从 runtime 复制基线后只覆盖本控制器
-        # 管理的 command/follower DOF，因此其它自由度保留资产或其它 controller 的设置。
-        controller.set_gains(kps=stiffness, kds=damping)
-        controller.set_max_efforts(self._runtime_max_efforts())
-        self._configure_effort_modes(controller)
-        self._switch_control_modes(controller)
+        if not isinstance(prepared, PreparedJointControllerRuntime):
+            raise TypeError("prepared must be PreparedJointControllerRuntime")
+        if prepared.owner_id != id(self):
+            raise ValueError("prepared runtime belongs to another JointController")
+        if type(clear_target_cache) is not bool:
+            raise TypeError("clear_target_cache must be bool")
+        controller = self.robot.get_articulation_controller()
+        controller.set_gains(kps=prepared.stiffness, kds=prepared.damping)
+        controller.set_max_efforts(prepared.max_efforts)
+        if prepared.effort_indices and hasattr(controller, "set_effort_modes"):
+            controller.set_effort_modes(
+                "force",
+                joint_indices=np.asarray(prepared.effort_indices, dtype=int),
+            )
+        if prepared.runtime_modes and not hasattr(
+            controller, "switch_dof_control_mode"
+        ):
+            raise RuntimeError(
+                "The articulation controller must provide switch_dof_control_mode"
+            )
+        for index, mode in prepared.runtime_modes:
+            controller.switch_dof_control_mode(dof_index=index, mode=mode)
+
+        self.settings = prepared.settings
+        self._active_stiffness = prepared.active_stiffness.copy()
+        self._active_damping = prepared.active_damping.copy()
+        self._active_effort_limits = prepared.active_effort_limits.copy()
+        self._active_specs = {
+            index: (mode, method) for index, mode, method in prepared.active_specs
+        }
+        if clear_target_cache:
+            self.last_commanded_efforts = np.full(
+                self.robot.num_dof, np.nan, dtype=float
+            )
+            self._last_control_targets = None
+
+    def configure_runtime(self) -> None:
+        """Prepare and apply the controller's current settings."""
+
+        self.apply_prepared_runtime(
+            self.prepare_runtime(),
+            clear_target_cache=True,
+        )
+
+    def _assign_follower_runtime_parameters_for(
+        self,
+        settings: JointControlSettings,
+        stiffness: np.ndarray,
+        damping: np.ndarray,
+    ) -> None:
+        """Resolve follower position-drive values for a candidate configuration."""
+
+        for group in ("arm", "hand", "default"):
+            group_indices = np.asarray(
+                [
+                    index
+                    for index in self.runtime_follower_indices
+                    if self._component_for_joint(self.dof_names[int(index)]) == group
+                ],
+                dtype=int,
+            )
+            if not group_indices.size:
+                continue
+            group_names = tuple(self.dof_names[int(index)] for index in group_indices)
+            component = settings.component(group_names[0], component=group)
+            stiffness[group_indices] = resolve_joint_parameter(
+                component.follower_stiffness,
+                group_names,
+                label=f"{group} follower stiffness",
+            )
+            damping[group_indices] = resolve_joint_parameter(
+                component.follower_damping,
+                group_names,
+                label=f"{group} follower damping",
+            )
+
+    def _runtime_max_efforts_for(
+        self,
+        controller: object,
+        *,
+        settings: JointControlSettings,
+        active_effort_limits: np.ndarray,
+    ) -> np.ndarray:
+        """Build full max-effort values while preserving unmanaged runtime DOFs."""
+
+        max_efforts = np.zeros(self.robot.num_dof, dtype=float)
+        getter = getattr(controller, "get_max_efforts", None)
+        runtime_max_efforts = getter() if callable(getter) else None
+        if runtime_max_efforts is None:
+            view = getattr(self.robot, "_articulation_view", None)
+            view_getter = getattr(view, "get_max_efforts", None)
+            runtime_max_efforts = view_getter() if callable(view_getter) else None
+        if runtime_max_efforts is not None:
+            values = tensor_like_to_numpy(runtime_max_efforts, dtype=float).reshape(-1)
+            if values.size < self.robot.num_dof:
+                raise RuntimeError(
+                    "Runtime max efforts contain fewer values than articulation DOFs"
+                )
+            max_efforts = values[: self.robot.num_dof].copy()
+        for index in self.command_indices:
+            limit = float(active_effort_limits[int(index)])
+            max_efforts[int(index)] = limit if limit > 0.0 else 0.0
+        for group in ("arm", "hand", "default"):
+            group_indices = np.asarray(
+                [
+                    index
+                    for index in self.runtime_follower_indices
+                    if self._component_for_joint(self.dof_names[int(index)]) == group
+                ],
+                dtype=int,
+            )
+            if not group_indices.size:
+                continue
+            group_names = tuple(self.dof_names[int(index)] for index in group_indices)
+            component = settings.component(group_names[0], component=group)
+            value = component.follower_max_force
+            if value is None:
+                value = component.max_force
+            resolved = resolve_joint_parameter(
+                value,
+                group_names,
+                label=f"{group} follower max_force",
+            )
+            max_efforts[group_indices] = np.where(resolved > 0.0, np.abs(resolved), 0.0)
+        return max_efforts
 
     def _runtime_gains(self, controller) -> tuple[np.ndarray, np.ndarray]:
         """读取并复制完整 runtime gains，供 managed DOF 做局部覆盖。"""
@@ -189,7 +440,7 @@ class JointController:
             raise RuntimeError("Articulation controller returned invalid runtime gains")
         result: list[np.ndarray] = []
         for name, values in zip(("stiffness", "damping"), gains, strict=True):
-            flattened = np.asarray(values, dtype=float).reshape(-1)
+            flattened = tensor_like_to_numpy(values, dtype=float).reshape(-1)
             if flattened.size < self.robot.num_dof:
                 raise RuntimeError(
                     f"Runtime {name} gains contain {flattened.size} values; "
@@ -289,7 +540,7 @@ class JointController:
             runtime_max_efforts = view.get_max_efforts()
             if runtime_max_efforts is not None:
                 max_efforts = (
-                    np.asarray(runtime_max_efforts, dtype=float)
+                    tensor_like_to_numpy(runtime_max_efforts, dtype=float)
                     .reshape(-1)[: self.robot.num_dof]
                     .copy()
                 )
@@ -402,7 +653,7 @@ class JointController:
             # 没有外部基准时，用当前仿真状态初始化完整目标。这样未命令的 DOF 不会在
             # 第一帧因为默认 0 被突然拉回零位。
             full_positions = (
-                np.asarray(self.robot.get_joint_positions(), dtype=float)
+                tensor_like_to_numpy(self.robot.get_joint_positions(), dtype=float)
                 .reshape(-1)
                 .copy()
             )
@@ -475,8 +726,12 @@ class JointController:
         self.follower_mapper.apply_from_actual(
             target_positions,
             target_velocities,
-            np.asarray(self.robot.get_joint_positions(), dtype=float).reshape(-1),
-            np.asarray(self.robot.get_joint_velocities(), dtype=float).reshape(-1),
+            tensor_like_to_numpy(self.robot.get_joint_positions(), dtype=float).reshape(
+                -1
+            ),
+            tensor_like_to_numpy(
+                self.robot.get_joint_velocities(), dtype=float
+            ).reshape(-1),
         )
 
     def apply_targets(self, articulation_action_type, targets: ControlTargets) -> None:
@@ -490,15 +745,15 @@ class JointController:
         """
 
         self._validate_targets_for_apply(targets)
-        actual_positions = np.asarray(
+        actual_positions = tensor_like_to_numpy(
             self.robot.get_joint_positions(), dtype=float
         ).reshape(-1)
-        actual_velocities = np.asarray(
+        actual_velocities = tensor_like_to_numpy(
             self.robot.get_joint_velocities(), dtype=float
         ).reshape(-1)
-        # 每次下发前重置 commanded effort 日志缓存。implicit drive 和 follower position drive
-        # 没有 Python 侧 effort command，因此对应 DOF 会保持 nan。
-        self.last_commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
+        # 先在局部数组中构造 commanded effort 日志。只有全部 action（包括 follower）都
+        # 成功后才提交缓存，避免中途异常留下与 articulation 实际命令不一致的半新状态。
+        commanded_efforts = np.full(self.robot.num_dof, np.nan, dtype=float)
         # 主动关节可能按 arm/hand/default 配成不同控制模式。按 mode/method 分组后下发
         # 多个带 joint_indices 的 action，可以避免在同一个 DOF 上同时写 position 和 effort。
         for mode, method, indices in self._active_groups():
@@ -510,19 +765,19 @@ class JointController:
                 efforts = self._explicit_position_efforts(
                     targets, actual_positions, actual_velocities, indices
                 )
-                self.last_commanded_efforts[indices] = efforts
+                commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             elif mode == "velocity" and method == "explicit":
                 efforts = self._explicit_velocity_efforts(
                     targets, actual_velocities, indices
                 )
-                self.last_commanded_efforts[indices] = efforts
+                commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             elif mode == "effort" and method == "direct":
                 efforts = self._clip_efforts(
                     targets.efforts[indices], self._active_effort_limits[indices]
                 )
-                self.last_commanded_efforts[indices] = efforts
+                commanded_efforts[indices] = efforts
                 self._apply_effort_action(articulation_action_type, efforts, indices)
             else:
                 raise ValueError(f"Unsupported control mode/method: {mode}/{method}")
@@ -533,27 +788,33 @@ class JointController:
             self._apply_position_action(
                 articulation_action_type, targets, self.runtime_follower_indices
             )
+        self.last_commanded_efforts = commanded_efforts
+        self._last_control_targets = self._copy_control_targets(targets)
 
     def _active_groups(self) -> list[tuple[ControlMode, ControlMethod, np.ndarray]]:
         """把主动关节按控制模式和方法分组。"""
 
         groups: dict[tuple[ControlMode, ControlMethod], list[int]] = {}
         for index in self.command_indices:
-            spec = self._active_specs.get(int(index))
-            if spec is None:
-                # 如果调用方忘记先 configure_runtime，仍按 settings 推导分组；不过真正的
-                # runtime gain/mode 写入仍应由 configure_runtime 完成。
-                joint_name = self.dof_names[int(index)]
-                settings = self.settings.component(
-                    joint_name,
-                    component=self._component_for_joint(joint_name),
-                )
-                spec = (settings.mode, settings.method)
+            spec = self._active_spec_for_index(int(index))
             groups.setdefault(spec, []).append(int(index))
         return [
             (mode, method, np.asarray(indices, dtype=int))
             for (mode, method), indices in groups.items()
         ]
+
+    def _active_spec_for_index(self, index: int) -> tuple[ControlMode, ControlMethod]:
+        """读取已配置 spec，或在首次 configure 前按 settings 确定逻辑模式。"""
+
+        spec = self._active_specs.get(int(index))
+        if spec is not None:
+            return spec
+        joint_name = self.dof_names[int(index)]
+        settings = self.settings.component(
+            joint_name,
+            component=self._component_for_joint(joint_name),
+        )
+        return settings.mode, settings.method
 
     def _apply_position_action(
         self, articulation_action_type, targets: ControlTargets, indices: np.ndarray
@@ -690,6 +951,16 @@ class JointController:
                     f"ControlTargets.{label} expected {self.robot.num_dof} values, "
                     f"got {vector.size}"
                 )
+
+    @staticmethod
+    def _copy_control_targets(targets: ControlTargets) -> ControlTargets:
+        """通过 ``ControlTargets`` 不变量建立三个数组均独立的深副本。"""
+
+        return ControlTargets(
+            positions=targets.positions,
+            velocities=targets.velocities,
+            efforts=targets.efforts,
+        )
 
     @staticmethod
     def _finite_vector(values: np.ndarray, label: str) -> np.ndarray:

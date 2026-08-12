@@ -561,34 +561,34 @@
       name="L6V1_R_hand_couple_index"
       joint1="L6V1_R_hand_index_dip"
       joint2="L6V1_R_hand_index_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_middle"
       joint1="L6V1_R_hand_middle_dip"
       joint2="L6V1_R_hand_middle_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_ring"
       joint1="L6V1_R_hand_ring_dip"
       joint2="L6V1_R_hand_ring_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_pinky"
       joint1="L6V1_R_hand_pinky_dip"
       joint2="L6V1_R_hand_pinky_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_thumb"
       joint1="L6V1_R_hand_thumb_dip"
       joint2="L6V1_R_hand_thumb_cmc_pitch"
-      polycoef="0 1.226495 0 0 0 0"
+      polycoef="0 1.226495 0 0 0"
     />
   </equality>
-  <!-- 执行器：每个可动关节对应一个 motor，并使用 URDF 的 effort 限制。 -->
+  <!-- 执行器：主动关节对应 motor；equality follower 不重复创建 actuator。 -->
   <actuator
   >
     <motor
@@ -606,24 +606,10 @@
       gear="1"
     />
     <motor
-      name="L6V1_R_hand_thumb_dip_motor"
-      joint="L6V1_R_hand_thumb_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
-    <motor
       name="L6V1_R_hand_index_mcp_pitch_motor"
       joint="L6V1_R_hand_index_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
-      gear="1"
-    />
-    <motor
-      name="L6V1_R_hand_index_dip_motor"
-      joint="L6V1_R_hand_index_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
       gear="1"
     />
     <motor
@@ -634,13 +620,6 @@
       gear="1"
     />
     <motor
-      name="L6V1_R_hand_middle_dip_motor"
-      joint="L6V1_R_hand_middle_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
-    <motor
       name="L6V1_R_hand_ring_mcp_pitch_motor"
       joint="L6V1_R_hand_ring_mcp_pitch"
       ctrllimited="true"
@@ -648,24 +627,10 @@
       gear="1"
     />
     <motor
-      name="L6V1_R_hand_ring_dip_motor"
-      joint="L6V1_R_hand_ring_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
-    <motor
       name="L6V1_R_hand_pinky_mcp_pitch_motor"
       joint="L6V1_R_hand_pinky_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
-      gear="1"
-    />
-    <motor
-      name="L6V1_R_hand_pinky_dip_motor"
-      joint="L6V1_R_hand_pinky_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
       gear="1"
     />
   </actuator>

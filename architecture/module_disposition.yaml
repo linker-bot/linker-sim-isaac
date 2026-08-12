@@ -1,0 +1,2865 @@
+schema_version: 2
+document_status: target_architecture_final
+
+# v2 清单只描述迁移完成后的事实。逐文件 move/split 的 9175 行历史计划已退出运行时
+# 权威；需要恢复迁移前代码时，以这里保留的 S0c commit 和仓库外 checkpoint 为准。
+baseline:
+  name: S0c
+  commit: e111c2d1ebb89c1bcbc996e1f6790b7191661dbe
+  captured_at: '2026-07-15T18:06:26+08:00'
+  external_checkpoint: <redacted-internal-checkpoint-path>
+  production_python_count: 220
+  test_python_count: 102
+
+breaking_migration:
+  compatibility_shims: forbidden
+  products:
+    mirror:
+      replaces: legacy single-world interactive product
+      public_module: linkerbot_sim.mirror
+      physics:
+        - {engine: physx, execution: cpu}
+        - {engine: newton, execution: cpu}
+        - {engine: newton, execution: cuda}
+      world_count: 1
+    kaleidoscope:
+      replaces: legacy replicated interactive product
+      public_module: linkerbot_sim.kaleidoscope
+      physics:
+        - {engine: physx, execution: cuda}
+        - {engine: newton, execution: cuda}
+      gpu_native: true
+      viewport: explicit_launch_only
+      rendered_world_count: 1
+      training_step_render: false
+      excluded_capabilities:
+        - batch_trajectory_planning
+        - collision_avoidance
+        - camera
+        - synthetic_data
+        - replicator
+        - recording
+        - transport
+        - telemetry
+
+required_targets:
+  kit_experiences:
+    exact:
+      - apps/linkerbot_sim.mirror.physx.python.kit
+      - apps/linkerbot_sim.mirror.newton.python.kit
+      - apps/linkerbot_sim.mirror.newton_render.python.kit
+      - apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit
+      - apps/linkerbot_sim.kaleidoscope.newton.python.kit
+      - apps/linkerbot_sim.kaleidoscope.physx_cuda_viewport.python.kit
+      - apps/linkerbot_sim.kaleidoscope.newton_viewport.python.kit
+  canonical_configuration:
+    paths:
+      - configs/modes/mirror/physx_cpu.yaml
+      - configs/modes/mirror/physx_cpu_hybrid.yaml
+      - configs/modes/mirror/newton_cpu.yaml
+      - configs/modes/mirror/newton_cuda.yaml
+      - configs/modes/kaleidoscope/physx_cuda.yaml
+      - configs/modes/kaleidoscope/newton_cuda.yaml
+      - configs/scenes/mirror/scene3.yaml
+      - configs/scenes/mirror/scene3_hybrid.yaml
+      - configs/scenes/kaleidoscope/tblock_push.yaml
+      - configs/physics/physx/cpu.yaml
+      - configs/physics/physx/cuda.yaml
+      - configs/physics/newton/cpu.yaml
+      - configs/physics/newton/cuda.yaml
+      - configs/control/mirror.yaml
+      - configs/control/hybrid_force_position.yaml
+      - configs/controllers/physx/arm_controller.yaml
+      - configs/controllers/physx/hand_controller.yaml
+      - configs/controllers/newton/arm_controller.yaml
+      - configs/controllers/newton/hand_controller.yaml
+      - configs/curobo/mirror.yaml
+      - configs/curobo/kaleidoscope_batch_ik.yaml
+      - configs/planning/mirror.yaml
+      - configs/outputs/mirror_default.yaml
+      - configs/tasks/kaleidoscope/tblock_push_v1.yaml
+      - configs/training/skrl/tblock_push_v1_ppo.yaml
+      - configs/visualization/kaleidoscope.yaml
+  maintained_entrypoints:
+    paths:
+      - scripts/check_isaac_runtime.py
+      - scripts/kaleidoscope_viewer.py
+      - scripts/mirror.py
+      - scripts/smoke_kaleidoscope_physics.py
+      - scripts/smoke_mirror_physics.py
+      - scripts/smoke_physx_gpu_memory_budget.py
+      - scripts/validate_mode_config.py
+      - ci/quality.sh
+      - ci/simulation.sh
+
+layers:
+  order:
+    - foundation
+    - domain
+    - configuration
+    - numerical_backend
+    - isaac_infrastructure
+    - outputs
+    - product
+    - product_interface
+    - training
+  path_owners:
+    linkerbot_sim.configuration: configuration
+    linkerbot_sim.backends: numerical_backend
+    linkerbot_sim.isaac: isaac_infrastructure
+    linkerbot_sim.mirror: product
+    linkerbot_sim.kaleidoscope: product
+    linkerbot_sim.training: training
+  dependency_rules:
+    - name: configuration_is_pure
+      source_prefix: linkerbot_sim.configuration
+      forbidden_import_prefixes:
+        - torch
+        - gymnasium
+        - skrl
+        - newton
+        - mujoco_warp
+        - omni
+        - isaacsim
+        - linkerbot_sim.app
+        - linkerbot_sim.isaac
+        - linkerbot_sim.mirror
+        - linkerbot_sim.kaleidoscope
+        - linkerbot_sim.training
+    - name: isaac_does_not_depend_on_products
+      source_prefix: linkerbot_sim.isaac
+      forbidden_import_prefixes:
+        - linkerbot_sim.mirror
+        - linkerbot_sim.kaleidoscope
+        - linkerbot_sim.training
+    - name: numerical_backends_do_not_depend_on_products
+      source_prefix: linkerbot_sim.backends
+      forbidden_import_prefixes:
+        - linkerbot_sim.mirror
+        - linkerbot_sim.kaleidoscope
+        - linkerbot_sim.training
+    - name: mirror_does_not_depend_on_kaleidoscope
+      source_prefix: linkerbot_sim.mirror
+      forbidden_import_prefixes:
+        - linkerbot_sim.kaleidoscope
+        - linkerbot_sim.training
+    - name: kaleidoscope_has_no_mirror_or_excluded_services
+      source_prefix: linkerbot_sim.kaleidoscope
+      forbidden_import_prefixes:
+        - linkerbot_sim.mirror
+        - linkerbot_sim.planning
+        - linkerbot_sim.telemetry
+        - linkerbot_sim.logging
+        - linkerbot_sim.sensors.camera
+        - linkerbot_sim.backends.curobo.collision
+        - linkerbot_sim.backends.curobo.planning
+        - newton
+        - mujoco_warp
+    - name: training_uses_only_public_kaleidoscope_port
+      source_prefix: linkerbot_sim.training
+      forbidden_import_prefixes:
+        - linkerbot_sim.isaac
+        - linkerbot_sim.mirror
+        - linkerbot_sim.kaleidoscope.
+
+# 下列 facade 导出已经冻结。生成器同时解析源码 ``__all__``，任何新增、删除或改名都必须
+# 先进行显式架构评审并同步中英文 API 文档，不能把 implementation helper 顺手公开。
+public_facades:
+  linkerbot_sim:
+    freeze_status: frozen
+    runtime: pure
+    exports: [REPO_ROOT]
+  linkerbot_sim.configuration:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - MirrorConfig
+      - KaleidoscopeConfig
+      - KaleidoscopeEnvironmentSettings
+      - KaleidoscopeViewportSettings
+      - ComputeSettings
+      - NewtonCpuSettings
+      - NewtonCudaSettings
+      - PhysicsEngine
+      - PhysicsExecution
+      - PhysicsSettings
+      - PhysxCpuSettings
+      - PhysxCudaSettings
+      - SkrlTrainingSettings
+      - load_mirror_config
+      - load_kaleidoscope_config
+      - load_kaleidoscope_viewport_config
+      - load_skrl_training_settings
+      - semantic_config_payload
+      - semantic_config_fingerprint
+  linkerbot_sim.mirror:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - MirrorConfig
+      - MirrorRuntime
+      - MirrorController
+      - create_mirror_runtime
+      - run_mirror
+  linkerbot_sim.kaleidoscope:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - ControlModeChange
+      - ControlModeGenerationConflict
+      - ControlModeIncompatibleError
+      - ControlModeLockedError
+      - ControlModeRollbackError
+      - ControlModeState
+      - ControlModeSwitchError
+      - KaleidoscopeConfig
+      - TorchKaleidoscopeEnv
+      - GymnasiumKaleidoscopeAdapter
+      - KaleidoscopeEpisodeSnapshot
+      - KaleidoscopeTrainingPort
+      - make_torch_env
+      - make_viewport_env
+      - make_gymnasium_env
+      - register_gymnasium_envs
+  linkerbot_sim.training.skrl:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - SkrlTorchAdapter
+      - FinalObservationPPO
+      - CudaRolloutMemory
+      - make_skrl_trainer
+  linkerbot_sim.snapshots:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - SceneSnapshot
+      - load_scene_snapshot
+      - save_scene_snapshot
+      - validate_scene_snapshot
+  linkerbot_sim.backends.curobo:
+    freeze_status: frozen
+    runtime: pure
+    exports:
+      - CuroboConfig
+      - CuroboContext
+      - CuroboDeviceBatchIKSolver
+      - CuroboKinematicsContext
+      - curobo_config_from_profiles
+      - create_kinematics_context
+
+module_map:
+  # 只为实际存在的一级 package 生成 heading；本顺序同时表达目标依赖方向。已退役的
+  # configs/app/physics/tiled 不再登记，因此重新创建这些一级 package 会立即触发门禁。
+  group_order:
+    - root
+    - foundation
+    - domain
+    - configuration
+    - assets
+    - robots
+    - objects
+    - controllers
+    - envs
+    - trajectories
+    - planning
+    - execution
+    - backends
+    - isaac
+    - sensors
+    - snapshots
+    - telemetry
+    - logging
+    - visualization
+    - mirror
+    - kaleidoscope
+    - training
+    - utils
+  owner_paths:
+    - linkerbot_sim.configuration.catalog
+    - linkerbot_sim.configuration.modes.mirror
+    - linkerbot_sim.configuration.modes.kaleidoscope
+    - linkerbot_sim.backends.curobo
+    - linkerbot_sim.isaac.session
+    - linkerbot_sim.isaac.physics.runtime
+    - linkerbot_sim.isaac.physics.factory
+    - linkerbot_sim.mirror.runtime
+    - linkerbot_sim.mirror.controller
+    - linkerbot_sim.mirror.rendering
+    - linkerbot_sim.kaleidoscope.env
+    - linkerbot_sim.kaleidoscope.runtime
+    - linkerbot_sim.kaleidoscope.state_api
+    - linkerbot_sim.training.skrl
+  group_layers:
+    root: foundation
+    foundation: foundation
+    domain: domain
+    configuration: configuration
+    assets: isaac_infrastructure
+    robots: isaac_infrastructure
+    objects: isaac_infrastructure
+    controllers: isaac_infrastructure
+    envs: isaac_infrastructure
+    trajectories: domain
+    planning: domain
+    execution: product
+    backends: numerical_backend
+    isaac: isaac_infrastructure
+    sensors: isaac_infrastructure
+    snapshots: domain
+    telemetry: outputs
+    logging: outputs
+    visualization: isaac_infrastructure
+    mirror: product
+    kaleidoscope: product
+    training: training
+    utils: foundation
+  runtime_prefixes:
+    cuRobo/CUDA:
+      - linkerbot_sim.backends.curobo
+      - linkerbot_sim.kaleidoscope
+      - linkerbot_sim.training.skrl
+    Isaac main thread:
+      - linkerbot_sim.isaac
+      - linkerbot_sim.mirror
+      - linkerbot_sim.controllers
+      - linkerbot_sim.execution
+      - linkerbot_sim.objects
+      - linkerbot_sim.sensors
+      - linkerbot_sim.telemetry
+    pure:
+      - linkerbot_sim.configuration
+      - linkerbot_sim.foundation
+      - linkerbot_sim.domain
+  pure_module_prefixes:
+    - linkerbot_sim.mirror.interface
+  documentation_targets:
+    root: ../reference/python-api.md
+    foundation: ../getting-started/project-overview.md
+    domain: ../getting-started/project-overview.md
+    configuration: ../reference/configuration.md
+    assets: naming.md
+    robots: naming.md
+    objects: object-assets.md
+    controllers: ../guides/control-and-trajectories.md
+    envs: ../reference/configuration.md
+    trajectories: ../guides/control-and-trajectories.md
+    planning: ../guides/motion-planning.md
+    execution: ../guides/control-and-trajectories.md
+    backends: ../guides/motion-planning.md
+    isaac: ../operations/constraints.md
+    sensors: ../guides/cameras.md
+    snapshots: ../reference/snapshots.md
+    telemetry: ../guides/telemetry.md
+    logging: ../reference/outputs.md
+    visualization: ../development/usd-preview.md
+    mirror: ../getting-started/project-overview.md
+    kaleidoscope: ../getting-started/choose-runtime-and-api.md
+    training: ../operations/constraints.md
+    utils: ../getting-started/project-overview.md
+
+legacy_retirement:
+  scan_roots:
+    - root: src/linkerbot_sim
+      suffixes: [.py]
+    - root: configs
+      suffixes: [.yaml, .yml, .md]
+    - root: scripts
+      suffixes: [.py]
+    - root: apps
+      suffixes: [.kit]
+  forbidden_path_or_text_regexes:
+    - '(?i)single_scene|SingleScene'
+    - '(?i)tiled_scene|TiledScene'
+    - 'linkerbot_sim\.tiled(?:\.|\b)'
+    - 'linkerbot_sim\.physics(?:\.|\b)'
+    - 'linkerbot_sim\.(?:app|configs|profiles)(?:\.|\b)'
+    - 'linkerbot_sim\.telemetry\.tiled(?:\.|\b)'
+    - 'linkerbot_sim\.envs\.config(?:\.|\b)'
+    - '(?:^|/)src/linkerbot_sim/(?:app|configs|profiles|physics|tiled)(?:/|$)'
+    - '(?:^|/)src/linkerbot_sim/telemetry/tiled(?:/|$)'
+    - '(?:^|/)src/linkerbot_sim/envs/config\.py$'
+    - '(?:^|/)src/linkerbot_sim/configuration/visualization\.py$'
+    - '(?i)newton_direct|DirectNewton'
+    - 'linkerbot_sim\.configuration\.loader(?:\.|\b)'
+  forbidden_import_prefixes:
+    - linkerbot_sim.app
+    - linkerbot_sim.configs
+    - linkerbot_sim.envs.config
+    - linkerbot_sim.physics
+    - linkerbot_sim.profiles
+    - linkerbot_sim.telemetry.tiled
+    - linkerbot_sim.tiled
+    - linkerbot_sim.configuration.loader
+    - linkerbot_sim.isaac.physics.newton_direct
+  historical_documentation_roots:
+    - design_plan
+    - docs
+
+# generated-inventory:start
+generated_inventory:
+  status: final
+  generated_by: scripts/update_architecture_inventory.py
+  hash_serialization: path_sha256 uses UTF-8 POSIX path plus LF; path_content_sha256 uses UTF-8 POSIX path, NUL, raw content,
+    NUL
+  pending_facades: []
+  production_python:
+    count: 247
+    path_sha256: fa145cceb481034c7aa8f3a6276c659c1ac112b83988ac6906a6cb4f083cc180
+    path_content_sha256: a50739819cd4eb7e26fc43db0290363e107a12e790c60c0e35ababfd1e8bfea5
+    files:
+    - path: src/linkerbot_sim/__init__.py
+      sha256: 5e43f3c99689ee492aef09d75e2caa2d47e8d667158c186b5d65b2083ae28acc
+      module: linkerbot_sim
+      group: root
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/assets/__init__.py
+      sha256: e7691ec2798f5a75fa39bbb1fc74b21bafb8ba54d67121124cf824f81ecaf8fd
+      module: linkerbot_sim.assets
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/instance_paths.py
+      sha256: 9bb6cbccc2451d3e561a7589e7e14587bb84025786c59f61129fc5b684e8bed2
+      module: linkerbot_sim.assets.instance_paths
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/robot_config.py
+      sha256: c262ff071de1be6f6c211877aae59aa7b1f3897a0bfa78cdad16a4cf752c65db
+      module: linkerbot_sim.assets.robot_config
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/robot_import.py
+      sha256: db19ad5cb8cd2d9621722f7320cc9729f93ccbc31933fb407f097c0ea37f15d7
+      module: linkerbot_sim.assets.robot_import
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/robot_instances.py
+      sha256: 4b60c722a6aba2b23630fa74dc1dda416f207c2854367df6fc751850ed063f0b
+      module: linkerbot_sim.assets.robot_instances
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/root_pose.py
+      sha256: 3254c2f577ad3595432fb479f5d9320b6a23bf1a262a5517b3a7a447e49ebea5
+      module: linkerbot_sim.assets.root_pose
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/solver_overrides.py
+      sha256: 72150fa0353af35307b4dddbf40ffd80bb8c5efcb46b7b3b91d1c9a7abb98ee1
+      module: linkerbot_sim.assets.solver_overrides
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/assets/usd_overrides.py
+      sha256: adb3616752a85a154e611f394c69616475f7b51f7be24a5c20608d4660352e5e
+      module: linkerbot_sim.assets.usd_overrides
+      group: assets
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/backends/__init__.py
+      sha256: 37baa85e2b208dc06640e30c4bcfde3e98b905e2d49b132a58012b44a27a3414
+      module: linkerbot_sim.backends
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/__init__.py
+      sha256: f1ee41136ce0f6cd33a2420eabed0a5732cc4b7effa2c10547d01290eb24a967
+      module: linkerbot_sim.backends.curobo
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/backends/curobo/call_guard.py
+      sha256: 872c33efede506aebd2dfea4f07668eac53fe28212c21939f94419b3df27bfc8
+      module: linkerbot_sim.backends.curobo.call_guard
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/collision_capability.py
+      sha256: 0cea890f5ab4b76abf0907ed841c5239130b6bd25598940dfcda2851e0905670
+      module: linkerbot_sim.backends.curobo.collision_capability
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/collision_world.py
+      sha256: 61e63c941223c2c6f9dd135777d8b7dd6e294e37244b59aa245197d2e97c58e1
+      module: linkerbot_sim.backends.curobo.collision_world
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/config.py
+      sha256: 0dfd3d707b9bcc663cc7adacfcc7a75f852778a1c389e22e40caca575806cf79
+      module: linkerbot_sim.backends.curobo.config
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/context.py
+      sha256: 03ec76c92ac7b1179bd49a0b2d6ce34255f68e938fa26294bc041f3edb2a59d5
+      module: linkerbot_sim.backends.curobo.context
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/forward_kinematics.py
+      sha256: 948074f6f79b3aa8dc5d17a7e5c42939094a361736d53887780087871663f256
+      module: linkerbot_sim.backends.curobo.forward_kinematics
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/inverse_kinematics.py
+      sha256: 1d1a8e14ad6af9c4630b21b3f4354feb376933a12b1ca7a9b5e618b77abed9bb
+      module: linkerbot_sim.backends.curobo.inverse_kinematics
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/kinematics/__init__.py
+      sha256: 57d8077124c5deef014d2f37e25ed560b74eb9671bf91c943f9c284a154bb48d
+      module: linkerbot_sim.backends.curobo.kinematics
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/kinematics/context.py
+      sha256: 349ec8a5132a4f5974fdbc72f9051becd0478c05defe540d9e28fa32a3dd1a40
+      module: linkerbot_sim.backends.curobo.kinematics.context
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/kinematics/device_batch_ik.py
+      sha256: 6d2177701736a5f79aa3af70da2ece2727a9f770489919577c581aa5109b91ad
+      module: linkerbot_sim.backends.curobo.kinematics.device_batch_ik
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/kinematics/types.py
+      sha256: 215103bc823ea404448cc5d39570b41325a8534459e2d6e6fb1a3306c2d1dcbd
+      module: linkerbot_sim.backends.curobo.kinematics.types
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/linear_pose_path.py
+      sha256: ef74e94f4085790f722d18f0340791bb5977757868dbf860a991863c53b9069a
+      module: linkerbot_sim.backends.curobo.linear_pose_path
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/motion_planner.py
+      sha256: b530912c489737a8860f29b479a211b2f94920f98f02b581c0d4a1dd40fe6bcd
+      module: linkerbot_sim.backends.curobo.motion_planner
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/profile_merge.py
+      sha256: e33b7f6bcb1b2cc46b415e26f1b0f994b6a4f0d69b42517c77601534cf871a9d
+      module: linkerbot_sim.backends.curobo.profile_merge
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/resources/__init__.py
+      sha256: e871053ae15cf1c62705f0bc8e7567d76e16b34806b3406b5e0b6dac59f0c153
+      module: linkerbot_sim.backends.curobo.resources
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/robot_model.py
+      sha256: aef190f322325053111a2e5cdaa72b61465761f44267e30b1294168eb57b869c
+      module: linkerbot_sim.backends.curobo.robot_model
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/runtime_imports.py
+      sha256: e82112dea1686c0814efbe3ef79b52ed61ab2e0790774bbe00d0beabd83452ce
+      module: linkerbot_sim.backends.curobo.runtime_imports
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/tensor_adapter.py
+      sha256: 383c9450ae24af35c9e18d63486fb6e9c9a3434771560d241862d301e452a0d7
+      module: linkerbot_sim.backends.curobo.tensor_adapter
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/tool_pose.py
+      sha256: 6e34765af82ecc36423ac044600fe118f14fcebe55294600fe49932febd14313
+      module: linkerbot_sim.backends.curobo.tool_pose
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/trajectory_adapter.py
+      sha256: fea2618d266f2a6f3579f28fdbdc3b29839b859630f16c40aa4c8d7beb557a3d
+      module: linkerbot_sim.backends.curobo.trajectory_adapter
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/backends/curobo/warp_compat.py
+      sha256: be04f48ba4e5f43564ca8d57a05729f639f1faf3f5df18cb1cb8554307b9934d
+      module: linkerbot_sim.backends.curobo.warp_compat
+      group: backends
+      layer: numerical_backend
+      owner: linkerbot_sim.backends.curobo
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/configuration/__init__.py
+      sha256: c028b466e22d1663a9efe492df3f9d84511f46f11ca3827c5c4a020df9a01e1a
+      module: linkerbot_sim.configuration
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/configuration/catalog.py
+      sha256: 40280b5a205fa3c8488cee71ff554b1c96eb7e0facc3845998382d9b6f2ab6dd
+      module: linkerbot_sim.configuration.catalog
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration.catalog
+      runtime: pure
+      classification: owner path
+    - path: src/linkerbot_sim/configuration/common.py
+      sha256: dc1b0077d26952fa785c5cde45f4eba1115492731276b733320c009f53bcdd42
+      module: linkerbot_sim.configuration.common
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/control.py
+      sha256: eb56f923eb196b6aa75e6f241f9afd58c0480969f7d4b7223733aed0840b4853
+      module: linkerbot_sim.configuration.control
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/controllers.py
+      sha256: 62b406a4549c1f548c27be9715c82bacb36a2d298e00aad71472ce80b3de5269
+      module: linkerbot_sim.configuration.controllers
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/curobo.py
+      sha256: 4827424b297ba381a7af8701358478d345c1cd84107004d04f70ed7967f67cba
+      module: linkerbot_sim.configuration.curobo
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/fingerprint.py
+      sha256: c852738cb32245f71efd36bd28b79c8a396b0d101ddcddc7148252b09e48cf6b
+      module: linkerbot_sim.configuration.fingerprint
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/modes/__init__.py
+      sha256: cb20523ba87b625a8bc35c8998f852a495c30b3a5aa1989219106d52d1895cc0
+      module: linkerbot_sim.configuration.modes
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/modes/common.py
+      sha256: e0d1a109d6ccb3e0a328ea4b1efe54c603f500d39f2ecf56408b03886c7db11d
+      module: linkerbot_sim.configuration.modes.common
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/modes/kaleidoscope.py
+      sha256: 791851b605979fd5d0d540dd243a7f8e321678f2a0fa8c6274eab1f70cb60819
+      module: linkerbot_sim.configuration.modes.kaleidoscope
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration.modes.kaleidoscope
+      runtime: pure
+      classification: owner path
+    - path: src/linkerbot_sim/configuration/modes/mirror.py
+      sha256: fbceab7f677335902c648e46a7d0f84b1eef68c99cee5f576b54c1d602a5ab43
+      module: linkerbot_sim.configuration.modes.mirror
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration.modes.mirror
+      runtime: pure
+      classification: owner path
+    - path: src/linkerbot_sim/configuration/objects.py
+      sha256: 517e861fa634c3d9e5dcb55d2bf8ada62b98b934e14e68e3302538a4bf53b3c1
+      module: linkerbot_sim.configuration.objects
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/outputs.py
+      sha256: b161866cf700c3544f69cec8c4b5610ad61008b48be34ee3548f89290f1803f6
+      module: linkerbot_sim.configuration.outputs
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/physics.py
+      sha256: f865ff18d881345479d98136207d1c25a38c31669b2efc748de3f37113855d54
+      module: linkerbot_sim.configuration.physics
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/planning.py
+      sha256: a41b7ed9e4a06d772e8231025c0b6f746a775dcee84a3389dcf8bef3b9722369
+      module: linkerbot_sim.configuration.planning
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/robots.py
+      sha256: 35f2e21169d2277da6171379a14b0ca003f2707b1ad0b13a95449659f37921c6
+      module: linkerbot_sim.configuration.robots
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/scenes.py
+      sha256: 675dd0d8d2947b876ee9e52baa6f54c323a7658155c652370617f11290388d70
+      module: linkerbot_sim.configuration.scenes
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/tasks/__init__.py
+      sha256: f7ef768be5cf527f49f0f6c05a2506c645c90fe434603505bb1efc6db5adeb87
+      module: linkerbot_sim.configuration.tasks
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/tasks/kaleidoscope.py
+      sha256: 4c3211b19a96814cf5f498dffec82ffb1e365725dc37c7c0011e3eb9f75fefe9
+      module: linkerbot_sim.configuration.tasks.kaleidoscope
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/training/__init__.py
+      sha256: 327006faf9c4eb58e9a5cb42a32e119e65660e04fd1049a45c59027d518aaa47
+      module: linkerbot_sim.configuration.training
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/training/skrl.py
+      sha256: ca3a6976806503f528f4c0cd58d4528f175190c926a6a5ec5c11fe2f90735495
+      module: linkerbot_sim.configuration.training.skrl
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/visualization/__init__.py
+      sha256: 3c3b8366b410e07e6a5b15a1717b77950e6e5e26aabe8f556961f74c2dd9e23b
+      module: linkerbot_sim.configuration.visualization
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/configuration/visualization/kaleidoscope.py
+      sha256: b492aed73d7bb3d4b9cbfc5f8be60120d4d0e916da180c27ae8c8abbe726723a
+      module: linkerbot_sim.configuration.visualization.kaleidoscope
+      group: configuration
+      layer: configuration
+      owner: linkerbot_sim.configuration
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/controllers/__init__.py
+      sha256: 745e14785d4d9b73ca97ac69a1d164b1491e65aa76f058730fc7f8378579e068
+      module: linkerbot_sim.controllers
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/control_mode.py
+      sha256: 91f5641464bc3ee720c40fc9a419d19c3500dda82cb0404cff2024c272db6809
+      module: linkerbot_sim.controllers.control_mode
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/hybrid_force_position.py
+      sha256: 9ddfa95183a1c5062877702f75fbea13a0e313eb0dada50aeb6ff9a1c5b6cb00
+      module: linkerbot_sim.controllers.hybrid_force_position
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/joint_controller.py
+      sha256: 94eefbcd48d6652804c69a30a796370d62d7db2e313d3f231b04f78e5c8184d8
+      module: linkerbot_sim.controllers.joint_controller
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/projection.py
+      sha256: 4d0717079e95fc536b024399376c13958eb01eb0c78bbf28f4d568e89307dbde
+      module: linkerbot_sim.controllers.projection
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/runtime_projection.py
+      sha256: b58063579aedb7474a90c6a4262fa4076393634c9ad17f7446388b676f846a85
+      module: linkerbot_sim.controllers.runtime_projection
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/controllers/types.py
+      sha256: 4dbebf696e37a6bb0fe09f6912dd9e352982152baafd2d213ca7486f54770d1d
+      module: linkerbot_sim.controllers.types
+      group: controllers
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/execution/__init__.py
+      sha256: 3e28cadf7e95ebdd3406c5154c20f5807e56044c2994040359908d4ea33e54cb
+      module: linkerbot_sim.execution
+      group: execution
+      layer: product
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/execution/runtime.py
+      sha256: 41bae0e456f09feb437a107fe7eb36213e97e048849715745fad08d548c05320
+      module: linkerbot_sim.execution.runtime
+      group: execution
+      layer: product
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/execution/setup.py
+      sha256: bb7930cf5d5a6954de6a3ee4497079db0d1f458b96c3544a7b790e92d5123620
+      module: linkerbot_sim.execution.setup
+      group: execution
+      layer: product
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/execution/steps.py
+      sha256: 77670051ff685fbfe7a30c1c43aefa14c12a7e74bf27a1b7b0334677ec0ba01e
+      module: linkerbot_sim.execution.steps
+      group: execution
+      layer: product
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/__init__.py
+      sha256: eb6f7de1bf70faa6afd7bb82aca2f978a78c3ffac3fcc76ab9f6e59a591d37e2
+      module: linkerbot_sim.isaac
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/app.py
+      sha256: a4286dded2e5dfa303cd4e2affeca03b355dde177e5f83ea953c942c3902a6bc
+      module: linkerbot_sim.isaac.app
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/extensions.py
+      sha256: a1e908eaeaede4e575daa9e557e7fd01979f2048a6eb715403e530d593e45c55
+      module: linkerbot_sim.isaac.extensions
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/gpu_memory_audit.py
+      sha256: 829710b6ff73964ce59f4c6e9b99baec877c92d093146378604bbccfa4fd3518
+      module: linkerbot_sim.isaac.gpu_memory_audit
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/lifecycle.py
+      sha256: 5f140dc6376f2e6620440abaa98bbad7fd24ded8618f7ad89133ed4b5c784e9d
+      module: linkerbot_sim.isaac.lifecycle
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/__init__.py
+      sha256: d84a989f9261398b27e2dd0d359e514444228b87580dd4918750eabee1ef4a01
+      module: linkerbot_sim.isaac.physics
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/backend.py
+      sha256: 121d9ca58bf307533bd93fc58426f1003077e9357cf20a53c28fafcf8124031f
+      module: linkerbot_sim.isaac.physics.backend
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/core_api.py
+      sha256: 93e872ba55968726e0a27c05810061be22b8c51bd7577e58873833bee26338ce
+      module: linkerbot_sim.isaac.physics.core_api
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/exclusivity.py
+      sha256: ea02590416952715bf05819e3ac0f4e084a8503ccd6ce349e64a5e81d1d43a52
+      module: linkerbot_sim.isaac.physics.exclusivity
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/factory.py
+      sha256: cbf9a05988a5b3187d07f3255b8769de18dfa031dc1463ae27bcd145658b2290
+      module: linkerbot_sim.isaac.physics.factory
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim.isaac.physics.factory
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/isaac/physics/manager.py
+      sha256: 6d0c4495871a9efdf54f05b6a40a1526f19f04f9ba7fdfbf5f082cda12565334
+      module: linkerbot_sim.isaac.physics.manager
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/__init__.py
+      sha256: 5b2b8f6fa8f24c6618365a0221459b6ebdb9ff21568060ad63b7145fdfacca27
+      module: linkerbot_sim.isaac.physics.newton
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/constraints.py
+      sha256: 2aff10cc9340f174f8ed08ed0d675c157a4fb1c06f0e6fa41d068175fc276ca4
+      module: linkerbot_sim.isaac.physics.newton.constraints
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/integration_state.py
+      sha256: 2ed887ad8c8395defc444641b25c6ed540952ad74c71523f806d1b3c4784bb46
+      module: linkerbot_sim.isaac.physics.newton.integration_state
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/manager.py
+      sha256: 6ab4aa164b9a9e5465eae8a124e9c304d77027dd61f835ef04f309be4e810c97
+      module: linkerbot_sim.isaac.physics.newton.manager
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/render.py
+      sha256: c27a41d901559b60210992b259fec5fd8cf9ce897d9bc73a76a6b056e6507fa5
+      module: linkerbot_sim.isaac.physics.newton.render
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/replication.py
+      sha256: ca7322920a987f77e86a83f3ee0fd2f52458c837a28c0aa218a088766ec74a39
+      module: linkerbot_sim.isaac.physics.newton.replication
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/newton/views.py
+      sha256: c42424cac656b77ee283182ff7df3b1a1ac7e378f86577f97436bf31803530c2
+      module: linkerbot_sim.isaac.physics.newton.views
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/physx.py
+      sha256: 9a9fca16fa5b4beaff0c3e49d5dce1d0c4479ddd7c62042c2cbda3fc3059220b
+      module: linkerbot_sim.isaac.physics.physx
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/physx_pipeline.py
+      sha256: 18b0b293ccab8532cd8a9961f2f02f23dfcb5a6d0aee800f21502d71dd792969
+      module: linkerbot_sim.isaac.physics.physx_pipeline
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/physx_task_space.py
+      sha256: d671a3b79d74495685db30e74e065278c335484dcb0dc5a8d6214ae6e99574af
+      module: linkerbot_sim.isaac.physics.physx_task_space
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/physics/runtime.py
+      sha256: dcb75630905cc1a778a85553bfa30d11ef2a223b1083688d147b2e8a95a4f761
+      module: linkerbot_sim.isaac.physics.runtime
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim.isaac.physics.runtime
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/isaac/provenance.py
+      sha256: cef2c571ce1e774c03463241dfa89c0cb9ab7cfd351dc35df4b055d24fd77f8d
+      module: linkerbot_sim.isaac.provenance
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/__init__.py
+      sha256: 69cef973da0aea842981e966f042cc02b0e87dfa6b7229a6e7ca86f2aaf0eb13
+      module: linkerbot_sim.isaac.replicated_scene
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/assets.py
+      sha256: 80040b75ab735971ab1c4a2fb370df77ae4ac99f2b2e8643c7fca33743bfd891
+      module: linkerbot_sim.isaac.replicated_scene.assets
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/layout.py
+      sha256: aa117580ac85213899712635a5302088b96aabed396138a247d8bf077050c46c
+      module: linkerbot_sim.isaac.replicated_scene.layout
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/newton_builder.py
+      sha256: 3b625d70d26778b7358417977e7f2df7b15fe5f745c12cda885b3c616809b08e
+      module: linkerbot_sim.isaac.replicated_scene.newton_builder
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/physx_builder.py
+      sha256: 538f70ce789891d7dfe1e27a8694c9a92b5f5a18707b2e76b1742c3f09e68f8d
+      module: linkerbot_sim.isaac.replicated_scene.physx_builder
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/types.py
+      sha256: c564533c401af19ff60ed844b12dc2c69fdcfa9b2f9c01edcc5ab17d1f90a1fb
+      module: linkerbot_sim.isaac.replicated_scene.types
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/replicated_scene/views.py
+      sha256: 143db097f802f1dfc84483e1b25039b547e90eb0bcf8d06b52a52a19375d0ce1
+      module: linkerbot_sim.isaac.replicated_scene.views
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/scene/__init__.py
+      sha256: fd6e93abb5f9851c3854562c7f875387c7186350cdf9b8cd2c24543a345cd05a
+      module: linkerbot_sim.isaac.scene
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/scene/pose.py
+      sha256: c5d353634ff001acab1ccd6410d907f819287d1c841280f4b180e0d859aa2274
+      module: linkerbot_sim.isaac.scene.pose
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/session.py
+      sha256: e5e1982b395ff09c3d34ded5993d68191450c78261b41ff0ff9b156109292b22
+      module: linkerbot_sim.isaac.session
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim.isaac.session
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/isaac/spec.py
+      sha256: 9b54a557bded4609474b82fcfbe12756ab6384975fb251ca05dc7e08c970a12c
+      module: linkerbot_sim.isaac.spec
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/isaac/world.py
+      sha256: 352912a5ddf9165a54fee87e4be4abc8d937a506ebaaf63572e2c7a72a96887d
+      module: linkerbot_sim.isaac.world
+      group: isaac
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/__init__.py
+      sha256: 8551419faf28a5f37f8d962e772e71065f12bb94588bb58e4a5ce7f78d3e5f6f
+      module: linkerbot_sim.kaleidoscope
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/kaleidoscope/actions.py
+      sha256: b790b0ded87950f9299bb9a8ed7eac23c89fcad7d206618ed6f6a488243266d7
+      module: linkerbot_sim.kaleidoscope.actions
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/adapters/__init__.py
+      sha256: e2cc91a5cb43435d948d62f752d70d00b99272ae4d96127f38bf10ff7e2dc418
+      module: linkerbot_sim.kaleidoscope.adapters
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/adapters/gymnasium.py
+      sha256: b12e5001dcb41076364f5ea814c5f0a00d8c5c289695a191d9af7aa202fb1a71
+      module: linkerbot_sim.kaleidoscope.adapters.gymnasium
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/bootstrap.py
+      sha256: c945fd291a69cfb9cd942a76043f4bb5a023e8bbc40c50cce0fa575b2e307020
+      module: linkerbot_sim.kaleidoscope.bootstrap
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/checkpoint.py
+      sha256: f75a777a7f97a80af083dc1d0de45d0121af1106488ba2158312e1c775875720
+      module: linkerbot_sim.kaleidoscope.checkpoint
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/control_commands.py
+      sha256: 35499952ba36bb6e0f7d7477cb327a3c27df43b1c8129897e54ee2502e5a4b43
+      module: linkerbot_sim.kaleidoscope.control_commands
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/control_mode.py
+      sha256: a901cff6275f452793360b8135ad901efdb58a057afff1b501f9feb9e65f5a1d
+      module: linkerbot_sim.kaleidoscope.control_mode
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/control_runtime.py
+      sha256: fb1d99b5f778e904f6cd992387f45faffb0b6a7842623c0e62b586fdc98c542f
+      module: linkerbot_sim.kaleidoscope.control_runtime
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/env.py
+      sha256: 5ca1b94c939784bf94848662afddf29a449b54083ade840c97f175ff9bdefe74
+      module: linkerbot_sim.kaleidoscope.env
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope.env
+      runtime: cuRobo/CUDA
+      classification: owner path
+    - path: src/linkerbot_sim/kaleidoscope/geometry.py
+      sha256: 96bd7fbb5f28409561dfb3ee58d9e2ebae1d4224ba03e8a2fbf4c3988e82db18
+      module: linkerbot_sim.kaleidoscope.geometry
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/ik.py
+      sha256: faa9f1a93533046c4fb06b1da18051b7f572066c85bb0d7c92e27d66657594e7
+      module: linkerbot_sim.kaleidoscope.ik
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/isaac_adapter.py
+      sha256: 950a0e674093fc4075a7f5f345b60ea67af2bd2b81a552d1233a1d45ab96a468
+      module: linkerbot_sim.kaleidoscope.isaac_adapter
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/isaac_views.py
+      sha256: 7a7ec60ff5fbaed5005710a00c96fddef8bc9947fefd8553dbc0c15ecbde9f1d
+      module: linkerbot_sim.kaleidoscope.isaac_views
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/linear_motion.py
+      sha256: 39c21408aad9c41fb3db7f332b10f11061f95fe9235aa731519d315ab1e73911
+      module: linkerbot_sim.kaleidoscope.linear_motion
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/newton_ports.py
+      sha256: 5fe9fa68acc97578e16a31fa82bc19a857949e9643d1ac1d346bb5dfb5f1fc60
+      module: linkerbot_sim.kaleidoscope.newton_ports
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/observations.py
+      sha256: 3be5dad4c41b5b851e04a2a7a7477e4cd52a589c681f79582edd486751c20567
+      module: linkerbot_sim.kaleidoscope.observations
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/physx_ports.py
+      sha256: 2a7662f61feb65d6b750e8174768573a562ccb9a0cc37f2b3d6c8e286a81a82f
+      module: linkerbot_sim.kaleidoscope.physx_ports
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/registration.py
+      sha256: 90bdc3fa2074471b703c347405e8012f183270662f0e9723f0c35bfd8930fced
+      module: linkerbot_sim.kaleidoscope.registration
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/resets.py
+      sha256: d2a8a24ed8c88d8dbeb75b371d953777cc35c0652444b246e57b6846b3014fcd
+      module: linkerbot_sim.kaleidoscope.resets
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/rewards.py
+      sha256: b95dee7cc517b25ebbd8faf0504e453d87fe8e4fb5b82772321b8f186cd31228
+      module: linkerbot_sim.kaleidoscope.rewards
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/runtime.py
+      sha256: b0d72997876c7ee6b0c24a2347911014927abbbf8743eebfc2e3faf8e5488b09
+      module: linkerbot_sim.kaleidoscope.runtime
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope.runtime
+      runtime: cuRobo/CUDA
+      classification: owner path
+    - path: src/linkerbot_sim/kaleidoscope/scene_assembly.py
+      sha256: 243c70586d4122b0bf3d0ef6128f41e883e91537e3488c59ef60c6b9a1598196
+      module: linkerbot_sim.kaleidoscope.scene_assembly
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/snapshot.py
+      sha256: 25184252af0c56f11ce48aaf5a2ed7bd2ec482f574f927672eab8f8c6375f1b3
+      module: linkerbot_sim.kaleidoscope.snapshot
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/state_api.py
+      sha256: eb97be871e941b2e5202b3ac569afe52f3869f87be936b6764e9ef393ef1ae58
+      module: linkerbot_sim.kaleidoscope.state_api
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope.state_api
+      runtime: cuRobo/CUDA
+      classification: owner path
+    - path: src/linkerbot_sim/kaleidoscope/task.py
+      sha256: b517687bd0a3a293816f399fa002275b1cdf267e6bb95d07448b6f78d93f7de9
+      module: linkerbot_sim.kaleidoscope.task
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/task_buffers.py
+      sha256: ebfcb2aa424095fb19802b8273ddab432802fac8614e2a20396e7f3706b1a49f
+      module: linkerbot_sim.kaleidoscope.task_buffers
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/tasks/__init__.py
+      sha256: 69fa4ca3c0502479044a943d77ea0c5641ac706612225c014c9b4d977b734032
+      module: linkerbot_sim.kaleidoscope.tasks
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/tasks/tblock_push_v1.py
+      sha256: 81fb8752540c8e626fdf4943224d09bdd9eead02f971458071fefa03a365bf9e
+      module: linkerbot_sim.kaleidoscope.tasks.tblock_push_v1
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/tensors.py
+      sha256: 828a1c7d1cad420be2f777ef82d6b96fba9eaa7f4e05217e9ea254c05c9bad61
+      module: linkerbot_sim.kaleidoscope.tensors
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/terminations.py
+      sha256: 05fa718e935642ec6ab1c7ee4e9d1114145c7be52ba9638adc41986d0b154488
+      module: linkerbot_sim.kaleidoscope.terminations
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/kaleidoscope/training_port.py
+      sha256: 6221ea9eaccb347b4aa21be70277561e08be7c7fab6a5bf619a06a2b2dabc614
+      module: linkerbot_sim.kaleidoscope.training_port
+      group: kaleidoscope
+      layer: product
+      owner: linkerbot_sim.kaleidoscope
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/logging/__init__.py
+      sha256: 268570fe962a01db9da61af3b8f14052b6a006185acac73c1563265997a4fa07
+      module: linkerbot_sim.logging
+      group: logging
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/logging/csv_writer.py
+      sha256: 8421cfb056ee0f3a441533e66a8d2c3167f9c3d175bc679494496991c3d19739
+      module: linkerbot_sim.logging.csv_writer
+      group: logging
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/logging/effort_logger.py
+      sha256: 1cbbb10fb9c2899a620dd9adf25a3841577abd35daa62408b5aaa1a2139e67ce
+      module: linkerbot_sim.logging.effort_logger
+      group: logging
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/logging/hybrid_control_logger.py
+      sha256: f8dfafc368f37b0ebd4a4f50e738781296b99cbde5ce1bf21766cd5ec59d3f34
+      module: linkerbot_sim.logging.hybrid_control_logger
+      group: logging
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/logging/joint_logger.py
+      sha256: 0da93c8f8fd0db397f4213124ccd816288577aba43b6d7191890425032048916
+      module: linkerbot_sim.logging.joint_logger
+      group: logging
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/__init__.py
+      sha256: 690ebf4c8d6c42b0b07a9f992e73e48e907741b63f58a97aada5ec6d085275f8
+      module: linkerbot_sim.mirror
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/mirror/app.py
+      sha256: c0ae2d650a4d0dfc973b44177e24a60478385d248081abad285616ca8f06d924
+      module: linkerbot_sim.mirror.app
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/bootstrap.py
+      sha256: c5c7c0138847f510fd55c8b3eef8fe6bda5adabf91e719bd572815a6523b1f5a
+      module: linkerbot_sim.mirror.bootstrap
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/cli.py
+      sha256: fd91019345ec50b28441d3afc0e39179b0913942e0973e4133986ac20dfd83c9
+      module: linkerbot_sim.mirror.cli
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/__init__.py
+      sha256: cc7123049c919614de4f7895fec8a82c0678c9113f6377c4e973690a3e1bb6e7
+      module: linkerbot_sim.mirror.collision
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/envelope_provider.py
+      sha256: f72f8562b72d81a736b5d0b3288f8f361b294c430f20b31f3558661cadead8f8
+      module: linkerbot_sim.mirror.collision.envelope_provider
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/object_provider.py
+      sha256: d0971eaf45b37d678528367dbdccf30a67b74ffd904ed343784e6fbb2aad1115
+      module: linkerbot_sim.mirror.collision.object_provider
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/owner.py
+      sha256: 3bb428b0e5b3b178bc8d5eb9e99ab6f6edb95bf9db988c5288441d8f852e2919
+      module: linkerbot_sim.mirror.collision.owner
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/registry.py
+      sha256: d06d41ac603aef1a04df582494e17eb0c55f0a6e66794e5935a6627e7033d2fe
+      module: linkerbot_sim.mirror.collision.registry
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/robot_provider.py
+      sha256: aa0049b2ecd35ab1bc9814b70c68c22c439fcc1bedcdc732d9f9ee33b4222626
+      module: linkerbot_sim.mirror.collision.robot_provider
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/collision/urdf_kinematics.py
+      sha256: 23b8e5d60c9522655627471c164a1c3375fa1873c4d65df8927e917dedae1f91
+      module: linkerbot_sim.mirror.collision.urdf_kinematics
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/control_mode.py
+      sha256: 3aa6481ed33caf7d97a7ab7cdc6426bf6ea0ab491a55d037a6f195c9ff2db138
+      module: linkerbot_sim.mirror.control_mode
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/controller.py
+      sha256: 2934bb05b2bdee11108dcb2df64a1c822f2c0229bc0153db9fc28b7f65f8adfd
+      module: linkerbot_sim.mirror.controller
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror.controller
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/mirror/hybrid_parameters.py
+      sha256: f37647a2f3fdf8a383b976a33c3135ed2587b0d659dbd563c34c1d0cf183bf57
+      module: linkerbot_sim.mirror.hybrid_parameters
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/interface/__init__.py
+      sha256: 2cb2aa8e8974bf98b9fd0052c8364838fd8acd513661bdf0fbb7c8c7aa38110a
+      module: linkerbot_sim.mirror.interface
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/interface/admission.py
+      sha256: 9f71a58d4b0f45380e020866ab9ae2c97e028ba447f4adf0567f2510bb06ba99
+      module: linkerbot_sim.mirror.interface.admission
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/interface/protocol.py
+      sha256: e7857c133e084f2c9a4d4f34e73d11346590c5b451da1f8bea728515c443524e
+      module: linkerbot_sim.mirror.interface.protocol
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/interface/state_stream.py
+      sha256: ba1719b59535ee9ada0d945f37ccea8ca79d802bc0d31e6d5c26d2cb244e0337
+      module: linkerbot_sim.mirror.interface.state_stream
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/interface/transport.py
+      sha256: fdc0459372fcd2d2f39d32f0bce0b64c2b4c7727cf3c321b70d6062a06258814
+      module: linkerbot_sim.mirror.interface.transport
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/mirror/lifecycle.py
+      sha256: facd3c7da2868aaf947a953a5fa8f2064963829ed99bf1a43e8b0f56aac06a89
+      module: linkerbot_sim.mirror.lifecycle
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/__init__.py
+      sha256: 163272af3c2dcb81b26d7d2310c8f3a5a364770bb67508723e195ee883f562c6
+      module: linkerbot_sim.mirror.motion
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/backend.py
+      sha256: 29cd99c7bbea61b63aee9f73a9cc73fe89eb2f07d2ed087ac4a09e0b98664994
+      module: linkerbot_sim.mirror.motion.backend
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/hybrid_executor.py
+      sha256: eea75c63999c8f27fa42739237419ac7737a934e5d8ea0d0c1b97424b78542b8
+      module: linkerbot_sim.mirror.motion.hybrid_executor
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/owner.py
+      sha256: 4e867ec5f0fff143269c0a208dc43a31983bdbc04a2825ea89c4e9c0141a68fe
+      module: linkerbot_sim.mirror.motion.owner
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/request_parser.py
+      sha256: 2587176b8cbc7306ee3fb8a715ce8a430e36458caa129bd3952b3e414ef09bc2
+      module: linkerbot_sim.mirror.motion.request_parser
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/__init__.py
+      sha256: f0e96d70ff858797f01506b72219104461d7ef30adbb4b894aca40da3a7085ce
+      module: linkerbot_sim.mirror.motion.timeline
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/builders.py
+      sha256: 7818ef97bf3f7cfb8e4dc930b73577713a01569b7a5c926fde32dfafbdde4d14
+      module: linkerbot_sim.mirror.motion.timeline.builders
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/compiler.py
+      sha256: a286c24cb2dd469ab92ff359a969ddbef245de067202c588b9d280ce643d932a
+      module: linkerbot_sim.mirror.motion.timeline.compiler
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/executor.py
+      sha256: 3dbf3eadfeda5714f3e8f666f1e68fbd7890d7ea006fff8b2eb6a115f15fbec9
+      module: linkerbot_sim.mirror.motion.timeline.executor
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/model.py
+      sha256: 05519db9d915762ab4cafe12a52813718803466cca26dcba33c6c75c8da24a0e
+      module: linkerbot_sim.mirror.motion.timeline.model
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/motion/timeline/requests.py
+      sha256: 8acca77dc58e0400047b47c8191bc0ee7a51a037091bb9b7e323dfe5f2b0f4b8
+      module: linkerbot_sim.mirror.motion.timeline.requests
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/rendering.py
+      sha256: 2d3cae4825398c93b507bdf14d1a5df563d126ae64569fac88111702eed94659
+      module: linkerbot_sim.mirror.rendering
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror.rendering
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/mirror/reset.py
+      sha256: 92f489ba46bd404b001b5509af79dffade754ac4636418d80654c4fd573d5331
+      module: linkerbot_sim.mirror.reset
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/reset_runtime.py
+      sha256: b7270ed6e2ad7fe897e7cde1d3a34e6478718872625439059f641e51dd8e215b
+      module: linkerbot_sim.mirror.reset_runtime
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/robots.py
+      sha256: d76a4d35c8924e3eccf147e2d898f022ad9ff208d37325a3cf86cc75cdadf81d
+      module: linkerbot_sim.mirror.robots
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/runtime.py
+      sha256: 290b36b39a444f2643b41e034298c3c6a43ccb92007d8c7fe228fa45c4e5ba4d
+      module: linkerbot_sim.mirror.runtime
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror.runtime
+      runtime: Isaac main thread
+      classification: owner path
+    - path: src/linkerbot_sim/mirror/scene_assembly.py
+      sha256: 5cba45d933a5e37bd481da43cea03a370510437dc85b3c139c55f18fbe35fb10
+      module: linkerbot_sim.mirror.scene_assembly
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/scene_settings.py
+      sha256: ab87692623ed43773ffca8ad67a0c3bc56f78e4f604f888a1571e2779b70718f
+      module: linkerbot_sim.mirror.scene_settings
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/snapshot.py
+      sha256: cd920c66c93f7f830c4839ddeabda75d75ce1651d5b394eb98e6c6226ef5436d
+      module: linkerbot_sim.mirror.snapshot
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/state.py
+      sha256: 3e0f9c0714a02db0e17e779bc9a867f208f8b7f41c1e85c47f086547ac9f335d
+      module: linkerbot_sim.mirror.state
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/mirror/timing.py
+      sha256: cd5b1ebdd5325badcff8564b5410a747877f8c31a8da3b8b223a39e7f09d5232
+      module: linkerbot_sim.mirror.timing
+      group: mirror
+      layer: product
+      owner: linkerbot_sim.mirror
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/__init__.py
+      sha256: cced803235b6b2265477348b83ba185232b2aa208e48cf761bc53301d68f0061
+      module: linkerbot_sim.objects
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/dynamic_chain/__init__.py
+      sha256: ec5ff0474c5f45f38a81f7fc30663675a3b84335b046e1f90746bc588d095d89
+      module: linkerbot_sim.objects.dynamic_chain
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/dynamic_chain/capsule_rope.py
+      sha256: 15baf23424d4b3be2bc024a8ac7c4162c904942aeff6e74c428a398dbac73f09
+      module: linkerbot_sim.objects.dynamic_chain.capsule_rope
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/physics.py
+      sha256: 18a89635357b8a9429f9d168db8f95763ea67a51cbed4095b875055aa3c19bc9
+      module: linkerbot_sim.objects.physics
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/rigid/__init__.py
+      sha256: 89c6ed721e63807b7c3e5ac7e24c1e78922e2ce9829285b750388fb2c238d25c
+      module: linkerbot_sim.objects.rigid
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/rigid/config.py
+      sha256: c2540cc479d8bb38f4d93de36312316b4e32d192cbd98c08370a670f46362e3e
+      module: linkerbot_sim.objects.rigid.config
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/rigid/importer.py
+      sha256: 2076e1a796a50fea8112af918b551ffa8172f44b48b1d89e0b90187782a65b94
+      module: linkerbot_sim.objects.rigid.importer
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/runtime.py
+      sha256: dded0c6a8bd03924bd5a858f51d48dc67e79a9865985dacb21789a3da75c101f
+      module: linkerbot_sim.objects.runtime
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/objects/state_views.py
+      sha256: ddf79ef881163df07a749b1878cddd5e0b38a4bdc14d2fd22f8067acfde48a96
+      module: linkerbot_sim.objects.state_views
+      group: objects
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/planning/__init__.py
+      sha256: a4b5d1d0d288c20b1eace362dac70a1ec253436dda8e9b6f43a1ae989c91d774
+      module: linkerbot_sim.planning
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/backend.py
+      sha256: ff63a13be8135d0c5f6073dd1587bbc8296c09cc018105d11b5383c13f44e2dd
+      module: linkerbot_sim.planning.backend
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/collision_objects.py
+      sha256: c40657b130b4df0c16b9391fdd39631833f199f71e27f989631c34202738d5ea
+      module: linkerbot_sim.planning.collision_objects
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/frames.py
+      sha256: 124fdfde3286c15b38752c60e4f4a2bcc403cca1a8bf2a24333a88c85b268339
+      module: linkerbot_sim.planning.frames
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/linear_backend.py
+      sha256: f6dafcc9bb8466252b730ee1f06c47b4d14869010293ceb814eece53e6b17f22
+      module: linkerbot_sim.planning.linear_backend
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/requests.py
+      sha256: 86b9dbc8b28188295e89a6360def15cb38a26208db8cbde43bb71112abca08d1
+      module: linkerbot_sim.planning.requests
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/planning/results.py
+      sha256: 6046bd35ee9ba04e2e7bc8e94788ae3bef9645033445076ff0bcab0facd1013c
+      module: linkerbot_sim.planning.results
+      group: planning
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/__init__.py
+      sha256: c3499fb5baf20dd14a27ae6e74cb52fc5b76d59bbda506c9ab5d995ac45c89ea
+      module: linkerbot_sim.robots
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/capabilities.py
+      sha256: af33269bb4c78d3f612e739bb048df43b766b7d39d23708b9ec2ae8edd7c110d
+      module: linkerbot_sim.robots.capabilities
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/classification.py
+      sha256: c654eaf2effc27e4544673bc2229533f88b9a5d479619730a130e802203c3a13
+      module: linkerbot_sim.robots.classification
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/joint_groups.py
+      sha256: a4e4e0f7ce0f630d6f3ece1826853758fdfd80cec652e07a54c7f27fc0421dc2
+      module: linkerbot_sim.robots.joint_groups
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/mimic/__init__.py
+      sha256: 871475454a1f18f8e5c5dc836bd0d7c4ba95ba4092919caaf11dd5ca16ce0c20
+      module: linkerbot_sim.robots.mimic
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/mimic/assets.py
+      sha256: c7a342ff58270dcd4203ddc74690834d22c76254aad06a6ecfe9066c0c252602
+      module: linkerbot_sim.robots.mimic.assets
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/mimic/mjcf.py
+      sha256: 6650f4f3095ce5419b70ebc03fb75821879275b33017889a4bf3260c88e6d8c7
+      module: linkerbot_sim.robots.mimic.mjcf
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/mimic/runtime.py
+      sha256: 2b12bbef3bd97be1d0d122936eb50c7c34a8d3ab85a8269ce6f7ada78b48e4c6
+      module: linkerbot_sim.robots.mimic.runtime
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/mimic/urdf.py
+      sha256: e44c516b5a00103965cee3a2ee19b9c650728b32a1407a57ffa495aed9cfb34f
+      module: linkerbot_sim.robots.mimic.urdf
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/robots/tcp_binding.py
+      sha256: ff5e06ed6ecbc012788654e513805382361f101652494ab9bbc9c8f6d288de49
+      module: linkerbot_sim.robots.tcp_binding
+      group: robots
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/sensors/__init__.py
+      sha256: 40c9153adecfa1d9764749128934db1a16cfc592f432ed414557a67fd8f69e4c
+      module: linkerbot_sim.sensors
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/__init__.py
+      sha256: 605f341deec0e7d6618c0b9eb915e88e6c7e04ebc34bc3637d96e5caa4117664
+      module: linkerbot_sim.sensors.camera
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/config.py
+      sha256: 47f431a9402bb446980dfc81a7a186dcbd5dd32c48f4c5ef0272970b374681df
+      module: linkerbot_sim.sensors.camera.config
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/foxglove.py
+      sha256: ddef1eaa78c2a072fd0985a12ed95a6aa50382bef80f4f724583298d747f4d26
+      module: linkerbot_sim.sensors.camera.foxglove
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/frame.py
+      sha256: a1b4bb1df71acf953e2dc713c01a84d8fc1bf0749faeafdfbdd81b6234a380aa
+      module: linkerbot_sim.sensors.camera.frame
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/limits.py
+      sha256: 181372e9fac70bd3f8d7bdd1e199fa1f968efe349c8a8c3a1f8f2204685ef8a7
+      module: linkerbot_sim.sensors.camera.limits
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/observer.py
+      sha256: 4f0281a1b26af64f438cbeda9736b854139c5aceb088eba298b7dbb995a9fd42
+      module: linkerbot_sim.sensors.camera.observer
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/recorder.py
+      sha256: e28b39947dc494656c6fa701f7ce87d4b48c96ac796d3da1881a44bbbf35cfe4
+      module: linkerbot_sim.sensors.camera.recorder
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/camera/runtime.py
+      sha256: b2c4195b92edbf9de85e428555e470318e2a5cfef4e879b79ad41ea2b1430414
+      module: linkerbot_sim.sensors.camera.runtime
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/sensors/config.py
+      sha256: 6b976f3cf47c6edc6e6760760e23bd3964d4b350763769794b5dd2087ed59d8d
+      module: linkerbot_sim.sensors.config
+      group: sensors
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/__init__.py
+      sha256: 706767e4f4982eacc3776ca49d74e5284c766b89844c101d21f7ffdbc19757df
+      module: linkerbot_sim.snapshots
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/snapshots/compatibility.py
+      sha256: ad9d6f5cf19ca1eca8907adde6ddb9bc9adaa8ecc9f69ff636c4c9a538e74ecb
+      module: linkerbot_sim.snapshots.compatibility
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/mirror_adapter.py
+      sha256: 411e85fe732153891d633530154fe1c28109a776513cd468905f338446433414
+      module: linkerbot_sim.snapshots.mirror_adapter
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/persistence.py
+      sha256: ad9830185874f48f4e0ab8633dd553339ea2be4479ae2adae6b3aa546fe84a79
+      module: linkerbot_sim.snapshots.persistence
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/runtime_objects.py
+      sha256: 7d0c944ebce5d103046b4dfac72cb0c6531e5c1e1f5b2ef8c9109d88eadbd9d6
+      module: linkerbot_sim.snapshots.runtime_objects
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/schema.py
+      sha256: ce818b90e763bd9b0ecae7cec67a0964907ba621a4cc9ad0d060be4a811d4204
+      module: linkerbot_sim.snapshots.schema
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/snapshots/transactions.py
+      sha256: 328a22b3874b86eae427c9a1a9a970d01d949a756971c925dab5dc3b8451a39c
+      module: linkerbot_sim.snapshots.transactions
+      group: snapshots
+      layer: domain
+      owner: linkerbot_sim.snapshots
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/telemetry/__init__.py
+      sha256: 1ad00dd1f0c3dfaeef18f7bbfc5ce3d3eee4e1b75042acbacba5b9709f119bdc
+      module: linkerbot_sim.telemetry
+      group: telemetry
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/telemetry/foxglove.py
+      sha256: 8ffad168d516417391eb5ad85b72590a47355674064f0a4798f7d756e8650d05
+      module: linkerbot_sim.telemetry.foxglove
+      group: telemetry
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/telemetry/foxglove_state.py
+      sha256: 506af746bdb98a24b47c758acc56bcd726ebfd9584cff5148df7f9998946bf0f
+      module: linkerbot_sim.telemetry.foxglove_state
+      group: telemetry
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/telemetry/state_snapshot.py
+      sha256: c0b09d74c58e59354dcb99a497dc8fd711fff37455c9f208274169e20d63c993
+      module: linkerbot_sim.telemetry.state_snapshot
+      group: telemetry
+      layer: outputs
+      owner: linkerbot_sim
+      runtime: Isaac main thread
+      classification: internal
+    - path: src/linkerbot_sim/training/__init__.py
+      sha256: b354b2b709571b1cce46bd75a2f1efbcc625493557f08fb0a6250f4c29a96124
+      module: linkerbot_sim.training
+      group: training
+      layer: training
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/training/skrl/__init__.py
+      sha256: 34f6bbaa84fd47a376153a41403d57ded5e016d84b865b59f962914608e0f0d0
+      module: linkerbot_sim.training.skrl
+      group: training
+      layer: training
+      owner: linkerbot_sim.training.skrl
+      runtime: pure
+      classification: documented facade
+    - path: src/linkerbot_sim/training/skrl/env.py
+      sha256: 18b4dfedc1674b7f3fc4dfa3f0c17ab580d129c91eb1fe52ee9fc154549a1f55
+      module: linkerbot_sim.training.skrl.env
+      group: training
+      layer: training
+      owner: linkerbot_sim.training.skrl
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/training/skrl/factory.py
+      sha256: c0549b077be63e48a0e2614cc4c1b4dba63ce50f81251f3289041950cc73bf36
+      module: linkerbot_sim.training.skrl.factory
+      group: training
+      layer: training
+      owner: linkerbot_sim.training.skrl
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/training/skrl/final_observation_ppo.py
+      sha256: 1ff0c5057fcb393b422ea0972c0b3f04c49205498aa10972b131c33bd7882948
+      module: linkerbot_sim.training.skrl.final_observation_ppo
+      group: training
+      layer: training
+      owner: linkerbot_sim.training.skrl
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/training/skrl/memory.py
+      sha256: 87181a9a2782d24bbeff5b3b696fc2b0d2f2f33888ff6bcfd6c717b69a62f77c
+      module: linkerbot_sim.training.skrl.memory
+      group: training
+      layer: training
+      owner: linkerbot_sim.training.skrl
+      runtime: cuRobo/CUDA
+      classification: internal
+    - path: src/linkerbot_sim/trajectories/__init__.py
+      sha256: 9c2468d75d6db78a6294db0b328e239e2ff3abcd711d999284195303deaa5362
+      module: linkerbot_sim.trajectories
+      group: trajectories
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/trajectories/joint_trajectory_builder.py
+      sha256: e51beb6b6cb2113c6a942c59e77087a41e96f8334326501979a4725faff1f1fe
+      module: linkerbot_sim.trajectories.joint_trajectory_builder
+      group: trajectories
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/trajectories/retiming.py
+      sha256: 75635cc12d4539d17774b76a0e58e014c3d69a290ed4ec4f90d03ea692e4b1ea
+      module: linkerbot_sim.trajectories.retiming
+      group: trajectories
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/trajectories/types.py
+      sha256: 5d4049e10f31e2a380df70963e2cdb8259f78114013bcaa196a636b3c655f8a0
+      module: linkerbot_sim.trajectories.types
+      group: trajectories
+      layer: domain
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/__init__.py
+      sha256: d2021ec70de3d36eac0ae9590d83d85e6d32d6cffa4b02523c3fa0eebabb1c8a
+      module: linkerbot_sim.utils
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/config.py
+      sha256: 0d2886417cd3189e681345c952d03cb6f6ef385becdcf5615bee9597496568e9
+      module: linkerbot_sim.utils.config
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/json.py
+      sha256: 63eea7118a09608aa5469a9572e18770ddc661d97783b06812058ae9b7affdad
+      module: linkerbot_sim.utils.json
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/math_utils.py
+      sha256: 001f484e0bbd5b44424401175f4e8ba57d431f89d72c0e2090835a611f0e12b2
+      module: linkerbot_sim.utils.math_utils
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/output_paths.py
+      sha256: a8a6403acdf28f467bb004ac3d1a3298e0b3647f72fe5b45afcecbc4a836529b
+      module: linkerbot_sim.utils.output_paths
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/paths.py
+      sha256: 88431660841a5b71a9889183efcee4cba1cbf24a87e3839066b010b3d3b6bd90
+      module: linkerbot_sim.utils.paths
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/rotations.py
+      sha256: e16679c4682f365da99d256e5e294fcd9a8681fd7bf2bb7dbdf9627ce45c1e18
+      module: linkerbot_sim.utils.rotations
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/tensors.py
+      sha256: 40996e4d0d3012117123c4eb4b9b5eac4a063ebabeafa143d01f0e2818b63b3e
+      module: linkerbot_sim.utils.tensors
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/utils/timing.py
+      sha256: 0916e9ff46885bf48c87600ec68a9d638251466ae3fca8c0746703516b196ec1
+      module: linkerbot_sim.utils.timing
+      group: utils
+      layer: foundation
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/visualization/__init__.py
+      sha256: fd9decad729bb2a25340c9ecc392e9d781e45e60dfc41ada784a57e937ad7b27
+      module: linkerbot_sim.visualization
+      group: visualization
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+    - path: src/linkerbot_sim/visualization/viewport.py
+      sha256: d2394f13553d14e452af0dc924d9609d9412bde3e7437eb8c05a194df73bc6cb
+      module: linkerbot_sim.visualization.viewport
+      group: visualization
+      layer: isaac_infrastructure
+      owner: linkerbot_sim
+      runtime: pure
+      classification: internal
+  test_python:
+    count: 113
+    path_sha256: a1494beb3ee5bf2c2164d619dcde3e2ba77bdc530b7264bf6c658de9387527e3
+    path_content_sha256: 1b88ed2325ef5e153d8fbbef1484a28babc6dda823c6705688038f921c26d10b
+    files:
+    - path: tests/fakes/__init__.py
+      sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
+    - path: tests/test_check_isaac_runtime.py
+      sha256: f1dbce508026d81c3a389f2940ce0f4fe7c384821d7aa39191f14e4c604764a2
+    - path: tests/test_configuration_modes.py
+      sha256: 6c9d3116215626f2cd0e5e9bf10bf69111c21a1b70918db7b404a68a0f0cdf1e
+    - path: tests/test_controller_configs.py
+      sha256: 9be245e6877cb0af4f0c64d3f5818dbd545f11d3cacc36f9151809496c7b52f2
+    - path: tests/test_core_api.py
+      sha256: 1965e3f42889de8ed9aea605b235dfff42ccefa2ebe9ca322a6842069598891a
+    - path: tests/test_curobo_collision_world.py
+      sha256: 3b73c742c0a8a1d94ab77c3ca56744f2b6ce704a2657cab519ad5192c042fae4
+    - path: tests/test_curobo_config.py
+      sha256: 03163dd34d864004173c3863a7fff301278d706f717d24a31f027e1f119fc7fe
+    - path: tests/test_curobo_device_batch_ik.py
+      sha256: c0d0ddb6aaba0976199cf3b4ec7f863cc160e5e74cfd0fef928ac0dd46b33d95
+    - path: tests/test_curobo_imports.py
+      sha256: 46eab1c2f58f930cb74e86d52f450d899b9deecda38c16656f912c58c1076c94
+    - path: tests/test_curobo_kinematics.py
+      sha256: 033671686abf373158d8b4a11dd3af9864f888be3f22ee26b537b07af74c6ef9
+    - path: tests/test_curobo_kinematics_context.py
+      sha256: df758c32209f9723e1b8069d1faebf16d4dc875a1835bf0fec02845bd798adc3
+    - path: tests/test_curobo_motion_planner.py
+      sha256: 603b383bb8f7f2b81d0bbe6c2e57a6c28c61bbb882f808b88268a8094173f369
+    - path: tests/test_curobo_trajectory_adapter.py
+      sha256: a5a1f3b3113d6091feceabf705cd356f6838bac23ea6241a013ea42b3779587c
+    - path: tests/test_documentation_contracts.py
+      sha256: f9f13d893fbcf4c5bea7856c4e7d513d2650e527450879a65b62a4701df5cc14
+    - path: tests/test_documented_module_map.py
+      sha256: 8268cb2fabd03990a5841ce5d8f79107f2a8159771c9cae69ccc5a3109e776f6
+    - path: tests/test_effort_logger.py
+      sha256: d5aa6ec288dfe04fcbb065c51da03445a0263725520cfe3d49d07199cafe9c4a
+    - path: tests/test_execution_setup.py
+      sha256: a260dc852ac0555444c21573acab9297d61770b1f93489b9de3a309cd5bd7d0d
+    - path: tests/test_execution_steps.py
+      sha256: 000052ddc0d9b692ad5ca9dfc3fe2e3da8923a6179991dffa6ff794f10e55c70
+    - path: tests/test_foxglove_logger.py
+      sha256: 9d006c6b265fbe851de8c0b9f49aff3bc0df131e4a5c461ac41dd76aa1864c8e
+    - path: tests/test_foxglove_state.py
+      sha256: 39512de71b34fe312fa56c2458582906dda71fad51c9e23cde55a494594bb4db
+    - path: tests/test_gpu_memory_audit.py
+      sha256: 973e44cab1719d64b47832b994d55a606043ab6a6dd43191a5b843c28aa36603
+    - path: tests/test_hardcoded_configuration_allowlist.py
+      sha256: 3043bb10c7cd73ba74578ac9b92114ca6185a9f8948cc318f3884bac1104f347
+    - path: tests/test_hybrid_control_logger.py
+      sha256: b6ac01c48b0ef637724a07d430a8bd2ffd97de44a873e2bb89596a925db8d1fd
+    - path: tests/test_hybrid_force_position_controller.py
+      sha256: d242778d2404b522677e9761ba09040d9a4543bb9a8c1225aba763d274dfa2ff
+    - path: tests/test_isaac_app.py
+      sha256: e97f3729401ec7d095704d8ec92fe7bb2d35f0dd0ffccc0bc1f548cb3475d3af
+    - path: tests/test_isaac_extensions.py
+      sha256: ffa91710619595e4e5d434ca856c7c0b55cabc4db456d30bda45393cfddfe758
+    - path: tests/test_isaac_replicated_newton_scene.py
+      sha256: dde49a2bc14692f9eb2f0f88bc8a15c47b268848268ff96033df419f048b592d
+    - path: tests/test_isaac_replicated_scene.py
+      sha256: 3be8be573f49dee8fb7147311a4765d9ed9fd29d12b6ca457a913791cf8a6327
+    - path: tests/test_isaac_session_spec.py
+      sha256: dce8554d585dd1f50427e9ebc0b7882cc61b23f50f780c1c437fb5124422a26f
+    - path: tests/test_isaac_world.py
+      sha256: c53d970c8f08dc7750361ac1b16ebfa0c8eb45824dbdde2d0071066f6e4d0a8d
+    - path: tests/test_joint_controller.py
+      sha256: 4036e70ee4eebe3a39fe582b3892367333536ab64a6b8717eca323ea81904cae
+    - path: tests/test_joint_trajectory_builder.py
+      sha256: 7d059f66478cdf4aeb20f76cc7556d35353f451ff8657a52af2c4ff387a89e58
+    - path: tests/test_kaleidoscope_adapters.py
+      sha256: 8c5b7d0d956eaaafaa872c082e7aa68fa01729c3817a9c9bdd98e1d383325e8e
+    - path: tests/test_kaleidoscope_composition.py
+      sha256: a66ba290991582d4d2d686b6d0c5f0012b38609f6a2d02aa917d54f979215f76
+    - path: tests/test_kaleidoscope_control_mode.py
+      sha256: 31da0e1a160a523ac2dfff64f0cec2375272cf34c940c755360b0aa14050ce42
+    - path: tests/test_kaleidoscope_gpu_contracts.py
+      sha256: e5b88776f0464b97031bdb44668e26b17e3d9a73c523ca1584a8c030416e2bfd
+    - path: tests/test_kaleidoscope_gpu_residency_source.py
+      sha256: 9fd2907024168ef714ceb2636b57bc37466dca3de4be3dbf4ad5c19d9989c304
+    - path: tests/test_kaleidoscope_isaac_views.py
+      sha256: ed55a7f1a8dd7e56c78d55e0d5da2bc01c6e34a6743ae58d2127962118b632fd
+    - path: tests/test_kaleidoscope_kit.py
+      sha256: d7e764c6839f4f8d38c6ff627efc0b9d6e22d36e8666ed5648f1a2ae3651f9e7
+    - path: tests/test_kaleidoscope_newton_ports.py
+      sha256: 153c16365b54baf7b2f8fd1a7edcd4d311608e2d503b58cb37877407323d36dc
+    - path: tests/test_kaleidoscope_physics_smoke.py
+      sha256: 06e6e57e90e5e593bbc72b959a8beff4e334ab8553ef1c5f8568382ec5b59b90
+    - path: tests/test_kaleidoscope_physx_ports.py
+      sha256: 1b8adabc911dafede8ae02878e8a2477d478033debe6fdd21fc38fbcece393db
+    - path: tests/test_kaleidoscope_scene_assembly.py
+      sha256: ee097e34ec564b0ba2199b36ab58a89ada60d4806478e09d6a8377c9567f0b1f
+    - path: tests/test_kaleidoscope_viewer.py
+      sha256: 191ea4965ead0d688580dcbdf83ba080169603b57709ab0e7ba9e154e7af1e0d
+    - path: tests/test_kaleidoscope_viewport_config.py
+      sha256: 2f1fd177d0ee101dfc97d3d6a4a421dc539b2ebaf811aa4c79a8abfab30b7148
+    - path: tests/test_logging_config.py
+      sha256: 38fab4e95ee9f9585e465131a89000404e4ecf0cf9f4b6802348798197b769a8
+    - path: tests/test_markdown_links.py
+      sha256: 3d7fc51f9dcbf091d466d0686f7c66734ddc975a519b55e4da8a0056b778e8d9
+    - path: tests/test_mimic.py
+      sha256: 7ca91121427c21552050d5934987f0ece25a0194d18448f85963b555865e8956
+    - path: tests/test_mirror_camera_intrinsics.py
+      sha256: d09024232554bf5171d29ed870a101854f44d3625ef615fe1a84958441283922
+    - path: tests/test_mirror_control_mode.py
+      sha256: 9d23100a2428868f9e72b1743f04fdf662ef8f256b73999ab533213caf65d291
+    - path: tests/test_mirror_controller.py
+      sha256: fd05cce97343536361be64eec113121694d3fc058f2658944d9e6c31c24dc7d7
+    - path: tests/test_mirror_cuda_tensor_getters.py
+      sha256: 719185ac9c04da2b10842cf62eb1bba1785508ca29e1acfba9e7089f846b676c
+    - path: tests/test_mirror_hybrid_executor.py
+      sha256: 6dd55ba49656fc8e50b74573d178fd3a13a6acc428ee907f0774a6376ee830f3
+    - path: tests/test_mirror_hybrid_parameters.py
+      sha256: fb45ec0e91bdeabe5c190c6d601347c08736a5bbdabbe20c44a5b42201921035
+    - path: tests/test_mirror_kits.py
+      sha256: 9d29a6dfb5dc97e837e020e62310471225b89567f306b2950b0b7afcb389c636
+    - path: tests/test_mirror_newton.py
+      sha256: 36297d07d8e60c42453dd814c0d6ca23307b1b9632b21a27e37c47788f1a80dc
+    - path: tests/test_mirror_physics_smoke.py
+      sha256: e5e858701f6f5b1353f780a51a4cc174bed52589291fa7881bf2108efc0f1711
+    - path: tests/test_mirror_planning_startup.py
+      sha256: cd04c28cd396b5f7889414b146496390eb19bfde357c4f330304238794476adf
+    - path: tests/test_mirror_protocol.py
+      sha256: 354eed8ee6c966a5727d4234e993f1e0d5aee2fcb0d64634e6247f74a96a54b1
+    - path: tests/test_mirror_reset_runtime.py
+      sha256: 93aee29217ebccdbebc23e355c62ae3a1fd4f6a99db9c79d39c7f4c546e44993
+    - path: tests/test_mirror_runtime.py
+      sha256: 6e671d8edc502fe74a9a6d7b799298de79bbd7de87afa56357a7c653149b9f96
+    - path: tests/test_mirror_timing.py
+      sha256: b00b970c78d02d2f133b97ab8e33a27df47470b2f90483662ccd349a9330ff9c
+    - path: tests/test_mirror_transport.py
+      sha256: d28d54451ed5cb1d236d68dccd9029a3be6c1bba51e8822195c435ce03322d04
+    - path: tests/test_motion_frames.py
+      sha256: 4ebf58f289fa28d8ec17e67eddb86cef87317434be1aeecd0284cb7b23a0152c
+    - path: tests/test_motion_timeline.py
+      sha256: 8c1102d79d8f3ae92abd92c17007dd9fa4c96702d343e8a9dd3faed2c2a1dda9
+    - path: tests/test_newton_asset_compatibility.py
+      sha256: 41257e032d658bb6358f896bd5622b057b8377eb237e47010323f3a2e5569e52
+    - path: tests/test_newton_constraints.py
+      sha256: 781f707012b6a63dec57daa80feb78164966af85f93a0f1fb2d4029c3ed8f45c
+    - path: tests/test_newton_integration_state.py
+      sha256: c14d88630be808b34c764d2d31967d24637c0d184d46f847d0ed2d973cadb20e
+    - path: tests/test_newton_manager.py
+      sha256: fb8ea78d8662a47960081254425ddf4ae8639d181624f76e821645178f5af03a
+    - path: tests/test_newton_render.py
+      sha256: 76e1aa02b3fab3c7325aa342033a55456186b3910487e860f0a138596d987931
+    - path: tests/test_newton_replication.py
+      sha256: 40f0f4e82f65f9ddf4627fe4d40f794d96cf281eff3230069551e8450c3cc54d
+    - path: tests/test_newton_views.py
+      sha256: 664c4d0e44bf9d84c59f9a6b565500cf0556b3374905d9634d33e898b3834608
+    - path: tests/test_object_asset_entrypoints.py
+      sha256: 4199bfb9ab9faa2904cfc353b5656acbbc6651ec0401b33e75e5404c547e2f07
+    - path: tests/test_object_instances.py
+      sha256: c762bdaecaf665b74ff40340dd7a744f8f71b7281b44a417c75a9b22be63a59b
+    - path: tests/test_object_physics_projection.py
+      sha256: 448b4e9a041c741192925e704fcb536cc0be7c40bef48b633cae4bd585c2a342
+    - path: tests/test_output_config.py
+      sha256: 6811b51d3364323559d2818cdd713b5b42d977be82379887ce7a7dee0facd35f
+    - path: tests/test_output_paths.py
+      sha256: 4e76cb2b790074a4872ee6c01492ef3b4b6535830ebf610183968cf74de771b2
+    - path: tests/test_physics_backend.py
+      sha256: 859a953d044a78feebda958828e38095ab51e07e5bd450cbc325f212a958efd1
+    - path: tests/test_physics_runtime_ownership.py
+      sha256: b683922e8b7fa8ba0750d4ef6168261976a2d411f4c430e14de6ae161cae93ec
+    - path: tests/test_physx_configuration.py
+      sha256: 98f0244e69a93f07ebe2ceed08f1d0a6aa75f15f1186670f713fff5b939f7fab
+    - path: tests/test_physx_gpu_memory_budget_smoke.py
+      sha256: 2a06dd20c3f1398111bfe78c21a1fc8acd5d54396e85ed7b2e99d0c3921a8747
+    - path: tests/test_physx_pipeline.py
+      sha256: 396581431b0510e516f5ed1d3a495fc3a3e000d454df8c4e2dfdb869e39ea04e
+    - path: tests/test_physx_task_space.py
+      sha256: 164d5a6b2d92a533471e1541a1a9844b146ba4ef52958ef7877cb071b644e0a4
+    - path: tests/test_planner_backend.py
+      sha256: e2de778fd9fa189e46bf17443f8bfa044deee3297389a54d0d864d1269aca7c8
+    - path: tests/test_robot_capabilities.py
+      sha256: 46ff5562840acde468dd7ab54cd25c04a330e983a5b8f99a7c257eecab7e1413
+    - path: tests/test_robot_instances.py
+      sha256: 981da8ca86cdb1ca88eed925e123c32167f001d1ffa88be27b10b1ade3804ae6
+    - path: tests/test_robot_loader_import_config.py
+      sha256: 1ce406903e3f05edcbdc2793ea7307ffd3ef7237298b45addcdf3fda80e1df9b
+    - path: tests/test_robot_profile_schema.py
+      sha256: add9df5e95427e184d3713a389b0110211c3ce5ac74de5ad6a4937b628e30178
+    - path: tests/test_robot_usd_overrides.py
+      sha256: 3b349ed992747440847db85a89bde2a427c0814295d06bfce24d6ba9051edad0
+    - path: tests/test_rotations.py
+      sha256: f4c425ce406814aeac14a24353d685c11bf0f4268e767d4010835b6a502d2e51
+    - path: tests/test_runtime_provenance.py
+      sha256: d17e299a964b5c0125f8638474195ba7b8d847159a9808efbb7c537730b98771
+    - path: tests/test_runtime_worker_supervisor.py
+      sha256: 502b02e420819daef991675f4924d395620ee7b29613678311afef170248189b
+    - path: tests/test_scene_collision_registry.py
+      sha256: 47a8b1832dcedbba221d0d7c809f37bc168525b81b65550f565b39f6aee7eea9
+    - path: tests/test_scene_snapshot_persistence.py
+      sha256: d2bfaf0d86a139f85f7c98a26d7f6d4d55438a85f6776a7ac86d39105aff0fc8
+    - path: tests/test_sensor_camera_config.py
+      sha256: efd0c42e7bdc91842c348ffebd6543172f272f442ee1f4baec5cb2a95c1b1b1a
+    - path: tests/test_sensor_camera_foxglove.py
+      sha256: 7ad884e2786daf632fea868ffca8714009636ca1c9dae614e68450037177a120
+    - path: tests/test_sensor_camera_output.py
+      sha256: a2f3aa6b1092161c73afd35533e3079297e8516e50185e705348d58ec6ffbeef
+    - path: tests/test_sensor_camera_runtime.py
+      sha256: a18bba4e952943532b450a86347bb5da8ff3c6270b7afe858b14a7ecd752fd28
+    - path: tests/test_simulation_app_lifecycle.py
+      sha256: 88e08e4c842807f7241e5194177b9e589f9368655aef148b960c6092510e93a4
+    - path: tests/test_skrl_cuda_integration.py
+      sha256: cb3991cb984c5c984076d1bdab478980d6175af14cd69a5f9edc58006e309de9
+    - path: tests/test_snapshot_object_velocities.py
+      sha256: d2bdbda5f49dfcc6920abfed5886fc150ed269bf27b762e78e5e28c5bbd716b6
+    - path: tests/test_snapshot_transactions.py
+      sha256: 4188fad44bc8e785f21cd8ba74148795676c546ec75f4ef4d8986f38fd4056db
+    - path: tests/test_snapshots_mirror_adapter.py
+      sha256: 6805fa88ace2bf5d28dea0011d7370167592f327ed47f046eb81fddcfbc1b9b6
+    - path: tests/test_snapshots_schema.py
+      sha256: 317fe327d93341ec58b17e20ea0baf3e5306dbf2cc94f252dd34d88edba33b2e
+    - path: tests/test_state_snapshot.py
+      sha256: c076c38bd1d78abe4bc635bf3e5ff47e779e9bc0f5118c4c58e047859449711c
+    - path: tests/test_strict_yaml_config.py
+      sha256: df5284c46f0997df9bf5b1946ba2ebe96519afb21e1d01355febd30abcb17cd4
+    - path: tests/test_system_configs.py
+      sha256: 6b8789675d293bbc165998c183593eaa1beeaf14e0129236381aaab88a1a6dc9
+    - path: tests/test_target_architecture.py
+      sha256: 42d5b541cf70c976804125b9bc46208d5582137813b80040562184018e8ab453
+    - path: tests/test_tcp_frames.py
+      sha256: d353eaea334b017aefd51bfc69e8c8e80007d69cf6211ccc01625c98821cbd6a
+    - path: tests/test_training_configuration.py
+      sha256: 366aa143eff442db6c793c92ae67c6087cdcabba61a4b3065bccd01d3e5bfe87
+    - path: tests/test_trajectory_retiming.py
+      sha256: 3f21260c85c79591d04b07f1b71bb27d5a5a040e8a68d384445d2d7d673b7070
+    - path: tests/test_viewport.py
+      sha256: 13f1c23cb6a2bc7e91b157775e838e7c7bebec487090f6a246433113e28ee951
+    - path: tests/test_workspace_build.py
+      sha256: d291d6d1c9cfbd483b053ec1ddaafe4481d0b74932473717812e00d1b19f6d3f
+  configuration_yaml:
+    count: 36
+    path_sha256: 5623fb868d8936b9db03aa9cb054a64682d9f8e4578aa17a44e55939a62b3a0a
+    path_content_sha256: 15a2e5c193f5728389e5aa45e9e92b6bab854a8028f0f78dc8d18f31939659db
+    files:
+    - path: configs/control/hybrid_force_position.yaml
+      sha256: 406b89af3c647515742853b2fc61c3d7d49ced99c11244da6a25c5321f894b60
+    - path: configs/control/mirror.yaml
+      sha256: 5dc183b56b1ea5791bb18809b5f8cc7a303426a573588eca3b0377cc5c43a353
+    - path: configs/controllers/newton/arm_controller.yaml
+      sha256: d3a6002d1742699c79b184ef87b4089b60d544f6dce78111dfff9561e1fb0258
+    - path: configs/controllers/newton/hand_controller.yaml
+      sha256: 47487b23de8c9a66071de54e75bffd23a45ce2ad9f243d19e481d673cdd4ce46
+    - path: configs/controllers/physx/arm_controller.yaml
+      sha256: bc2cbaca46418dff787e4211dde3a170e37a91bbaa9c503c70dea16fe77c05e1
+    - path: configs/controllers/physx/hand_controller.yaml
+      sha256: cedece0260efbb554e513dca9135fa1711e0bed054e29c6a81609917c973d739
+    - path: configs/curobo/kaleidoscope_batch_ik.yaml
+      sha256: f180761e0b3e4242a41a207edc120532d1ebf121c33b104c3dd0924af4c81f2a
+    - path: configs/curobo/mirror.yaml
+      sha256: 3d940bbf016d626de5f038aa3e281d29625de3eb3b28301da2c73cd43349bc12
+    - path: configs/modes/kaleidoscope/newton_cuda.yaml
+      sha256: 8490e4fb6cb81c20fc74b7b50a7521e77d4352787ce612736bf9503840795614
+    - path: configs/modes/kaleidoscope/physx_cuda.yaml
+      sha256: 3822337844898d4e1a83449672b01dd6f617e1161b81d87b285cb8625345963e
+    - path: configs/modes/mirror/newton_cpu.yaml
+      sha256: 65dcde6f0092cd7a5fe52519657cbad604b69c502a53cfc4556b687ba025e5ce
+    - path: configs/modes/mirror/newton_cuda.yaml
+      sha256: 9fbc1ed82a24f9a76e95d8b527693453277e3968738aa545fc600f4cb68c9a9d
+    - path: configs/modes/mirror/physx_cpu.yaml
+      sha256: 5596d4fb4b21ae7673bd8503d03b4b84d9315aeb66ac9278c52c8bbf39198ea7
+    - path: configs/modes/mirror/physx_cpu_hybrid.yaml
+      sha256: 78626a5fe89dc7311898852b8321dc3f5636aeac5dc82af9b55ba9d13d8d00e8
+    - path: configs/objects/TblockV1_default.yaml
+      sha256: 0a34787e06a17e39d25b181eb51ab6bf8b53a8e05f9529ba91530bd6b08b4aa5
+    - path: configs/objects/capsule_rope.yaml
+      sha256: 3c5aee63faefaa070abe15ab7823419f114f38dc17cc45df50edd7ecceffcfe4
+    - path: configs/objects/industrial_warehouse.yaml
+      sha256: 8f547bc19cf9ad1f76c56067674141fcd2e406f1f3a34cca26304cc3739f3ef5
+    - path: configs/objects/workstation_armbase.yaml
+      sha256: c7241a0caab9b788070d3e450827de99ecef07d6717b9882d217961b6077422a
+    - path: configs/objects/workstation_tablebase.yaml
+      sha256: a6825e699a4072380da132fdd470f492b5cdb702077a29c08f45656448a6f40a
+    - path: configs/outputs/mirror_default.yaml
+      sha256: 34634b4dc819f08a69c255772de56e3f041afe855676cbefa12ccab5c8bef9ee
+    - path: configs/physics/newton/cpu.yaml
+      sha256: b162c0eee43798747da3907669e5691fbd7876db95d9cbc27993f57431353d4d
+    - path: configs/physics/newton/cuda.yaml
+      sha256: b2fa9144d1068f395b1cf7e5f0ed034dfdfd99e404587e0241fb45fdbad8af27
+    - path: configs/physics/physx/cpu.yaml
+      sha256: 5cc749f2e1f8dfa414bcb26a062639b45d701283ac6f740e6ce73f5940b5b9fb
+    - path: configs/physics/physx/cuda.yaml
+      sha256: 5765733f319f96f41c46032c4cf7926bd340788204d18ef1e391700a93ed6a2a
+    - path: configs/planning/mirror.yaml
+      sha256: 542adf76ef944d71a30c49b220539b28cedabc583d609f8baba53cc3b27ea5b8
+    - path: configs/robots/ar5v2_l.yaml
+      sha256: b2886c349c43e6aea380469690d91d30e233fe27a9622f4664c55e3eca930a90
+    - path: configs/robots/ar5v2_l6v1_l.yaml
+      sha256: b1941030ae61d5a0406a9c5f77fc8825b3976113abfecd0f9112a3a4bbc72ff4
+    - path: configs/robots/ar5v2_l6v1_r.yaml
+      sha256: c0e181b44aab1320b7bac1de634a24e13acad891e571ec705b6cc33087f16e65
+    - path: configs/robots/l6v1_l.yaml
+      sha256: 08b2c19b0f25a5339a1f5e262567aef68148f5bb491d11044a18445292e9277e
+    - path: configs/robots/l6v1_r.yaml
+      sha256: cad60c95c858df94e1f30d5c082168d522f239ee5e8388092037dbb1ab6846a1
+    - path: configs/scenes/kaleidoscope/tblock_push.yaml
+      sha256: 2b4445bc8ccfa39f6de5ffda480b0a48c0c6dfaf896b8b99b5296ec905d142e6
+    - path: configs/scenes/mirror/scene3.yaml
+      sha256: a3c5fd5642f06347199df6d51cbde0816d5fa6a8b0c28ddc21cea0eb45d5c3fd
+    - path: configs/scenes/mirror/scene3_hybrid.yaml
+      sha256: b63c8677baa625dc54853d9a2c61f05fb6402ecbafad281ece076d7bba44315f
+    - path: configs/tasks/kaleidoscope/tblock_push_v1.yaml
+      sha256: 159f661c9a180eb878a0afe95be1adfe8f5bb4fcee8c1f3bbb70f0d676ac9bd3
+    - path: configs/training/skrl/tblock_push_v1_ppo.yaml
+      sha256: b6b52e81899a4ac729cff972aed26e98a8ff038aeeec1041e03af0e45bf9c9a4
+    - path: configs/visualization/kaleidoscope.yaml
+      sha256: 61a164c22a0659f25e42772fb2cde676d56524b59b3ac8eccedfb4660d532cb5
+  kit_experiences:
+    count: 7
+    path_sha256: 46efca16c88d2da9c811ea4f58ef1afa5a17cf3e7eadfeed8e7d3334fe2e34f8
+    path_content_sha256: a950db19bacceb235a686fbcc31a0309f72252eaee75ada1197c81abadc4c009
+    files:
+    - path: apps/linkerbot_sim.kaleidoscope.newton.python.kit
+      sha256: b6c05795827193075136e29dec71ea56a020979e220b154367f84b307e9d1a04
+    - path: apps/linkerbot_sim.kaleidoscope.newton_viewport.python.kit
+      sha256: 3f32e93d8a36ccf514ac092f02c6f2635bbda0a4bd8ae2e7219170eae667e1d9
+    - path: apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit
+      sha256: 6add6df3fcf3bd66feac9a755c650ecefc439026062344b5190519ede6bf3f51
+    - path: apps/linkerbot_sim.kaleidoscope.physx_cuda_viewport.python.kit
+      sha256: d6281cde0302e707e6585636781d7184dc5d44c915cbaab926a9ee8f3b9af8d0
+    - path: apps/linkerbot_sim.mirror.newton.python.kit
+      sha256: 9e0f668dbbac16df5feea802cbc81919e7f8b05194c18b035ee2e84f45a907a2
+    - path: apps/linkerbot_sim.mirror.newton_render.python.kit
+      sha256: aef579d47238e4d12ed0d1365951084047b10ddbac9accddec39d359d5bb8748
+    - path: apps/linkerbot_sim.mirror.physx.python.kit
+      sha256: cb681f4b33ad9f6185cc8ad3977d737e0fca0d87111a70c29f17c2c0d4df0e4e
+  entry_scripts:
+    count: 11
+    path_sha256: cec3f2b5d9bb4d7e65aedf9529b347b0d684c9af3a954d5426dfb609bf1db5f3
+    path_content_sha256: 9991eb9a737ef36bc4fd57887e01a961c221ed34057c694c7f26f36a845d941b
+    files:
+    - path: scripts/check_curobo_runtime.py
+      sha256: 179a95551b6259430195cbe298c40fbf338c960f42f08862ef663e7e5668291b
+    - path: scripts/check_isaac_runtime.py
+      sha256: 5970f73bfee141dd55ad3dd3635e0a31531f904ef5020317bf9bcee0dce25114
+    - path: scripts/check_markdown_links.py
+      sha256: f05deece4665f29cebf47ea324b91153406bf37fdd0fd2283c6a3df6fdf01d4f
+    - path: scripts/kaleidoscope_viewer.py
+      sha256: 77c535ff422c6888eb8534a25487fab5775333bbb53bdbac48e71392119ac33f
+    - path: scripts/mirror.py
+      sha256: ef7c21b3b2ac0c1f3c0004fabf1ae2e7c25ae4a035093e604c66406ee53e9b9a
+    - path: scripts/runtime_worker_supervisor.py
+      sha256: be5c0585ceb64bafc24c611d7606e0769fca7e6104eb832419d8b27f645ca0d0
+    - path: scripts/smoke_kaleidoscope_physics.py
+      sha256: a089be5da56af6b672dac966903783e363444b913d0787f4cf0212338fee3371
+    - path: scripts/smoke_mirror_physics.py
+      sha256: 89b092dac1eda6b85b252b506677b83dc4d0c524a1431fd08213c8e7d1be3342
+    - path: scripts/smoke_physx_gpu_memory_budget.py
+      sha256: 9c6e84f31aa41f9feb3e48195d1fb7d7892a90f6a7e9ea7881255718bbf8a3bf
+    - path: scripts/update_architecture_inventory.py
+      sha256: 84195899218bd7dd0e92f6942cb8f4b201d0bf7fad98966cab1283d0fe88d722
+    - path: scripts/validate_mode_config.py
+      sha256: 5f5849cb4438f96234037f0bb4ad42f907e1ba9a70d5d695548477d9e3aa8f15
+  automation_scripts:
+    count: 2
+    path_sha256: 6feac13cd7f7305f1f0a20e2e5965bb21c411354ff0084748f69d538c7e10b53
+    path_content_sha256: 8197d2b5aa1a19c3f8363b0d4f3218e6f4e444ab65ca05710b11c6c00b979d98
+    files:
+    - path: ci/quality.sh
+      sha256: bffce82afec8036b49455acf11d9572ec70133b38bcb90cff9218557977649f8
+    - path: ci/simulation.sh
+      sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
+  maintained_docs:
+    count: 55
+    path_sha256: 730d4d3cc9799dd1cc36b52af5760d269c4d5378baabd84cd24787a3c3001854
+    path_content_sha256: 0fab12f73462752b625b426222f7d88012a734906b864fb114b7a143641ae93a
+    files:
+    - path: docs/README.md
+      sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
+    - path: docs/en/development/collision-approximation.md
+      sha256: d837bc0753f874fa24c3d10682285d4b90295d11d9b49e4d3041de1185f9a290
+    - path: docs/en/development/module-map.md
+      sha256: c68c7345b7157976b982a88b11a69316ae37bdb00bc9046e752830608c8b7b5e
+    - path: docs/en/development/naming.md
+      sha256: 9b2d31b5c890b439043b2606ea2997f3826e827269d0f8b0818182b896b505b3
+    - path: docs/en/development/object-assets.md
+      sha256: ce0a1bdef0d00b6fa9e5d3d3400826306f0d7d1b8e715dde9ce7050e0fac1897
+    - path: docs/en/development/usd-preview.md
+      sha256: bb26bb2207da77cf8b6073d926000fa7ae5783732247f07041cb03b6370d62df
+    - path: docs/en/getting-started/choose-runtime-and-api.md
+      sha256: efca7b65828c4246ff8a5456a693815807034a22d24de6fd7d89db5a0a1955b9
+    - path: docs/en/getting-started/kaleidoscope-quickstart.md
+      sha256: ed8842fb63ad82708431a25ef3962d5d00b7fc1a542609c5d30e07de044b9c5d
+    - path: docs/en/getting-started/mirror-quickstart.md
+      sha256: 2e4416c883b7f471607860c3f23415044e831285e03da34f8abd7b7c03d247b8
+    - path: docs/en/getting-started/project-overview.md
+      sha256: 340552411c8287105397c41ee42b7e16945142091777e21a082d274681490339
+    - path: docs/en/guides/cameras.md
+      sha256: a15e7a6ad2d1d00805b2599e7c63137a4a2f47999a78ae8818621fb528882452
+    - path: docs/en/guides/collision-models.md
+      sha256: 6fcfc85386165c4615e6535a2e5ebb9c08ec96df544918c203d1edc808a7a6ec
+    - path: docs/en/guides/configuration.md
+      sha256: e07ed13ed485b481dd203d35f9e8e4c5eb203ecf9960f67a3c4aa32f36ebdc18
+    - path: docs/en/guides/control-and-trajectories.md
+      sha256: 957d3b31fdaf11893c4fb5624ce59622120730d5a0fe3a7712796297c626281d
+    - path: docs/en/guides/foxglove.md
+      sha256: 6f5e2e466529b5620dfa975060532d302145765e2c520a49320b4db86d675b1d
+    - path: docs/en/guides/motion-planning.md
+      sha256: 1908132d2ac632eaa8376d361c1654fd6d6f93ca216e4379d517a3fa04734584
+    - path: docs/en/guides/telemetry.md
+      sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
+    - path: docs/en/index.md
+      sha256: c9137b5cab630f1930a9a27145bf13ddbfca0499a4b6e3aaa21fe5b91a9bc762
+    - path: docs/en/maintenance/documentation-guide.md
+      sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
+    - path: docs/en/operations/constraints.md
+      sha256: 597e81d8f00c2ce44a13bcb3859d4ed8c115b138b059560f0e15281f72a41a12
+    - path: docs/en/operations/troubleshooting.md
+      sha256: a6fe3856aa8b42063afe9b33c5818da3201ae4825a45694eab166f97e5ebb08f
+    - path: docs/en/reference/configuration.md
+      sha256: a9910ab1526a6da3a3fddebd58570025cf11857ed5ada2a9a6ae62f1390fa42d
+    - path: docs/en/reference/kaleidoscope-api.md
+      sha256: 02e65bf094c8b08a775702a89b2c5096a08ae93b7fb3480af024d787620718a3
+    - path: docs/en/reference/mirror-cli.md
+      sha256: 4db21216d5498abf5ca3d4c18836fb0e57d8b44496a23c02266f9d821f5f9c1e
+    - path: docs/en/reference/mirror-json.md
+      sha256: bdbcb0d9218ddead99c61b27577155a87ad55f7e42ecc0ffaab98ab07ae38e3a
+    - path: docs/en/reference/outputs.md
+      sha256: 527ffb32b82f379b77e02b39708f5add86acc82150b10ffa3cdbcdd253b2b3f0
+    - path: docs/en/reference/python-api.md
+      sha256: 7484f9e18d449ff21bfe98774f8fd93900d910d8fdd6b2406c23b897b290772d
+    - path: docs/en/reference/snapshots.md
+      sha256: f2f60e9c57cd27601a228823e132a593223537cf59d7bf72a93a5ec2539e92d7
+    - path: docs/zh-CN/development/collision-approximation.md
+      sha256: 8e5b2dcffee91a6d52e43ab41d963dff6134d92ca4553336e2cda17549984317
+    - path: docs/zh-CN/development/module-map.md
+      sha256: bd885d295bef42c0cb13a01e3bc08993c7caa7c77cc15c989a1d5d2a8cecf5c1
+    - path: docs/zh-CN/development/naming.md
+      sha256: 15e1bcd3a09682252a23083f0d0d90df25a2c1fa8d40e1cddca1795169f2c6ec
+    - path: docs/zh-CN/development/object-assets.md
+      sha256: db6fcc87d9522926123c9ece6704cd766a1daac18f1d21193ae96c05932d795b
+    - path: docs/zh-CN/development/usd-preview.md
+      sha256: d004f62291264d15e772012538262634140f793d2e6692c60c96b772c8336e95
+    - path: docs/zh-CN/getting-started/choose-runtime-and-api.md
+      sha256: 4fc5df674bac8a4f986bd8a60157bfd80a841bb3fc879c5dae03b6c222c892b3
+    - path: docs/zh-CN/getting-started/kaleidoscope-quickstart.md
+      sha256: 6dc1ccb820fc403612d489d41c6f549d25044111e977ff5e0f65fd0f2bd2ce8e
+    - path: docs/zh-CN/getting-started/mirror-quickstart.md
+      sha256: eedde7edce3577426b794ced8f02840e27a473b4776c3c31e273283537dcd98e
+    - path: docs/zh-CN/getting-started/project-overview.md
+      sha256: caba8e5e2409139eccb9717ea67027b540394abf16bc7a5d8090bac62c0b6595
+    - path: docs/zh-CN/guides/cameras.md
+      sha256: a31f890cdea223930d81346de5e960f2831aa722cc6a6b5f0cb09992e108fe74
+    - path: docs/zh-CN/guides/collision-models.md
+      sha256: f8c7ccb6eab3a7cf3b0b2461d0d13604cc31f89e1d05240835c7f308c9ac9818
+    - path: docs/zh-CN/guides/configuration.md
+      sha256: 7008e9f78280a6bc0a34a114f512a5c8ccfee0b0d3154abeb8786077ca85208a
+    - path: docs/zh-CN/guides/control-and-trajectories.md
+      sha256: fe7b7d837b56b0fff20eb8e36b9a93ae67887b63a8003cfa399c079983921858
+    - path: docs/zh-CN/guides/foxglove.md
+      sha256: 050f43eab33c26fb258e147b7d96d7f865fac4e88da83f5ea5bcdb2d3d9d4583
+    - path: docs/zh-CN/guides/motion-planning.md
+      sha256: 884acd3a55500734030f04b8037d14b0472e384107d3031a9d325e9c3ccd1f79
+    - path: docs/zh-CN/guides/telemetry.md
+      sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
+    - path: docs/zh-CN/index.md
+      sha256: c77dae831990a25b8a09b8055eb2efb2e767ac810a455e81e7e71708d7639b80
+    - path: docs/zh-CN/maintenance/documentation-guide.md
+      sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
+    - path: docs/zh-CN/operations/constraints.md
+      sha256: 15ff01d800b0991777171f1f6a4c798997bd2c6807cbe7177bb225467926434a
+    - path: docs/zh-CN/operations/troubleshooting.md
+      sha256: e5e398db7b784d338540ed75c848f0acbc073139ec61ca9f2ffb6d41c4def469
+    - path: docs/zh-CN/reference/configuration.md
+      sha256: 3f391108372618a18f63ef06fcce4b8ca2a686f26edfbb10b9242b8b88ab7a25
+    - path: docs/zh-CN/reference/kaleidoscope-api.md
+      sha256: 5ae26293083198351a747ca9d78175d0fa4921915389eb038c25d23dd89bad88
+    - path: docs/zh-CN/reference/mirror-cli.md
+      sha256: 80634d42eb33b6cc970b8a151089c2d69ec2219d2163bd4c7d5a15e00b0b5e56
+    - path: docs/zh-CN/reference/mirror-json.md
+      sha256: ca0bee1be6c8f0d1546cc63e48b0bd7b3f784e3d370d7d2c3c4fbc1682a92393
+    - path: docs/zh-CN/reference/outputs.md
+      sha256: fd4e043acf2966562e6bb2a49bf45975796822ebc7fbd8e569dd129f2c200106
+    - path: docs/zh-CN/reference/python-api.md
+      sha256: b44a8c9125ccde2019b38c66509f5dd94d72d46d0e6676cf5ea338f9a65b100e
+    - path: docs/zh-CN/reference/snapshots.md
+      sha256: 2f36effb4fec19ddc4f20da54ff5c94f99f3dfbeb97f7af00cf0adffedf3b235
+# generated-inventory:end

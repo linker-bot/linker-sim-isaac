@@ -25,7 +25,7 @@ object:
 ```
 
 USD object references do not accept an `import` section. Do not put importer
-collision approximation settings in env or controller YAML.
+collision approximation settings in scene or controller YAML.
 
 ## Supported Values
 
@@ -33,8 +33,8 @@ The project-level `collision_approximation` field accepts exactly:
 
 | Value | Isaac importer mapping | Physical meaning |
 | --- | --- | --- |
-| `convex_decomposition` | `convex_decomp = True` / `set_convex_decomp(True)` | Decompose a non-convex mesh into multiple convex collision shapes. This better preserves concavities but increases import/cooking cost and shape count. |
-| `convex_hull` | `convex_decomp = False` / `set_convex_decomp(False)` | Build one convex hull for each collision mesh. This is simpler and faster but fills concave regions. |
+| `convex_decomposition` | Importer 3.0 `collision_type="Convex Decomposition"`, USD `convexDecomposition` | Decompose a non-convex mesh into multiple convex collision shapes. This better preserves concavities but increases import/cooking cost and shape count. |
+| `convex_hull` | Importer 3.0 `collision_type="Convex Hull"`, USD `convexHull` | Build one convex hull for each collision mesh. This is simpler and faster but fills concave regions. |
 
 The project default is `convex_decomposition`. Other USD
 `physics:approximation` tokens are outside this importer field and fail YAML
@@ -48,12 +48,12 @@ description into runtime data; this is not a second manually configured hull
 pass.
 
 Importer options are format-specific. URDF also accepts `fix_base`,
-`merge_fixed_joints`, `collision_from_visuals`, and `import_inertia_tensor`;
-MJCF accepts `fix_base`, `merge_fixed_joints`, `import_inertia_tensor`, and
-`import_sites`. Robot profiles of either format may set `self_collision`, which
-defaults to `false` and controls Isaac/PhysX articulation contacts. Rigid object
-profiles do not accept `self_collision`. Unsupported combinations fail
-validation instead of being silently ignored.
+`merge_fixed_joints`, and `collision_from_visuals`; MJCF only adds `fix_base`.
+Robot profiles of either format may set `self_collision`, which defaults to
+`false` and controls articulation contacts. Rigid object profiles do not accept
+`self_collision`. The Isaac 5.1 `import_inertia_tensor`, `import_sites`, and
+MJCF `merge_fixed_joints` options are absent from Importer 3.0 and fail project
+validation explicitly.
 
 These fields affect Isaac physical contacts only. cuRobo uses its own
 URDF/robot YAML and world descriptions, so changing importer collision

@@ -19,7 +19,6 @@ from linkerbot_sim.backends.curobo.collision_capability import (
 )
 from linkerbot_sim.backends.curobo.tensor_adapter import (
     seed_config_from_state_or_seed,
-    tensor_like_to_numpy,
 )
 from linkerbot_sim.backends.curobo.tool_pose import (
     goal_tool_pose_from_single_tcp_target,
@@ -35,6 +34,7 @@ from linkerbot_sim.planning.results import MotionResult, PlanningDiagnostics
 from linkerbot_sim.trajectories.joint_trajectory_builder import (
     joint_trajectory_from_positions,
 )
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 from linkerbot_sim.utils.rotations import normalize_quat_wxyz_or_identity
 
 
@@ -441,7 +441,7 @@ def _result_positions(result, *, expected_shape: tuple[int, ...]) -> np.ndarray 
         value = getattr(result, name, None)
         if value is None:
             continue
-        array = tensor_like_to_numpy(value)
+        array = tensor_like_to_numpy(value, dtype=float)
         if array.ndim == 3:
             array = array[:, 0, :]
         if array.shape == tuple(expected_shape):
@@ -455,7 +455,7 @@ def _result_success_vector(result, *, rows: int) -> np.ndarray:
     value = getattr(result, "success", None)
     if value is None:
         return np.zeros(rows, dtype=bool)
-    success = np.asarray(tensor_like_to_numpy(value), dtype=bool)
+    success = np.asarray(tensor_like_to_numpy(value, dtype=float), dtype=bool)
     if success.ndim > 1:
         success = success.any(axis=tuple(range(1, success.ndim)))
     success = success.reshape(-1)

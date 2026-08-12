@@ -6,7 +6,7 @@ from types import ModuleType
 
 import pytest
 
-from linkerbot_sim.configs.runtime import SimulationAppSettings
+from linkerbot_sim.isaac.spec import IsaacSessionSpec
 from tools.object_assets.flexible.rope import build_asset as rope_entry
 from tools.object_assets.rigid.tblock import build_asset as tblock_entry
 
@@ -46,31 +46,38 @@ class _FakeSimulationApp:
         ),
     ],
 )
-def test_asset_entrypoint_launches_typed_headless_app_and_closes_it(
+def test_asset_entrypoint_creates_spec_session_and_closes_it(
     monkeypatch: pytest.MonkeyPatch,
     entry: ModuleType,
     config: dict[str, object],
     writer_name: str,
 ) -> None:
     app = _FakeSimulationApp()
-    launched: list[SimulationAppSettings] = []
+    launched: list[IsaacSessionSpec] = []
 
     monkeypatch.setattr(
         entry,
         "parse_args",
-        lambda: argparse.Namespace(config=Path("asset.yaml"), output=None),
+        lambda: argparse.Namespace(
+            config=Path("asset.yaml"), output=None, cuda_device=3
+        ),
     )
     monkeypatch.setattr(entry, "load_yaml", lambda _path: config)
 
-    def launch(settings: SimulationAppSettings) -> _FakeSimulationApp:
-        launched.append(settings)
+    def launch(*, spec: IsaacSessionSpec) -> _FakeSimulationApp:
+        launched.append(spec)
         return app
 
-    monkeypatch.setattr(entry, "launch_simulation_app", launch)
+    monkeypatch.setattr(entry, "create_isaac_session_from_spec", launch)
     monkeypatch.setattr(entry, writer_name, lambda _config, _output: Path("asset.usda"))
 
     entry.main()
 
     assert len(launched) == 1
-    assert launched[0].gui is False
+    assert launched[0].experience_family == "mirror"
+    assert launched[0].compute.cuda_device == 3
+    assert launched[0].compute_device == "cuda:3"
+    assert launched[0].physics_device == "cpu"
+    assert launched[0].physics.kind == "physx_cpu"
+    assert launched[0].app.gui is False
     assert app.close_count == 1

@@ -20,8 +20,12 @@ if str(REPO_ROOT) not in sys.path:
 if str(SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(SOURCE_ROOT))
 
-from linkerbot_sim.app.launch import launch_simulation_app
-from linkerbot_sim.configs.runtime import SimulationAppSettings
+from linkerbot_sim.isaac.session import create_isaac_session_from_spec
+from linkerbot_sim.isaac.spec import (
+    IsaacComputeSpec,
+    IsaacPhysxCpuSpec,
+    IsaacSessionSpec,
+)
 from linkerbot_sim.utils.config import load_yaml
 from linkerbot_sim.utils.paths import repo_path
 from tools.object_assets.flexible.rope.builder import (
@@ -40,7 +44,11 @@ def parse_args() -> argparse.Namespace:
         default=Path("tools/object_assets/flexible/rope/config.yaml"),
     )
     parser.add_argument("--output", type=Path, default=None)
-    return parser.parse_args()
+    parser.add_argument("--cuda-device", type=int, default=0)
+    args = parser.parse_args()
+    if args.cuda_device < 0:
+        parser.error("--cuda-device must be non-negative")
+    return args
 
 
 def main() -> None:
@@ -50,7 +58,17 @@ def main() -> None:
     config = CapsuleRopeAssetConfig.from_mapping(load_yaml(args.config))
     # USD/PhysX schema 由 Isaac/Omni 扩展提供；即使只是写 usda 文件，也需要先启动
     # SimulationApp，确保 pxr/omni 侧 schema 和插件已经注册。
-    simulation_app = launch_simulation_app(SimulationAppSettings(gui=False))
+    session = create_isaac_session_from_spec(
+        spec=IsaacSessionSpec(
+            experience_family="mirror",
+            compute=IsaacComputeSpec(cuda_device=args.cuda_device),
+            physics=IsaacPhysxCpuSpec(),
+            physics_dt=1.0 / 60.0,
+            rendering_dt=1.0 / 60.0,
+            gravity_z=-9.81,
+            add_ground=False,
+        )
+    )
     try:
         output = write_capsule_rope_asset(
             config, repo_path(args.output) if args.output is not None else None
@@ -62,7 +80,7 @@ def main() -> None:
             flush=True,
         )
     finally:
-        simulation_app.close()
+        session.close()
 
 
 if __name__ == "__main__":

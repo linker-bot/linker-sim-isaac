@@ -1,0 +1,69 @@
+[package]
+description = "LinkerBot Kaleidoscope headless project-owned Newton application"
+title = "LinkerBot Kaleidoscope (Newton CUDA)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "kaleidoscope", "newton", "cuda"]
+
+# 该 Kit 是独立的 physics-only closure，不继承 PhysX Kaleidoscope 或 Mirror Kit。
+# Newton 与 MuJoCo-Warp wheel 由项目自有 runtime 导入；Isaac Newton extension、
+# Isaac Core/Cloner、PhysX/Fabric 和所有渲染消费者均不进入此进程。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.warp.core" = {}
+
+[settings.app]
+name = "LinkerBot-Kaleidoscope-Newton-CUDA"
+version = "6.0.1"
+window.title = "LinkerBot Kaleidoscope (Newton CUDA)"
+settings.persistent = false
+useFabricSceneDelegate = false
+extensions.excluded = [
+    "isaacsim.core.api",
+    "isaacsim.core.cloner",
+    "isaacsim.core.experimental.prims",
+    "isaacsim.core.simulation_manager",
+    "isaacsim.core.utils",
+    "isaacsim.pip.newton",
+    "isaacsim.physics.newton",
+    "isaacsim.physics.newton.tensors",
+    "isaacsim.sensors.camera",
+    "isaacsim.sensors.experimental.physics",
+    "isaacsim.sensors.physx",
+    "isaacsim.sensors.physx.examples",
+    "isaacsim.sensors.physx.ui",
+    "isaacsim.sensors.physics.nodes",
+    "omni.hydra.rtx",
+    "omni.kit.viewport.window",
+    "omni.physics.physx",
+    "omni.physics.stageupdate",
+    "omni.physx",
+    "omni.physx.asset_validator",
+    "omni.physx.bundle",
+    "omni.physx.camera",
+    "omni.physx.demos",
+    "omni.physx.fabric",
+    "omni.physx.graph",
+    "omni.physx.pvd",
+    "omni.physx.tensors",
+    "omni.physx.vehicle",
+    "omni.replicator.core",
+    "omni.syntheticdata",
+]
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+# 无头训练不得等待 IOMMU 信息弹窗。
+renderer.startupMessageDisplayed = true

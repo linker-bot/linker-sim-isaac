@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import threading
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from linkerbot_sim.app.interactive.single_scene.state_stream import (
+from linkerbot_sim.mirror.interface.state_stream import (
     InteractiveStateStreamHandle,
 )
 from linkerbot_sim.telemetry.foxglove_state import (
@@ -26,6 +27,7 @@ class _FakeFoxgloveLogger:
     def __init__(self) -> None:
         self.joint_states = []
         self.state_json = []
+        self.hybrid_control_json = []
         self.scene_spheres = []
         self.closed = False
 
@@ -34,6 +36,9 @@ class _FakeFoxgloveLogger:
 
     def log_state_json(self, state, *, time_s=None) -> None:
         self.state_json.append((state, time_s))
+
+    def log_hybrid_control_json(self, diagnostics, *, time_s=None) -> None:
+        self.hybrid_control_json.append((diagnostics, time_s))
 
     def log_scene_spheres(self, **kwargs) -> None:
         self.scene_spheres.append(kwargs)
@@ -127,7 +132,31 @@ def test_foxglove_state_sink_honors_modality_switches() -> None:
 
     assert logger.joint_states == []
     assert logger.state_json == []
+    assert logger.hybrid_control_json == []
     assert logger.scene_spheres == []
+
+
+def test_foxglove_state_sink_publishes_dedicated_hybrid_payload() -> None:
+    logger = _FakeFoxgloveLogger()
+    sink = FoxgloveStateSink(
+        logger,
+        publish_joint_states=False,
+        publish_state_json=False,
+        publish_scene_markers=False,
+        publish_hybrid_control=True,
+    )
+    active = replace(
+        _snapshot(),
+        hybrid_control={"active": True, "request_id": "hybrid-1"},
+    )
+
+    sink.publish(active)
+    sink.publish(_snapshot())
+
+    assert logger.hybrid_control_json == [
+        ({"active": True, "request_id": "hybrid-1"}, 0.8),
+        ({"active": False}, 0.8),
+    ]
 
 
 def test_state_publisher_continues_after_error_and_reports_metrics() -> None:
@@ -252,7 +281,6 @@ def test_state_stream_handle_keeps_timeout_status_until_successful_retry() -> No
         previous_observer=previous_observer,
         previous_status_provider=previous_status,
         publisher=publisher,  # type: ignore[arg-type]
-        stream=object(),  # type: ignore[arg-type]
     )
 
     assert handle.close() is False

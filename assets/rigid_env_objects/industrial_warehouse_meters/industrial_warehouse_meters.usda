@@ -16,13 +16,16 @@ def Xform "IndustrialWarehouse"
         double3 xformOp:scale = (0.01, 0.01, 0.01)
         uniform token[] xformOpOrder = ["xformOp:scale"]
 
-        # The source pack is visual-only. Reuse its low-poly floor mesh as the
-        # static scene collider so this environment can replace the default ground.
-        over "SM_Floor_A1" (
+        # 上游仓库保持纯视觉表示；共面的 floor mesh 不能交给 MuJoCo CPU 作为碰撞体。
+        # 解析 Plane 与视觉地板共用局部 z=0，随仓库根位姿一起移动，PhysX 与 Newton
+        # 因而读取同一份物理事实，同时不会在渲染时叠加第二层可见地面。
+        def Plane "FloorCollider" (
             prepend apiSchemas = ["PhysicsCollisionAPI"]
         )
         {
+            uniform token axis = "Z"
             bool physics:collisionEnabled = 1
+            token visibility = "invisible"
         }
     }
 }

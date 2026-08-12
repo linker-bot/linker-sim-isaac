@@ -1,0 +1,21 @@
+# Mirror mode 文件只做 composition：每个字段都是 canonical profile 引用。
+# PhysX CPU 不消费 compute.cuda_device 做物理；cuRobo、RTX 和其它 CUDA 模块仍共享它。
+# 引用值相对 configs/<group>/ 解析且省略 .yaml；loader 对所有键执行 exact-key 校验。
+# 产品根选择单场景交互式 Mirror 配置图。
+mode: mirror
+compute:
+  # 进程唯一 CUDA 设备序号；即使物理走 CPU，cuRobo 与 RTX 仍从这里选择 GPU。
+  cuda_device: 0
+profiles:
+  # 现实映像场景：机器人/对象实例、物理与渲染频率、相机、灯光和 viewport。
+  scene: mirror/scene3
+  # PhysX CPU 求解 leaf；该选择同时派生默认 physx controller bundle。
+  physics: physx/cpu
+  # 交互命令模式、空闲步进策略以及 stdin/network ingress 的资源边界。
+  control: mirror
+  # cuRobo FK/IK、MotionGen seed、warmup 与碰撞 cache 数值配置。
+  curobo: mirror
+  # 与具体后端无关的单次 motion 请求默认值。
+  planning: mirror
+  # 主渲染、相机落盘/直播、关节 CSV 和 telemetry 输出策略。
+  outputs: mirror_default

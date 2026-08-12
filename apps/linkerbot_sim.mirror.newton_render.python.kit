@@ -1,0 +1,77 @@
+[package]
+description = "LinkerBot Mirror with Newton and RTX camera rendering"
+title = "LinkerBot Mirror (Newton Render)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "mirror", "newton", "cpu", "cuda", "rtx"]
+
+# Render Kit 重复声明同一排他 physics closure，再只增加 RTX、viewport 与 SyntheticData。
+# camera manipulator 只为默认主 Viewport 提供观察导航；项目创建的传感器 viewport 会在
+# 构造后按窗口关闭该 layer，不能借鼠标输入改写相机外参。
+# 不依赖另一个项目 Kit，因而 apps/ 下五个正式文件均可独立交给 SimulationApp 解析。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.warp.core" = {}
+"omni.hydra.rtx" = {}
+"omni.kit.manipulator.camera" = {}
+"omni.kit.viewport.window" = {}
+"omni.syntheticdata" = {}
+"omni.usd.schema.omni_lens_distortion" = {}
+
+[settings]
+rtx.hydra.supportMultiTickRate = false
+rtx.rendering.perSensorTickTlas = false
+rtx.post.dlss.execMode = 3
+rtx-transient.dlssg.enabled = false
+exts."omni.kit.viewport.window".startup.cameraManipulator.enabled = true
+
+[settings.app]
+name = "LinkerBot-Mirror-Newton-Render"
+version = "6.0.1"
+window.title = "LinkerBot Mirror (Newton Render)"
+settings.persistent = false
+useFabricSceneDelegate = false
+settings.fabricDefaultStageFrameHistoryCount = 3
+extensions.excluded = [
+    "isaacsim.core.api",
+    "isaacsim.core.cloner",
+    "isaacsim.core.experimental.prims",
+    "isaacsim.core.simulation_manager",
+    "isaacsim.core.utils",
+    "isaacsim.pip.newton",
+    "isaacsim.physics.newton",
+    "isaacsim.physics.newton.tensors",
+    "isaacsim.sensors.experimental.physics",
+    "isaacsim.sensors.physx",
+    "isaacsim.sensors.physx.examples",
+    "isaacsim.sensors.physx.ui",
+    "isaacsim.sensors.physics.nodes",
+    "omni.physics.physx",
+    "omni.physics.stageupdate",
+    "omni.physx",
+    "omni.physx.asset_validator",
+    "omni.physx.bundle",
+    "omni.physx.camera",
+    "omni.physx.demos",
+    "omni.physx.fabric",
+    "omni.physx.graph",
+    "omni.physx.pvd",
+    "omni.physx.tensors",
+    "omni.physx.vehicle",
+]
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+renderer.startupMessageDisplayed = true

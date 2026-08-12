@@ -9,14 +9,17 @@ articulation、stage 等仿真对象。``StateStream`` 通过有界队列明确�
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 from threading import Condition
 
 import numpy as np
 
+from linkerbot_sim.isaac.scene.pose import read_prim_world_pose
 from linkerbot_sim.logging.effort_logger import read_joint_efforts
-from linkerbot_sim.utils.rotations import matrix_to_quat_wxyz
+from linkerbot_sim.objects.runtime import runtime_object_prim_path
+from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 @dataclass(frozen=True)
@@ -108,6 +111,7 @@ class StateSnapshot:
     robots: tuple[RobotJointStateSnapshot, ...]
     objects: tuple[ObjectPoseSnapshot, ...] = ()
     phase: str | None = None
+    hybrid_control: Mapping[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """转换为 JSON 友好的完整快照。"""
@@ -120,6 +124,8 @@ class StateSnapshot:
         }
         if self.phase is not None:
             result["phase"] = self.phase
+        if self.hybrid_control is not None:
+            result["hybrid_control"] = deepcopy(dict(self.hybrid_control))
         return result
 
 
@@ -265,6 +271,8 @@ class SceneRobotStateSampler:
         rate_hz: float = 60.0,
         include_efforts: bool = False,
         include_objects: bool = False,
+        include_hybrid_control: bool = False,
+        hybrid_diagnostics_provider: Callable[[], Mapping[str, object]] | None = None,
     ) -> None:
         """保存采样依赖和频率设置，不读取任何 Isaac 状态。
 
@@ -277,6 +285,8 @@ class SceneRobotStateSampler:
         self.rate_hz = float(rate_hz)
         self.include_efforts = bool(include_efforts)
         self.include_objects = bool(include_objects)
+        self.include_hybrid_control = bool(include_hybrid_control)
+        self.hybrid_diagnostics_provider = hybrid_diagnostics_provider
         self._previous_velocities: dict[int, tuple[float, np.ndarray]] = {}
 
     def should_sample(self, *, step: int, physics_dt: float) -> bool:
@@ -308,7 +318,7 @@ class SceneRobotStateSampler:
         runtime/stage 的读取权。
         """
 
-        physics_dt = float(runtime.world.get_physics_dt())
+        physics_dt = _runtime_physics_dt(runtime)
         time_s = (int(step) + 1) * physics_dt
         robots = tuple(
             self._sample_robot(robot, time_s=time_s)
@@ -319,13 +329,29 @@ class SceneRobotStateSampler:
             if self.include_objects and self.stage is not None
             else ()
         )
+        hybrid_control = self._sample_hybrid_diagnostics()
         return StateSnapshot(
             step=int(step),
             time_s=time_s,
             phase=phase,
             robots=robots,
             objects=objects,
+            hybrid_control=hybrid_control,
         )
+
+    def _sample_hybrid_diagnostics(self) -> dict[str, object] | None:
+        """冻结 owner 缓存，不从 telemetry 路径读取 articulation 或 PhysX。"""
+
+        if not self.include_hybrid_control:
+            return None
+        if self.hybrid_diagnostics_provider is None:
+            return {"active": False}
+        payload = self.hybrid_diagnostics_provider()
+        if not isinstance(payload, Mapping) or type(payload.get("active")) is not bool:
+            raise ValueError("hybrid diagnostics provider returned an invalid payload")
+        if payload["active"] is False:
+            return {"active": False}
+        return deepcopy(dict(payload))
 
     def _sample_robot(self, runtime, *, time_s: float) -> RobotJointStateSnapshot:
         """采样单 robot，并用相邻 velocity frame 估算 acceleration。"""
@@ -377,7 +403,7 @@ class SceneRobotStateObserver:
     def observe(self, runtime, *, step: int, phase: str | None = None) -> None:
         """命中 sampling interval 时冻结 snapshot 并写入 ``StateStream``。"""
 
-        dt = float(runtime.world.get_physics_dt())
+        dt = _runtime_physics_dt(runtime)
         if self.sampler.should_sample(step=step, physics_dt=dt):
             self.stream.publish(self.sampler.sample(runtime, step=step, phase=phase))
 
@@ -385,6 +411,25 @@ class SceneRobotStateObserver:
         """把 reset 传播给 sampler 的 derivative history。"""
 
         self.sampler.reset()
+
+
+def _runtime_physics_dt(runtime: object) -> float:
+    """从产品 runtime 的显式 physics port 读取步长。
+
+    MirrorSceneResources 暴露 ``physics``，ExecutionRuntime 暴露 ``simulation_world``；
+    telemetry 不再要求已经删除的 ``IsaacSession.world`` facade。保留最后的 ``world``
+    structural 分支仅服务该产品无关采样器的轻量调用方，不会在 Mirror composition 中使用。
+    """
+
+    for name in ("physics", "simulation_world", "world"):
+        physics = getattr(runtime, name, None)
+        get_dt = getattr(physics, "get_physics_dt", None)
+        if callable(get_dt):
+            dt = float(get_dt())
+            if np.isfinite(dt) and dt > 0.0:
+                return dt
+            raise ValueError(f"runtime.{name}.get_physics_dt() 必须返回有限正数")
+    raise RuntimeError("state sampler runtime 缺少 physics time-step port")
 
 
 def _num_dof(robot) -> int:
@@ -407,10 +452,10 @@ def _sample_runtime_objects(
 
     snapshots: list[ObjectPoseSnapshot] = []
     for handle in object_handles:
-        prim_path = _runtime_object_prim_path(handle)
+        prim_path = runtime_object_prim_path(handle)
         if prim_path is None:
             continue
-        pose = _read_prim_world_pose(stage, prim_path)
+        pose = read_prim_world_pose(stage, prim_path)
         if pose is None:
             continue
         position, orientation = pose
@@ -436,7 +481,7 @@ def _vector_from_method(source, method_name: str, expected_size: int) -> np.ndar
     if method is None:
         return np.full(int(expected_size), np.nan, dtype=float)
     try:
-        values = np.asarray(method(), dtype=float).reshape(-1)
+        values = tensor_like_to_numpy(method(), dtype=float).reshape(-1)
     except Exception:
         return np.full(int(expected_size), np.nan, dtype=float)
     if values.size != int(expected_size):
@@ -457,52 +502,6 @@ def _commanded_efforts(controller, expected_size: int) -> np.ndarray:
     if efforts.size != int(expected_size):
         return np.full(int(expected_size), np.nan, dtype=float)
     return efforts.copy()
-
-
-def _runtime_object_prim_path(handle: object) -> str | None:
-    """从 RuntimeObjectHandle 或兼容替身中读取对象 root prim path。"""
-
-    model = getattr(handle, "model", None)
-    for source in (model, getattr(handle, "config", None)):
-        if source is None:
-            continue
-        prim_path = getattr(source, "prim_path", None)
-        if prim_path is not None:
-            return str(prim_path)
-        if isinstance(source, Mapping):
-            root = source.get("root")
-            if root is not None and hasattr(root, "GetPath"):
-                return str(root.GetPath())
-            prim_path = source.get("prim_path")
-            if prim_path is not None:
-                return str(prim_path)
-    return None
-
-
-def _read_prim_world_pose(
-    stage, prim_path: str
-) -> tuple[np.ndarray, np.ndarray] | None:
-    """读取 USD prim 的世界位姿；只能在仿真主线程调用。"""
-
-    from pxr import Sdf, UsdGeom
-
-    prim = stage.GetPrimAtPath(Sdf.Path(prim_path))
-    if not prim.IsValid():
-        return None
-    matrix = UsdGeom.XformCache().GetLocalToWorldTransform(prim)
-    translation = matrix.ExtractTranslation()
-    position = np.asarray([translation[0], translation[1], translation[2]], dtype=float)
-    rotation_matrix = _matrix3_to_numpy(matrix.ExtractRotationMatrix())
-    return position, matrix_to_quat_wxyz(rotation_matrix)
-
-
-def _matrix3_to_numpy(matrix) -> np.ndarray:
-    """把 USD/Gf 3x3 matrix 转成 numpy。"""
-
-    return np.asarray(
-        [[float(matrix[row][col]) for col in range(3)] for row in range(3)],
-        dtype=float,
-    )
 
 
 def _optional_json_vector(values: np.ndarray | None) -> list[float | None] | None:

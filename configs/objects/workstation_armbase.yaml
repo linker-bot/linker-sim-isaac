@@ -1,12 +1,12 @@
 # workstation armbase 运行时对象配置。
 #
-# env objects[].object_profile 通过文件名 workstation_armbase 选择本 profile；实例 name、
-# prim_path 与 root_pose 由 env 管理。本文件负责可复用的资产导入与运行时物理覆盖。
-# 本 profile 没有 planning_collision，因此工装会参与 PhysX 接触，但不会自动成为规划障碍物。
+# scene objects[].object_profile 通过文件名 workstation_armbase 选择本 profile；实例 name、
+# prim_path 与 root_pose 由 scene 管理。本文件负责可复用的资产导入与运行时物理覆盖。
+# 本 profile 没有 planning_collision，因此工装会参与物理接触，但不会自动成为规划障碍物。
 
 
 object:
-  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
+  # 资产逻辑名称；scene 按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
   name: workstation_armbase
 
   # 对象能力类别。rigid 允许 USD/URDF 导入、static 策略与接触材质覆盖。
@@ -15,7 +15,7 @@ object:
   # 资产来源类型。这里通过 Isaac URDF importer 导入工装基座。
   source: urdf
 
-  # 工装基座 URDF 路径，相对仓库根目录；stage 目标 prim_path 由 env 实例提供。
+  # 工装基座 URDF 路径，相对仓库根目录；stage 目标 prim_path 由 scene 实例提供。
   asset_path: assets/rigid_env_objects/workstationV1_armbase/workstationV1_armbase.urdf
 
   import:
@@ -36,5 +36,9 @@ object:
       dynamic_friction: 0.6
       # 恢复系数：0 表示接触基本不反弹。
       restitution: 0.0
-      # 摩擦合成模式；average 表示与接触另一方材质取平均。
-      friction_combine_mode: average
+
+    # PhysX-only leaf 不会投影给 Newton；通用摩擦/恢复系数仍由上方 material 统一提供。
+    physx:
+      material:
+        # 摩擦合成模式；average 表示与接触另一方材质取平均。
+        friction_combine_mode: average

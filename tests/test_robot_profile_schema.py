@@ -5,9 +5,9 @@ import re
 
 import pytest
 
-from linkerbot_sim.assets.robot_config import (
-    RobotAssetConfig,
-    load_robot_profile,
+from linkerbot_sim.assets.robot_config import RobotAssetConfig
+from linkerbot_sim.configuration.robots import (
+    RobotProfileSettings,
     validate_robot_profile,
 )
 from linkerbot_sim.assets.robot_instances import (
@@ -15,10 +15,6 @@ from linkerbot_sim.assets.robot_instances import (
     RobotSceneInstanceConfig,
 )
 from linkerbot_sim.assets.root_pose import RootPoseConfig
-from linkerbot_sim.robots.capabilities import (
-    PlanningBindingConfig,
-    robot_kind_from_profile,
-)
 from linkerbot_sim.utils.config import load_yaml
 
 
@@ -41,23 +37,24 @@ def test_all_bundled_robot_yaml_loads_strictly() -> None:
     assert paths
     for path in paths:
         raw = load_yaml(path)
-        canonical = load_robot_profile(path)
-        assert canonical == raw
+        profile = RobotProfileSettings.from_mapping(raw, source=str(path))
+        assert profile.name == raw["robot"]["name"]
+        assert profile.joint_groups.arm == profile.component_mapping.joints.arm
         instance = RobotSceneInstanceConfig(
             robot_profile=path.stem,
             root_pose=RootPoseConfig(),
             label="robot_0",
         )
-        asset = RobotAssetConfig.from_mapping(
-            canonical,
+        asset = RobotAssetConfig.from_profile(
+            profile,
             prim_path=instance.effective_prim_path,
         )
-        execution = RobotExecutionConfig.from_mapping(
-            canonical,
+        execution = RobotExecutionConfig.from_profile(
+            profile,
             scene_instance=instance,
         )
-        kind = robot_kind_from_profile(canonical)
-        binding = PlanningBindingConfig.from_profile(canonical, kind=kind)
+        kind = profile.kind
+        binding = profile.curobo.binding
         assert asset.asset_path == execution.robot.asset_path
         assert execution.controlled_joints == ("all",)
         assert binding.enabled is (kind.value != "hand")
@@ -65,7 +62,9 @@ def test_all_bundled_robot_yaml_loads_strictly() -> None:
 
 def test_robot_asset_config_requires_resolved_prim_path() -> None:
     with pytest.raises(TypeError, match="prim_path"):
-        RobotAssetConfig.from_mapping(_hand_profile())  # type: ignore[call-arg]
+        RobotAssetConfig.from_profile(
+            RobotProfileSettings.from_mapping(_hand_profile())
+        )  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize(
@@ -92,9 +91,9 @@ def test_robot_asset_config_requires_resolved_prim_path() -> None:
         ),
         (
             lambda profile: profile["robot"].update(
-                {"physics": {"solver": {"hand": {"position_iteratons": 2}}}}
+                {"physics": {"physx": {"solver": {"hand": {"position_iteratons": 2}}}}}
             ),
-            "robot.physics.solver.hand.position_iteratons",
+            "robot.physics.physx.solver.hand.position_iteratons",
         ),
         (
             lambda profile: profile["robot"].update(
@@ -153,11 +152,35 @@ def test_robot_solver_iterations_are_strict_non_negative_integers(
     profile = _hand_profile()
     robot = profile["robot"]
     assert isinstance(robot, dict)
-    robot["physics"] = {"solver": {"hand": {"position_iterations": value}}}
+    robot["physics"] = {"physx": {"solver": {"hand": {"position_iterations": value}}}}
 
     with pytest.raises(
         ValueError,
-        match=r"robot\.physics\.solver\.hand\.position_iterations",
+        match=r"robot\.physics\.physx\.solver\.hand\.position_iterations",
+    ):
+        validate_robot_profile(profile)
+
+
+def test_legacy_robot_physics_solver_sibling_is_rejected() -> None:
+    profile = _hand_profile()
+    robot = profile["robot"]
+    assert isinstance(robot, dict)
+    robot["physics"] = {"solver": {"hand": {"position_iterations": 32}}}
+
+    with pytest.raises(ValueError, match=r"robot\.physics\.solver"):
+        validate_robot_profile(profile)
+
+
+@pytest.mark.parametrize("value", (True, "0.5", -0.1, None, [], {}))
+def test_robot_physx_joint_friction_is_strict(value: object) -> None:
+    profile = _hand_profile()
+    robot = profile["robot"]
+    assert isinstance(robot, dict)
+    robot["physics"] = {"physx": {"joint": {"friction": value}}}
+
+    with pytest.raises(
+        ValueError,
+        match=r"robot\.physics\.physx\.joint\.friction",
     ):
         validate_robot_profile(profile)
 
@@ -197,7 +220,7 @@ def test_robot_physx_restitution_is_bounded() -> None:
     profile = _hand_profile()
     robot = profile["robot"]
     assert isinstance(robot, dict)
-    robot["physics"] = {"physx": {"material": {"contact_restitution": 1.01}}}
+    robot["physics"] = {"material": {"contact_restitution": 1.01}}
 
     with pytest.raises(ValueError, match="contact_restitution.*between 0 and 1"):
         validate_robot_profile(profile)

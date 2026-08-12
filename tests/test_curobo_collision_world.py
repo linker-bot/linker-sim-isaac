@@ -9,7 +9,12 @@ from linkerbot_sim.backends.curobo.collision_world import (
     CuroboCollisionWorld,
     make_curobo_scene_cfg,
 )
-from linkerbot_sim.backends.curobo.config import CuroboConfig
+from linkerbot_sim.backends.curobo.config import (
+    CuroboConfig,
+    CuroboIkConfig,
+    CuroboMotionPlannerConfig,
+    CuroboRobotConfig,
+)
 from linkerbot_sim.backends.curobo.context import CuroboContext
 from linkerbot_sim.planning.collision_objects import CollisionObject
 
@@ -51,7 +56,6 @@ class _FakeContext:
         self.scene_module = _FakeScene
         self.ik_solver = _FakeSolver(supports_scene=supports_scene)
         self.motion_planner = _FakeSolver(supports_scene=supports_scene)
-        self.batch_motion_planner = _FakeSolver(supports_scene=supports_scene)
 
 
 class _LazyFakeContext:
@@ -71,11 +75,26 @@ class _LazyFakeContext:
     def motion_planner(self):
         raise AssertionError("collision sync should not create lazy motion_planner")
 
-    @property
-    def batch_motion_planner(self):
-        raise AssertionError(
-            "collision sync should not create lazy batch_motion_planner"
-        )
+
+def _typed_curobo_config(
+    *,
+    ik_cache: dict[str, int],
+    planner_cache: dict[str, int],
+) -> CuroboConfig:
+    """直接构造 collision capability 测试需要的 typed backend 配置。"""
+
+    config = CuroboConfig(
+        robot=CuroboRobotConfig.from_mapping(
+            {
+                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "default_tcp_frame": "tool",
+            }
+        ),
+        ik=CuroboIkConfig(collision_cache=dict(ik_cache)),
+        motion_planner=CuroboMotionPlannerConfig(collision_cache=dict(planner_cache)),
+    )
+    config.validate()
+    return config
 
 
 def test_make_curobo_scene_cfg_converts_enabled_collision_objects() -> None:
@@ -140,14 +159,13 @@ def test_curobo_collision_world_sync_updates_supported_solvers() -> None:
         ),
     )
 
-    assert world.num_enabled_obstacles == 1
+    assert world.materialized_counts == {"cuboid": 1, "mesh": 0}
     assert len(context.ik_solver.world_updates) == 1
     assert len(context.motion_planner.world_updates) == 1
-    assert len(context.batch_motion_planner.world_updates) == 1
 
     world.sync(())
 
-    assert world.num_enabled_obstacles == 0
+    assert world.materialized_counts == {"cuboid": 0, "mesh": 0}
     assert len(context.ik_solver.world_updates) == 2
 
 
@@ -168,7 +186,6 @@ def test_curobo_collision_world_skips_solvers_without_scene_checker() -> None:
 
     assert context.ik_solver.world_updates == []
     assert context.motion_planner.world_updates == []
-    assert context.batch_motion_planner.world_updates == []
 
 
 def test_curobo_collision_world_updates_existing_lazy_solvers_only() -> None:
@@ -194,7 +211,6 @@ def test_curobo_context_lazy_solver_receives_existing_collision_world() -> None:
     solver = _FakeSolver()
     context._ik_solver = None
     context._motion_planner = None
-    context._batch_motion_planner = None
     context._collision_world = SimpleNamespace(scene_cfg="scene")
     context._make_ik_solver = lambda: solver
 
@@ -230,26 +246,15 @@ def test_fake_namespace_keeps_module_import_side_effect_free() -> None:
 
 
 def test_curobo_context_collision_capability_checks_all_requirements() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {"ik": {"collision_cache": {"cuboid": 4, "mesh": 1}}},
-                "motion_planner": {"collision_cache": {"cuboid": 6, "mesh": 1}},
-            }
-        }
+    config = _typed_curobo_config(
+        ik_cache={"cuboid": 4, "mesh": 1},
+        planner_cache={"cuboid": 6, "mesh": 1},
     )
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.kinematics = SimpleNamespace(total_spheres=lambda: 3)
     context._ik_solver = _FakeSolver()
     context._motion_planner = None
-    context._batch_motion_planner = None
     context._collision_world = SimpleNamespace(
         materialized_counts={"cuboid": 4, "mesh": 1}
     )
@@ -265,72 +270,53 @@ def test_curobo_context_collision_capability_checks_all_requirements() -> None:
 
 
 def test_collision_capability_uses_each_consumer_cache() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {"ik": {"collision_cache": {"cuboid": 2}}},
-                "motion_planner": {"collision_cache": {"cuboid": 6}},
-            }
-        }
+    config = _typed_curobo_config(
+        ik_cache={"cuboid": 2},
+        planner_cache={"cuboid": 6},
     )
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.kinematics = SimpleNamespace(total_spheres=lambda: 3)
     context._ik_solver = _FakeSolver()
     context._motion_planner = _FakeSolver()
-    context._batch_motion_planner = _FakeSolver()
     context._collision_world = SimpleNamespace(materialized_counts={"cuboid": 5})
-    context.record_collision_sync(1, "batch-view")
+    context.record_collision_sync(1, "planner-view")
 
     ik_capability = context.ensure_collision_checker("ik")
     planner_capability = context.ensure_collision_checker("planner")
-    batch_capability = context.ensure_collision_checker("batch_planner")
 
     assert ik_capability.available is False
     assert ik_capability.configured_cache == {"cuboid": 2}
     assert planner_capability.available is True
     assert planner_capability.configured_cache == {"cuboid": 6}
-    assert batch_capability.available is True
-    assert batch_capability.configured_cache == {"cuboid": 6}
-    assert batch_capability.required_cache == {"cuboid": 5}
+
+    try:
+        context.ensure_collision_checker("batch_planner")
+    except ValueError as exc:
+        assert "Unknown cuRobo collision consumer" in str(exc)
+    else:
+        raise AssertionError("retired batch planner consumer was accepted")
 
 
 def test_lazy_consumer_reports_undersized_cache_without_updating_world() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {"ik": {"collision_cache": {"cuboid": 2}}},
-                "motion_planner": {"collision_cache": {"cuboid": 4}},
-            }
-        }
+    config = _typed_curobo_config(
+        ik_cache={"cuboid": 2},
+        planner_cache={"cuboid": 4},
     )
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.kinematics = SimpleNamespace(total_spheres=lambda: 3)
     context._ik_solver = None
     context._motion_planner = None
-    context._batch_motion_planner = None
     context._collision_world = SimpleNamespace(
         materialized_counts={"cuboid": 5},
         scene_cfg="scene",
     )
-    context.record_collision_sync(1, "batch-view")
+    context.record_collision_sync(1, "planner-view")
     solver = _FakeSolver()
-    context._make_motion_planner = lambda *, batch: solver
+    context._make_motion_planner = lambda: solver
 
-    capability = context.ensure_collision_checker("batch_planner")
+    capability = context.ensure_collision_checker("planner")
 
     assert capability.available is False
     assert "scene_collision_cache_capacity" in capability.missing_requirements
@@ -338,51 +324,44 @@ def test_lazy_consumer_reports_undersized_cache_without_updating_world() -> None
 
 
 def test_cache_validation_only_checks_existing_consumers() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {"ik": {"collision_cache": {"cuboid": 2}}},
-                "motion_planner": {"collision_cache": {"cuboid": 6}},
-            }
-        }
+    config = _typed_curobo_config(
+        ik_cache={"cuboid": 2},
+        planner_cache={"cuboid": 6},
     )
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.kinematics = SimpleNamespace(total_spheres=lambda: 3)
     context._ik_solver = None
     context._motion_planner = _FakeSolver()
-    context._batch_motion_planner = None
+
+    context.validate_collision_cache_capacity({"cuboid": 5})
+
+
+def test_cache_validation_ignores_existing_solver_without_scene_checker() -> None:
+    config = _typed_curobo_config(
+        ik_cache={},
+        planner_cache={"cuboid": 6},
+    )
+    context = CuroboContext.__new__(CuroboContext)
+    context.config = config
+    context.kinematics = SimpleNamespace(total_spheres=lambda: 3)
+    # Mirror direct IK 不接收 collision world；它不能把 planner 的有效缓存上限压成零。
+    context._ik_solver = _FakeSolver(supports_scene=False)
+    context._motion_planner = _FakeSolver()
 
     context.validate_collision_cache_capacity({"cuboid": 5})
 
 
 def test_curobo_context_rejects_materialized_world_larger_than_cache() -> None:
-    config = CuroboConfig.from_mapping(
-        {
-            "curobo": {
-                "enabled": True,
-                "planning_joint_group": "arm",
-                "robot": {
-                    "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                    "default_tcp_frame": "tool",
-                },
-                "kinematics": {"ik": {"collision_cache": {"cuboid": 4}}},
-                "motion_planner": {"collision_cache": {"cuboid": 6}},
-            }
-        }
+    config = _typed_curobo_config(
+        ik_cache={"cuboid": 4},
+        planner_cache={"cuboid": 6},
     )
     context = CuroboContext.__new__(CuroboContext)
     context.config = config
     context.kinematics = SimpleNamespace(total_spheres=2)
     context._ik_solver = _FakeSolver()
     context._motion_planner = None
-    context._batch_motion_planner = None
 
     try:
         context.validate_collision_cache_capacity(

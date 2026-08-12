@@ -1,0 +1,92 @@
+# 首个正式 RL task。所有数值均在 env-local frame 中解释；真实物体推动依赖所选
+# PhysX/Newton backend 的物理接触，但本 task 不包含规划碰撞模型、批量轨迹规划或避障字段。
+task:
+  # 任务稳定标识，必须与被引用 profile 的文件 stem 一致。
+  id: tblock_push_v1
+  # 要观察、奖励和判定终止的 scene.objects[].name。
+  dynamic_object: Tblock
+  # heading 使用 T-block 本体 +Y 轴，避免 nominal pitch 接近 90 度时的 Euler 奇异点。
+  heading_axis: [0.0, 1.0, 0.0]
+
+  # action schema 由 mode 判别；joint_control 不创建 cuRobo/IK context，并允许在
+  # 两次完整运动之间切换 position、velocity、effort 控制通道。
+  action:
+    # 每个动作分量在当前控制模式下解释为归一化关节命令。
+    mode: joint_control
+    # 一个 policy decision 保持命令的物理步数；240 Hz / 2 = 120 Hz 决策频率。
+    physics_ticks_per_action: 2
+    # 对输入动作逐元素裁剪到 [-clip, clip]。
+    clip: 1.0
+    # position 模式下，clip 后单位动作对应的最大关节增量，单位 rad。
+    position_delta_scale_rad: 0.05
+    # velocity 模式下，clip 后单位动作对应的最大目标速度，单位 rad/s。
+    velocity_scale_rad_s: 1.0
+    # effort 模式下，profile effort limit 的可用比例，范围 (0, 1]。
+    effort_limit_fraction: 1.0
+
+  # observation 各项按固定顺序拼接为 policy tensor；前五项是本任务必选项。
+  observation:
+    # 当前主动关节命令目标与实际状态之间的误差。
+    command_target_error: true
+    # 两个机器人 TCP 的位置与姿态。
+    tcp_pose: true
+    # T-block 的位置、姿态及线/角速度。
+    dynamic_object_state: true
+    # episode 采样得到的目标位置和目标 heading。
+    goal: true
+    # 上一个 policy action，帮助策略感知控制变化率。
+    previous_action: true
+    # [0, 1] 范围的 episode 时间进度；该项可关闭，其余核心项不可关闭。
+    normalized_time: true
+
+  # r = 8*delta(distance) + 0.5*delta(heading) + 0.25*delta(hand proximity)
+  #     - 0.002*mean(action^2) - 0.010*mean(delta_action^2)
+  #     + 10*success - 5*task_failure；motion_failure 供 IK/直线 variant 使用。
+  reward:
+    # T-block 到目标平面距离相对上一步的减少量权重。
+    distance_progress: 8.0
+    # heading 角误差相对上一步的减少量权重。
+    heading_progress: 0.5
+    # 双手到任务对象距离改善量的权重，用于提供接触前的稠密信号。
+    hand_proximity_progress: 0.25
+    # 当前动作均方幅值惩罚系数；负值抑制过大的关节增量。
+    action_l2: -0.002
+    # 当前与上一动作之差的均方惩罚系数；负值鼓励平滑控制。
+    action_rate_l2: -0.010
+    # 满足成功条件时发放的一次性/终态奖励。
+    success: 10.0
+    # 对象越出 failure AABB 等任务失败的惩罚。
+    task_failure: -5.0
+    # EE/直线路径 action 的 IK 或 waypoint 执行失败惩罚；joint_control 不会触发。
+    motion_failure: -1.0
+
+  # episode 结束条件；成功阈值需连续满足 success_streak 个 decision。
+  termination:
+    # 最长 policy decision 数；按当前 action cadence 对应约 4.17 s 仿真时间。
+    horizon_decisions: 500
+    # T-block 平面位置到目标的最大成功距离，单位 m。
+    success_distance_m: 0.02
+    # heading 绝对误差的成功阈值，单位 rad。
+    success_heading_rad: 0.10
+    # 判定稳定成功时允许的最大平面速度，单位 m/s。
+    success_planar_speed_m_s: 0.03
+    # 上述位置、heading 和速度条件必须连续成立的 decision 数。
+    success_streak: 5
+    # env-local failure AABB 的 xyz 最小/最大角，单位 m；对象中心离开盒子即任务失败。
+    failure_aabb_min: [-0.05, -0.20, -0.48]
+    failure_aabb_max: [0.35, 0.20, -0.28]
+
+  # 每次 reset 相对 scene nominal 状态独立采样的闭区间 [min, max]。
+  randomization:
+    # 所有主动机器人关节的初始位置扰动范围，单位 rad。
+    robot_joint_delta_rad: [-0.03, 0.03]
+    # T-block 初始 env-local X/Y 平移扰动，单位 m。
+    block_x_delta_m: [-0.02, 0.02]
+    block_y_delta_m: [-0.02, 0.02]
+    # T-block 初始绕 heading 平面的 yaw 扰动，单位 rad。
+    block_yaw_delta_rad: [-0.15, 0.15]
+    # 目标相对对象 nominal reset 位置的 X/Y 偏移采样范围，单位 m。
+    goal_x_delta_m: [0.06, 0.14]
+    goal_y_delta_m: [-0.06, 0.06]
+    # 目标 heading 相对 nominal heading 的 yaw 偏移，单位 rad。
+    goal_yaw_delta_rad: [-0.25, 0.25]

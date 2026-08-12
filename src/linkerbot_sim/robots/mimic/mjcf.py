@@ -114,6 +114,11 @@ def parse_mjcf_joint_equalities(
             ) from exc
         if not polycoef:
             polycoef = (0.0, 1.0)
+        if len(polycoef) > 5:
+            raise ValueError(
+                f"MJCF equality {equality_name!r} polycoef accepts at most 5 "
+                f"coefficients in MuJoCo 3.8, got {len(polycoef)}"
+            )
         if not all(isfinite(value) for value in polycoef):
             raise ValueError(
                 f"MJCF equality {equality_name!r} polycoef must contain only "

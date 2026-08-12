@@ -93,6 +93,59 @@ def test_scene_state_sampler_reset_clears_acceleration_history() -> None:
     assert np.isnan(after_reset.robots[0].accelerations_rad_s2).all()
 
 
+def test_scene_state_sampler_freezes_cached_hybrid_diagnostics() -> None:
+    source = {
+        "active": True,
+        "request_id": "hybrid-1",
+        "force_axes": [False, False, True, False, False, False],
+    }
+    sampler = SceneRobotStateSampler(
+        stage=None,
+        rate_hz=10.0,
+        include_hybrid_control=True,
+        hybrid_diagnostics_provider=lambda: source,
+    )
+
+    snapshot = sampler.sample(_runtime(), step=0)
+    source["force_axes"][2] = False  # type: ignore[index]
+
+    assert snapshot.hybrid_control == {
+        "active": True,
+        "request_id": "hybrid-1",
+        "force_axes": [False, False, True, False, False, False],
+    }
+    payload = snapshot.as_dict()
+    payload["hybrid_control"]["force_axes"][2] = False  # type: ignore[index]
+    assert snapshot.hybrid_control["force_axes"][2] is True  # type: ignore[index]
+
+
+def test_scene_state_sampler_omits_disabled_and_collapses_inactive_hybrid_data() -> (
+    None
+):
+    calls = 0
+
+    def provider() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"active": False, "stale": "must-not-leak"}
+
+    disabled = SceneRobotStateSampler(
+        stage=None,
+        include_hybrid_control=False,
+        hybrid_diagnostics_provider=provider,
+    ).sample(_runtime(), step=0)
+    enabled = SceneRobotStateSampler(
+        stage=None,
+        include_hybrid_control=True,
+        hybrid_diagnostics_provider=provider,
+    ).sample(_runtime(), step=0)
+
+    assert disabled.hybrid_control is None
+    assert "hybrid_control" not in disabled.as_dict()
+    assert enabled.hybrid_control == {"active": False}
+    assert calls == 1
+
+
 def test_state_stream_keeps_latest_snapshot() -> None:
     stream = StateStream()
     snapshot = SceneRobotStateSampler(stage=None, rate_hz=1.0).sample(

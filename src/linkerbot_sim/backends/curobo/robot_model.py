@@ -215,64 +215,6 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def default_tcp_frame_name(config: CuroboConfig) -> str | None:
-    """返回显式默认 TCP，缺省时使用第一个 resolved tool frame。"""
-
-    if config.robot.default_tcp_frame:
-        return config.robot.default_tcp_frame
-    frames = tuple(config.robot.resolved_tool_frames)
-    return frames[0] if frames else None
-
-
-def resolve_tcp_frame_name(
-    context: object,
-    *,
-    tcp_frame_name: str | None = None,
-    default_tcp_frame_name: str | None = None,
-    label: str = "tcp_frame_name",
-) -> str:
-    """按显式值、调用方默认、context 配置默认的优先级解析 frame。"""
-
-    config = getattr(context, "config", None)
-    frame_name = (
-        tcp_frame_name
-        or default_tcp_frame_name
-        or (default_tcp_frame_name_from_config(config) if config is not None else None)
-    )
-    if frame_name is None:
-        raise ValueError(
-            f"{label} is required because cuRobo config has no default frame"
-        )
-    frame = str(frame_name)
-    validate_curobo_frame(context, frame, label=label)
-    return frame
-
-
-def default_tcp_frame_name_from_config(config: object) -> str | None:
-    """按 default TCP、materialized tool frame 顺序读取 config 默认 frame。"""
-
-    robot = getattr(config, "robot", None)
-    if robot is None:
-        return None
-    value = getattr(robot, "default_tcp_frame", None)
-    if value:
-        return str(value)
-    frames = tuple(getattr(robot, "resolved_tool_frames", ()) or ())
-    return str(frames[0]) if frames else None
-
-
-def validate_curobo_frame(
-    context: object, frame_name: str, *, label: str = "frame"
-) -> None:
-    """校验非空 frame，并在 context 可枚举 frame 时检查其确实存在。"""
-
-    if not str(frame_name):
-        raise ValueError(f"{label} cannot be empty")
-    frame_names = getattr(context, "frame_names", None)
-    if callable(frame_names) and str(frame_name) not in set(frame_names()):
-        raise ValueError(f"cuRobo frame {frame_name!r} not found")
-
-
 def resolve_curobo_cache_dir(
     cache_root: str | Path | None = None,
     *,
@@ -326,11 +268,8 @@ def _custom_tcp_urdf_path(
 
 
 __all__ = [
-    "default_tcp_frame_name",
     "materialize_curobo_config",
     "materialized_robot_mapping",
     "resolve_curobo_cache_dir",
-    "resolve_tcp_frame_name",
-    "validate_curobo_frame",
     "write_curobo_tcp_urdf_with_frames",
 ]

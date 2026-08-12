@@ -1,18 +1,34 @@
 # NVIDIA Industrial Assets 中空仓库的米制环境 profile。
 #
-# 上游 Warehouse01 采用 Z-up、厘米制，项目包装层负责缩放到米，并只为仓库地板补充
-# 静态碰撞。原始模型与纹理仍保留在 usd-material/extracted 中，不复制进项目 assets。
+# 上游 Warehouse01 采用 Z-up、厘米制，项目包装层负责缩放到米，并用不可见解析 Plane
+# 表示仓库地板碰撞；视觉 mesh 不参与物理。原始模型与纹理仍保留在
+# usd-material/extracted 中，不复制进项目 assets。
+# scene 负责实例 name、prim_path 和 root_pose；本 profile 只保存可复用资产与接触策略。
 
 object:
+  # 资产逻辑名称；scene 按文件名 industrial_warehouse 引用，实例身份使用 objects[].name。
   name: industrial_warehouse
+  # rigid 表示单个刚体/静态子树语义，可应用 static 策略和统一接触材质。
   kind: rigid
+  # 包装资产已经是 USD，因此运行时直接 reference，不经过 URDF/MJCF importer。
   source: usd
+  # 仓库相对路径；stage 挂载路径和世界位姿由 scene 对象实例提供。
   asset_path: assets/rigid_env_objects/industrial_warehouse_meters/industrial_warehouse_meters.usda
 
   physics:
+    # true 将仓库视为静态环境；其解析地面参与接触，但不会受力或重力移动。
     static: true
+    # 两个物理后端共享的接触材质，运行时强绑定到包装层 collision prim。
+    # 三个系数均无量纲，仅影响当前 stage，不回写源 USD。
     material:
+      # 接触开始相对滑动前的静摩擦系数。
       static_friction: 0.7
+      # 已经发生相对滑动后的动摩擦系数。
       dynamic_friction: 0.6
+      # 恢复系数；0 表示地面接触不额外反弹。
       restitution: 0.0
-      friction_combine_mode: average
+    # Newton 只消费上方通用材质；本 leaf 仅由 PhysX material schema 读取。
+    physx:
+      material:
+        # 与接触另一方材质的摩擦合成规则；average 表示取双方系数平均值。
+        friction_combine_mode: average

@@ -2,140 +2,89 @@
 
 Language: [English](troubleshooting.md) | [中文](../../zh-CN/operations/troubleshooting.md)
 
-Use this page to locate a failure domain. Exact fields and error responses remain owned by
-the linked reference pages.
+Start with the failing boundary: configuration, Kit/physics construction, product
+composition, request/action validation, or shutdown.
 
-## Before Isaac Starts
-
-| Symptom | Check |
-| --- | --- |
-| `OMNI_KIT_ACCEPT_EULA=Y` error | Read and accept the applicable NVIDIA/Kit EULA, then set `Y`, `YES`, or `1` without surrounding whitespace |
-| Import or resource path fails | Run from the checkout root with `PYTHONPATH=src`; do not install only `src/` |
-| Profile or unknown-field error | Run `scripts/validate_config.py --runtime-profile <name>` and inspect the full field path |
-| Runtime mode mismatch | Use a `single_scene` runtime profile with the Single Scene entrypoint and a `tiled_scene` runtime profile with the Tiled Scene entrypoint |
-| `--dump-effective-config` exits | This is expected: it resolves, prints, and exits before Isaac startup |
-| Wheel/editable build is rejected | This project is intentionally a checkout workspace application |
-
-Start with [Project Overview](../getting-started/project-overview.md) and
-[Configuration](../guides/configuration.md).
-
-## Process Starts But Is Not Ready
-
-`SINGLE_SCENE_INTERACTIVE_READY` or `TILED_SCENE_INTERACTIVE_READY` means command transports can
-accept requests. Before that marker, inspect the first startup exception rather than sending
-control messages.
-
-- Asset/import errors: verify every selected env, robot, object, controller, and cuRobo path.
-- CUDA/cuRobo errors: verify the locked environment, GPU availability, and robot planning binding.
-- Camera startup errors: distinguish a fatal exception from the known RTX/Fabric warnings in
-  the [Camera Guide](../guides/cameras.md).
-- Port errors: TCP, WebSocket, state Foxglove, and camera Foxglove endpoints need distinct
-  available ports.
-
-## Transport And Lifetime
-
-| Symptom | Likely cause |
-| --- | --- |
-| Non-loopback host is rejected | Built-in listeners are loopback-only and have no authentication/TLS |
-| TCP request has no delimiter | TCP JSONL requires one complete JSON object followed by `\n` |
-| WebSocket binary frame is rejected | Only text JSON messages are accepted |
-| JSON is rejected before dispatch | Check UTF-8, duplicate keys, trailing data, `NaN`/infinity, message size, and required object shape |
-| New connection is refused | Single Scene TCP and WebSocket share one bounded connection quota |
-| Process exits on stdin EOF | Select the documented EOF policy or keep an enabled service/output consumer alive |
-| GUI/camera/telemetry stops refreshing while idle | Use `hold_step`; `pause` deliberately stops idle World stepping |
-
-Do not expose a listener directly to an untrusted network. Use an authenticated TLS proxy or
-SSH tunnel whose upstream remains on loopback.
-
-## Single Scene Commands
-
-- Discover the current `robot_id`, label, profile, joint groups, and capability flags with
-  `status`; IDs are session-local.
-- A `rejected` response means no command entered the queue.
-- `accepted` proves queue admission, not completion. Poll `status` for `done`, `failed`, or
-  `cancelled`, or consume WebSocket lifecycle events.
-- If one segment fails during planning, the complete timeline fails before execution.
-- Separate JSONL commands do not provide same-tick coordination; use `plan_timeline`.
-
-See [Single Scene JSON](../reference/single-scene-json.md) and
-[Control And Trajectories](../guides/control-and-trajectories.md).
-
-## Tiled Scene Commands And Selectors
-
-- Every env-scoped command requires explicit nonempty unique `env_ids`.
-- Multi-robot commands require the robot selector defined for that message.
-- `values` row count must be one or `len(env_ids)`; widths follow command-space or action rules.
-- `get_state` is a transient in-process debugging shape; use Snapshot for persistent restore.
-- Unselected envs still advance when the shared World steps, while holding their targets.
-
-Inspect `status` for `num_envs`, robot command joints, env origins, queue resources, telemetry,
-planner, and camera diagnostics. See [Tiled Scene JSON](../reference/tiled-scene-json.md).
-
-## Planning And IK
+## Startup
 
 | Symptom | Check |
 | --- | --- |
-| Task-space request is unsupported | Robot cuRobo binding, TCP frame, and request kind |
-| `avoid_collisions=true` fails | Complete robot collision model, planning world, cache, and backend capability |
-| Linear backend rejects a request | It supports joint interpolation only, not IK or collision avoidance |
-| Batch is too large | Runtime `max_batch_problems` and `oversize_request_policy` |
-| Planning request remains queued | Call `planner_status` or `step_trajectory` to dispatch/collect Tiled Scene work |
-| Planner succeeds but trajectory is absent | Inspect `loaded` and `load_rejected` for playback admission failure |
-| First request is slow | cuRobo context creation, kernel compilation, and warmup occur lazily per resource owner |
+| EULA error | Export `OMNI_KIT_ACCEPT_EULA=Y` in the process environment. |
+| `pxr` or extension mismatch | Remove the CPU `dev` extra from the Isaac environment and recreate it with `simulation`. |
+| Mode/profile error | Run `scripts/validate_mode_config.py` with the exact mode and profile. |
+| Unknown configuration field | Move the fact to its owning leaf or remove an unsupported capability; do not bypass strict validation. |
+| Unsupported physics selection | Mirror accepts PhysX/CPU and Newton/CPU or CUDA; Kaleidoscope accepts PhysX/CUDA or Newton/CUDA. |
+| CUDA device mismatch | Keep the index only at `mode.compute.cuda_device` and rebuild the graph. |
+| PhysX allocation failure | Reduce environment/contact load, then inspect the runtime pipeline diagnostics and process-memory gates. |
+| Newton world construction failure | Mirror uses `newton_cpu` or `newton_cuda` with one derived world; Kaleidoscope uses `newton_cuda` and derives `world_count` from final `environments.num_envs`. |
+| Newton robot drifts against a small position target | Verify that the robot profile's disabled gravity was authored as `mjc:gravcomp=1` before model finalization. Runtime per-link gravity setters are intentionally unsupported. |
+| Isaac Newton extension appears | The wrong Kit closure loaded. Project-owned Newton excludes `isaacsim.physics.newton` and its tensor extension. |
 
-Use [Motion Planning](../guides/motion-planning.md) and
-[Collision Models](../guides/collision-models.md).
+For a backend-specific startup failure, exercise each production closure separately:
 
-## Trajectory Playback
+```bash
+PYTHONPATH=src .venv/bin/python scripts/smoke_kaleidoscope_physics.py \
+  --profile physx_cuda --num-envs 2 --steps 2
+PYTHONPATH=src .venv/bin/python scripts/smoke_kaleidoscope_physics.py \
+  --profile newton_cuda --num-envs 2 --steps 2
+```
 
-- Verify finite strictly increasing `times`, position shape, and `joint_names` order.
-- Check per-env queue-depth, sample-count, and duration limits in `trajectory_status`.
-- Append accounts for existing plus new playback; replace validates the new sequence.
-- Playback advances only through `step_trajectory`; loading does not step physics.
-- The sparse `hand` path is not a synchronized Single Scene-style arm/hand timeline.
+The first command must select `linkerbot_sim.kaleidoscope.physx_cuda.python.kit`;
+the second must select `linkerbot_sim.kaleidoscope.newton.python.kit`. Do not
+infer one backend's status from the other backend's failure.
 
-## Snapshots And State Mutation
+The explicit viewer selects the matching `physx_cuda_viewport` or
+`newton_cuda_viewport` Kit. Do not assemble a viewport closure manually.
 
-- Use stable label/profile/fingerprint matching, not a cached session robot ID.
-- `strict=true` requires equal joint/body-name sets for every mapped entry; extra target
-  robots or objects remain unchanged. Use `label_map` only for an intentional rename.
-- A pending snapshot request can time out before execution. An executing request waits for a
-  real result except when shutdown returns the explicit running state.
-- A rollback failure or failure after an irreversible commit puts the runtime in fail-stop.
-  Recreate it; do not retry mutations on unprovable state.
-
-See [Snapshot Reference](../reference/snapshots.md).
-
-## Telemetry, Cameras, And Files
+## Mirror Service
 
 | Symptom | Check |
 | --- | --- |
-| No telemetry sink opens | Effective rate must be greater than zero and a live port or MCAP path must be configured |
-| Foxglove connects to the wrong service | Control TCP/WebSocket and Foxglove use different ports and protocols |
-| Joint effort is empty | Enable effort sampling and select the intended effort field |
-| Segmentation image is absent in Foxglove | Segmentation is stored locally as `.npy`; RawImage channels are RGB/depth only |
-| Output target already exists | Select an allowed explicit existing-data policy before startup |
-| Camera publisher stops at quota | Increase the planned per-camera budget or start with a new target; inspect orphan cleanup status |
-| Persistent output drops frames | Persistent sinks reject lossy queue policies; use bounded blocking or fail-fast behavior |
+| No ready marker | Inspect the traceback before `MIRROR_INTERACTIVE_FAILED`; construction did not complete. |
+| JSON rejected | Envelope must contain exactly protocol, request ID, operation, and arguments; reject duplicate keys and non-finite values. |
+| Duplicate ID | Generate a new request ID; retained terminal IDs are intentionally not reusable. |
+| Queue full | Reduce concurrent submissions or increase admission capacity at embedded construction after a memory/latency review. |
+| Motion rejected after stop | Call `runtime.status`, then a successful `runtime.reset` to clear the emergency-stop latch. |
+| Cancel appears late | Cancellation is cooperative; inspect the active operation and its execution boundary. |
+| Response timeout | Do not assume the operation was rolled back. Query status with a new ID before retrying. |
+| TCP/WebSocket host rejected | Use `localhost` or a numeric loopback address. |
 
-Use [Telemetry](../guides/telemetry.md), [Cameras](../guides/cameras.md), and
-[Output Reference](../reference/outputs.md).
+## Mirror Motion
 
-## Asset Tools
+| Symptom | Check |
+| --- | --- |
+| Robot mismatch | Use the session-local `robot_id`; if supplied, `robot_label` must agree. |
+| Joint target rejected | Use discovered names, finite values, and the correct group. |
+| Task-space goal wrong | Confirm metres, `wxyz`, and the selected world/env/base/TCP frame. |
+| Planner cannot find a path | Inspect collision freshness and approximation separately from physical contacts. |
+| Timeline partially expected | Compilation is atomic; execution cancellation is not rollback. Capture/restore a snapshot when rollback is required. |
 
-The rope and T block builders require EULA acceptance and launch a headless SimulationApp.
-Run their `build_asset.py`, not the library `builder.py`, from the checkout root. If runtime
-still loads old geometry, verify that `--output` matches the object profile's `asset_path` and
-preview the generated USD before launching the scene.
+## Kaleidoscope Native API
 
-See [Object Assets](../development/object-assets.md) and
-[USD Preview](../development/usd-preview.md).
+| Symptom | Check |
+| --- | --- |
+| Tensor must live on CUDA | Construct the tensor directly on `env.device`; the API does not perform hidden copies. |
+| Wrong selector | Use one-dimensional CUDA `int64`, unique IDs, and valid range. |
+| Wrong action shape/dtype | Use `(env.num_envs, env.action_dim)` and CUDA `float32`. |
+| Next step refuses | Reset every terminated/truncated row or use the skrl same-decision adapter. |
+| State API poisoned | An engine writer failed. Stop using the runtime, close it, and create a new one. |
+| IK action truncates rows | Inspect the dense failure mask and task policy; there is no avoidance fallback. |
+| Rendering disabled | `make_torch_env()` is intentionally headless; construct with `make_viewport_env()` or Gymnasium `render_mode="human"`. |
+| Blank or stale viewport | Verify `selected_env < num_envs` and call `env.render()` explicitly according to `render_every_n_steps`; `step()` never renders implicitly. |
+| Camera/SyntheticData unavailable | Expected: the human viewport does not add camera observations, Replicator, SyntheticData, or recording. |
+
+## Gymnasium And skrl
+
+| Symptom | Check |
+| --- | --- |
+| Gymnasium dependency error | Install the `training` extra. |
+| Poor Gymnasium throughput | Expected full NumPy transfer; use native Torch or skrl for device residency. |
+| Unsupported autoreset | Select `disabled` or `same_step`. |
+| skrl version/source error | The integration is pinned to 2.1.0; audit upstream changes before updating fingerprints. |
+| skrl actions rejected | Keep CUDA `float32`, correct batch width, and the environment device. |
 
 ## Shutdown
 
-A `*_SHUTDOWN_TIMEOUT` marker means shutdown is incomplete even if an outer script prints its
-final step count. The owner retains timed-out resources for retry and must not close Kit below
-a live child. Inspect transport, state publisher, camera publisher, planner, and runtime status
-separately; they use independent timeout budgets.
-
-For invariants and recovery boundaries, see [Known Constraints](constraints.md).
+If close reports live resources, preserve the process logs and resource names. Retry
+the idempotent close after the worker finishes. Do not destroy the session manually or
+force-close the stage underneath camera, planner, tensor-view, or output owners.

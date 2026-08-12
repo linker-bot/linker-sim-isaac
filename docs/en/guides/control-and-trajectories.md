@@ -1,219 +1,192 @@
-# Control And Trajectory Guide
+# Control And Trajectories
 
 Language: [English](control-and-trajectories.md) | [中文](../../zh-CN/guides/control-and-trajectories.md)
 
-This guide helps application users choose the correct control and trajectory path.
-It does not redefine message fields; use the [Single Scene JSON reference](../reference/single-scene-json.md)
-and [Tiled Scene JSON reference](../reference/tiled-scene-json.md) for exact schemas.
+Mirror and Kaleidoscope use different control models. Mirror accepts discrete
+interactive requests that compile into synchronized timelines. Kaleidoscope consumes
+one fixed-shape action tensor per decision and advances a fixed number of physics
+ticks. Only Mirror owns a control profile; Kaleidoscope action semantics come from its
+task, and its physics engine derives the controller bundle used to prepare all supported
+runtime joint-control modes.
 
-## Choose The Execution Path
+## Mirror Timeline Model
 
-| Need | Use | Runtime |
-| --- | --- | --- |
-| Hold, move joints, or execute a sampled joint curve for one robot/group | Single-segment Single Scene command | Single Scene |
-| Start several robots and arm/hand groups on one shared tick axis | `plan_timeline` | Single Scene |
-| Plan one Single Scene arm target through joint space or task space | Single Scene planning segment | Single Scene |
-| Apply a fixed-tick command to selected cloned env rows | `step` | Tiled Scene |
-| Load a known joint trajectory and advance it under explicit caller control | `load_trajectory` then `step_trajectory` | Tiled Scene |
-| Append a sparse named hand-joint subtrack | `hand` | Tiled Scene |
-| Plan without blocking physics, inspect completion, then load/play the result | `plan`, `planner_status`, `step_trajectory` | Tiled Scene |
-
-Single Scene timeline and Tiled Scene playback solve different synchronization problems. Single Scene compiles
-all tracks atomically before execution and applies every robot target before one World step.
-Tiled Scene playback owns a queue per robot/env row and advances only when the caller sends
-`step_trajectory`.
-
-## Command Space And Joint Order
-
-Public joint vectors are not arbitrary articulation arrays:
-
-- Single Scene group vectors follow `status.robots[].joint_groups.arm` or `.hand`.
-- Tiled Scene command vectors follow `status.robots[].command_joints`.
-- Planning vectors follow the selected backend's planning-joint order.
-- A `JointTrajectory` column order is exactly its `joint_names` order.
-
-Named mappings and `joint_names` are preferable when a request intentionally controls a
-subset. Prefix-based Tiled Scene `step` actions write the first `D` command columns and retain the
-remaining targets. Controller/runtime logic expands active command joints to mimic followers;
-clients must not send separate follower targets unless a documented interface asks for them.
-
-Positions use radians for revolute joints and meters for prismatic joints. Velocities use the
-corresponding units per second. Effort dimensions follow the PhysX joint type.
-
-## Single Scene Timeline Model
-
-Single Scene uses this hierarchy:
+Mirror represents motion as:
 
 ```text
 timeline
-  robot track                 parallel from global tick 0
-    motion unit               serial within one robot
-      arm/hand group track    parallel within one unit
-        segment               serial within one group
+  robot track
+    motion unit (same start tick)
+      group track (arm, hand, ...)
+        serial segments
 ```
 
-One unit ends when its longest group track ends; a shorter group holds its terminal target.
-The whole timeline ends when its longest robot track ends. Compilation is atomic: a planning
-or validation failure prevents every track from starting.
+Use a one-segment operation for a direct move or hold. Use
+`motion.plan_timeline` when robots or joint groups must share one tick axis.
+Complete, parser-validated requests for every motion operation are maintained in
+[Mirror JSON](../reference/mirror-json.md).
 
-Minimal coordinated request:
+Supported segment kinds are:
 
-```json
-{
-  "type": "plan_timeline",
-  "id": "arm-and-hand",
-  "tracks": [
-    {
-      "robot_id": 0,
-      "units": [
-        {
-          "group_tracks": [
-            {
-              "group": "arm",
-              "segments": [
-                {
-                  "kind": "joint_goal",
-                  "joint_positions": {"AR5V2_L_arm_joint_1": 0.2},
-                  "duration_s": 0.5
-                }
-              ]
-            },
-            {
-              "group": "hand",
-              "segments": [
-                {"kind": "hold", "duration_s": 0.5}
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+- `hold`;
+- `joint_goal` and `joint_delta`;
+- `joint_trajectory` with explicit sample times;
+- `joint_effort` in the v2 protocol;
+- `plan_cspace_goal` and `plan_cspace_delta`;
+- `ik_pose` and `ik_offset`;
+- `plan_linear_pose_path`.
 
-Use single-segment Single Scene commands for one track. Use `plan_timeline` whenever same-tick
-coordination is part of the requirement; sending separate JSONL requests does not make them
-start together.
+The compiler validates the entire request and completes required planning before
+execution. A compilation error produces no partial movement.
 
-## Tiled Scene Synchronous `step`
+## Runtime Joint-Control Modes
 
-`step` converts targets and advances a fixed number of physics ticks before returning. Every
-env-scoped request supplies explicit `env_ids`; multi-robot scenes also require the documented
-robot selector.
+Joint-control mode is runtime state, not an action variant. Mirror v2 and the native
+`TorchKaleidoscopeEnv` can switch all robots and all environments between `position`,
+`velocity`, and `effort` after one complete motion/decision and before the next. The
+switch keeps the session, physics runtime, robot views, action term, task, IK, and
+planner owners intact. It is rejected during motion execution or an active SAME_STEP
+transaction.
 
-```json
-{
-  "type": "step",
-  "kind": "joint_delta_pos",
-  "robot_id": 0,
-  "env_ids": [0, 1],
-  "values": [[0.05, 0.0], [-0.05, 0.0]],
-  "decimation": 4,
-  "interpolation": "smoothstep"
-}
-```
+Mirror v1 remains frozen and has no mode operations. Mirror v2 adds
+`control.get_mode`, `control.set_mode`, and `motion.joint_effort`. Position and velocity
+modes accept position-derived timelines; effort mode accepts hold and explicit bounded
+effort segments only. A real switch increments `generation`; an idempotent switch does
+not write the engine or increment it.
 
-Use `step` for closed-loop policies that produce the next target from the latest observation.
-Joint actions support absolute and relative command-space prefixes. End-effector actions use
-batched IK, and `ee_linear_path` computes all waypoints before the first physics write.
+Every real switch first neutralizes the old channel, applies all prepared controller
+profiles transactionally, and then writes the new neutral target: current `q` for
+position and zero for velocity or effort. A fully compensated failure leaves the old
+mode usable. Failed compensation makes the runtime fail-stop; close and recreate it.
 
-All envs share one World step. Unselected envs therefore advance in time while holding their
-latest targets.
+## Hybrid Force/Position Control
 
-## Tiled Scene Trajectory Buffer
+The dedicated `physx_cpu_hybrid` Mirror profile runs at 240 Hz. During one
+`motion.hybrid_force_position` request, the selected robot arm temporarily uses
+direct effort drives for every arm joint. Cartesian axes with `force_axes=false` use
+explicit pose impedance (`Kp/Kd`); axes with `force_axes=true` use explicit force PI
+(`Kf/Ki`). The hand remains position/implicit, and every other robot remains in its
+existing mode. Per-axis implicit arm position drives are not mixed with explicit arm
+effort drives because PhysX exposes the drive mode at the joint, not at a Cartesian
+axis.
 
-Use the buffer when trajectory samples already exist or when an asynchronous planner result
-should be replayed later:
+`force_axes` belongs to each motion request and may change from one request to the
+next. The six gain groups are runtime tuning state. Mirror v3 serializes
+`control.get_hybrid_parameters` and `control.set_hybrid_parameters` through the same
+owner queue as motion. A motion requires `hybrid_parameter_generation` and freezes
+exactly one immutable gain snapshot during preflight. Later updates cannot change an
+active loop; the next motion must use the returned new generation. YAML keeps the
+non-adjustable filter, contact, sensor, effort, rate, displacement, and safety limits.
 
-1. `load_trajectory` validates and stages all selected rows atomically.
-2. `step_trajectory` advances playback by explicit physics ticks.
-3. `trajectory_status` reports active, queued, completed, capacity, and rejection data.
-4. `clear_trajectory` removes selected robot/env entries.
+A successful `control.tare_wrench` for the same robot, physical TCP, and world frame
+is also required. Raw PhysX feedback is environment-on-tool; tare subtraction and
+filtering precede the sign conversion exposed to targets, results, CSV, and telemetry
+as tool-on-environment. Reset invalidates tare. Completion, cancellation, or failure
+ramps effort to zero, restores the original position controller, and hands over at the
+final measured joint position. Restore failure is fatal and requires closing and
+recreating the runtime.
 
-The buffer is bounded per env by queue depth, samples, and duration. `replace` validates only
-the replacement sequence; append validates existing plus new content. A capacity failure
-rejects the complete selected-env load instead of evicting an active trajectory.
+## Timing
 
-The `hand` command is a sparse named-joint convenience path. It can append a hand subtrack
-without overwriting the arm endpoint when playback begins. It is not a same-tick replacement
-for a Single Scene arm/hand timeline.
+Mirror durations are converted to integer physics ticks. Direct joint and hold kinds
+require a positive `duration_s`. Planning kinds may inherit the positive default from
+`planning.request_defaults`. `sample_dt_s` controls the planning/interpolation grid,
+not the physics clock. Wire-level planning overrides are `duration_s`, `sample_dt_s`,
+`avoid_collisions`, and `force_collision_refresh`; `coordination` is overridden at
+the one-segment wrapper or timeline top level. `timeout_s` is not accepted on the
+wire: every planning request uses `planning.request_defaults.timeout_s`. These request
+defaults do not select or configure the cuRobo numerical backend. Its
+`kinematics.max_batch_size` belongs to IK only; the Mirror MotionPlanner remains a
+single-request context while retaining configured seeds, graph, collision capability,
+and cache capacity.
 
-## Tiled Scene Asynchronous Planning
+`joint_trajectory.times_s` must describe finite, ordered samples compatible with the
+named joint arrays. The executor never changes the configured physics frequency to
+fit a trajectory.
 
-An asynchronous request has a separate planning and playback lifecycle:
+`control.sync_simulation_to_wall_clock` controls execution pacing, not trajectory
+retiming. When enabled, idle hold steps and motion timelines use the same wall-clock
+deadline sequence. The first tick after startup or reset is immediate; later ticks wait
+only for the remaining physics interval. A late tick rebases that sequence, so Mirror
+does not issue a burst of catch-up steps. When disabled, both paths advance without
+wall-clock sleeps while retaining the same physics dt. `idle_physics_policy: pause`
+still stops simulation time because there are no physics ticks to pace.
+
+## Joint Identity
+
+Name mappings may target only part of a joint group. A flat JSON array must cover the
+whole group and follows the robot profile's explicit `joint_groups` order. Neither
+form depends on incidental USD articulation DOF order; never infer one robot's order
+from a URDF, asset file, or another robot.
+
+`robot_id` is a session-local nonnegative integer. `robot_label`, when supplied, is an
+identity assertion and must match discovery; it is not a fallback selector.
+
+## Task-Space Frames
+
+Task-space operations accept `world`, `env`, `robot_base`, or `tcp` as documented by
+the field. Positions use metres and quaternions use `wxyz`. Offset fields and absolute
+targets are distinct and cannot be inferred from vector magnitude.
+
+Mirror linear motion is a planning operation and can use collision avoidance. It is
+not the same implementation as Kaleidoscope's synchronous fixed-waypoint action.
+
+## Cancellation And Stop
+
+Mirror motion checks a cooperative cancellation predicate while executing. A client
+can cancel a request by ID, cancel the active request, or emergency-stop the runtime.
+Emergency stop also freezes idle stepping and blocks new motion until reset.
+
+Cancellation is bounded but not transactional rollback. Capture a snapshot before a
+motion when the application requires explicit rollback semantics.
+
+## Kaleidoscope Decision Model
+
+Kaleidoscope freezes the action variant when the environment is created. The action
+variant and runtime joint-control mode are separate: switching control mode never
+changes action shape or `physics_ticks_per_action`. Every step
+accepts a CUDA `float32` tensor with shape `(num_envs, action_dim)`. One decision
+produces a fixed sequence of `physics_ticks_per_action` typed targets, writes each
+target to the selected PhysX/Newton channel, and steps without rendering.
+
+The canonical `joint_control` variant preserves the former joint-delta position
+behavior:
 
 ```text
-plan submission
-  -> queued planner request
-  -> planner_status dispatch/collect
-  -> optional atomic playback load
-  -> step_trajectory playback
+target <- clamp(target + scale * clip(action, -1, 1), lower, upper)
 ```
 
-`plan` only queues work. `planner_status` and `step_trajectory` dispatch/collect ready work.
-Successful results with `load_on_success=true` enter the trajectory buffer if its admission
-checks pass. Always inspect `ready`, `loaded`, and `load_rejected`; planner success does not
-guarantee playback capacity.
+The anchor is the previous command target, not noisy measured joint position. Reset
+re-anchors the selected rows to their reset joint command.
 
-Use request IDs for cancellation and completed-result management. Reset, state restore, and
-other overlapping mutations can cancel stale planning work for the affected robot/env rows.
+In velocity mode, `joint_control` maps the bounded action directly to rad/s. In effort
+mode, it maps the action to the configured fraction of each controller profile's effort
+limit. Existing `joint_delta` and EE/linear variants support position and bounded
+position-reference derivatives in velocity mode, but reject effort mode. Gymnasium,
+skrl, and `KaleidoscopeTrainingPort` do not expose the mode setter; training rollout
+semantics remain fixed at the initial position mode.
 
-## Timing And Interpolation
+Schema 2 snapshots record control mode and source generation. Restore never switches
+mode and must target the same active mode; generation is diagnostic and is not restored.
 
-- Single Scene converts `duration_s` to `ceil(duration_s / physics_dt)` ticks.
-- Single Scene `sample_dt_s` controls a planning grid, not World physics dt.
-- Tiled Scene joint `step` uses positive `decimation` physics ticks.
-- Tiled Scene `ee_linear_path` accepts either a logical `duration_s` or explicit `decimation`, not both.
-- Tiled Scene trajectory sample times are finite and strictly increasing for multi-sample data.
-- `linear` interpolation uses uniform progress; `smoothstep` eases progress without changing
-  the requested geometric endpoints.
+## Batched IK And Linear Actions
 
-The response's actual tick count is authoritative. Do not reconstruct completion from wall
-clock time or assume a decimal duration is exactly divisible by physics dt.
+End-effector action variants run device-batched IK for every environment. Linear
+variants create a fixed number of synchronous waypoints using `linear` or
+`smoothstep` progress, solve them in batches, and execute the resulting fixed tick
+targets.
 
-## Frames, Orientation, And TCP
+These operations intentionally provide no graph search, trajectory optimization,
+asynchronous job queue, or avoidance. A failed row holds from the documented failure
+point and receives the configured penalty/truncation behavior.
 
-Public positions use meters and quaternions use `wxyz` order. Frame fields are interface
-specific:
+## Done And Reset
 
-- Single Scene task-space commands explicitly name `world`, `env`, `robot_base`, or the documented
-  offset frame.
-- Tiled Scene synchronous named end-effector targets resolve `env`, `base`, or `world`.
-- Tiled Scene asynchronous linear pose goals are robot-base-local and do not accept a
-  `pose_reference_frame` field.
+The native environment requires explicit `reset_idx(done_ids)` before the next
+`step`. The skrl adapter uses a generation token to preserve terminal observations,
+reset done rows in the same decision, and expose post-reset observations without a
+missed reset. Gymnasium offers `disabled` or `same_step` autoreset at its NumPy
+boundary.
 
-`free` constrains position only, `current` preserves the starting orientation, and `target`
-requires a target quaternion. Confirm the robot's registered `tcp_frame_name` through status;
-do not infer a TCP from a link name.
-
-## Control Modes
-
-Single Scene controller profiles can configure position, velocity, or effort control using the
-supported implicit, explicit, or direct method for each component. The selected runtime mode
-and controller bundle must agree. Tiled Scene runtime currently accepts position control only and
-rejects velocity or effort mode during configuration resolution.
-
-Mimic followers remain controller-owned position drives. Planning normally targets the arm
-group; hand motion remains direct command-space control.
-
-## Failure And Recovery
-
-- A rejected JSON request performs no command mutation.
-- Single Scene timeline compilation is all-or-nothing before execution.
-- Tiled Scene `reject_request` IK policy rejects before any selected robot target or physics write.
-- Tiled Scene `hold_failed_env` preserves the last successful target for failed rows while reporting
-  their diagnostics.
-- A failed trajectory load does not partially fill selected env buffers.
-- A runtime in fail-stop rejects later mutations; recreate it rather than retrying control.
-
-Use `status`, `trajectory_status`, or `planner_status` for the lifecycle you selected. A
-submission response proves admission, not terminal execution.
-
-## Related Documentation
-
-- [Single Scene JSON Reference](../reference/single-scene-json.md)
-- [Tiled Scene JSON Reference](../reference/tiled-scene-json.md)
-- [Motion Planning](motion-planning.md)
-- [Configuration](configuration.md)
-- [Known Constraints](../operations/constraints.md)
+See [Mirror JSON And Motion Examples](../reference/mirror-json.md) and
+[Kaleidoscope API](../reference/kaleidoscope-api.md).

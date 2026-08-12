@@ -1,78 +1,49 @@
-"""cuRobo 后端入口。
+"""cuRobo 的能力分型 lazy public facade。
 
-当前包先提供可测试的配置、关节映射、轨迹适配和 tiled batch IK 适配骨架。真实 cuRobo
-运行依赖 ``warp``、``cuda-core`` 等较重依赖，因此所有第三方导入都放到构造或调用边界，
-避免普通单元测试因为环境未完整安装 cuRobo 而失败。
+Mirror 使用完整 ``CuroboContext`` 做规划；Kaleidoscope 只能使用不加载 planner/collision
+资源的 kinematics context 与 device batch IK adapter。根包导入本身不加载 Torch/CUDA，
+具体 capability 只在用户首次访问对应符号时导入。
 """
 
-from linkerbot_sim.backends.curobo.config import (
-    CuroboConfig,
-    CuroboDeviceConfig,
-    CuroboIkConfig,
-    CuroboMotionPlannerConfig,
-    CuroboRobotConfig,
-    CuroboTaskBundle,
-    CuroboTcpFrame,
-    SUPPORTED_CUROBO_DTYPES,
-)
-from linkerbot_sim.backends.curobo.collision_world import (
-    CuroboCollisionWorld,
-    make_curobo_scene_cfg,
-)
-from linkerbot_sim.backends.curobo.context import (
-    CollisionCapability,
-    CuroboContext,
-)
-from linkerbot_sim.backends.curobo.robot_model import (
-    default_tcp_frame_name,
-    materialize_curobo_config,
-    resolve_curobo_cache_dir,
-    resolve_tcp_frame_name,
-)
-from linkerbot_sim.backends.curobo.forward_kinematics import CuroboForwardKinematics
-from linkerbot_sim.backends.curobo.runtime_imports import import_curobo_module
-from linkerbot_sim.backends.curobo.inverse_kinematics import CuroboInverseKinematics
-from linkerbot_sim.backends.curobo.joint_mapping import CuroboJointMapping
-from linkerbot_sim.backends.curobo.linear_pose_path import plan_linear_pose_path
-from linkerbot_sim.backends.curobo.motion_planner import CuroboMotionPlanner
-from linkerbot_sim.backends.curobo.profile_merge import (
-    load_curobo_profile,
-    merged_robot_config_with_curobo_profile,
-    robot_curobo_config,
-    validate_curobo_profile,
-)
-from linkerbot_sim.backends.curobo.batch.ik import CuroboBatchIKSolver
-from linkerbot_sim.backends.curobo.trajectory_adapter import (
-    joint_trajectory_from_curobo,
-)
+from __future__ import annotations
 
-__all__ = [
-    "CuroboBatchIKSolver",
-    "CuroboConfig",
-    "CollisionCapability",
-    "CuroboContext",
-    "CuroboCollisionWorld",
-    "CuroboDeviceConfig",
-    "CuroboForwardKinematics",
-    "CuroboIkConfig",
-    "CuroboInverseKinematics",
-    "CuroboJointMapping",
-    "CuroboMotionPlanner",
-    "CuroboMotionPlannerConfig",
-    "CuroboRobotConfig",
-    "CuroboTaskBundle",
-    "CuroboTcpFrame",
-    "SUPPORTED_CUROBO_DTYPES",
-    "default_tcp_frame_name",
-    "import_curobo_module",
-    "joint_trajectory_from_curobo",
-    "load_curobo_profile",
-    "make_curobo_scene_cfg",
-    "materialize_curobo_config",
-    "resolve_curobo_cache_dir",
-    "merged_robot_config_with_curobo_profile",
-    "plan_linear_pose_path",
-    "resolve_tcp_frame_name",
-    "robot_curobo_config",
-    "validate_curobo_profile",
-]
+from importlib import import_module
+from typing import Any
+
+
+_EXPORTS = {
+    "CuroboConfig": ("linkerbot_sim.backends.curobo.config", "CuroboConfig"),
+    "CuroboContext": ("linkerbot_sim.backends.curobo.context", "CuroboContext"),
+    "CuroboDeviceBatchIKSolver": (
+        "linkerbot_sim.backends.curobo.kinematics.device_batch_ik",
+        "CuroboDeviceBatchIKSolver",
+    ),
+    "CuroboKinematicsContext": (
+        "linkerbot_sim.backends.curobo.kinematics.context",
+        "CuroboKinematicsContext",
+    ),
+    "create_kinematics_context": (
+        "linkerbot_sim.backends.curobo.kinematics.context",
+        "create_kinematics_context",
+    ),
+    "curobo_config_from_profiles": (
+        "linkerbot_sim.backends.curobo.profile_merge",
+        "curobo_config_from_profiles",
+    ),
+}
+
+__all__ = sorted(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    try:
+        module_name, attribute = _EXPORTS[name]
+    except KeyError as exc:
+        raise AttributeError(name) from exc
+    value = getattr(import_module(module_name), attribute)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted((*globals(), *_EXPORTS))

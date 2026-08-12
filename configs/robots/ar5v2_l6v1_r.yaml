@@ -1,14 +1,15 @@
 # AR5 机械臂 + LinkerHand L6 右手组合配置。
 #
 # 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
-# - env 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
+# - scene 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
 #   场景实例身份、USD 挂载位置和世界位姿。
 # - robot 段负责组合资产导入、碰撞近似以及导入后的 PhysX 覆盖。
 # - curobo 段只声明机械臂规划能力；joint_groups 定义 Isaac 命令关节成员，并校验 cuRobo
 #   active joints 名称集合。规划向量顺序不由 joint_groups 决定，结果会按名称映射。
 #
 # 注意：
-# - 这里不写机器人在场景中的 root_pose；root_pose 属于 configs/envs/*.yaml。
+# - 这里不写机器人在场景中的 root_pose；root_pose 属于所属产品的
+#   configs/scenes/<mode>/<scene>.yaml。
 # - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
 # - 该组合资产包含 AR5V2_R 机械臂和 L6V1 右手，但 cuRobo 只加载机械臂 URDF；
 #   因此手部可参与 Isaac 接触与控制，却不属于 cuRobo 的运动学链或 collision spheres。
@@ -16,7 +17,7 @@
 robot:
   # 能力类别：arm_hand 要求 arm/hand 两个 joint group 都非空，规划能力只绑定 arm。
   kind: arm_hand
-  # profile 内的资产逻辑名称。正式 env 装配会使用 robots[].label 作为 articulation 实例名；
+  # profile 内的资产逻辑名称。正式 scene 装配会使用 robots[].label 作为 articulation 实例名；
   # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
   name: ar5v2_l6v1_r
 
@@ -48,17 +49,19 @@ robot:
       arm: false
       hand: false
 
+    # 两个后端共享的标准 USD 接触材质；Newton/PhysX 都会创建并绑定到 collision prim。
+    material:
+      # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
+      contact_static_friction: 0.8
+      # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
+      contact_dynamic_friction: 0.6
+      # 恢复系数：0 表示接触基本不反弹，适合夹持和稳定接触。
+      contact_restitution: 0.0
+
     physx:
-      # 导入后写到机器人 USD/PhysX 上的资产级物理覆盖。
-      # 这些参数不属于控制器配置；它们影响接触、摩擦、反弹和刚体阻尼。
+      # 本 leaf 只包含 PhysX schema 属性；Newton composition 不会读取或告警跳过。
       material:
-        # 三个接触参数均为无量纲 PhysX 材料属性，并绑定到组合资产的 collision prim。
-        # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
-        contact_static_friction: 0.8
-        # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
-        contact_dynamic_friction: 0.6
-        # 恢复系数：0 表示接触基本不反弹，适合夹持和稳定接触。
-        contact_restitution: 0.0
+        friction_combine_mode: average
 
       rigid_body:
         # 线速度阻尼：0 表示不额外衰减线速度，由原资产和仿真默认值决定。
@@ -66,21 +69,26 @@ robot:
         # 角速度阻尼：适度抑制旋转抖动，尤其对手部接触稳定性有帮助。
         angular_damping: 0.1
 
-    solver:
-      # 机器人刚体的 PhysX solver iteration 覆盖。
-      # position_iterations 主要影响位置约束、接触穿透修正和关节约束收敛。
-      # velocity_iterations 主要影响速度约束、摩擦和碰撞后的速度收敛。
-      # 数值越大通常越稳定但越慢；这里对机械臂和灵巧手分别设置。
-      arm:
-        # 机械臂刚体的位置约束求解迭代次数。
-        position_iterations: 32
-        # 机械臂刚体的速度约束求解迭代次数。
-        velocity_iterations: 4
-      hand:
-        # 灵巧手刚体的位置约束求解迭代次数；指尖接触和夹持通常需要较高稳定性。
-        position_iterations: 32
-        # 灵巧手刚体的速度约束求解迭代次数。
-        velocity_iterations: 4
+      # 关节摩擦属于 PhysX 资产属性，不随 position/velocity/effort 控制模式重复配置。
+      joint:
+        friction: 0.5
+        follower_friction: 0.5
+
+      solver:
+        # 机器人刚体的 PhysX solver iteration 覆盖。
+        # position_iterations 主要影响位置约束、接触穿透修正和关节约束收敛。
+        # velocity_iterations 主要影响速度约束、摩擦和碰撞后的速度收敛。
+        # 数值越大通常越稳定但越慢；这里对机械臂和灵巧手分别设置。
+        arm:
+          # 机械臂刚体的位置约束求解迭代次数。
+          position_iterations: 32
+          # 机械臂刚体的速度约束求解迭代次数。
+          velocity_iterations: 4
+        hand:
+          # 灵巧手刚体的位置约束求解迭代次数；指尖接触和夹持通常需要较高稳定性。
+          position_iterations: 32
+          # 灵巧手刚体的速度约束求解迭代次数。
+          velocity_iterations: 4
 
 curobo:
   # true 表示此组合机器人可以创建机械臂 cuRobo context；手部仍由 Isaac 控制器执行。
@@ -91,7 +99,8 @@ curobo:
     # cuRobo 规划后端使用的模型资源。
     # 虽然 Isaac stage 中导入的是“机械臂+右手”的 MJCF 组合资产，
     # 但这里的规划模型仍使用单独的 AR5V2_R 机械臂 URDF。
-    # IK/planner 等算法参数由 configs/curobo/*.yaml 提供，不放在本文件。
+    # IK/MotionPlanner 数值参数由 mode 的 profiles.curobo 提供；Mirror 请求默认策略则由
+    # profiles.planning 提供，二者都不放在机器人资产 profile。
 
     # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
     urdf_path: assets/single_system/arm/AR5V2_R/AR5V2_R.urdf

@@ -1,0 +1,24 @@
+# 训练框架是 Kaleidoscope 环境的下游消费者，不属于环境根配置。
+# device 明确继承 mode root 的 compute.cuda_device，避免 policy 再声明第二份 GPU 编号。
+# 这里的 rollout 单位均为 policy decision，不是单独 physics tick；环境 cadence 由 task.action 拥有。
+training:
+  # adapter 实现；当前 strict schema 只接受 skrl。
+  framework: skrl
+  # 使用 final observation 正确处理 time-limit truncation bootstrap 的 PPO 变体。
+  algorithm: final_observation_ppo
+  # policy、value 与 optimizer 继承 environment tensor device，不允许另写 CUDA 编号。
+  device_source: environment
+  # 每个并行环境在一次 update 前收集的连续 decision 数。
+  rollout_length: 32
+  # 每轮 update 把 rollout 划分的 mini-batch 数，必须 <= rollout_length。
+  mini_batches: 8
+  # 同一批 rollout 数据重复执行 optimizer update 的 epoch 数。
+  learning_epochs: 5
+  # policy/value optimizer 的基础学习率，必须大于 0。
+  learning_rate: 0.0003
+  # 回报折扣 gamma，范围 [0, 1]；越接近 1 越重视长期奖励。
+  discount_factor: 0.99
+  # Generalized Advantage Estimation 的 lambda，范围 [0, 1]，控制 bias/variance 权衡。
+  gae_lambda: 0.95
+  # PPO probability-ratio 的对称裁剪半径 epsilon，必须大于 0。
+  clip_ratio: 0.2

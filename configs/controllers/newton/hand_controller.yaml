@@ -1,0 +1,50 @@
+# newton bundle 的灵巧手控制参数。
+#
+# controller bundle 是 PhysX/Newton、Mirror/Kaleidoscope 共用的配置闭包，实际选择来自
+# physics.engine 派生默认值、robot 默认值或 scene instance override。Newton composition 选择本
+# bundle，以采用适合项目 Newton solver 的较低增益和 follower 零 drive；loader 不按 bundle 名限制后端。
+# 手指惯量远小于机械臂，不能沿用 physx bundle 的 1000/50 增益和 100 N*m 限幅。
+# 本文件中的 active drive 数值会在单位修正后原样进入 Newton model；DIP follower drive
+# 则必须删除，只由 MJCF equality 与关节自身 damping 执行。
+# 本 bundle 面向 joint_groups.hand；loader 会校验 target 与文件角色一致。
+target: hand
+
+# 主动 master 关节的位置 drive；DIP 等 follower 不占上层命令维度。
+position_control:
+  # implicit 由 Newton solver 内部 drive 消费位置目标和 PD 参数。
+  method: implicit
+  active_joints:
+    # 单位分别为 N*m/rad、N*m*s/rad、N*m；最大力与 MJCF 手指 actuator 的量级一致。
+    stiffness: 5.0
+    damping: 0.2
+    max_force: 0.5
+  follower_joints:
+    # 这些值为零是结构合同，不是另一套 follower 控制律。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+
+velocity_control:
+  # explicit 在控制层根据速度误差计算并限幅 effort。
+  method: explicit
+  active_joints:
+    # 手部速度残差增益和最大输出，单位分别为 N*m*s/rad 与 N*m。
+    damping: 0.2
+    max_force: 0.5
+  follower_joints:
+    # follower 仍只由 MJCF equality 执行，不能接收 velocity drive。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+
+effort_control:
+  # direct 模式仅裁剪上层 effort，不添加位置或速度反馈。
+  method: direct
+  active_joints:
+    # 每个主动手指关节的对称 effort 上限，单位 N*m。
+    effort_limit: 0.5
+  follower_joints:
+    # follower 不接收 direct effort；零值是严格 bundle schema 的显式能力边界。
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0

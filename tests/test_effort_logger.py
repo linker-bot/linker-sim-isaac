@@ -6,17 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from linkerbot_sim.configuration.outputs import LoggingOutputSettings
 from linkerbot_sim.logging.csv_writer import (
     CsvWriter,
     apply_csv_output_plans,
     plan_csv_output,
 )
-from linkerbot_sim.logging.config import (
-    JointLoggingConfig,
-    joint_logging_config_from_mapping,
-)
 from linkerbot_sim.logging.effort_logger import (
-    EffortLogger,
     commanded_efforts_from_controller,
     read_joint_efforts,
 )
@@ -79,6 +75,26 @@ def _read_rows(path):
         return list(csv.DictReader(file))
 
 
+def _logging_settings(**updates: object) -> LoggingOutputSettings:
+    values = {
+        "enabled": True,
+        "existing_data_policy": "error",
+        "joint_tracking_path": "logs/joint_tracking/test.csv",
+        "flush_interval_s": 0.05,
+        "interval_steps": 1,
+        "log_actual_position": True,
+        "log_actual_velocity": True,
+        "log_command_position": True,
+        "log_command_velocity": True,
+        "log_command_effort": True,
+        "log_action_effort": False,
+        "log_measured_effort": False,
+        "log_applied_effort": False,
+    }
+    values.update(updates)
+    return LoggingOutputSettings(**values)
+
+
 def test_read_joint_efforts_uses_robot_methods_and_joint_indices() -> None:
     sample = read_joint_efforts(_RobotWithEfforts(), np.asarray([2, 0], dtype=int))
 
@@ -99,28 +115,6 @@ def test_commanded_efforts_from_controller_slices_last_command() -> None:
     )
 
     np.testing.assert_allclose(values, [0.2, 0.3])
-
-
-def test_effort_logger_writes_commanded_measured_and_applied_efforts(tmp_path) -> None:
-    path = tmp_path / "efforts.csv"
-    logger = EffortLogger(path, ["j0", "j1"])
-    logger.write(
-        step=7,
-        time_s=0.25,
-        phase="hold",
-        drive_update=True,
-        commanded_effort=np.asarray([0.1, 0.2]),
-        measured_effort=np.asarray([1.0, 2.0]),
-        applied_effort=np.asarray([3.0, 4.0]),
-    )
-    logger.close()
-
-    row = _read_rows(path)[0]
-    assert row["step"] == "7"
-    assert row["phase"] == "hold"
-    assert row["tau_cmd_j0"] == "0.1"
-    assert row["tau_measured_j1"] == "2"
-    assert row["tau_applied_j1"] == "4"
 
 
 def test_csv_writer_existing_data_policies(tmp_path: Path) -> None:
@@ -258,20 +252,28 @@ def test_joint_tracking_logger_propagates_csv_existing_data_policy(
     path.write_text("existing", encoding="utf-8")
 
     with pytest.raises(FileExistsError, match="already exists"):
-        JointTrackingLogger(path, ["j0"], existing_data_policy="error")
+        JointTrackingLogger(
+            path,
+            ["j0"],
+            settings=_logging_settings(existing_data_policy="error"),
+            flush_interval_steps=1,
+        )
 
 
 def test_joint_tracking_logger_includes_optional_effort_columns(tmp_path) -> None:
     path = tmp_path / "joint_tracking.csv"
+    settings = _logging_settings(
+        log_action_effort=True,
+        log_measured_effort=True,
+        log_applied_effort=True,
+    )
     logger = JointTrackingLogger(
         path,
         ["j0"],
-        config=JointLoggingConfig(
-            log_action_effort=True,
-            log_measured_effort=True,
-            log_applied_effort=True,
-        ),
+        settings=settings,
+        flush_interval_steps=1,
     )
+    assert logger.settings is settings
     logger.write(
         step=1,
         time_s=0.1,
@@ -298,7 +300,10 @@ def test_joint_tracking_logger_includes_optional_effort_columns(tmp_path) -> Non
 def test_joint_tracking_logger_omits_disabled_effort_columns(tmp_path) -> None:
     path = tmp_path / "joint_tracking.csv"
     logger = JointTrackingLogger(
-        path, ["j0"], config=JointLoggingConfig(log_command_effort=False)
+        path,
+        ["j0"],
+        settings=_logging_settings(log_command_effort=False),
+        flush_interval_steps=1,
     )
     logger.write(
         step=1,
@@ -324,7 +329,11 @@ def test_joint_tracking_logger_collects_efforts_only_when_enabled(tmp_path) -> N
     logger = JointTrackingLogger(
         tmp_path / "joint_tracking.csv",
         ["j0", "j1"],
-        config=JointLoggingConfig(log_measured_effort=False, log_applied_effort=True),
+        settings=_logging_settings(
+            log_measured_effort=False,
+            log_applied_effort=True,
+        ),
+        flush_interval_steps=1,
     )
 
     values = logger.collect_efforts(robot, _Controller(), np.asarray([2, 0], dtype=int))
@@ -343,7 +352,7 @@ def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(
     logger = JointTrackingLogger(
         tmp_path / "joint_tracking.csv",
         ["j0", "j1"],
-        config=JointLoggingConfig(
+        settings=_logging_settings(
             log_actual_position=False,
             log_actual_velocity=True,
             log_command_position=False,
@@ -352,6 +361,7 @@ def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(
             log_measured_effort=False,
             log_applied_effort=False,
         ),
+        flush_interval_steps=1,
     )
 
     values = logger.collect_step_values(
@@ -369,23 +379,20 @@ def test_joint_tracking_logger_collects_step_values_only_for_enabled_columns(
     assert values["commanded_effort"] is None
 
 
-def test_joint_logging_config_parses_yaml_mapping() -> None:
-    config = joint_logging_config_from_mapping(
-        {
-            "logging": {
-                "enabled": False,
-                "interval_steps": 5,
-                "log_measured_effort": True,
-                "log_applied_effort": True,
-                "log_action_effort": True,
-                "log_command_effort": False,
-            },
-        }
+def test_logging_output_settings_control_effort_columns() -> None:
+    settings = _logging_settings(
+        enabled=False,
+        joint_tracking_path=None,
+        interval_steps=5,
+        log_measured_effort=True,
+        log_applied_effort=True,
+        log_action_effort=True,
+        log_command_effort=False,
     )
 
-    assert not config.enabled
-    assert config.interval_steps == 5
-    assert config.log_measured_effort
-    assert config.log_applied_effort
-    assert config.log_action_effort
-    assert not config.log_command_effort
+    assert not settings.enabled
+    assert settings.interval_steps == 5
+    assert settings.log_measured_effort
+    assert settings.log_applied_effort
+    assert settings.log_action_effort
+    assert not settings.log_command_effort

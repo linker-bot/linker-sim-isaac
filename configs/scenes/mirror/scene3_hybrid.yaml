@@ -1,0 +1,76 @@
+# 240 Hz variant of scene3 for explicit task-space hybrid force/position control.
+# The robot, object, camera and visual facts intentionally match scene3; this file is
+# separate because the strict configuration graph does not merge scene profiles.
+scene:
+  id: scene3_hybrid
+  description: dual arm push T reality mirror with hybrid force control
+  gravity_z: -9.81
+  add_ground: false
+  ground_height: 0.0
+  physics_frequency_hz: 240.0
+  render_frequency_hz: 60.0
+  planning_startup: prewarm
+
+  robots:
+    - label: left_arm
+      robot_profile: ar5v2_l6v1_l
+      root_pose:
+        xyz: [0.0, 0.09, 0.0]
+        rpy: [-1.5707, 0.0, 0.0]
+    - label: right_arm
+      robot_profile: ar5v2_l6v1_r
+      root_pose:
+        xyz: [0.0, -0.09, 0.0]
+        rpy: [1.5707, 0.0, 0.0]
+
+  objects:
+    - name: warehouse
+      object_profile: industrial_warehouse
+      prim_path: /World/IndustrialWarehouse
+      root_pose:
+        xyz: [0.0, 0.0, -1.266845]
+        rpy: [0.0, 0.0, 0.0]
+    - name: workstation
+      object_profile: workstation_armbase
+      prim_path: /World/WorkstationArmBase
+      root_pose:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
+    - name: Tblock
+      object_profile: TblockV1_default
+      prim_path: /World/TBlock
+      root_pose:
+        xyz: [0.15, 0.0, -0.4]
+        rpy: [0.0, 1.5707, 0.0]
+
+  cameras:
+    - id: world_rgbd
+      parent_prim_path: /World
+      prim_path: /World/WorldRGBD
+      pose:
+        xyz: [0.08, 0.0, 0.08]
+        rpy: [0.0, 1.1, 0.0]
+      resolution: [320, 240]
+      frequency_hz: 20.0
+      modalities: [rgb, depth]
+      clipping_range_m: [0.01, 5.0]
+      intrinsics:
+        fx: 307.5
+        fy: 308.0
+        cx: 160.0
+        cy: 120.0
+
+  viewport:
+    enabled: true
+    eye: [1.35, -1.65, 1.05]
+    target: [0.0, -0.1, 0.42]
+    prim_path: /OmniverseKit_Persp
+
+  lights:
+    - id: key
+      path: /World/KeyLight
+      intensity: 1200.0
+      angle: 0.5
+    - id: fill
+      path: /World/FillLight
+      intensity: 250.0

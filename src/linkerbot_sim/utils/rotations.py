@@ -18,6 +18,15 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 
+def _finite_vector(value, *, size: int, label: str) -> np.ndarray:
+    """把冷路径旋转输入规范为有限一维向量，统一边界错误。"""
+
+    result = np.asarray(value, dtype=float).reshape(-1)
+    if result.size != size or not np.all(np.isfinite(result)):
+        raise ValueError(f"{label} must contain {size} finite values")
+    return result
+
+
 def rpy_xyz_to_matrix(rpy_rad) -> np.ndarray:
     """把固定轴 XYZ 顺序（外旋 XYZ 顺序）的 RPY 弧度值转换为旋转矩阵。
 
@@ -28,7 +37,7 @@ def rpy_xyz_to_matrix(rpy_rad) -> np.ndarray:
     """
 
     return Rotation.from_euler(
-        "xyz", np.asarray(rpy_rad, dtype=float).reshape(3)
+        "xyz", _finite_vector(rpy_rad, size=3, label="rpy_rad")
     ).as_matrix()
 
 
@@ -42,7 +51,7 @@ def rpy_xyz_to_quat_wxyz(rpy_rad) -> np.ndarray:
     """
 
     xyzw = Rotation.from_euler(
-        "xyz", np.asarray(rpy_rad, dtype=float).reshape(3)
+        "xyz", _finite_vector(rpy_rad, size=3, label="rpy_rad")
     ).as_quat()
     return xyzw[[3, 0, 1, 2]]
 

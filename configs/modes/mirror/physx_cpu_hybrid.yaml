@@ -1,0 +1,12 @@
+# Mirror PhysX CPU composition with the dedicated 240 Hz hybrid controller profile.
+mode: mirror
+compute:
+  cuda_device: 0
+profiles:
+  scene: mirror/scene3_hybrid
+  physics: physx/cpu
+  control: mirror
+  hybrid_control: hybrid_force_position
+  curobo: mirror
+  planning: mirror
+  outputs: mirror_default

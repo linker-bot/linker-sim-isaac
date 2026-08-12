@@ -1,0 +1,25 @@
+# Kaleidoscope 的正式 PhysX CUDA 分支。另一个正式分支是项目自有 Newton；两者
+# 由 mode profile 在构造前选择，不能在同一 runtime 内热切换。设备由 mode.compute 注入，
+# 本 leaf 只拥有 PhysX 专属事实，不得再增加 active_gpu、physics_gpu 或 policy device。
+physics:
+  # 判别字段固定选择 NVIDIA PhysX。
+  engine: physx
+  # 物理流水线在 mode.compute.cuda_device 指定的 GPU 上执行。
+  execution: cuda
+  # 约束求解器可选 PGS/TGS；该值会投影到 PhysX scene 创建参数。
+  solver_type: PGS
+  # Fabric 为 GPU 并行环境提供高吞吐 stage/state 访问；Kaleidoscope CUDA 分支强制为 true。
+  use_fabric: true
+  # RL 不创建规划 collision-query manager；真实 PhysX 接触仍保持启用。
+  enable_scene_query_support: false
+
+  # 这些是进程级门禁，不等同于仅统计 Torch allocator 的显存。
+  memory:
+    # warmup 后模拟器进程允许占用的显存上限，单位 MiB；包含 PhysX、Kit、RTX 等分配。
+    max_simulator_process_mib: 16384
+    # 无论 GPU 总容量多大，warmup 后必须保留的绝对空闲显存下限，单位 MiB。
+    min_free_floor_mib: 4096
+    # warmup 后必须保留的空闲显存比例，范围 (0, 1]；与绝对下限同时检查。
+    min_free_fraction_after_warmup: 0.20
+    # 进入稳态观察窗口后允许继续增长的进程显存，单位 MiB，用于发现持续泄漏/扩容。
+    max_steady_growth_mib: 128

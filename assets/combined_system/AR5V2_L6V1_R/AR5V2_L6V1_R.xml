@@ -382,9 +382,11 @@
                       name="AR5V2_R_arm_flan_link"
                       pos="0 0 0.09"
                     >
+                      <!-- 占位惯性：1 mg、等效半径 50 mm；对机构动力学影响可忽略，并高于 Newton 惯量校验下限。 -->
                       <inertial
-                        mass="1e-016"
-                        diaginertia="1e-18 1e-18 1e-18"
+                        pos="0 0 0"
+                        mass="1e-6"
+                        diaginertia="1e-9 1e-9 1e-9"
                       />
                       <!-- L6 hand mounted to the AR5 flange. -->
                       <body
@@ -511,6 +513,7 @@
                                 axis="1 0 0"
                                 limited="true"
                                 range="0 0.963287"
+                                damping="0.05"
                               />
                               <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                               <inertial
@@ -602,6 +605,7 @@
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
+                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
@@ -691,6 +695,7 @@
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
+                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
@@ -780,6 +785,7 @@
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
+                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
@@ -869,6 +875,7 @@
                               axis="0 1 0"
                               limited="true"
                               range="0 1.277039"
+                              damping="0.05"
                             />
                             <!-- 惯性数据：quat 表示主惯性轴姿态，diaginertia 表示主惯性矩。 -->
                             <inertial
@@ -917,7 +924,7 @@
       </body>
     </body>
   </worldbody>
-  <!-- 执行器：每个可动关节对应一个 motor，并使用 URDF 的 effort 限制。 -->
+  <!-- 执行器：主动关节对应 motor；equality follower 不重复创建 actuator。 -->
   <actuator
   >
     <motor
@@ -984,24 +991,10 @@
       gear="1"
     />
     <motor
-      name="L6V1_R_hand_thumb_dip_motor"
-      joint="L6V1_R_hand_thumb_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
-    <motor
       name="L6V1_R_hand_index_mcp_pitch_motor"
       joint="L6V1_R_hand_index_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
-      gear="1"
-    />
-    <motor
-      name="L6V1_R_hand_index_dip_motor"
-      joint="L6V1_R_hand_index_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
       gear="1"
     />
     <motor
@@ -1012,24 +1005,10 @@
       gear="1"
     />
     <motor
-      name="L6V1_R_hand_middle_dip_motor"
-      joint="L6V1_R_hand_middle_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
-    <motor
       name="L6V1_R_hand_ring_mcp_pitch_motor"
       joint="L6V1_R_hand_ring_mcp_pitch"
       ctrllimited="true"
       ctrlrange="-0.574 0.574"
-      gear="1"
-    />
-    <motor
-      name="L6V1_R_hand_ring_dip_motor"
-      joint="L6V1_R_hand_ring_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
       gear="1"
     />
     <motor
@@ -1039,13 +1018,6 @@
       ctrlrange="-0.574 0.574"
       gear="1"
     />
-    <motor
-      name="L6V1_R_hand_pinky_dip_motor"
-      joint="L6V1_R_hand_pinky_dip"
-      ctrllimited="true"
-      ctrlrange="-0 0"
-      gear="1"
-    />
   </actuator>
   <equality
   >
@@ -1053,41 +1025,31 @@
       name="L6V1_R_hand_couple_index"
       joint1="L6V1_R_hand_index_dip"
       joint2="L6V1_R_hand_index_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
-      limited="true"
-      damping="0.05"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_middle"
       joint1="L6V1_R_hand_middle_dip"
       joint2="L6V1_R_hand_middle_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
-      limited="true"
-      damping="0.05"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_ring"
       joint1="L6V1_R_hand_ring_dip"
       joint2="L6V1_R_hand_ring_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
-      limited="true"
-      damping="0.05"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_pinky"
       joint1="L6V1_R_hand_pinky_dip"
       joint2="L6V1_R_hand_pinky_mcp_pitch"
-      polycoef="0 1.125676 0 0 0 0"
-      limited="true"
-      damping="0.05"
+      polycoef="0 1.125676 0 0 0"
     />
     <joint
       name="L6V1_R_hand_couple_thumb"
       joint1="L6V1_R_hand_thumb_dip"
       joint2="L6V1_R_hand_thumb_cmc_pitch"
-      polycoef="0 1.226495 0 0 0 0"
-      limited="true"
-      damping="0.05"
+      polycoef="0 1.226495 0 0 0"
     />
   </equality>
 </mujoco>

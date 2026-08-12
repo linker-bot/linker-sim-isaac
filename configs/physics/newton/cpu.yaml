@@ -1,0 +1,21 @@
+# Newton CPU leaf 只声明 CPU 求解器本身的参数。Mirror composition 固定派生一个 world；
+# compute.cuda_device 仍由 mode root 唯一声明，供 cuRobo 与 RTX 消费。
+physics:
+  # 判别字段固定选择项目 Newton/MuJoCo-Warp 后端。
+  engine: newton
+  # 求解器和模型 buffer 位于 CPU；本 leaf 因此不包含 use_cuda_graph。
+  execution: cpu
+  # 每个 world 预分配的最大 contact 数；场景越复杂或并行接触越多，所需容量越高。
+  nconmax_per_world: 200
+  # 每个 world 的约束 Jacobian/求解工作区容量；不足会限制复杂关节与接触约束。
+  njmax_per_world: 1200
+  # 每个 physics step 拆分的内部子步数，必须 >= 1；增加可改善快速接触稳定性但更慢。
+  substeps: 1
+  # 每个子步的主约束求解迭代上限。
+  iterations: 100
+  # Newton/CG 更新中的 line-search 迭代上限；更高可能改善收敛但提高最坏耗时。
+  line_search_iterations: 50
+  # 约束求解器：auto/cg/newton；auto 由 runtime 按 execution 和能力选择。
+  constraint_solver: auto
+  # 接触生成流水线：CPU 支持 auto/mujoco；auto 会收敛到 MuJoCo contacts。
+  contact_pipeline: auto

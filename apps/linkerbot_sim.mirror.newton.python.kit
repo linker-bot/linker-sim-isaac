@@ -1,0 +1,63 @@
+[package]
+description = "LinkerBot Mirror with project-owned Newton"
+title = "LinkerBot Mirror (Newton Physics)"
+version = "6.0.1"
+keywords = ["experience", "app", "usd", "mirror", "newton", "cpu", "cuda"]
+
+# 该正式 Kit 自身就是完整 physics-only closure。它不继承通用/隐藏 base Kit，也不加载
+# Isaac Core、Cloner、SimulationManager、PhysX 或 Isaac Newton extension；Newton 和
+# MuJoCo-Warp wheel 仅由项目自有 manager 在启动后导入。
+[dependencies]
+"isaacsim.simulation_app" = {}
+"isaacsim.asset.importer.mjcf" = {}
+"isaacsim.asset.importer.urdf" = {}
+"omni.kit.loop-isaac" = {}
+"omni.kit.usd.layers" = {}
+"omni.warp.core" = {}
+
+[settings.app]
+name = "LinkerBot-Mirror-Newton"
+version = "6.0.1"
+window.title = "LinkerBot Mirror (Newton)"
+settings.persistent = false
+useFabricSceneDelegate = false
+extensions.excluded = [
+    "isaacsim.core.api",
+    "isaacsim.core.cloner",
+    "isaacsim.core.experimental.prims",
+    "isaacsim.core.simulation_manager",
+    "isaacsim.core.utils",
+    "isaacsim.pip.newton",
+    "isaacsim.physics.newton",
+    "isaacsim.physics.newton.tensors",
+    "isaacsim.sensors.experimental.physics",
+    "isaacsim.sensors.physx",
+    "isaacsim.sensors.physx.examples",
+    "isaacsim.sensors.physx.ui",
+    "isaacsim.sensors.physics.nodes",
+    "omni.physics.physx",
+    "omni.physics.stageupdate",
+    "omni.physx",
+    "omni.physx.asset_validator",
+    "omni.physx.bundle",
+    "omni.physx.camera",
+    "omni.physx.demos",
+    "omni.physx.fabric",
+    "omni.physx.graph",
+    "omni.physx.pvd",
+    "omni.physx.tensors",
+    "omni.physx.vehicle",
+]
+
+[settings.app.exts.folders]
+'++' = [
+    "${app}",
+    "${env:ISAAC_PATH}/apps",
+    "${env:ISAAC_PATH}/exts",
+    "${env:ISAAC_PATH}/extscache",
+    "${env:ISAAC_PATH}/extsUser",
+    "${env:ISAAC_PATH}/extsDeprecated",
+]
+
+[settings.persistent]
+renderer.startupMessageDisplayed = true

@@ -2,213 +2,184 @@
 
 Language: [English](project-overview.md) | [中文](../../zh-CN/getting-started/project-overview.md)
 
-LinkerHand Simulation is a checkout-based Isaac Sim application for robot control,
-motion planning, parallel environment execution, state capture, and sensor output.
-It provides two runtime models with different execution contracts:
+The repository is organized around two products and one infrastructure boundary.
+They share assets and pure domain types, but they do not share a runtime facade.
 
-- Single Scene mode operates one physical world and can coordinate any number of robots
-  declared by the selected env profile.
-- Tiled Scene mode builds cloned environments and applies explicitly selected batched
-  operations to their robot and object rows.
-
-Both modes support strict YAML configuration, robot-ID discovery, JSON control,
-cuRobo integration, canonical snapshots, Foxglove/MCAP telemetry, and sensor
-cameras. Single Scene mode additionally provides shared-tick multi-robot timelines and
-per-robot joint-tracking CSV output. Tiled Scene mode additionally provides batched
-step actions, per-env state operations, trajectory buffers, and asynchronous
-planning with bounded scheduling resources.
-
-Use [Choose A Runtime And API](choose-runtime-and-api.md) before selecting an
-entrypoint or Python integration surface.
-
-## Execution Models
-
-| Boundary | Single Scene | Tiled Scene |
-| --- | --- | --- |
-| Runtime owner | `SingleSceneRuntime` | `TiledSceneRuntime` |
-| Topology | One World containing the configured robot and object instances | One source env cloned into `tiled.num_envs` rows |
-| Robot count | One or more robots in the same scene | One or more robots in every cloned env |
-| Selection | Session `robot_id` | Explicit `env_ids` plus session `robot_id` or `robot_ids` where required |
-| Synchronous execution | Integer-tick robot timelines with one shared `world.step()` per tick | Batched fixed-tick `step` actions and trajectory-buffer playback |
-| Planning | Single Scene compiler using `curobo` or joint-space `linear` backend | Synchronous batched IK for end-effector actions and a separate asynchronous planner manager |
-| State operations | Single Scene reset and scene snapshot capture/restore | Per-env reset, debug state, snapshot broadcast, and env-to-env clone |
-| Joint CSV | Supported through the selected logging profile | Not created by the Tiled Scene entrypoint |
-
-Single Scene does not mean single robot. An env profile selected by Single Scene may contain several robot
-instances, and one timeline can coordinate their tracks from a common tick zero.
-Single Scene has no cloned `env_id` dimension.
-
-Tiled Scene is not a wrapper around `SingleSceneRuntime`. It has a separate runtime class,
-scene builder, command adapter, state shape, trajectory buffer, and planner
-manager. A Tiled env may still contain multiple robots; `env_ids` select cloned
-rows and robot IDs select robots within those rows.
-
-## Shared Boundaries
-
-The runtimes deliberately share domain contracts where the data has the same
-meaning:
-
-- Runtime profiles own process policy, selected domain profiles, resource
-  limits, telemetry, output lifecycle, and shutdown timeouts.
-- Env, robot, controller, object, cuRobo, and logging profiles use strict
-  repository schemas and are validated before Isaac starts.
-- Robots use session-local numeric IDs for control and stable labels/profile
-  fingerprints for persistent matching.
-- Planning requests and results use backend-neutral DTOs before a concrete
-  `linear` or cuRobo adapter executes them.
-- `linkerbot.snapshot` is the canonical logical snapshot schema used by Single Scene
-  and Tiled Scene adapters.
-- Coordinate values use meters and radians; public quaternions use `wxyz`.
-- State telemetry, camera output, and file targets use bounded queues and
-  explicit output policies.
-
-Sharing these contracts does not make runtime-specific JSON interchangeable.
-Always use the message schema for the selected runtime.
-
-## Separate Boundaries
-
-The following are intentionally runtime-specific:
-
-- Single Scene timeline messages and Tiled Scene action messages have different envelopes,
-  selectors, response fields, and state machines.
-- Single Scene state describes one world. Tiled Scene state retains an explicit selected-env
-  row dimension.
-- Single Scene command status is tracked by command ID. Tiled Scene trajectory playback and
-  asynchronous planning have independent lifecycle APIs.
-- Scene collision coordination can freeze other robots as static planning
-  obstacles. Tiled Scene planning treats selected env rows as request problems and
-  does not expose the Single Scene coordination fields.
-- Tiled Scene articulation control is position-based. A runtime profile requesting
-  Tiled Scene velocity or effort control is rejected during configuration resolution.
-- Single Scene and Tiled Scene own different Isaac objects and must each be closed through
-  their own lifecycle facade.
-
-See the [Single Scene JSON reference](../reference/single-scene-json.md) and
-[Tiled Scene JSON reference](../reference/tiled-scene-json.md) for exact messages.
-
-## Workspace Requirements
-
-The repository is a workspace application, not an independently installable
-Python library. It depends at runtime on checkout-local `configs/`, `assets/`,
-`scripts/`, and cuRobo task resources. Wheel, source-distribution, and editable
-builds are rejected by the local build backend.
-
-The declared environment is Linux x86-64 with Python 3.11. Create the unified
-environment from the checkout root:
-
-```bash
-uv sync --all-extras
+```text
+clients and trainers
+        |
+        +----------------------+-----------------------+
+        |                      |                       |
+ Mirror JSON / Python    native Torch / skrl    Gymnasium adapter
+        |                      |                       |
+ linkerbot_sim.mirror    linkerbot_sim.kaleidoscope   NumPy boundary
+        |                      |
+        +---------- linkerbot_sim.isaac --------------+
+                              |
+                    PhysX CPU / PhysX CUDA /
+                       Newton runtime
 ```
 
-Run project commands from that same root with `PYTHONPATH=src`. Before starting
-Isaac Sim, read and accept the applicable NVIDIA/Kit EULA, then record that
-acceptance in the deployment environment:
+Dependencies point downward. Product code owns behavior; `linkerbot_sim.isaac` owns
+Kit, stage, and concrete physics runtime construction. An `IsaacSession` is the only
+owner allowed to close its app, stage, and physics runtime.
 
-```bash
-export OMNI_KIT_ACCEPT_EULA=Y
-```
+## Mirror
 
-The application accepts `Y`, `YES`, or `1`, case-insensitively. It never sets
-this variable or accepts the EULA for the user. Missing acceptance fails before
-`SimulationApp` is created.
+Mirror represents one physical workspace as one simulation world. A world may contain
+many robots and objects; the product boundary is about world ownership, not robot
+count.
+
+Mirror provides:
+
+- a strict versioned JSON envelope over stdin, loopback TCP JSONL, or loopback
+  WebSocket;
+- bounded admission, duplicate-request protection, cancellation, emergency stop,
+  reset, status, and orderly shutdown;
+- joint goals, deltas, sampled trajectories, synchronized timelines, IK, linear TCP
+  paths, cuRobo planning, collision refresh, and avoidance;
+- process-local state access and versioned scene snapshots;
+- PhysX CPU or Newton physics selected at the cold configuration boundary;
+- rendering, cameras, logging, telemetry, and persistent output.
+
+All Isaac, USD, physics, camera, and planner work executes on the runtime owner thread.
+Ingress threads parse and enqueue JSON only.
+
+Mirror closes resources in dependency order: ingress, outputs/cameras/planner,
+controllers/views, then `IsaacSession`. A child timeout preserves ownership and blocks
+premature session destruction.
+
+## Kaleidoscope
+
+Kaleidoscope is a homogeneous vector environment for large-scale reinforcement
+learning. One template scene is replicated into `N` environments and accessed through
+fixed-shape CUDA tensor views.
+
+Kaleidoscope provides:
+
+- either PhysX CUDA/Fabric or the project's multi-world Newton runtime, with
+  one canonical CUDA device selected by `mode.compute.cuda_device`;
+- native Torch `reset`, `reset_idx`, and `step` methods;
+- GPU-resident `get_state`, `set_state`, `snapshot`, `restore_snapshot`, and
+  `clone_state` operations;
+- fixed action variants for joint deltas, batched end-effector IK, and synchronous
+  waypoint-linear end-effector motion;
+- task-owned observations, rewards, termination, randomization, and reset buffers;
+- a NumPy Gymnasium `VectorEnv` adapter at an explicit host-transfer boundary;
+- a CUDA-native skrl adapter with same-decision autoreset and final-observation
+  preservation.
+
+Both Kaleidoscope training backends are headless and GPU-native. An explicit debug
+entrypoint can show one selected environment for either backend. Kaleidoscope
+intentionally has no asynchronous or batched trajectory planner, path search,
+collision-avoidance model, camera, SyntheticData, Replicator, recording, transport
+server, telemetry publisher, or playback queue.
+Physical contact remains active for task dynamics; what is removed is the planning
+collision/query world and avoidance service.
+
+## Physics Backends
+
+| Product | Engine | Execution | Important consequence |
+| --- | --- | --- | --- |
+| Mirror | PhysX | CPU | Isaac World-backed physics; root CUDA device remains available to RTX and cuRobo |
+| Mirror | Newton | CPU | MuJoCo CPU integration; exactly one product world; root CUDA remains available to RTX/cuRobo |
+| Mirror | Newton | CUDA | CUDA stream/graph integration; exactly one product world |
+| Kaleidoscope | PhysX | CUDA | CUDA tensor pipeline and Fabric; headless vector execution |
+| Kaleidoscope | Newton | CUDA | Project-owned Model/State/Control/Solver; one isolated world per environment |
+
+Newton's infrastructure can manage more than one world. Mirror derives one
+world, while Kaleidoscope derives its world count from the final `environments.num_envs`. Both
+use the shared per-world physics leaf and the project's `NewtonRuntime`; neither
+loads the Isaac Newton extension or its tensor extension.
+
+## Formal Kit Entry Matrix
+
+The strict composition factory selects exactly one formal Kit. Callers do not pass an
+arbitrary experience path or assemble physics/render extensions themselves:
+
+| Product | Engine / execution | Render closure | Kit selected by the factory |
+| --- | --- | --- | --- |
+| Mirror | PhysX / CPU | Controlled by the outputs profile | `apps/linkerbot_sim.mirror.physx.python.kit` |
+| Mirror | Newton / CPU or CUDA | Disabled | `apps/linkerbot_sim.mirror.newton.python.kit` |
+| Mirror | Newton / CPU or CUDA | Enabled | `apps/linkerbot_sim.mirror.newton_render.python.kit` |
+| Kaleidoscope | PhysX / CUDA | Training headless | `apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit` |
+| Kaleidoscope | Newton / CUDA | Training headless | `apps/linkerbot_sim.kaleidoscope.newton.python.kit` |
+| Kaleidoscope | PhysX / CUDA | Explicit single-environment viewport | `apps/linkerbot_sim.kaleidoscope.physx_cuda_viewport.python.kit` |
+| Kaleidoscope | Newton / CUDA | Explicit single-environment viewport | `apps/linkerbot_sim.kaleidoscope.newton_viewport.python.kit` |
+
+Mirror PhysX uses one experience containing the RTX resources and lets the session
+render specification decide whether to render. Mirror Newton has separate
+physics-only and Newton-render closures. Kaleidoscope keeps separate physics-only
+training Kits and selects a matching viewport Kit only through the explicit viewer.
+That viewport displays `selected_env` and adds no camera, SyntheticData, or Replicator.
+Public mode profiles state execution explicitly: Mirror provides
+`physx_cpu/newton_cpu/newton_cuda`, while Kaleidoscope provides
+`physx_cuda/newton_cuda`.
 
 ## Configuration Ownership
 
-| Location | Sole responsibility |
-| --- | --- |
-| `configs/runtime/` | Runtime mode, selected profiles, GUI/GPU/render settings, execution defaults, transports, planner/playback limits, telemetry, camera output policy, paths, and shutdown |
-| `configs/envs/` | World settings, visual scene, sensor placement, robot/object instances, and optional Tiled topology/per-env pose overrides |
-| `configs/robots/` | Isaac model, robot kind, joint groups, importer/PhysX settings, and optional cuRobo model/TCP binding |
-| `configs/controllers/` | Position, velocity, and effort control methods, joints, gains, limits, and PhysX drive overrides |
-| `configs/objects/` | Object asset, object kind, runtime physics/material, state summary, and optional simplified planning collision |
-| `configs/curobo/` | Device, task bundle, IK/planner algorithms, seeds, tolerances, collision cache, and batch capacity |
-| `configs/logging/` | Single Scene joint-tracking CSV enablement, path, sampling, flush interval, and columns |
-| `tools/object_assets/` | Offline generated-asset geometry and authored USD/PhysX properties |
+A mode root is a composition file, not a parameter dump:
 
-Runtime resolution order is code defaults, the selected runtime YAML, then only
-the CLI fields explicitly supplied for that launch. Env profiles own scene facts;
-they do not own planner, transport, telemetry, or process resource policy. Use
-the [configuration guide](../guides/configuration.md) for ownership examples and
-the [configuration reference](../reference/configuration.md) for validation
-behavior.
+```text
+configs/modes/mirror/{physx_cpu,newton_cpu,newton_cuda}.yaml
+  -> compute + scene selector mirror/scene3 + physics + control + cuRobo + planning + outputs
 
-## Operational Boundaries
+configs/modes/kaleidoscope/{physx_cuda,newton_cuda}.yaml
+  -> compute + environments + scene selector kaleidoscope/tblock_push + physics + task
+  -> optional cuRobo numerical profile for EE/linear actions only
 
-### Network And Input
+configs/scenes/mirror/scene3.yaml
+  -> scene.id: scene3
 
-stdin, TCP JSONL, and WebSocket control paths accept strict JSON objects. Unknown
-fields, duplicate YAML keys, non-finite JSON constants, invalid selectors, and
-out-of-range values are rejected instead of guessed.
+configs/scenes/kaleidoscope/tblock_push.yaml
+  -> scene.id: tblock_push
 
-Every built-in control, state telemetry, and camera live listener is restricted
-to loopback. The application provides no authentication or TLS. Remote access
-requires an authenticated TLS proxy or SSH tunnel whose upstream remains a
-loopback endpoint. Foxglove live is telemetry, not a JSON control transport.
+configs/visualization/kaleidoscope.yaml
+  -> launch-only selected environment + window/renderer + scene visuals
+```
 
-### Thread Ownership
+Leaf values have one writer. In particular, the CUDA index appears only at
+`mode.compute.cuda_device`; physics, Torch, cuRobo, and training derive their device
+from it. Kaleidoscope environment count and path naming appear only in the mode-root
+`environments` mapping. The selected engine then derives its internal replication
+mechanism: PhysX uses GridCloner with environment-ID isolation, while Newton creates
+one Newton-runtime world per environment. These are implementation plans, not public
+configuration selectors.
 
-Isaac stage objects, articulation/PhysX views, Camera wrappers, and runtime
-mutation are owned by the simulation main thread. Transport and planner workers
-may parse messages or consume frozen NumPy/Python snapshots, but they must not
-read or write Isaac objects. File and telemetry publishers receive already
-captured immutable data.
+Scene selectors, file paths, and scene identities are deliberately distinct. A mode
+stores a product-qualified selector, the catalog resolves it below the corresponding
+`configs/scenes/<product>/` directory, and `scene.id` remains the unqualified file
+basename. Flat selectors and cross-product references are rejected because Mirror and
+Kaleidoscope scenes have incompatible schemas.
 
-### Resource And Output Limits
+Mirror uses the same `control: mirror` for both engines; the selected physics engine
+derives the default controller bundle. Kaleidoscope has no control profile or control
+object. Planning and cuRobo are separate owners. `configs/planning/mirror.yaml` contains only
+backend-neutral request defaults, while `configs/curobo/*.yaml` contains numerical
+IK batch capacity plus MotionPlanner seed, CUDA graph, collision-capability, and cache
+facts. MotionPlanner is fixed to one request; its cache capacity remains explicit.
+The backend fixes its
+validated cuRobo 0.8.0 task bundle and float32 dtypes. A Kaleidoscope task never
+selects a backend: the mode root conditionally adds `profiles.curobo` for an EE/linear
+action and must omit it for the joint-only `joint_control` and `joint_delta` actions.
 
-Transport connections, request/event queues, snapshot requests, planner work,
-completed planner summaries, trajectory buffers, telemetry buffers, camera
-queues, and camera directory bytes all have explicit bounds. Overflow behavior
-is configured as rejection, backpressure, replacement, or a declared drop
-policy; it is never an unbounded queue.
+## Public Boundaries
 
-CSV, MCAP, and camera targets are planned and checked together before any writer
-opens. Existing data requires an explicit `error`, `truncate`, `resume`, or
-`timestamped_dir` policy, and a sink may reject a policy it cannot implement
-safely. See [Telemetry](../guides/telemetry.md) and
-[Cameras](../guides/cameras.md) for task workflows, and the
-[Output Reference](../reference/outputs.md) for exact file and payload contracts.
+Use these stable facades:
 
-### Mutation And Fail-Stop
+- `linkerbot_sim.configuration`
+- `linkerbot_sim.isaac`
+- `linkerbot_sim.mirror`
+- `linkerbot_sim.kaleidoscope`
+- `linkerbot_sim.training.skrl`
 
-Reset, Tiled Scene `set_state`, snapshot restore, and env cloning validate and capture
-rollback state before their first mutation. Completed writes are compensated in
-reverse order when a later setter fails. A complete rollback leaves the runtime
-usable.
+The facades are lazy. Importing them does not start Kit or initialize CUDA. Internal
+scene builders, tensor ports, timeline compilers, and backend managers may change
+without a compatibility promise.
 
-If rollback fails, or an error occurs after an irreversible queue/cache commit,
-the runtime records its first fatal reason, requests shutdown, and rejects later
-mutations. Recreate the runtime instead of continuing from state whose
-controller/PhysX consistency cannot be proven.
+## Next Steps
 
-### Shutdown
-
-Entrypoints first stop new transport and publisher admission, then perform
-bounded waits for background work, close planners/cameras/loggers and their
-dependent sinks, release IK/planning resources, and finally close
-`SimulationApp`. Independent timeout settings prevent one resource class from
-consuming another class's shutdown budget. A worker that remains alive retains
-its sink or runtime dependency so it is not closed concurrently; the owning
-runtime can retry cleanup before releasing Kit.
-
-The detailed invariants are collected in
-[Known Constraints](../operations/constraints.md).
-
-## Continue Reading
-
-- [Choose A Runtime And API](choose-runtime-and-api.md)
-- [Single Scene Quickstart](single-scene-quickstart.md)
-- [Tiled Scene Quickstart](tiled-scene-quickstart.md)
-- [Configuration Guide](../guides/configuration.md)
-- [Single Scene CLI Reference](../reference/single-scene-cli.md)
-- [Single Scene JSON Reference](../reference/single-scene-json.md)
-- [Tiled Scene CLI Reference](../reference/tiled-scene-cli.md)
-- [Tiled Scene JSON Reference](../reference/tiled-scene-json.md)
-- [Control And Trajectories](../guides/control-and-trajectories.md)
-- [Motion Planning](../guides/motion-planning.md)
-- [Collision Models](../guides/collision-models.md)
-- [Snapshot Data And Restore](../reference/snapshots.md)
-- [Telemetry](../guides/telemetry.md)
-- [Cameras](../guides/cameras.md)
-- [Persistent And Live Outputs](../reference/outputs.md)
-- [Troubleshooting](../operations/troubleshooting.md)
-- [Object Assets](../development/object-assets.md)
+- [Choose a mode and API](choose-runtime-and-api.md)
+- [Mirror quickstart](mirror-quickstart.md)
+- [Kaleidoscope quickstart](kaleidoscope-quickstart.md)
+- [Configuration reference](../reference/configuration.md)

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
 
 from linkerbot_sim.assets.robot_config import RobotAssetConfig
-from linkerbot_sim.app.interactive.tiled_scene import command_utils
-from linkerbot_sim.configs.profiles import load_profile_yaml
+from linkerbot_sim.configuration.robots import RobotProfileSettings
+from linkerbot_sim.utils.config import load_yaml
 from linkerbot_sim.robots.mimic.assets import (
     mimic_follower_joint_names,
     parse_asset_mimic_relations,
@@ -25,13 +23,55 @@ from linkerbot_sim.robots.mimic.runtime import (
     resolve_mimic_follower_controls,
 )
 from linkerbot_sim.robots.mimic.urdf import parse_urdf_joint_mimics
-from linkerbot_sim.tiled.scene.views import _command_joint_indices
 
 
-AR5_L6_MJCF = RobotAssetConfig.from_mapping(
-    load_profile_yaml("robot", "ar5v2_l6v1_l"),
+def _robot_profile(name: str) -> RobotProfileSettings:
+    path = f"configs/robots/{name}.yaml"
+    return RobotProfileSettings.from_mapping(load_yaml(path), source=path)
+
+
+AR5_L6_MJCF = RobotAssetConfig.from_profile(
+    _robot_profile("ar5v2_l6v1_l"),
     prim_path="/World/Robots/test_robot",
 ).asset_path
+AR5_L6_RIGHT_MJCF = RobotAssetConfig.from_profile(
+    _robot_profile("ar5v2_l6v1_r"),
+    prim_path="/World/Robots/test_robot_right",
+).asset_path
+
+
+def test_bundled_left_and_right_mjcf_keep_all_ten_mimic_equalities() -> None:
+    relations_by_side = {
+        "L": parse_mjcf_joint_equalities(AR5_L6_MJCF),
+        "R": parse_mjcf_joint_equalities(AR5_L6_RIGHT_MJCF),
+    }
+
+    assert {side: len(items) for side, items in relations_by_side.items()} == {
+        "L": 5,
+        "R": 5,
+    }
+    assert sum(len(items) for items in relations_by_side.values()) == 10
+    for side, equalities in relations_by_side.items():
+        by_name = {equality.name: equality for equality in equalities}
+        expected = {
+            f"L6V1_{side}_hand_couple_{finger}": (
+                f"L6V1_{side}_hand_{finger}_dip",
+                (
+                    f"L6V1_{side}_hand_thumb_cmc_pitch"
+                    if finger == "thumb"
+                    else f"L6V1_{side}_hand_{finger}_mcp_pitch"
+                ),
+                1.226495 if finger == "thumb" else 1.125676,
+            )
+            for finger in ("index", "middle", "ring", "pinky", "thumb")
+        }
+
+        assert set(by_name) == set(expected)
+        for name, (dependent, master, multiplier) in expected.items():
+            relation = by_name[name]
+            assert relation.dependent_joint == dependent
+            assert relation.master_joint == master
+            assert relation.polycoef == (0.0, multiplier, 0.0, 0.0, 0.0)
 
 
 def test_parse_ar5_l6_mjcf_equalities() -> None:
@@ -225,6 +265,19 @@ def test_mjcf_mimic_rejects_non_finite_polycoef(
         parse_mjcf_joint_equalities(mjcf_path)
 
 
+def test_mjcf_mimic_rejects_more_than_five_polycoef_terms(tmp_path: Path) -> None:
+    mjcf_path = _write_mimic_mjcf(
+        tmp_path / "too_many_polycoef.xml",
+        equality_xml=(
+            '    <joint name="too_many" joint1="follower" joint2="master" '
+            'polycoef="0 1 0 0 0 0"/>'
+        ),
+    )
+
+    with pytest.raises(ValueError, match="accepts at most 5 coefficients"):
+        parse_mjcf_joint_equalities(mjcf_path)
+
+
 def test_mjcf_single_joint_equality_is_not_a_mimic_relation(tmp_path: Path) -> None:
     mjcf_path = _write_mimic_mjcf(
         tmp_path / "fixed.xml",
@@ -304,18 +357,6 @@ def test_urdf_mimic_runtime_uses_affine_relation(tmp_path: Path) -> None:
     np.testing.assert_allclose(target_velocities, [0.0, -0.45])
 
 
-def test_tiled_command_space_excludes_urdf_mimic_follower(tmp_path: Path) -> None:
-    urdf_path = _write_mimic_urdf(tmp_path / "robot.urdf")
-
-    indices = _command_joint_indices(
-        dof_names=("master", "follower"),
-        controlled_joints=("all",),
-        mimic_path=urdf_path,
-    )
-
-    np.testing.assert_array_equal(indices, [0])
-
-
 def test_urdf_mimic_rejects_dangling_master(tmp_path: Path) -> None:
     urdf_path = tmp_path / "dangling.urdf"
     urdf_path.write_text(
@@ -356,48 +397,3 @@ def test_mimic_binding_rejects_relation_with_only_one_present_joint(
 
     with pytest.raises(ValueError, match="missing 'master'"):
         resolve_mimic_follower_controls(["follower"], urdf_path)
-
-
-def test_tiled_runtime_applies_mjcf_followers_from_actual_master_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    applied: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
-
-    class _View:
-        def get_joint_positions(self):
-            return np.asarray([[0.4, 0.0], [-0.2, 0.0]], dtype=float)
-
-        def get_joint_velocities(self):
-            return np.asarray([[0.3, 0.0], [0.5, 0.0]], dtype=float)
-
-    monkeypatch.setattr(
-        command_utils,
-        "_apply_joint_targets",
-        lambda _view, targets, *, velocities, joint_indices: applied.append(
-            (
-                np.asarray(targets),
-                np.asarray(velocities),
-                np.asarray(joint_indices),
-            )
-        ),
-    )
-    articulation = SimpleNamespace(
-        view=_View(),
-        runtime_mimic_controls=(
-            MimicFollowerControl(
-                dependent_joint="follower",
-                master_joint="master",
-                dependent_index=1,
-                master_index=0,
-                polycoef=(0.2, -1.5),
-            ),
-        ),
-    )
-
-    command_utils._apply_runtime_mimic_targets(articulation)
-
-    assert len(applied) == 1
-    positions, velocities, indices = applied[0]
-    np.testing.assert_allclose(positions, [[-0.4], [0.5]])
-    np.testing.assert_allclose(velocities, [[-0.45], [-0.75]])
-    np.testing.assert_array_equal(indices, [1])

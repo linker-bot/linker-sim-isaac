@@ -43,36 +43,10 @@ class SolverIterationConfig:
     hand_velocity_iterations: int | None = None
 
 
-def scene_solver_settings(
-    env_config: Mapping[str, object],
-) -> SolverIterationConfig | None:
-    """从环境配置构造 scene 级 PhysX solver 覆盖设置。
-
-    env YAML 只允许声明 ``solver.type``，因为它写到 physics scene。机器人刚体 iteration
-    属于 robot YAML 的 ``robot.physics.solver``。
-    """
-
-    solver = env_config.get("solver")
-    if solver is None:
-        return None
-    if not isinstance(solver, Mapping):
-        raise ValueError("solver config must be a mapping")
-    _reject_solver_keys(
-        solver,
-        {"type"},
-        "solver",
-        extra_message=("arm/hand solver iterations belong under robot.physics.solver"),
-    )
-    config = SolverIterationConfig(
-        solver_type=_optional_string(solver, "type", "solver")
-    )
-    return config if _has_overrides(config) else None
-
-
 def robot_solver_settings(
     robot_solver_config: Mapping[str, object] | None, *, label: str
 ) -> SolverIterationConfig | None:
-    """从 ``robot.physics.solver`` 构造机器人刚体 solver iteration 覆盖。"""
+    """从 ``robot.physics.physx.solver`` 构造刚体 solver iteration 覆盖。"""
 
     if robot_solver_config is None:
         return None
@@ -150,20 +124,6 @@ def merge_solver_configs(
             ),
         )
     return merged if has_any and _has_overrides(merged) else None
-
-
-def _optional_string(
-    data: Mapping[str, object], key: str, parent_label: str
-) -> str | None:
-    """读取可选非空字符串字段。"""
-
-    value = data.get(key)
-    if value is None:
-        return None
-    text = str(value)
-    if not text:
-        raise ValueError(f"{parent_label}.{key} cannot be empty")
-    return text
 
 
 def _optional_int(
@@ -302,6 +262,7 @@ def apply_solver_iteration_overrides(
     config: SolverIterationConfig,
     *,
     component_mapping: RobotComponentMapping | None = None,
+    physics_backend: object | None = None,
 ) -> dict[str, int]:
     """写入配置中显式指定的 PhysX solver 属性。
 
@@ -313,18 +274,28 @@ def apply_solver_iteration_overrides(
         统计字典，记录写入的刚体数量、分组数量、属性数量和 physics scene 数量。
     """
 
-    from isaacsim.core.utils.prims import get_prim_at_path
-    from pxr import PhysxSchema, Usd, UsdPhysics
-
+    backend = _resolved_physics_backend(physics_backend)
     _validate_solver_config(config)
+    solver_type = (
+        str(config.solver_type).upper() if config.solver_type is not None else None
+    )
+    if backend == "newton" and solver_type == "TGS":
+        raise RuntimeError(
+            "solver.type='TGS' cannot be used with Newton: TGS is a PhysX "
+            "solver and has no behavior-preserving Newton mapping"
+        )
+
+    from pxr import Usd, UsdPhysics
+
+    if backend == "physx":
+        from pxr import PhysxSchema
 
     # solver 类型写在 physics scene 上，是全局物理求解策略；迭代次数写在刚体/关节树上，
     # 可以只提高关键部件的稳定性，避免整场景成本过高。
     physics_scene_prims = [
         prim for prim in stage.Traverse() if prim.IsA(UsdPhysics.Scene)
     ]
-    if config.solver_type is not None:
-        solver_type = str(config.solver_type).upper()
+    if config.solver_type is not None and backend == "physx":
         for scene_prim in physics_scene_prims:
             scene_api = (
                 PhysxSchema.PhysxSceneAPI(scene_prim)
@@ -340,10 +311,48 @@ def apply_solver_iteration_overrides(
         "skipped_rigid_bodies": 0,
         "physics_scenes": len(physics_scene_prims),
     }
+    if backend == "newton":
+        from linkerbot_sim.isaac.physics.backend import warn_unsupported_physics_fields
+
+        skipped_fields = _newton_solver_fields(config)
+        counts["skipped_physx_fields"] = warn_unsupported_physics_fields(
+            backend=backend,
+            feature="solver overrides",
+            fields=skipped_fields,
+            reason=(
+                "the configured PhysX solver type and per-body iteration fields "
+                "have no behavior-preserving Newton MuJoCo mapping; Newton keeps "
+                "its experience-defined solver"
+            ),
+            stacklevel=3,
+        )
+        counts["skipped_physx_rigid_bodies"] = 0
+        if not _has_iteration_overrides(config):
+            return counts
+        articulation_root = stage.GetPrimAtPath(articulation_root_path)
+        if not articulation_root.IsValid():
+            raise ValueError(
+                f"Articulation root prim does not exist: {articulation_root_path}"
+            )
+        for prim in Usd.PrimRange(articulation_root):
+            if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                continue
+            solver_iterations = solver_iterations_for_prim_name(
+                prim.GetName(), config, component_mapping=component_mapping
+            )
+            if solver_iterations is None:
+                counts["skipped_rigid_bodies"] += 1
+            else:
+                counts["skipped_physx_rigid_bodies"] += 1
+        return counts
     if not _has_iteration_overrides(config):
         return counts
 
-    articulation_root = get_prim_at_path(articulation_root_path)
+    articulation_root = stage.GetPrimAtPath(articulation_root_path)
+    if not articulation_root.IsValid():
+        raise ValueError(
+            f"Articulation root prim does not exist: {articulation_root_path}"
+        )
     for prim in Usd.PrimRange(articulation_root):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
@@ -374,6 +383,47 @@ def apply_solver_iteration_overrides(
         elif group == "hand":
             counts["hand_rigid_bodies"] += 1
     return counts
+
+
+def _resolved_physics_backend(value: object | None) -> str:
+    """解析显式后端；省略时读取 Isaac 当前 active engine。"""
+
+    from linkerbot_sim.isaac.physics.backend import (
+        active_physics_backend,
+        normalize_physics_backend,
+    )
+
+    return (
+        active_physics_backend() if value is None else normalize_physics_backend(value)
+    )
+
+
+def _newton_solver_fields(config: SolverIterationConfig) -> tuple[str, ...]:
+    """列出 Newton 路径不会应用的 PhysX solver 配置字段。"""
+
+    fields: list[str] = []
+    if config.solver_type is not None:
+        fields.append("solver.type")
+    field_paths = {
+        "arm_position_iterations": (
+            "robot.physics.physx.solver.arm.position_iterations"
+        ),
+        "arm_velocity_iterations": (
+            "robot.physics.physx.solver.arm.velocity_iterations"
+        ),
+        "hand_position_iterations": (
+            "robot.physics.physx.solver.hand.position_iterations"
+        ),
+        "hand_velocity_iterations": (
+            "robot.physics.physx.solver.hand.velocity_iterations"
+        ),
+    }
+    fields.extend(
+        path
+        for field_name, path in field_paths.items()
+        if getattr(config, field_name) is not None
+    )
+    return tuple(fields)
 
 
 def _validate_solver_config(config: SolverIterationConfig) -> None:

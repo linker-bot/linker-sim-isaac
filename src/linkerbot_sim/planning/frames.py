@@ -106,10 +106,10 @@ class FrameTransformer:
             orientation = None
         else:
             world_pose[:3, :3] = source[:3, :3] @ quat_wxyz_to_matrix(orientation_wxyz)
-            base_pose = np.linalg.inv(self.world_from_robot_base) @ world_pose
+        base_pose = np.linalg.solve(self.world_from_robot_base, world_pose)
+        if orientation_wxyz is not None:
             orientation = matrix_to_quat_wxyz(base_pose[:3, :3])
-        base_position = (np.linalg.inv(self.world_from_robot_base) @ world_pose)[:3, 3]
-        return PoseInRobotBase(base_position, orientation)
+        return PoseInRobotBase(base_pose[:3, 3], orientation)
 
     def offset_to_robot_base(
         self,

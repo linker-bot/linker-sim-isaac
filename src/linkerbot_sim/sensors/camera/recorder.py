@@ -518,7 +518,7 @@ class CameraFramePublisher:
         )
         self.shutdown_timed_out = False
         self.stop_event.set()
-        if self.shutdown_policy == "abort":
+        if self.shutdown_policy == "discard":
             self._discard_queued_frames()
         deadline = time.monotonic() + timeout
         thread = self.thread
@@ -575,7 +575,7 @@ class CameraFramePublisher:
 
         while not (
             self.stop_event.is_set()
-            and (self.shutdown_policy == "abort" or self.queue.empty())
+            and (self.shutdown_policy == "discard" or self.queue.empty())
         ):
             try:
                 frame = self.queue.get(timeout=self.worker_poll_interval_s)
@@ -720,9 +720,9 @@ def validate_camera_frame_publisher_settings(
         )
     if not isinstance(shutdown_policy, str) or shutdown_policy not in {
         "drain",
-        "abort",
+        "discard",
     }:
-        raise ValueError("shutdown_policy must be drain or abort")
+        raise ValueError("shutdown_policy must be drain or discard")
     _positive_finite_float(
         worker_poll_interval_s,
         label="worker_poll_interval_s",

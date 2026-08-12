@@ -73,6 +73,7 @@ class FoxgloveStateSink:
         publish_joint_states: bool = True,
         publish_state_json: bool = True,
         publish_scene_markers: bool = True,
+        publish_hybrid_control: bool = False,
     ) -> None:
         """创建 Foxglove 状态 sink。"""
 
@@ -83,6 +84,7 @@ class FoxgloveStateSink:
         self.publish_joint_states = bool(publish_joint_states)
         self.publish_state_json = bool(publish_state_json)
         self.publish_scene_markers = bool(publish_scene_markers)
+        self.publish_hybrid_control = bool(publish_hybrid_control)
 
     @classmethod
     def open_live(
@@ -95,6 +97,7 @@ class FoxgloveStateSink:
         publish_joint_states: bool = True,
         publish_state_json: bool = True,
         publish_scene_markers: bool = True,
+        publish_hybrid_control: bool = False,
         topics: FoxgloveTopicConfig | None = None,
     ) -> "FoxgloveStateSink":
         """打开 Foxglove live server 输出。"""
@@ -110,6 +113,7 @@ class FoxgloveStateSink:
             publish_joint_states=publish_joint_states,
             publish_state_json=publish_state_json,
             publish_scene_markers=publish_scene_markers,
+            publish_hybrid_control=publish_hybrid_control,
         )
 
     @classmethod
@@ -121,6 +125,7 @@ class FoxgloveStateSink:
         publish_joint_states: bool = True,
         publish_state_json: bool = True,
         publish_scene_markers: bool = True,
+        publish_hybrid_control: bool = False,
         topics: FoxgloveTopicConfig | None = None,
     ) -> "FoxgloveStateSink":
         """打开 Foxglove MCAP 输出。"""
@@ -134,6 +139,7 @@ class FoxgloveStateSink:
             publish_joint_states=publish_joint_states,
             publish_state_json=publish_state_json,
             publish_scene_markers=publish_scene_markers,
+            publish_hybrid_control=publish_hybrid_control,
         )
 
     def publish(self, snapshot: StateSnapshot) -> None:
@@ -152,6 +158,14 @@ class FoxgloveStateSink:
             )
         if self.publish_state_json:
             self.logger.log_state_json(snapshot.as_dict(), time_s=snapshot.time_s)
+        if self.publish_hybrid_control:
+            diagnostics = snapshot.hybrid_control
+            payload = (
+                dict(diagnostics)
+                if diagnostics is not None and diagnostics.get("active") is True
+                else {"active": False}
+            )
+            self.logger.log_hybrid_control_json(payload, time_s=snapshot.time_s)
         if self.publish_scene_markers and snapshot.objects:
             self.logger.log_scene_spheres(
                 entity_id="runtime_objects",

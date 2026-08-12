@@ -1,15 +1,15 @@
 # Capsule rope 运行时对象配置。
 #
 # 边界：
-# - env objects[].object_profile 通过文件名 capsule_rope 选择本 profile；实例 name、prim_path
-#   与 root_pose 由 env 管理，同一绳体资产 profile 可在场景中实例化多次。
+# - scene objects[].object_profile 通过文件名 capsule_rope 选择本 profile；实例 name、prim_path
+#   与 root_pose 由 scene 管理，同一绳体资产 profile 可在场景中实例化多次。
 # - 本文件只放 src/linkerbot_sim 运行时代码在引用已有 USD 后需要读取的对象属性。
 # - 绳体几何、段数、质量、阻尼、关节限制和可视材质属于生成固有属性，
 #   放在 tools/object_assets/flexible/rope/config.yaml。
 
 
 object:
-  # 资产逻辑名称；env 实际按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
+  # 资产逻辑名称；scene 按 YAML 文件名选择 profile，场景实例身份使用 objects[].name。
   name: capsuleropeV1_default
 
   # 对象能力类别。dynamic_chain 表示由多个刚体和关节组成的链式动态对象，当前只支持 USD。
@@ -18,11 +18,11 @@ object:
   # 资产来源类型。capsule rope 已由工具生成 USD/USDA，因此这里直接引用 usd。
   source: usd
 
-  # 绳体 USD 资产路径，相对仓库根目录；stage 挂载位置由 env 实例 prim_path 决定。
+  # 绳体 USD 资产路径，相对仓库根目录；stage 挂载位置由 scene 实例 prim_path 决定。
   asset_path: assets/flexible_env_objects/capsuleropeV1_default/capsuleropeV1_default.usda
 
-  # 源 USD 的绝对根路径元数据。当前 runtime 只校验并保留该值，不用它决定挂载或遍历根；
-  # 实际引用位置和刚体/joint 收集根均由 env 实例的 prim_path 决定。
+  # 源 USD 的绝对根路径。runtime 用它在引用资产中选择绳体根，再映射到 scene 实例 prim_path
+  # 下收集刚体与 joint；因此同一资产 profile 可安全挂载到不同实例路径。
   root_path: /CapsuleRope
 
   # dynamic-chain 顶层 pose/velocity 摘要取同一个命名刚体；值必须是资产中的刚体短名称，
@@ -40,11 +40,15 @@ object:
       dynamic_friction: 0.5
       # 恢复系数：0 表示接触基本不反弹。
       restitution: 0.0
-      # 摩擦合成模式；average 表示与接触另一方材质取平均。
-      friction_combine_mode: average
 
-    # 绳体所有刚体的 solver 迭代次数是运行时 PhysX 覆盖，不参与资产生成。
-    # position iterations 影响关节/接触位置约束收敛，绳体抓取不稳定时可提高。
-    solver_position_iterations: 48
-    # velocity iterations 影响摩擦、碰撞后速度等速度约束收敛。
-    solver_velocity_iterations: 4
+    # PhysX-only leaf 不会投影给 Newton；Newton 只消费上方通用 material。
+    physx:
+      material:
+        # 摩擦合成模式；average 表示与接触另一方材质取平均。
+        friction_combine_mode: average
+      # 绳体刚体的 solver 迭代次数只覆盖当前 PhysX stage，不参与资产生成。
+      solver:
+        # position iterations 影响关节/接触位置约束收敛，绳体抓取不稳定时可提高。
+        position_iterations: 48
+        # velocity iterations 影响摩擦、碰撞后速度等速度约束收敛。
+        velocity_iterations: 4

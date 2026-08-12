@@ -1,151 +1,93 @@
-"""cuRobo profile 合并工具。
+"""robot 资产 profile 与 cuRobo 数值 profile 的 typed composition。
 
-cuRobo 配置拆成两层：``configs/curobo/*.yaml`` 保存算法默认值，
-``configs/robots/*.yaml`` 的 ``curobo.robot`` 保存机器人资源。后端入口只接受这一套
-canonical cuRobo 配置语义。
+配置 catalog 已分别把 ``configs/robots`` 和 ``configs/curobo`` 解析为冻结 dataclass。
+本模块只做一次单向投影：注入 mode root 的 CUDA 设备并构造最终 ``CuroboConfig``；不会
+还原 YAML mapping，也不会再次运行 backend mapping parser。
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-from typing import Any
+from dataclasses import replace
 
 from linkerbot_sim.backends.curobo.config import (
     CuroboConfig,
     CuroboDeviceConfig,
     CuroboIkConfig,
     CuroboMotionPlannerConfig,
-    CuroboTaskBundle,
-    DEFAULT_CUROBO_TASK_BUNDLE,
 )
-from linkerbot_sim.utils.config import deep_merge, load_yaml
+from linkerbot_sim.configuration.curobo import CuroboProfileSettings
+from linkerbot_sim.configuration.robots import RobotProfileSettings
 
 
-_CUROBO_PROFILE_ROOT_KEYS = frozenset({"curobo"})
-_CUROBO_ALGORITHM_KEYS = frozenset(
-    {"task_bundle", "device", "kinematics", "motion_planner"}
-)
-
-
-def validate_curobo_profile(
-    data: Mapping[str, Any], *, source: str = "<curobo profile>"
-) -> dict[str, Any]:
-    """严格校验项目侧当前 cuRobo 算法 profile。
-
-    ``configs/curobo/task/**/*.yml`` 是受版本化 bundle 管理的第三方资源，不应传给
-    本函数，也不使用项目 profile schema。
-    """
-
-    try:
-        if not isinstance(data, Mapping):
-            raise ValueError("cuRobo profile must be a mapping")
-        canonical = dict(data)
-        _reject_unknown_keys(canonical, _CUROBO_PROFILE_ROOT_KEYS, "profile")
-        curobo = _required_mapping(canonical, "curobo", "profile")
-        _reject_unknown_keys(curobo, _CUROBO_ALGORITHM_KEYS, "curobo")
-
-        CuroboTaskBundle.named(curobo.get("task_bundle", DEFAULT_CUROBO_TASK_BUNDLE))
-        CuroboDeviceConfig.from_mapping(_optional_mapping(curobo, "device", "curobo"))
-        kinematics = _optional_mapping(curobo, "kinematics", "curobo")
-        _reject_unknown_keys(kinematics, {"ik"}, "curobo.kinematics")
-        CuroboIkConfig.from_mapping(
-            _optional_mapping(kinematics, "ik", "curobo.kinematics")
-        )
-        CuroboMotionPlannerConfig.from_mapping(
-            _optional_mapping(curobo, "motion_planner", "curobo")
-        )
-    except ValueError as exc:
-        if str(exc).startswith(f"{source}:"):
-            raise
-        raise ValueError(f"{source}: {exc}") from exc
-    return canonical
-
-
-def load_curobo_profile(path: str | Path) -> dict[str, Any]:
-    """从文件加载并严格校验项目侧 cuRobo 算法 profile。"""
-
-    profile_path = Path(path)
-    return validate_curobo_profile(load_yaml(profile_path), source=str(profile_path))
-
-
-def _required_mapping(
-    data: Mapping[str, Any], key: str, label: str
-) -> Mapping[str, Any]:
-    value = data.get(key)
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{label}.{key} must be a mapping")
-    return value
-
-
-def _optional_mapping(
-    data: Mapping[str, Any], key: str, parent_label: str
-) -> Mapping[str, Any]:
-    if key not in data:
-        return {}
-    value = data[key]
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{parent_label}.{key} must be a mapping")
-    return value
-
-
-def _reject_unknown_keys(
-    data: Mapping[Any, Any], allowed: set[str] | frozenset[str], label: str
-) -> None:
-    unknown = sorted(str(key) for key in data if key not in allowed)
-    if unknown:
-        paths = ", ".join(f"{label}.{key}" for key in unknown)
-        raise ValueError(f"unsupported configuration field(s): {paths}")
-
-
-def merged_robot_config_with_curobo_profile(
-    robot_config: Mapping[str, Any],
-    curobo_profile: Mapping[str, Any],
+def curobo_config_from_profiles(
+    robot_profile: RobotProfileSettings,
     *,
-    profile_source: str = "<curobo profile>",
-) -> dict[str, Any]:
-    """把 cuRobo profile 默认值合入 robot 配置。
-
-    合并优先级为 ``curobo profile < robot YAML``。profile 提供 batch size、collision cache、
-    CUDA graph 等算法默认值；robot YAML 负责覆盖原生 ``curobo.robot`` 资源。
-    """
-
-    canonical_profile = validate_curobo_profile(curobo_profile, source=profile_source)
-    profile_curobo = _required_mapping(canonical_profile, "curobo", "profile")
-    return deep_merge({"curobo": dict(profile_curobo)}, dict(robot_config))
-
-
-def robot_curobo_config(
-    robot_config: Mapping[str, Any],
-    *,
-    curobo_profile: Mapping[str, Any] | None = None,
-    robot_source: str = "<robot profile>",
-    curobo_profile_source: str = "<curobo profile>",
+    cuda_device: int,
+    curobo_settings: CuroboProfileSettings | None = None,
 ) -> CuroboConfig:
-    """解析机器人级 cuRobo 配置，并可选合入算法 profile。"""
+    """把已解析 robot/model 与可选算法 profile 组合为后端配置。
 
-    try:
-        config = (
-            dict(robot_config)
-            if curobo_profile is None
-            else merged_robot_config_with_curobo_profile(
-                robot_config,
-                curobo_profile,
-                profile_source=curobo_profile_source,
-            )
-        )
-        return CuroboConfig.from_mapping(config)
-    except ValueError as exc:
-        if str(exc).startswith(f"{robot_source}:"):
-            raise
+    ``cuda_device`` 始终必填，避免诊断或测试路径重新引入隐式 ``cuda:0``。算法 profile
+    缺省时使用后端 dataclass 的已验证默认值，适合只物化机器人模型的工具调用。
+    """
+
+    if not isinstance(robot_profile, RobotProfileSettings):
+        raise TypeError("robot_profile must be RobotProfileSettings")
+    if type(cuda_device) is not int or cuda_device < 0:
+        raise ValueError("cuda_device must be a non-negative integer")
+    if curobo_settings is not None and not isinstance(
+        curobo_settings, CuroboProfileSettings
+    ):
+        raise TypeError("curobo_settings must be CuroboProfileSettings")
+
+    binding = robot_profile.curobo.binding
+    robot = robot_profile.curobo.robot
+    if not binding.enabled or robot is None:
         raise ValueError(
-            f"{robot_source} merged with {curobo_profile_source}: {exc}"
-        ) from exc
+            f"robot profile {robot_profile.name!r} does not enable a cuRobo model"
+        )
+
+    ik = CuroboIkConfig()
+    planner = CuroboMotionPlannerConfig()
+    if curobo_settings is not None:
+        kinematics = curobo_settings.kinematics
+        ik = replace(
+            ik,
+            num_seeds=kinematics.seed_count,
+            seed_solver_num_seeds=kinematics.seed_count,
+            max_batch_size=kinematics.max_batch_size,
+            use_cuda_graph=kinematics.use_cuda_graph,
+            self_collision_check=kinematics.collision_check,
+            collision_cache=(
+                kinematics.collision_cache.as_backend_mapping()
+                if kinematics.collision_check and kinematics.collision_cache is not None
+                else {}
+            ),
+        )
+        settings = curobo_settings.motion_planner
+        if settings is not None:
+            planner = replace(
+                planner,
+                warmup=settings.warmup,
+                num_ik_seeds=settings.ik_seed_count,
+                num_trajopt_seeds=settings.trajectory_seed_count,
+                use_cuda_graph=settings.use_cuda_graph,
+                self_collision_check=settings.collision_check,
+                collision_cache=(
+                    settings.collision_cache.as_backend_mapping()
+                    if settings.collision_check and settings.collision_cache is not None
+                    else {}
+                ),
+            )
+
+    config = CuroboConfig(
+        robot=robot,
+        device=CuroboDeviceConfig(device=f"cuda:{cuda_device}"),
+        ik=ik,
+        motion_planner=planner,
+    )
+    config.validate()
+    return config
 
 
-__all__ = [
-    "load_curobo_profile",
-    "merged_robot_config_with_curobo_profile",
-    "robot_curobo_config",
-    "validate_curobo_profile",
-]
+__all__ = ["curobo_config_from_profiles"]

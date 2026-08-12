@@ -1,0 +1,52 @@
+# Kaleidoscope 的显式 human viewport 冷配置。训练入口不会读取本文件；这里只显示一个
+# environment，避免为完整并行 batch 维护 renderer-facing USD/RTX 状态。
+# 该文件由独立可视化入口加载；不会改变 task observation、reward、physics 或训练 batch。
+viewport:
+  # 要投影到 renderer-facing stage 的环境索引，必须满足 0 <= index < 最终 num_envs。
+  selected_env: 0
+  # 每隔多少个 simulation step 更新一次画面；增大可降低渲染开销。
+  render_every_n_steps: 1
+  # RTX render product 分辨率，单位 pixel。
+  width: 1280
+  height: 720
+  # Kit OS 窗口尺寸，单位 pixel；可大于 render product，由 viewport 负责缩放显示。
+  window_width: 1440
+  window_height: 900
+  # Kit renderer 名称，必须由当前 Isaac Sim 安装提供。
+  renderer: RaytracedLighting
+  # Kit anti-aliasing mode 数值；0 表示关闭额外抗锯齿。
+  anti_aliasing: 0
+  # 每帧每像素 RTX sample 数；增加会提高质量和 GPU 成本。
+  samples_per_pixel_per_frame: 1
+  # RTX denoiser 开关；低 sample 实时预览可按需要启用。
+  denoiser: false
+
+  # 只描述 renderer-facing stage 的视角和灯光，不会复制进每个物理 environment。
+  visuals:
+    viewport:
+      # 是否创建/更新 Kit perspective camera。
+      enabled: true
+      # 世界坐标中的观察点与注视目标 xyz，单位 m。
+      eye: [2.4, -2.8, 1.6]
+      target: [0.0, 0.0, -0.05]
+      # perspective camera 的绝对 USD prim path。
+      prim_path: /OmniverseKit_Persp
+    lights:
+      # DistantLight 主光；color/rotation_rpy 为 null 时使用运行时默认颜色和朝向。
+      key:
+        enabled: true
+        path: /World/KeyLight
+        # USD light intensity 与角尺寸；两者必须为非负值。
+        intensity: 1200.0
+        angle: 0.5
+        # 可选 RGB 三元组；null 表示不覆盖 USD 默认白色。
+        color: null
+        # 可选 XYZ Euler 旋转，单位 rad；null 表示使用默认主光方向。
+        rotation_rpy: null
+      # DomeLight 环境补光，不具有 direction/angle 字段。
+      fill:
+        enabled: true
+        path: /World/FillLight
+        intensity: 250.0
+        # null 表示不覆盖 DomeLight 默认颜色。
+        color: null

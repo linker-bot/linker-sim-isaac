@@ -1,0 +1,9 @@
+# PhysX CPU 是 Mirror 的兼容性后端。具体 CUDA 卡仍由 mode.compute 唯一选择，供
+# cuRobo 与渲染使用；本 leaf 不重复声明设备编号。
+physics:
+  # 判别字段固定选择 NVIDIA PhysX；mode 只通过 profile 引用决定使用哪个后端。
+  engine: physx
+  # 刚体与约束在 CPU 上执行；cuRobo 和 RTX 仍可使用 mode.compute.cuda_device。
+  execution: cpu
+  # 约束求解器：PGS 内存/计算开销较低；TGS 通常更稳但单步成本更高。
+  solver_type: PGS

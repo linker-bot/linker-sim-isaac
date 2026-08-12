@@ -6,7 +6,21 @@ effort 控制参数写入，以及 YAML profile 解析。入口文件保持轻�
 机器人对象。
 """
 
-from linkerbot_sim.controllers.joint_controller import JointController
+from linkerbot_sim.controllers.control_mode import (
+    CONTROL_MODES,
+    ControlModeChange,
+    ControlModeError,
+    ControlModeGenerationConflict,
+    ControlModeIncompatibleError,
+    ControlModeLockedError,
+    ControlModeRollbackError,
+    ControlModeState,
+    ControlModeSwitchError,
+)
+from linkerbot_sim.controllers.joint_controller import (
+    JointController,
+    PreparedJointControllerRuntime,
+)
 from linkerbot_sim.controllers.types import (
     ComponentControlSettings,
     ControlMethod,
@@ -16,10 +30,20 @@ from linkerbot_sim.controllers.types import (
 )
 
 __all__ = [
+    "CONTROL_MODES",
     "ComponentControlSettings",
+    "ControlModeChange",
+    "ControlModeError",
+    "ControlModeGenerationConflict",
+    "ControlModeIncompatibleError",
+    "ControlModeLockedError",
+    "ControlModeRollbackError",
+    "ControlModeState",
+    "ControlModeSwitchError",
     "ControlMethod",
     "ControlMode",
     "ControlTargets",
     "JointControlSettings",
     "JointController",
+    "PreparedJointControllerRuntime",
 ]

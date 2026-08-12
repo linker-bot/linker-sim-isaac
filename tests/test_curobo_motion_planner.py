@@ -52,10 +52,6 @@ class _FakeCuroboContext:
         self._supports_collision_queries = bool(supports_collision_queries)
         self.collision_consumers = []
         self._tcp_orientation_wxyz = np.asarray(tcp_orientation_wxyz, dtype=float)
-        self.closed = False
-
-    def close(self):
-        self.closed = True
 
     def joint_names(self):
         return ["j0", "j1"]
@@ -160,9 +156,6 @@ class _LazyMotionPlannerContext:
     def motion_planner(self):
         self.motion_planner_created = True
         return self._motion_planner
-
-    def close(self):
-        pass
 
     def joint_names(self):
         return ["j0", "j1"]
@@ -274,24 +267,6 @@ def test_curobo_motion_planner_uses_request_dt_when_result_has_no_dt() -> None:
     assert result.success is True
     assert result.trajectory is not None
     np.testing.assert_allclose(result.trajectory.times, [0.05, 0.1])
-
-
-def test_curobo_motion_planner_close_releases_context() -> None:
-    context = _FakeCuroboContext()
-    planner = CuroboMotionPlanner(context)
-
-    planner.plan(
-        MotionRequest(
-            current_q=np.asarray([0.0, 0.1]),
-            goal_q=np.asarray([1.0, 1.1]),
-        )
-    )
-    assert planner._planner is context.motion_planner
-
-    planner.close()
-
-    assert context.closed is True
-    assert planner._planner is None
 
 
 def test_curobo_motion_planner_routes_pose_goal_to_plan_pose() -> None:

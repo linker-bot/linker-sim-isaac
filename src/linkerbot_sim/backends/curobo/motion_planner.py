@@ -33,7 +33,6 @@ class CuroboMotionPlanner:
         """保存 context 和默认 TCP frame。"""
 
         self.context = context
-        # tiled joint-space batch planning 只需要 facade 的 context 和 joint_names。
         # 单问题 MotionPlanner warmup 显存开销较大，因此延迟到真正执行 ``plan()`` 时再创建。
         self._planner = None
         self.tcp_frame_name = str(tcp_frame_name or context.default_tcp_frame)
@@ -50,14 +49,6 @@ class CuroboMotionPlanner:
         """返回 planner 使用的 C-space 关节名。"""
 
         return self.context.joint_names()
-
-    def close(self) -> None:
-        """释放底层 ``CuroboContext`` 持有的 CUDA graph / solver 资源。"""
-
-        close = getattr(self.context, "close", None)
-        if callable(close):
-            close()
-        self._planner = None
 
     def plan(
         self,

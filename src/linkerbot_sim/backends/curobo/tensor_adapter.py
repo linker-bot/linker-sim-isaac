@@ -1,20 +1,8 @@
-"""cuRobo tensor-like result 与 seed_config shape 适配。"""
+"""cuRobo ``seed_config`` shape 适配。"""
 
 from __future__ import annotations
 
 import numpy as np
-
-
-def tensor_like_to_numpy(value) -> np.ndarray:
-    """把 torch tensor、numpy 或序列转换为 float ndarray。"""
-
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        value = value.numpy()
-    return np.asarray(value, dtype=float)
 
 
 def seed_config_from_state_or_seed(current_state: object | None, seed):
@@ -58,5 +46,4 @@ def _contiguous(value):
 __all__ = [
     "as_curobo_seed_config",
     "seed_config_from_state_or_seed",
-    "tensor_like_to_numpy",
 ]

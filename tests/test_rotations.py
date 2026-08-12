@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from linkerbot_sim.utils.math_utils import make_rpy_transform
 from linkerbot_sim.utils.rotations import (
@@ -13,6 +14,11 @@ def test_rpy_to_quaternion_is_unit_length() -> None:
     quat = rpy_xyz_to_quat_wxyz([0.0, 2.007128639793479, -np.pi / 2.0])
     assert quat.shape == (4,)
     assert np.isclose(np.linalg.norm(quat), 1.0)
+
+
+def test_rpy_to_quaternion_rejects_non_finite_input() -> None:
+    with pytest.raises(ValueError, match="rpy_rad must contain 3 finite values"):
+        rpy_xyz_to_quat_wxyz([0.0, np.nan, 0.0])
 
 
 def test_quaternion_matrix_uses_wxyz_and_normalizes_input() -> None:

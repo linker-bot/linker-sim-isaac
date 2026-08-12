@@ -1,60 +1,105 @@
-# 已知风险与设计约束
+# 约束与安全边界
 
 语言：[中文](constraints.md) | [English](../../en/operations/constraints.md)
 
-本文定义当前 runtime、资源、配置和安全边界。
+## 平台
 
-## Runtime 与资源边界
+- Linux x86-64、Python 3.12、Isaac Sim 6.0.1；
+- 仿真环境使用 Kit `pxr`，CPU dev 环境使用 `usd-core`，二者不混装；
+- EULA 必须由部署者通过 `OMNI_KIT_ACCEPT_EULA` 明确接受；
+- 仓库是 checkout application，不支持 wheel/editable install。
 
-- Execution 层只播放已经生成的 target 或 trajectory，不在 physics-step playback 中执行 IK 或 planning。
-- cuRobo backend 只处理 cuRobo C-space；完整 articulation command-space 映射属于 runtime/controller 层。
-- Mimic follower 展开属于 controller/runtime logic，不属于 cuRobo backend。
-- 在 Tiled Scene 中，`TiledCommandAdapter` 是同步 command-step adapter；graph search 和 trajectory optimization 属于异步 planner worker 或 backend planning 层。
-- Reset、`set_state` 和 snapshot restore 在第一次写入前捕获 rollback state。Rollback 不完整，或不可逆 cache/queue reset 后发生失败时，runtime 进入 fail-stop；后续操作需要重建 runtime，不能继续提交修改。
-- 关闭时先停止 transport 和 publisher 线程，再关闭 planner、camera、IK 资源，最后关闭 `SimulationApp`。Timeout 表示关闭未完成；仍存活的子资源保留 sink 或 runtime dependency，以便再次执行关闭。
+## 产品排他
 
-## 线程边界
+- Mirror：PhysX/CPU、Newton/CPU 或 Newton/CUDA，一个 world；
+- Kaleidoscope：PhysX/CUDA 或项目自有 multi-world Newton/CUDA，默认训练入口均为 headless、
+  同一 CUDA device 上的 GPU-native runtime；显式调试入口可为任一后端打开单环境 viewport；
+- 两个 product root 互不 import；一个 runtime 只拥有一个 `IsaacSession`；
+- Kaleidoscope 不创建 trajectory planner、planning avoidance/collision cache、camera、SyntheticData、
+  Replicator、录制、transport 或 telemetry placeholder；Newton profile 是正式后端，不是 placeholder。
 
-- Isaac stage、articulation、PhysX view 和 camera wrapper 只能在仿真主线程访问。
-- 后台线程可以发布已经序列化的 snapshot、写文件或处理 transport response。
-- Foxglove 和 camera publisher 只消费主线程捕获的数据，不直接访问 Isaac object。
+## 线程与资源
 
-## 配置边界
+USD、Isaac view、physics step/render 和 runtime mutation 只在 owner thread。后台 ingress/output
+worker 只能处理已冻结数据。资源关闭遵循 consumer → producer；close timeout 不转移所有权。
 
-- Robot placement 属于 env profile，不属于 robot profile。
-- cuRobo robot model resource 属于 robot profile。
-- Planner 算法默认值属于 `configs/curobo/`。
-- Object 资产身份、import option、physics 和 planning collision 属于 object profile；逐场景 placement 属于 env profile。
-- Runtime process、resource、transport、telemetry、output 和 shutdown policy 属于 runtime profile；env profile 不接受这些字段。
-- 当前 checkout 是 workspace application。Runtime 需要 `configs/`、`scripts/`、`assets/` 和 vendored task resource，因此明确拒绝 distribution build 和 editable build。
+Mirror v2 与原生 Kaleidoscope 的控制模式切换只允许发生在两次完整运动/decision 之间，并且一次切换
+覆盖全部 robot/env；不会重建 runtime owner。回滚失败会永久 fail-stop，reset 不能清除，只能 close
+并由调用方重建。
 
-## Fixed-Base 边界
+Hybrid 力/位控制第一阶段只支持 Mirror PhysX CPU、至少 200 Hz（维护 profile 为 240 Hz）、每条请求一个
+目标 robot、物理 TCP 绑定和 `reference_frame: world`。目标 arm 的全部 joint 使用显式 effort；位控方向
+是显式笛卡尔阻抗，不是逐方向 implicit joint drive。hand 的 implicit position drive 与其它 robot 不被覆盖。
 
-- URDF rigid object 未设置 `import.fix_base` 时，其有效值跟随 `physics.static`：static object 使用 fixed import，dynamic object 使用 floating import。
-- Fixed URDF object 不叠加 kinematic rigid-body freeze。Static object 显式设置 `import.fix_base: false` 时先 floating import，再通过 kinematic body 和关闭重力实现冻结。
-- `physics.static: false` 与 `import.fix_base: true` 语义冲突，配置会被拒绝。
-- Static USD object 通过 kinematic body 和关闭重力实现冻结；USD object reference 不接受 `import` 段。
+Hybrid 增益只能作为独立 owner-queued operation 在两次完整运动之间修改。每段 motion 冻结一个
+`hybrid_parameter_generation`；`force_axes` 由每条 motion 独立选择。filter 与安全限幅不可通过 wire
+修改。motion 必须引用当前 tare generation，reset 会失效 tare；恢复 controller 失败会永久 fail-stop
+并请求 runtime shutdown。
 
-## Tiled Scene 约束
+## 数据
 
-- 全部 env 同步推进 physics。
-- Env-specific command 只更新选中 env 的 target row，不暂停其他 env。
-- 同一个启用 `tiled` 的 env profile 中，全部 env 共享相同的 robot/object 集合。
-- Per-env object 差异只允许覆盖同名 object 的 pose。
+- 长度 m、角度 rad、公开 quaternion `wxyz`；
+- Kaleidoscope hot path 禁止 CPU/NumPy selector 和隐式 device/dtype copy；
+- Gymnasium、persistent checkpoint 与 human viewport physics-to-USD sync 是三类显式主机边界；
+- Mirror scene snapshot 与 Kaleidoscope episode snapshot schema 不兼容；
+- setter/restore 先完整 preflight；不可证明 rollback 时 fail-stop。
 
-## 网络与 Telemetry 安全
+## 网络
 
-- Foxglove state stream 只用于观测，不接受控制命令。
-- 内置 control、state 和 camera listener 只接受 `localhost` 或数值 loopback 地址，不提供认证或 TLS。远程访问必须通过以 loopback endpoint 为上游的认证 TLS proxy 或 SSH tunnel。
-- Command port、Foxglove state live port 和 camera live port 是不同服务，必须使用不同端口。
-- Camera output port 在 env profile 中配置，不属于 interactive state-stream CLI 参数。
+Mirror TCP/WebSocket/Foxglove 只绑定 loopback，不提供认证、授权或 TLS。任何远程访问必须使用认证
+代理或 SSH tunnel。Queue、连接、消息、planner、camera 和 output byte 均有显式上限。
 
-## 验证
+## Newton
 
-常用检查：
+Newton runtime 不创建 Isaac World，直接拥有 Model/State/Control/Solver。Mirror 分配前断言一个
+world；Kaleidoscope 则从最终 `num_envs` 派生 `world_count`，并为每个 env 创建独立 world。两者都使用
+项目 Newton runtime，不加载 Isaac Newton extension。Mirror 每个 render frame 只执行一次
+physics-to-USD sync；camera 不归 physics manager 所有。
+
+机器人 profile 的逐组件 `gravity=false` 在 model finalize 前投影为 `mjc:gravcomp=1`，由
+Newton 求解器通过 `mjc:gravcomp` 补偿；它不会关闭同 world 动态对象的场景重力。Newton 不支持运行期逐 link
+切换，修改重力策略必须重建 runtime。
+
+## GPU RL
+
+PhysX builder 固定用 GridCloner 并启用 env ID；Newton builder 固定创建独立 worlds。它们是与物理
+引擎绑定的内部复制实现，不是公开配置 selector。Task 物理接触保留，但规划碰撞和避障禁用。Native/skrl step 中
+observation/action/reward/done/state/snapshot/clone/RNG 都必须驻留同一 GPU。
+
+Kaleidoscope task 不选择数值 backend。EE/直线 mode 必须用可选 `profiles.curobo` 选择
+kinematics-only profile，并关闭 collision check。canonical profile 省略
+`kinematics.collision_cache`；保留的合法值也会被忽略，从而不分配碰撞缓存；纯关节
+`joint_control`/`joint_delta` mode 必须省略该引用。
+
+Kaleidoscope action variant、shape 与 tick 数在构造期冻结；运行时 control mode 初始为 position，只能在
+完整 decision 之间全局切换。SAME_STEP 的 issued/stepped 阶段都拒绝切换。Gymnasium、skrl 与
+`KaleidoscopeTrainingPort` 不暴露 setter。Snapshot restore 不自动切换模式：schema 2 要求 active mode
+相同，schema 1 只表示 position，generation 不会被恢复。
+
+显式 viewport 是独立冷边界：只显示 `selected_env`，配置不进入 episode fingerprint。训练 physics tick
+始终 `render=False`，只有 `env.render()` 可执行一次 render-only 更新且不得推进 simulation time。
+
+## PhysX GPU 显存门禁
+
+`configs/physics/physx/cuda.yaml` 的 `physics.memory` 是完整的 `GpuMemoryBudget`，四个字段缺一不可：
+
+| 字段 | 约束 |
+| --- | --- |
+| `max_simulator_process_mib` | NVML 归属到当前 simulator PID 的进程显存上限，覆盖 Kit、PhysX、Torch 与其它原生 CUDA allocator |
+| `min_free_floor_mib` | prelaunch、warmup 后及稳态采样都必须保留的设备空闲显存绝对下限 |
+| `min_free_fraction_after_warmup` | warmup 后、稳态起点与终点必须保留的设备空闲显存比例，范围 `(0, 1]` |
+| `max_steady_growth_mib` | steady final 相对 steady baseline 的 simulator PID 显存最大增长量，允许为 `0` |
+
+该门禁只适用于 Kaleidoscope `physx_cuda` profile，不是 Newton capacity 的替代品。它通过 NVML 统计整个
+simulator 进程，同时报告 Torch allocated/reserved；采样失败、PID 不可见或预算越界都 fail closed。
+在有 Isaac/CUDA 的仿真环境执行：
 
 ```bash
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_tiled_*.py -q
-PYTHONPATH=src .venv/bin/python -m pytest tests/test_env_profile_directory.py tests/test_controller_configs.py tests/test_robot_loader_import_config.py -q
-git diff --check
+just smoke-kaleidoscope-memory
+OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
+  scripts/smoke_physx_gpu_memory_budget.py \
+  --profile physx_cuda --num-envs 2 --warmup-steps 8 --steady-steps 16
 ```
+
+`just test-simulation` 会连同七个正式 Kit closure、Mirror 四个 profile、Kaleidoscope 双后端与 Newton
+容量 smoke 一起执行这条显存门禁；普通 CPU `quality` 不隐式启动它。
