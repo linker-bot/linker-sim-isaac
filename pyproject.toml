@@ -60,6 +60,11 @@ simulation = [
 [tool.uv]
 # This is a repository application: runtime profiles and assets live beside src/.
 package = false
+# dev 与 simulation 互斥：dev 带来 PyPI usd-core，simulation 依赖 Kit 提供的 pxr，
+# 两者混装会让 Isaac 运行时从错误来源加载 USD。声明冲突后 uv 会直接拒绝
+# `--all-extras` 与 `--extra dev --extra simulation`，把这条约束从文档纪律升级为
+# 工具强制，而不是静默混装。
+conflicts = [[{ extra = "dev" }, { extra = "simulation" }]]
 # NVIDIA publishes Linux Isaac wheels separately from PyPI. Searching both
 # trusted indexes is required because the placeholder metadata differs.
 index-strategy = "unsafe-best-match"

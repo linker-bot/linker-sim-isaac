@@ -22,12 +22,12 @@ def import_curobo_module():
         if missing == "curobo":
             raise RuntimeError(
                 "cuRobo is not installed. Sync the project simulation dependencies "
-                "into .venv with 'uv sync --all-extras'."
+                "into .venv with 'uv sync --extra simulation'."
             ) from exc
         raise RuntimeError(
             "cuRobo is installed but a runtime dependency is missing: "
             f"{missing!r}. Sync .venv from the project lockfile with "
-            "'uv sync --all-extras'."
+            "'uv sync --extra simulation'."
         ) from exc
 
 

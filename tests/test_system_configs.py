@@ -5,6 +5,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import numpy as np
+import pytest
 
 from linkerbot_sim.assets.robot_config import RobotAssetConfig
 from linkerbot_sim.configuration.robots import (
@@ -434,6 +435,21 @@ def test_workstation_uses_primitive_collisions() -> None:
         )
 
 
+# 仓库场景引用的第三方资产包被 .gitignore 忽略，只有做仓库场景的开发者才需要安装。
+# 缺包时物理与该外部包完全解耦（FloorCollider 是本地 def），仅渲染少一个仓库；因此
+# 缺包环境下这条“视觉地板/解析碰撞体同位”验证唯一诚实的行为是 skip，而不是硬失败或
+# 用桩件伪造被引用 mesh 的真实变换。用单测 skipif 而非模块级 pytestmark，避免误伤本
+# 文件其余测试。
+_WAREHOUSE_PACK = repo_path(
+    "usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial"
+    "/Buildings/Warehouse/Warehouse01.usd"
+)
+
+
+@pytest.mark.skipif(
+    not _WAREHOUSE_PACK.exists(),
+    reason=f"仓库场景专用第三方资产包缺失，非仓库场景开发无需安装：{_WAREHOUSE_PACK}",
+)
 def test_industrial_warehouse_separates_visual_floor_and_analytic_collider() -> None:
     """仓库视觉 mesh 不参与接触，CPU/CUDA 后端共用同位解析 Plane。"""
 
