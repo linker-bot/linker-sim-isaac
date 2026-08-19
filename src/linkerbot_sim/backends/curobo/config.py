@@ -70,7 +70,16 @@ class CuroboTaskBundle:
         return cls(
             name=name,
             compatible_versions=frozenset({"0.8.0"}),
-            ik_optimizer_configs=("ik/particle_ik.yml", "ik/lbfgs_ik.yml"),
+            # Direct (kinematics) IK uses cuRobo's LBFGS optimizer ONLY -- the MPPI
+            # particle stage (ik/particle_ik.yml) is skipped. cuRobo 0.8.0's multi-stage
+            # direct IK crashes at scale: with >=8 parallel IK problems whose seed stage
+            # doesn't fully converge, it falls back to the MPPI stage whose RobotCostManager
+            # comes up with an empty cost registry (particle_ik.yml's multi_link_pose/bound
+            # costs unregistered) -> torch.cat([]) in get_sum_cost_and_constraint. LBFGS-only
+            # (what motion_ik_optimizer_configs already does) avoids that path, is faster
+            # (one stage), and converges from the warm-started seed for our use. See the
+            # DemoGrasp-port ticket ticket-curobo-mppi-ik-empty-cost.md.
+            ik_optimizer_configs=("ik/lbfgs_ik.yml",),
             ik_metrics_rollout="metrics_base.yml",
             ik_transition_model="ik/transition_ik.yml",
             motion_ik_optimizer_configs=("ik/lbfgs_ik.yml",),

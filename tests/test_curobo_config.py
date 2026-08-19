@@ -96,10 +96,8 @@ def test_curobo_complete_typed_config_validates_backend_sections() -> None:
     assert config.robot.resolved_tool_frames == ("tool",)
     assert config.robot.custom_tcp_frames[0].frame_name == "pinch_tcp"
     assert config.task_bundle.name == "curobo_v0_8_default"
-    assert config.task_bundle.ik_optimizer_configs == (
-        "ik/particle_ik.yml",
-        "ik/lbfgs_ik.yml",
-    )
+    # Direct IK is LBFGS-only (MPPI particle stage dropped; see config.py).
+    assert config.task_bundle.ik_optimizer_configs == ("ik/lbfgs_ik.yml",)
     assert config.ik.num_seeds == 16
     assert config.ik.random_seed == 999
     assert config.ik.optimizer_collision_activation_distance == 0.025
@@ -503,7 +501,6 @@ def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
         assert path.is_file()
 
     assert [Path(value).name for value in ik_calls[0]["optimizer_configs"]] == [
-        "particle_ik.yml",
         "lbfgs_ik.yml",
     ]
     assert_task_path(ik_calls[0]["metrics_rollout"], "metrics_base.yml")

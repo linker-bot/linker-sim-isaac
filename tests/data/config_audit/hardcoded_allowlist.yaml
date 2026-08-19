@@ -15,7 +15,7 @@ inventory:
   project_yaml_glob: configs/**/*.yaml
   project_yaml_count: 36
   third_party_task_glob: src/linkerbot_sim/backends/curobo/resources/task/**/*.yml
-  third_party_task_count: 8
+  third_party_task_count: 7
 
 # This file is an exception register, not a list of ordinary dataclass defaults.
 # Values already supplied by a strict current profile/request are deliberately absent.
@@ -167,7 +167,6 @@ entries:
       graph_planner/exact_graph_planner.yml: 0468c67a2edc16e5840792ab9bafd108a3ffec4f87ab4998a3d97cc2d7c8b73d
       graph_planner/transition_graph_planner.yml: 1e2cd8799c5d8fd5502cbf3c4a7283dd81a98ba239da5c110de65be7b56718f9
       ik/lbfgs_ik.yml: b350e4dfa90a54afade0c40f5eccf12a9db720ba8391b2de01d392f3b051ee4b
-      ik/particle_ik.yml: cc0f04fc3c945e6dc39bddff2cb8bb5cced35c105d29bcab898ced06e1b61a17
       ik/transition_ik.yml: 1e2cd8799c5d8fd5502cbf3c4a7283dd81a98ba239da5c110de65be7b56718f9
       metrics_base.yml: a99c622096983905c5ab3df05d16399acd80c558aad5c13d24377345e8c18832
       trajopt/lbfgs_bspline_trajopt.yml: 07c93d557663e5ba5baca5ddf9cd73e17f0892c617b73a5dd091fec928aef7a0
