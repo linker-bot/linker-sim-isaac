@@ -54,9 +54,9 @@ def _exact_arguments(
     missing = sorted(set(required) - set(arguments))
     unknown = sorted(set(arguments) - set(allowed))
     if missing:
-        raise ValueError(f"{operation} 缺少 arguments: {', '.join(missing)}")
+        raise ValueError(f"{operation} is missing arguments: {', '.join(missing)}")
     if unknown:
-        raise ValueError(f"{operation} 包含未知 arguments: {', '.join(unknown)}")
+        raise ValueError(f"{operation} contains unknown arguments: {', '.join(unknown)}")
 
 
 def _json_result(value: object) -> object:
@@ -94,7 +94,7 @@ class MirrorController:
         self, provider: Callable[[], Mapping[str, object]]
     ) -> None:
         if self.status_provider is not None:
-            raise RuntimeError("MirrorController status provider 已绑定")
+            raise RuntimeError("MirrorController status provider is already bound")
         self.status_provider = provider
 
     @property
@@ -264,7 +264,7 @@ class MirrorController:
             )
             if self.admission.status().estopped:
                 raise RuntimeEstoppedError(
-                    "Mirror 已 estop；reset 前拒绝 control.set_mode"
+                    "Mirror is e-stopped; control.set_mode is rejected before reset"
                 )
             expected_generation = (
                 require_expected_generation(arguments["expected_generation"])
@@ -321,17 +321,17 @@ class MirrorController:
                 arguments.get("clear_queue", True) is not True
                 and arguments.get("clear_queue", True) is not False
             ):
-                raise ValueError("runtime.reset.clear_queue 必须是 boolean")
+                raise ValueError("runtime.reset.clear_queue must be a boolean")
             if (
                 arguments.get("hold_after_reset", True) is not True
                 and arguments.get("hold_after_reset", True) is not False
             ):
-                raise ValueError("runtime.reset.hold_after_reset 必须是 boolean")
+                raise ValueError("runtime.reset.hold_after_reset must be a boolean")
             cancelled = ()
             if bool(arguments.get("clear_queue", True)):
                 cancelled = self.admission.cancel_pending(
                     code="reset_queue_cleared",
-                    message="请求因 runtime.reset 清空队列",
+                    message="request cancelled because runtime.reset cleared the queue",
                 )
             result = self.reset_service.reset(
                 hold_after_reset=bool(arguments.get("hold_after_reset", True))
@@ -354,13 +354,13 @@ class MirrorController:
             state = arguments["state"]
             strict = arguments.get("strict", True)
             if not isinstance(state, Mapping):
-                raise ValueError("state.set.state 必须是 object")
+                raise ValueError("state.set.state must be an object")
             if type(strict) is not bool:
-                raise ValueError("state.set.strict 必须是 boolean")
+                raise ValueError("state.set.strict must be a boolean")
             # state mutation 必须留在 owner thread；急停只允许继续读取状态，不能通过
             # state.set 改写仿真或隐式解除 latch。普通 ingress 在 admission 层也执行同一检查。
             if self.admission.status().estopped:
-                raise RuntimeEstoppedError("Mirror 已 estop；reset 前拒绝 state.set")
+                raise RuntimeEstoppedError("Mirror is e-stopped; state.set is rejected before reset")
             return self.state.set_state(state, strict=strict)
         if operation == "snapshot.get":
             _exact_arguments(arguments, allowed=set(), operation=operation)
@@ -376,11 +376,11 @@ class MirrorController:
             label_map = arguments.get("label_map")
             strict = arguments.get("strict", True)
             if not isinstance(snapshot, Mapping):
-                raise ValueError("snapshot.set.snapshot 必须是 object")
+                raise ValueError("snapshot.set.snapshot must be an object")
             if label_map is not None and not isinstance(label_map, Mapping):
-                raise ValueError("snapshot.set.label_map 必须是 object 或 null")
+                raise ValueError("snapshot.set.label_map must be an object or null")
             if type(strict) is not bool:
-                raise ValueError("snapshot.set.strict 必须是 boolean")
+                raise ValueError("snapshot.set.strict must be a boolean")
             return self.snapshots.restore_snapshot(
                 snapshot,
                 label_map=label_map,  # type: ignore[arg-type]
@@ -402,7 +402,7 @@ class MirrorController:
             )
             target = arguments["request_id"]
             if not isinstance(target, str) or not target:
-                raise ValueError("queue.cancel.request_id 必须非空")
+                raise ValueError("queue.cancel.request_id must be non-empty")
             return {"cancelled": self.admission.cancel(target), "request_id": target}
         if operation == "queue.cancel_current":
             _exact_arguments(arguments, allowed=set(), operation=operation)
@@ -414,7 +414,7 @@ class MirrorController:
             _exact_arguments(arguments, allowed=set(), operation=operation)
             self._quit.set()
             return {"quitting": True}
-        raise ValueError(f"不支持的 operation: {operation!r}")
+        raise ValueError(f"unsupported operation: {operation!r}")
 
     def _control_mode_service(self) -> MirrorControlModeService:
         if self.control_mode is None:

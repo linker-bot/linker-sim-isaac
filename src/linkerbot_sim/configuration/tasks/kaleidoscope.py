@@ -118,7 +118,7 @@ def _action_from_mapping(value: object, *, label: str) -> ActionSettings:
         )
         if fraction > 1.0:
             raise ConfigurationError(
-                f"{label}.effort_limit_fraction 必须在 (0, 1] 范围内"
+                f"{label}.effort_limit_fraction must be within the range (0, 1]"
             )
         return JointControlActionSettings(
             mode="joint_control",
@@ -291,7 +291,7 @@ def _action_from_mapping(value: object, *, label: str) -> ActionSettings:
         "ee_pose_position, ee_pose_full, "
         "ee_linear_path_position, ee_linear_path_full"
     )
-    raise ConfigurationError(f"{label}.mode 必须是固定 action variant 之一: {allowed}")
+    raise ConfigurationError(f"{label}.mode must be one of the fixed action variants: {allowed}")
 
 
 @dataclass(frozen=True)
@@ -327,7 +327,7 @@ class ObservationSettings:
         ):
             if not getattr(result, mandatory):
                 raise ConfigurationError(
-                    f"{label}.{mandatory} 是 tblock task 的必选 observation"
+                    f"{label}.{mandatory} is a required observation for the tblock task"
                 )
         return result
 
@@ -392,7 +392,7 @@ class TerminationSettings:
             mapping["failure_aabb_max"], label=f"{label}.failure_aabb_max", length=3
         )
         if any(low >= high for low, high in zip(minimum, maximum, strict=True)):
-            raise ConfigurationError(f"{label} failure AABB 每个 min 必须小于 max")
+            raise ConfigurationError(f"{label} failure AABB requires each min to be less than max")
         return cls(
             horizon_decisions=as_int(
                 mapping["horizon_decisions"],
@@ -425,7 +425,7 @@ class TerminationSettings:
 def _range2(value: object, *, label: str) -> tuple[float, float]:
     result = as_float_tuple(value, label=label, length=2)
     if result[0] > result[1]:
-        raise ConfigurationError(f"{label}[0] 必须 <= {label}[1]")
+        raise ConfigurationError(f"{label}[0] must be <= {label}[1]")
     return result  # type: ignore[return-value]
 
 
@@ -489,7 +489,7 @@ class KaleidoscopeTaskSettings:
         )
         norm_squared = sum(component * component for component in heading_axis)
         if abs(norm_squared - 1.0) > 1e-6:
-            raise ConfigurationError(f"{label}.heading_axis 必须是单位向量")
+            raise ConfigurationError(f"{label}.heading_axis must be a unit vector")
         return cls(
             task_id=as_string(mapping["id"], label=f"{label}.id"),
             dynamic_object=as_string(

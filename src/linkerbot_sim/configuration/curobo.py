@@ -76,7 +76,7 @@ class CuroboKinematicsSettings:
         cache_raw = mapping.get("collision_cache")
         if collision_check and cache_raw is None:
             raise ConfigurationError(
-                f"{label}.collision_cache 在 collision_check=true 时必须声明"
+                f"{label}.collision_cache must be declared when collision_check=true"
             )
         return cls(
             max_batch_size=as_int(
@@ -134,7 +134,7 @@ class CuroboMotionPlannerSettings:
         cache_raw = mapping.get("collision_cache")
         if collision_check and cache_raw is None:
             raise ConfigurationError(
-                f"{label}.collision_cache 在 collision_check=true 时必须声明"
+                f"{label}.collision_cache must be declared when collision_check=true"
             )
         return cls(
             warmup=as_bool(mapping["warmup"], label=f"{label}.warmup"),

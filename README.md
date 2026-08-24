@@ -1,4 +1,4 @@
-# LinkerHand Simulation
+# linker-sim-isaac
 
 Choose a language:
 
@@ -26,7 +26,7 @@ The product factory selects exactly one of seven formal Kit experiences:
 
 Kaleidoscope viewport launch configuration is independent from the task/physics graph and its
 snapshot fingerprint. It adds no camera, SyntheticData, Replicator, recording, or telemetry.
-Public mode profiles are `mirror/{physx_cpu,newton_cpu,newton_cuda}` and
+Public mode profiles are `mirror/{physx_cpu,physx_cpu_hybrid,newton_cpu,newton_cuda}` and
 `kaleidoscope/{physx_cuda,newton_cuda}`.
 Their scene selectors are respectively `mirror/scene3` and
 `kaleidoscope/tblock_push`; the unqualified `scene.id` remains the stable identity
@@ -43,3 +43,9 @@ Documentation:
 
 Start with the [runtime and API chooser](docs/en/getting-started/choose-runtime-and-api.md)
 or its [中文版](docs/zh-CN/getting-started/choose-runtime-and-api.md).
+
+## License
+
+Released under the [MIT License](LICENSE), © Linkerbot (Beijing) Technology Co., Ltd.
+Third-party software and asset licenses are documented in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

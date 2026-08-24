@@ -59,17 +59,17 @@ class MirrorMotionOwner:
         protocol: str = "linkerbot.mirror.v1",
     ) -> object:
         if self._closed:
-            raise RuntimeError("MirrorMotionOwner 已关闭")
+            raise RuntimeError("MirrorMotionOwner is closed")
         allowed = (
             MIRROR_V3_MOTION_OPERATIONS
             if protocol == "linkerbot.mirror.v3"
             else MOTION_OPERATIONS
         )
         if operation not in allowed:
-            raise ValueError(f"不支持的 Mirror motion operation: {operation!r}")
+            raise ValueError(f"unsupported Mirror motion operation: {operation!r}")
         callback = getattr(self.backend, "execute", None)
         if not callable(callback):
-            raise RuntimeError("motion backend 未实现 execute")
+            raise RuntimeError("motion backend does not implement execute")
         return callback(
             operation,
             dict(arguments),
@@ -88,10 +88,10 @@ class MirrorMotionOwner:
         """Run the dedicated v3 tare transaction on the same owner thread."""
 
         if self._closed:
-            raise RuntimeError("MirrorMotionOwner 已关闭")
+            raise RuntimeError("MirrorMotionOwner is closed")
         callback = getattr(self.backend, "tare_wrench", None)
         if not callable(callback):
-            raise RuntimeError("motion backend 未实现 tare_wrench")
+            raise RuntimeError("motion backend does not implement tare_wrench")
         return callback(
             dict(arguments),
             request_id=request_id,

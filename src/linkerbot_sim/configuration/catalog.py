@@ -63,15 +63,15 @@ def load_yaml_mapping(path: str | Path) -> dict[str, object]:
         resolved = candidate.resolve()
         data = load_yaml(resolved)
     except OSError as exc:
-        raise ConfigurationError(f"无法读取 YAML 配置 {candidate}: {exc}") from exc
+        raise ConfigurationError(f"failed to read YAML configuration {candidate}: {exc}") from exc
     except ValueError as exc:
-        raise ConfigurationError(f"无效 YAML 配置 {resolved}: {exc}") from exc
+        raise ConfigurationError(f"invalid YAML configuration {resolved}: {exc}") from exc
     try:
         document = strict_mapping(data, label=str(resolved))
         _require_string_mapping_keys(document, label=str(resolved))
         return document
     except ConfigurationError as exc:
-        raise ConfigurationError(f"无效 YAML 配置 {resolved}: {exc}") from exc
+        raise ConfigurationError(f"invalid YAML configuration {resolved}: {exc}") from exc
 
 
 def _require_string_mapping_keys(
@@ -93,7 +93,7 @@ def _require_string_mapping_keys(
     ancestors = set() if _ancestors is None else _ancestors
     identity = id(value)
     if identity in ancestors:
-        raise ConfigurationError(f"{label}:{path} 不得包含递归 YAML alias")
+        raise ConfigurationError(f"{label}:{path} must not contain recursive YAML alias")
     ancestors.add(identity)
     try:
         if is_mapping:
@@ -101,7 +101,7 @@ def _require_string_mapping_keys(
             for key, item in value.items():
                 if not isinstance(key, str) or not key:
                     raise ConfigurationError(
-                        f"{label}:{path} 的键必须是非空字符串，得到 {key!r}"
+                        f"{label}:{path} keys must be non-empty strings, got {key!r}"
                     )
                 child_path = key if path == "<root>" else f"{path}.{key}"
                 _require_string_mapping_keys(
@@ -127,16 +127,16 @@ def _profile_reference(reference: str, *, label: str) -> tuple[str, ...]:
     """校验可含子目录的 profile stem，禁止绝对路径和目录逃逸。"""
 
     if not isinstance(reference, str) or not reference:
-        raise ConfigurationError(f"{label} 必须是非空 profile 引用")
+        raise ConfigurationError(f"{label} must be a non-empty profile reference")
     if "\\" in reference:
-        raise ConfigurationError(f"{label} 必须使用 '/' 作为 profile namespace 分隔符")
+        raise ConfigurationError(f"{label} must use '/' as the profile namespace separator")
     if reference.startswith("/") or reference.endswith(".yaml"):
-        raise ConfigurationError(f"{label} 必须是不带扩展名的相对 profile stem")
+        raise ConfigurationError(f"{label} must be a relative profile stem without an extension")
     parts = tuple(reference.split("/"))
     if any(not part or part in {".", ".."} for part in parts):
-        raise ConfigurationError(f"{label} 包含非法路径分量: {reference!r}")
+        raise ConfigurationError(f"{label} contains an invalid path component: {reference!r}")
     if any("." in part for part in parts):
-        raise ConfigurationError(f"{label} 的 profile stem 不能包含 '.'")
+        raise ConfigurationError(f"{label} profile stem must not contain '.'")
     return parts
 
 
@@ -148,7 +148,7 @@ def _within(path: Path, root: Path, *, label: str) -> Path:
     try:
         resolved.relative_to(resolved_root)
     except ValueError as exc:
-        raise ConfigurationError(f"{label} 逃逸配置根目录: {resolved}") from exc
+        raise ConfigurationError(f"{label} escapes the configuration root directory: {resolved}") from exc
     return resolved
 
 
@@ -169,7 +169,7 @@ class _ConfigurationGraphReader:
         if isinstance(source, str) and "/" not in source and "\\" not in source:
             if not source or source in {".", ".."} or source.endswith(".yaml"):
                 raise ConfigurationError(
-                    "mode selector 必须是简单 stem；路径调用方应显式传入 Path"
+                    "mode selector must be a simple stem; path callers should pass an explicit Path"
                 )
             candidate = self.configs_root / "modes" / mode / f"{source}.yaml"
         else:
@@ -184,7 +184,7 @@ class _ConfigurationGraphReader:
                 )
         candidate = _within(candidate, self.configs_root, label="mode config")
         if candidate.suffix != ".yaml":
-            raise ConfigurationError(f"mode config 必须使用 .yaml 扩展名: {candidate}")
+            raise ConfigurationError(f"mode config must use the .yaml extension: {candidate}")
         expected_parent = self.configs_root / "modes" / mode
         _within(candidate, expected_parent, label=f"{mode} mode config")
         self.sources["mode"] = candidate
@@ -202,7 +202,7 @@ class _ConfigurationGraphReader:
         parts = _profile_reference(reference, label=f"profiles.{group}")
         if namespace is not None and (len(parts) < 2 or parts[0] != namespace):
             raise ConfigurationError(
-                f"profiles.{group} 必须位于 {namespace!r} namespace，得到 {reference!r}"
+                f"profiles.{group} must reside within the {namespace!r} namespace, got {reference!r}"
             )
         group_root = _within(
             self.configs_root / group,
@@ -222,7 +222,7 @@ class _ConfigurationGraphReader:
             )
             if profile_root != namespace_path:
                 raise ConfigurationError(
-                    f"profiles.{group} {namespace!r} namespace 根目录不能是符号链接"
+                    f"profiles.{group} {namespace!r} namespace root directory must not be a symbolic link"
                 )
             relative_parts = parts[1:]
         path = _within(
@@ -243,7 +243,7 @@ class _ConfigurationGraphReader:
         )
         if source_key in self.sources:
             raise ConfigurationError(
-                f"configuration provenance key {source_key!r} 已被占用"
+                f"configuration provenance key {source_key!r} is already in use"
             )
         self.sources[source_key] = path
         return payload
@@ -279,7 +279,7 @@ class _ConfigurationGraphReader:
                 source=str(path),
             )
         except ValueError as exc:
-            raise ConfigurationError(f"无效对象 profile {path}: {exc}") from exc
+            raise ConfigurationError(f"invalid object profile {path}: {exc}") from exc
         self.sources[f"object.{instance_name}"] = path
         return profile
 
@@ -308,7 +308,7 @@ class _ConfigurationGraphReader:
                 source=str(path),
             )
         except ValueError as exc:
-            raise ConfigurationError(f"无效机器人 profile {path}: {exc}") from exc
+            raise ConfigurationError(f"invalid robot profile {path}: {exc}") from exc
         self.sources[f"robot.{instance_label}"] = path
         return profile
 
@@ -359,7 +359,7 @@ class _ConfigurationGraphReader:
             )
         except (OSError, ValueError) as exc:
             raise ConfigurationError(
-                f"无效 controller bundle {bundle_name!r} ({bundle_root}): {exc}"
+                f"invalid controller bundle {bundle_name!r} ({bundle_root}): {exc}"
             ) from exc
         self._controller_bundles[bundle_name] = profiles
         return profiles
@@ -429,14 +429,14 @@ def _effective_controller_bundle_names(
         profile = instance.resolved_profile
         if profile is None:
             raise ConfigurationError(
-                f"robot instance {instance.label!r} 尚未绑定 resolved profile"
+                f"robot instance {instance.label!r} has not yet been bound to a resolved profile"
             )
         selected = (
             instance.controller_profile or profile.controller_profile or runtime_default
         )
         if not isinstance(selected, str):
             raise ConfigurationError(
-                f"robot instance {instance.label!r} 的 controller profile 必须是字符串"
+                f"robot instance {instance.label!r} controller profile must be a string"
             )
         result.append(selected)
     return tuple(result)
@@ -516,7 +516,7 @@ def load_mirror_config(
     assert isinstance(scene, MirrorSceneSettings)
     if scene.scene_id != Path(references.scene).name:
         raise ConfigurationError(
-            "scene.id 必须与 scene profile stem 一致: "
+            "scene.id must match the scene profile stem: "
             f"{scene.scene_id!r} != {Path(references.scene).name!r}"
         )
     physics = physics_settings_from_mapping(physics_raw)
@@ -584,8 +584,8 @@ def load_kaleidoscope_config(
     physics = physics_settings_from_mapping(raw_profiles["physics"])
     if not isinstance(physics, (PhysxCudaSettings, NewtonCudaSettings)):
         raise ConfigurationError(
-            "Kaleidoscope physics profile 必须使用 PhysX CUDA 或 Newton CUDA；"
-            f"实际为 engine={physics.engine!r}, execution={physics.execution!r}"
+            "Kaleidoscope physics profile must use PhysX CUDA or Newton CUDA; "
+            f"got engine={physics.engine!r}, execution={physics.execution!r}"
         )
     scene = _resolve_scene_asset_profiles(
         KaleidoscopeSceneSettings.from_mapping(raw_profiles["scene"]),
@@ -595,12 +595,12 @@ def load_kaleidoscope_config(
     task = KaleidoscopeTaskSettings.from_mapping(raw_profiles["task"])
     if scene.scene_id != Path(references.scene).name:
         raise ConfigurationError(
-            "scene.id 必须与 scene profile stem 一致: "
+            "scene.id must match the scene profile stem: "
             f"{scene.scene_id!r} != {Path(references.scene).name!r}"
         )
     if task.task_id != Path(references.task).name:
         raise ConfigurationError(
-            "task.id 必须与 task profile stem 一致: "
+            "task.id must match the task profile stem: "
             f"{task.task_id!r} != {Path(references.task).name!r}"
         )
     curobo: CuroboProfileSettings | None = None
@@ -610,7 +610,7 @@ def load_kaleidoscope_config(
     )
     if needs_curobo != (references.curobo is not None):
         raise ConfigurationError(
-            "Kaleidoscope profiles.curobo 必须且只能用于 EE/直线 action"
+            "Kaleidoscope profiles.curobo must be used only for EE/linear action"
         )
     if references.curobo is not None:
         # task 只表达动作语义；数值实现由 mode composition 显式选择。joint_delta 不读取
@@ -674,7 +674,7 @@ def load_kaleidoscope_viewport_config(
             candidate = cwd_candidate if cwd_candidate.exists() else root / candidate
         path = _within(candidate, group_root, label="viewport config")
         if path.suffix != ".yaml":
-            raise ConfigurationError(f"viewport config 必须使用 .yaml 扩展名: {path}")
+            raise ConfigurationError(f"viewport config must use the .yaml extension: {path}")
     else:
         parts = _profile_reference(source, label="viewport profile")
         path = _within(
@@ -715,7 +715,7 @@ def load_skrl_training_settings(
             candidate = cwd_candidate if cwd_candidate.exists() else root / candidate
         path = _within(candidate, group_root, label="training config")
         if path.suffix != ".yaml":
-            raise ConfigurationError(f"training config 必须使用 .yaml 扩展名: {path}")
+            raise ConfigurationError(f"training config must use the .yaml extension: {path}")
     else:
         parts = _profile_reference(source, label="training profile")
         path = _within(

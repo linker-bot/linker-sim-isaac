@@ -114,24 +114,24 @@ class KaleidoscopeEnvironmentSettings:
             (origin_xyz[0], origin_xyz[1], origin_xyz[2]),
         )
         if not self.base_env_path.startswith("/"):
-            raise ConfigurationError("environments.base_env_path 必须是绝对 USD path")
+            raise ConfigurationError("environments.base_env_path must be an absolute USD path")
         if self.base_env_path == "/":
             raise ConfigurationError(
-                "environments.base_env_path 必须是非根 USD 容器 path"
+                "environments.base_env_path must be a non-root USD container path"
             )
         if "//" in self.base_env_path:
             raise ConfigurationError(
-                "environments.base_env_path 不能包含空 USD path component"
+                "environments.base_env_path must not contain an empty USD path component"
             )
         if self.base_env_path != "/" and self.base_env_path.endswith("/"):
-            raise ConfigurationError("environments.base_env_path 不能以 '/' 结尾")
+            raise ConfigurationError("environments.base_env_path must not end with '/'")
         if (
             not self.env_prefix
             or "/" in self.env_prefix
             or self.env_prefix in {".", ".."}
         ):
             raise ConfigurationError(
-                "environments.env_prefix 必须是单个非空 USD path component"
+                "environments.env_prefix must be a single non-empty USD path component"
             )
 
     @classmethod
@@ -183,52 +183,52 @@ class KaleidoscopeConfig:
     def __post_init__(self) -> None:
         if self.mode != "kaleidoscope":
             raise ConfigurationError(
-                f"KaleidoscopeConfig.mode 必须是 'kaleidoscope'，得到 {self.mode!r}"
+                f"KaleidoscopeConfig.mode must be 'kaleidoscope', got {self.mode!r}"
             )
         if not isinstance(self.physics, (PhysxCudaSettings, NewtonCudaSettings)):
             raise ConfigurationError(
-                "Kaleidoscope 只接受 PhysX CUDA 或 Newton CUDA；execution 必须为 cuda"
+                "Kaleidoscope only accepts PhysX CUDA or Newton CUDA; execution must be cuda"
             )
         if self.default_controller_bundle not in self.controller_bundles:
             raise ConfigurationError(
-                "Kaleidoscope physics 派生的默认 controller bundle 未进入已解析配置图: "
+                "Kaleidoscope physics-derived default controller bundle did not enter the resolved configuration graph: "
                 f"{self.default_controller_bundle!r}"
             )
         for robot in self.scene.robots:
             if robot.resolved_profile is None:
                 raise ConfigurationError(
-                    "Kaleidoscope scene.robots 必须由 catalog 绑定严格 robot profile"
+                    "Kaleidoscope scene.robots must be bound to a strict robot profile by the catalog"
                 )
         if isinstance(self.physics, PhysxCudaSettings):
             if self.physics.use_fabric is not True:
-                raise ConfigurationError("Kaleidoscope PhysX 必须启用 Fabric")
+                raise ConfigurationError("Kaleidoscope PhysX must enable Fabric")
             if self.physics.enable_scene_query_support:
                 raise ConfigurationError(
-                    "Kaleidoscope 不建立 planner/collision-query 路径，"
-                    "enable_scene_query_support 必须为 false"
+                    "Kaleidoscope does not establish planner/collision-query paths, "
+                    "enable_scene_query_support must be false"
                 )
         dynamic_rigid_names: list[str] = []
         for item in self.scene.objects:
             profile = item.resolved_profile
             if profile is None:
                 raise ConfigurationError(
-                    "Kaleidoscope scene.objects 必须由 catalog 绑定严格对象 profile"
+                    "Kaleidoscope scene.objects must be bound to a strict object profile by the catalog"
                 )
             if not isinstance(profile, RigidObjectProfileConfig):
                 raise ConfigurationError(
-                    "Kaleidoscope 状态 schema 只支持一个动态刚体，不支持 dynamic_chain"
+                    "Kaleidoscope state schema supports only one dynamic rigid body, not dynamic_chain"
                 )
             if not profile.physics.static:
                 dynamic_rigid_names.append(item.name)
         if len(dynamic_rigid_names) != 1:
             raise ConfigurationError(
-                "Kaleidoscope scene 必须恰好包含一个非静态 rigid object，"
-                f"实际为 {dynamic_rigid_names}"
+                "Kaleidoscope scene must contain exactly one non-static rigid object, "
+                f"got {dynamic_rigid_names}"
             )
         if dynamic_rigid_names[0] != self.task.dynamic_object:
             raise ConfigurationError(
-                "task.dynamic_object 必须命名 scene 中唯一的非静态 rigid object："
-                f"期望 {dynamic_rigid_names[0]!r}，得到 {self.task.dynamic_object!r}"
+                "task.dynamic_object must name the unique non-static rigid object in the scene: "
+                f"expected {dynamic_rigid_names[0]!r}, got {self.task.dynamic_object!r}"
             )
         needs_kinematics = not isinstance(
             self.task.action,
@@ -236,23 +236,23 @@ class KaleidoscopeConfig:
         )
         if (self.profiles.curobo is None) != (self.curobo is None):
             raise ConfigurationError(
-                "profiles.curobo 与已解析 cuRobo profile 必须同时存在或同时缺省"
+                "profiles.curobo and the resolved cuRobo profile must both be present or both be absent"
             )
         if needs_kinematics != (self.curobo is not None):
             raise ConfigurationError(
-                "只有 EE/直线 action 必须由 mode root 引用一个 cuRobo profile；"
-                "joint_control/joint_delta 不得加载无用 cuRobo 配置"
+                "only EE/linear action must reference a cuRobo profile from the mode root; "
+                "joint_control/joint_delta must not load an unused cuRobo configuration"
             )
         if self.curobo is not None:
             if self.curobo.motion_planner is not None:
                 raise ConfigurationError(
-                    "Kaleidoscope cuRobo profile 不得声明 motion_planner"
+                    "Kaleidoscope cuRobo profile must not declare motion_planner"
                 )
             kinematics = self.curobo.kinematics
             if kinematics.collision_check:
                 raise ConfigurationError(
-                    "Kaleidoscope batch IK/直线运动不装配 collision world，"
-                    "curobo.kinematics.collision_check 必须为 false"
+                    "Kaleidoscope batch IK/linear motion does not assemble a collision world, "
+                    "curobo.kinematics.collision_check must be false"
                 )
 
     @property

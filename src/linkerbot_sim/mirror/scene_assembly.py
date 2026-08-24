@@ -254,7 +254,7 @@ class MirrorSceneResources:
 
         sample_step = self.claim_completed_step() if step is None else int(step)
         if sample_step < 0:
-            raise ValueError("Mirror output step 必须 >= 0")
+            raise ValueError("Mirror output step must be >= 0")
         if write_idle_logs:
             self._write_idle_logs(step=sample_step, phase=phase)
         observe_state = getattr(self.state_observer, "observe", None)
@@ -1094,7 +1094,7 @@ def _resolved_robot_profile(instance: RobotInstanceSettings) -> RobotProfileSett
     profile = instance.resolved_profile
     if not isinstance(profile, RobotProfileSettings):
         raise RuntimeError(
-            f"Mirror robot {instance.label!r} 缺少 catalog 绑定的 resolved profile"
+            f"Mirror robot {instance.label!r} is missing the catalog-bound resolved profile"
         )
     return profile
 
@@ -1279,7 +1279,7 @@ def build_mirror_assembly(config: MirrorConfig) -> object:
         profile = instance.resolved_profile
         if profile is None:
             raise RuntimeError(
-                f"Mirror object {instance.name!r} 缺少 catalog 绑定的 resolved profile"
+                f"Mirror object {instance.name!r} is missing the catalog-bound resolved profile"
             )
 
     resources = create_mirror_scene_resources(

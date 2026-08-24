@@ -428,8 +428,8 @@ def _runtime_physics_dt(runtime: object) -> float:
             dt = float(get_dt())
             if np.isfinite(dt) and dt > 0.0:
                 return dt
-            raise ValueError(f"runtime.{name}.get_physics_dt() 必须返回有限正数")
-    raise RuntimeError("state sampler runtime 缺少 physics time-step port")
+            raise ValueError(f"runtime.{name}.get_physics_dt() must return a finite positive number")
+    raise RuntimeError("state sampler runtime is missing a physics time-step port")
 
 
 def _num_dof(robot) -> int:

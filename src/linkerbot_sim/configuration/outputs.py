@@ -112,7 +112,7 @@ class CameraOutputSettings:
         )
         if enabled and not has_consumer:
             raise ConfigurationError(
-                f"{label} 在 enabled=true 时必须配置 save_root、live_port 或 mcap_path"
+                f"{label} must configure save_root, live_port or mcap_path when enabled=true"
             )
         return cls(
             enabled=enabled,
@@ -234,7 +234,7 @@ class LoggingOutputSettings:
         )
         if enabled and path is None:
             raise ConfigurationError(
-                f"{label}.joint_tracking_path 在 enabled=true 时必须存在"
+                f"{label}.joint_tracking_path must be present when enabled=true"
             )
         hybrid_path = _optional_string(
             mapping["hybrid_control_path"],
@@ -246,11 +246,11 @@ class LoggingOutputSettings:
         )
         if log_hybrid and not enabled:
             raise ConfigurationError(
-                f"{label}.log_hybrid_control=true 要求 enabled=true"
+                f"{label}.log_hybrid_control=true requires enabled=true"
             )
         if log_hybrid and hybrid_path is None:
             raise ConfigurationError(
-                f"{label}.hybrid_control_path 在 log_hybrid_control=true 时必须存在"
+                f"{label}.hybrid_control_path must be present when log_hybrid_control=true"
             )
         return cls(
             enabled=enabled,
@@ -339,7 +339,7 @@ class TelemetryOutputSettings:
         enabled = as_bool(mapping["enabled"], label=f"{label}.enabled")
         rate_hz = as_float(mapping["rate_hz"], label=f"{label}.rate_hz", minimum=0.0)
         if enabled and rate_hz <= 0.0:
-            raise ConfigurationError(f"{label}.rate_hz 在 enabled=true 时必须 > 0")
+            raise ConfigurationError(f"{label}.rate_hz must be > 0 when enabled=true")
         live_port = _optional_port(
             mapping["foxglove_live_port"],
             label=f"{label}.foxglove_live_port",
@@ -347,7 +347,7 @@ class TelemetryOutputSettings:
         mcap_path = _optional_string(mapping["mcap_path"], label=f"{label}.mcap_path")
         if enabled and live_port is None and mcap_path is None:
             raise ConfigurationError(
-                f"{label} 在 enabled=true 时必须配置 live_port 或 mcap_path"
+                f"{label} must configure live_port or mcap_path when enabled=true"
             )
         include_joint_states = as_bool(
             mapping["include_joint_states"],
@@ -370,7 +370,7 @@ class TelemetryOutputSettings:
             or include_scene_markers
             or include_hybrid_control
         ):
-            raise ConfigurationError(f"{label} 启用时至少选择一种 telemetry modality")
+            raise ConfigurationError(f"{label} must select at least one telemetry modality when enabled")
         include_efforts = as_bool(
             mapping["include_efforts"], label=f"{label}.include_efforts"
         )
@@ -381,7 +381,7 @@ class TelemetryOutputSettings:
         )
         if include_efforts and effort_field == "none":
             raise ConfigurationError(
-                f"{label}.joint_effort_field 在 include_efforts=true 时不能为 none"
+                f"{label}.joint_effort_field must not be none when include_efforts=true"
             )
         return cls(
             enabled=enabled,
@@ -448,9 +448,9 @@ class TelemetryTopicSettings:
             name: as_string(mapping[name], label=f"{label}.{name}") for name in names
         }
         if any(not value.startswith("/") or ".." in value for value in values.values()):
-            raise ConfigurationError(f"{label} 的 topic 必须是无 '..' 的绝对路径")
+            raise ConfigurationError(f"{label} topics must be absolute paths without '..'")
         if len(set(values.values())) != len(values):
-            raise ConfigurationError(f"{label} 的 topic 必须互不相同")
+            raise ConfigurationError(f"{label} topics must be distinct")
         return cls(**values)
 
 

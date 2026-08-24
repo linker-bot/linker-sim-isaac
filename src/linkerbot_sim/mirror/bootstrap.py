@@ -61,29 +61,29 @@ def _backend_value(value: object) -> str:
 def _validate_physics_composition(config: MirrorConfig, session: object) -> None:
     physics = getattr(session, "physics_runtime", None)
     if physics is None:
-        raise RuntimeError("Mirror assembly session 缺少 physics_runtime")
+        raise RuntimeError("Mirror assembly session is missing physics_runtime")
     backend = _backend_value(getattr(physics, "backend", ""))
     kind = str(getattr(physics, "kind", "")).casefold()
     execution = str(getattr(physics, "execution", "")).casefold()
     if isinstance(config.physics, PhysxCpuSettings):
         if backend != "physx" or kind != "physx_cpu":
             raise RuntimeError(
-                "Mirror physx_cpu 配置得到错误 runtime："
+                "Mirror physx_cpu config produced the wrong runtime: "
                 f"backend={backend!r}, kind={kind!r}"
             )
         return
     if not isinstance(config.physics, (NewtonCpuSettings, NewtonCudaSettings)):
-        raise RuntimeError("MirrorConfig 包含未授权物理后端")
+        raise RuntimeError("MirrorConfig contains an unauthorized physics backend")
     expected_execution = config.physics.execution
     expected_kind = f"newton_{expected_execution}"
     if backend != "newton" or kind != expected_kind or execution != expected_execution:
         raise RuntimeError(
-            "Mirror Newton 配置必须得到执行设备一致的项目 Newton runtime；"
+            "Mirror Newton config must produce a project Newton runtime whose execution device matches; "
             f"actual={backend}/{kind}/{execution}"
         )
     assert_single_world = getattr(physics, "assert_single_world", None)
     if not callable(assert_single_world):
-        raise RuntimeError("Newton runtime 缺少 assert_single_world")
+        raise RuntimeError("Newton runtime is missing assert_single_world")
     assert_single_world(consumer="Mirror")
 
 
@@ -138,7 +138,7 @@ def create_mirror_runtime(
     """
 
     if not isinstance(config, MirrorConfig):
-        raise TypeError("create_mirror_runtime 必须接收 MirrorConfig")
+        raise TypeError("create_mirror_runtime must be given a MirrorConfig")
     factory = assembly_factory or _default_assembly_factory
     assembly = factory(config)
     try:
@@ -208,7 +208,7 @@ def create_mirror_runtime(
             "control_mode_state_provider",
         ):
             if assembly.scene_resources.control_mode_state_provider is not None:
-                raise RuntimeError("Mirror snapshot control-mode provider 已绑定")
+                raise RuntimeError("Mirror snapshot control-mode provider is already bound")
             assembly.scene_resources.control_mode_state_provider = control_mode.get_mode
         bind_control_mode_provider = getattr(
             assembly.motion_backend,

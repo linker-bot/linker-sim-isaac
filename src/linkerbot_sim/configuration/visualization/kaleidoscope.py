@@ -43,32 +43,32 @@ class KaleidoscopeViewportSettings:
         """也约束直接构造/``dataclasses.replace``，避免绕过 YAML parser。"""
 
         if type(self.selected_env) is not int or self.selected_env < 0:
-            raise ConfigurationError("viewport.selected_env 必须是非负整数")
+            raise ConfigurationError("viewport.selected_env must be a non-negative integer")
         if type(self.render_every_n_steps) is not int or self.render_every_n_steps < 1:
-            raise ConfigurationError("viewport.render_every_n_steps 必须是正整数")
+            raise ConfigurationError("viewport.render_every_n_steps must be a positive integer")
         for name in ("width", "height", "window_width", "window_height"):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
-                raise ConfigurationError(f"viewport.{name} 必须是正整数")
+                raise ConfigurationError(f"viewport.{name} must be a positive integer")
         if (
             not isinstance(self.renderer, str)
             or not self.renderer
             or self.renderer.strip() != self.renderer
         ):
-            raise ConfigurationError("viewport.renderer 必须是首尾无空白的非空字符串")
+            raise ConfigurationError("viewport.renderer must be a non-empty string with no leading or trailing whitespace")
         if type(self.anti_aliasing) is not int or self.anti_aliasing < 0:
-            raise ConfigurationError("viewport.anti_aliasing 必须是非负整数")
+            raise ConfigurationError("viewport.anti_aliasing must be a non-negative integer")
         if (
             type(self.samples_per_pixel_per_frame) is not int
             or self.samples_per_pixel_per_frame < 1
         ):
             raise ConfigurationError(
-                "viewport.samples_per_pixel_per_frame 必须是正整数"
+                "viewport.samples_per_pixel_per_frame must be a positive integer"
             )
         if type(self.denoiser) is not bool:
-            raise ConfigurationError("viewport.denoiser 必须是 boolean")
+            raise ConfigurationError("viewport.denoiser must be a boolean")
         if not isinstance(self.visuals, SceneVisualSettings):
-            raise ConfigurationError("viewport.visuals 必须是 SceneVisualSettings")
+            raise ConfigurationError("viewport.visuals must be a SceneVisualSettings")
 
     @classmethod
     def from_mapping(
@@ -100,7 +100,7 @@ class KaleidoscopeViewportSettings:
                 {"visuals": visuals_mapping}
             )
         except ValueError as exc:
-            raise ConfigurationError(f"{label} 包含无效视觉设置: {exc}") from exc
+            raise ConfigurationError(f"{label} contains invalid visual settings: {exc}") from exc
         return cls(
             selected_env=as_int(
                 mapping["selected_env"],

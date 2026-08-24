@@ -91,7 +91,7 @@ class ObjectInstanceSettings:
 
     def __post_init__(self) -> None:
         if not self.prim_path.startswith("/"):
-            raise ConfigurationError("scene.objects[].prim_path 必须是绝对 USD path")
+            raise ConfigurationError("scene.objects[].prim_path must be an absolute USD path")
 
     @classmethod
     def from_mapping(cls, value: object, *, label: str) -> "ObjectInstanceSettings":
@@ -115,7 +115,7 @@ class ObjectInstanceSettings:
 
 def _sequence(value: object, *, label: str) -> Sequence[object]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        raise ConfigurationError(f"{label} 必须是序列")
+        raise ConfigurationError(f"{label} must be a sequence")
     return value
 
 
@@ -133,14 +133,14 @@ def _instances(
         for index, item in enumerate(object_values)
     )
     if not robots:
-        raise ConfigurationError(f"{label}.robots 至少需要一个机器人")
+        raise ConfigurationError(f"{label}.robots requires at least one robot")
     if len({item.label for item in robots}) != len(robots):
-        raise ConfigurationError(f"{label}.robots label 必须唯一")
+        raise ConfigurationError(f"{label}.robots label must be unique")
     if len({item.name for item in objects}) != len(objects):
-        raise ConfigurationError(f"{label}.objects name 必须唯一")
+        raise ConfigurationError(f"{label}.objects name must be unique")
     prim_paths = [item.prim_path for item in objects]
     if len(set(prim_paths)) != len(prim_paths):
-        raise ConfigurationError(f"{label}.objects prim_path 必须唯一")
+        raise ConfigurationError(f"{label}.objects prim_path must be unique")
     return robots, objects
 
 
@@ -183,16 +183,16 @@ class CameraSettings:
         if not self.parent_prim_path.startswith("/") or not self.prim_path.startswith(
             "/"
         ):
-            raise ConfigurationError("scene.cameras 的 prim path 必须是绝对 USD path")
+            raise ConfigurationError("scene.cameras prim path must be an absolute USD path")
         if not self.prim_path.startswith(self.parent_prim_path.rstrip("/") + "/"):
             raise ConfigurationError(
-                "camera prim_path 必须位于 parent_prim_path namespace 下"
+                "camera prim_path must be under the parent_prim_path namespace"
             )
         if (
             self.clipping_range_m[0] <= 0
             or self.clipping_range_m[1] <= self.clipping_range_m[0]
         ):
-            raise ConfigurationError("camera clipping_range_m 必须满足 0 < near < far")
+            raise ConfigurationError("camera clipping_range_m must satisfy 0 < near < far")
 
     @classmethod
     def from_mapping(cls, value: object, *, label: str) -> "CameraSettings":
@@ -210,7 +210,7 @@ class CameraSettings:
         require_keys(mapping, required=required, optional={"intrinsics"}, label=label)
         resolution_raw = _sequence(mapping["resolution"], label=f"{label}.resolution")
         if len(resolution_raw) != 2:
-            raise ConfigurationError(f"{label}.resolution 必须是 [width, height]")
+            raise ConfigurationError(f"{label}.resolution must be [width, height]")
         return cls(
             camera_id=as_string(mapping["id"], label=f"{label}.id"),
             parent_prim_path=as_string(
@@ -260,7 +260,7 @@ class ViewportSettings:
         )
         prim_path = as_string(mapping["prim_path"], label=f"{label}.prim_path")
         if not prim_path.startswith("/"):
-            raise ConfigurationError(f"{label}.prim_path 必须是绝对 USD path")
+            raise ConfigurationError(f"{label}.prim_path must be an absolute USD path")
         return cls(
             enabled=as_bool(mapping["enabled"], label=f"{label}.enabled"),
             eye=as_float_tuple(mapping["eye"], label=f"{label}.eye", length=3),  # type: ignore[arg-type]
@@ -292,7 +292,7 @@ class ViewportSettings:
             label=f"{label}.prim_path",
         )
         if not prim_path.startswith("/"):
-            raise ConfigurationError(f"{label}.prim_path 必须是绝对 USD path")
+            raise ConfigurationError(f"{label}.prim_path must be an absolute USD path")
         return cls(
             enabled=as_bool(
                 mapping.get("enabled", defaults.enabled),
@@ -460,14 +460,14 @@ def _optional_mapping(
         return None
     value = mapping[key]
     if not isinstance(value, Mapping):
-        raise ConfigurationError(f"{label}.{key} 必须是 mapping")
+        raise ConfigurationError(f"{label}.{key} must be a mapping")
     return value
 
 
 def _absolute_prim_path(value: object, *, label: str) -> str:
     path = as_string(value, label=label)
     if not path.startswith("/"):
-        raise ConfigurationError(f"{label} 必须是绝对 USD path")
+        raise ConfigurationError(f"{label} must be an absolute USD path")
     return path
 
 
@@ -495,7 +495,7 @@ class LightSettings:
         )
         path = as_string(mapping["path"], label=f"{label}.path")
         if not path.startswith("/"):
-            raise ConfigurationError(f"{label}.path 必须是绝对 USD path")
+            raise ConfigurationError(f"{label}.path must be an absolute USD path")
         return cls(
             light_id=as_string(mapping["id"], label=f"{label}.id"),
             path=path,
@@ -563,9 +563,9 @@ class MirrorSceneSettings:
             for index, item in enumerate(light_values)
         )
         if len({item.camera_id for item in cameras}) != len(cameras):
-            raise ConfigurationError(f"{label}.cameras id 必须唯一")
+            raise ConfigurationError(f"{label}.cameras id must be unique")
         if len({item.light_id for item in lights}) != len(lights):
-            raise ConfigurationError(f"{label}.lights id 必须唯一")
+            raise ConfigurationError(f"{label}.lights id must be unique")
         return cls(
             scene_id=as_string(mapping["id"], label=f"{label}.id"),
             description=as_string(mapping["description"], label=f"{label}.description"),

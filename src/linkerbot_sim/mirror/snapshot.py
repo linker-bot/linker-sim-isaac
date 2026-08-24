@@ -17,11 +17,11 @@ def _json_snapshot(value: object) -> dict[str, object]:
         serializer = getattr(value, "to_mapping", None)
     if not callable(serializer):
         raise RuntimeError(
-            "snapshot adapter 必须返回 mapping 或可序列化 snapshot object"
+            "snapshot adapter must return a mapping or a serializable snapshot object"
         )
     result = serializer()
     if not isinstance(result, Mapping):
-        raise RuntimeError("snapshot serializer 必须返回 mapping")
+        raise RuntimeError("snapshot serializer must return a mapping")
     return deepcopy(dict(result))
 
 
@@ -50,7 +50,7 @@ class MirrorSnapshotService:
         strict: bool = True,
     ) -> object:
         if not isinstance(snapshot, Mapping):
-            raise ValueError("snapshot 必须是 mapping")
+            raise ValueError("snapshot must be a mapping")
         copied_map = None if label_map is None else dict(label_map)
         result = self.restore(
             deepcopy(dict(snapshot)),

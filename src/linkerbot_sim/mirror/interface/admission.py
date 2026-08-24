@@ -59,9 +59,9 @@ class MirrorAdmissionQueue:
 
     def __init__(self, *, capacity: int = 256, terminal_capacity: int = 512) -> None:
         if type(capacity) is not int or capacity <= 0:
-            raise ValueError("capacity 必须是正整数")
+            raise ValueError("capacity must be a positive integer")
         if type(terminal_capacity) is not int or terminal_capacity < capacity:
-            raise ValueError("terminal_capacity 必须是 >= capacity 的整数")
+            raise ValueError("terminal_capacity must be an integer >= capacity")
         self.capacity = capacity
         self.terminal_capacity = terminal_capacity
         self._condition = Condition()
@@ -76,7 +76,7 @@ class MirrorAdmissionQueue:
     def submit(self, request: MirrorRequest) -> None:
         with self._condition:
             if self._closed:
-                raise AdmissionClosedError("Mirror admission 已关闭")
+                raise AdmissionClosedError("Mirror admission is closed")
             if self._estopped and (
                 request.operation.startswith("motion.")
                 or request.operation
@@ -88,12 +88,12 @@ class MirrorAdmissionQueue:
                 }
             ):
                 raise RuntimeEstoppedError(
-                    "Mirror 已 estop；reset 前拒绝新 motion、state.set 与 control.set_mode"
+                    "Mirror is estopped; new motion, state.set and control.set_mode are rejected until reset"
                 )
             if self._known(request.request_id):
-                raise DuplicateRequestError(f"重复 request_id: {request.request_id!r}")
+                raise DuplicateRequestError(f"duplicate request_id: {request.request_id!r}")
             if len(self._pending) + int(self._active is not None) >= self.capacity:
-                raise AdmissionCapacityError("Mirror admission queue 已满")
+                raise AdmissionCapacityError("Mirror admission queue is full")
             self._pending.append(request)
             self._condition.notify_all()
 
@@ -102,15 +102,15 @@ class MirrorAdmissionQueue:
 
         with self._condition:
             if self._closed:
-                raise AdmissionClosedError("Mirror admission 已关闭")
+                raise AdmissionClosedError("Mirror admission is closed")
             if self._known(request_id):
-                raise DuplicateRequestError(f"重复 request_id: {request_id!r}")
+                raise DuplicateRequestError(f"duplicate request_id: {request_id!r}")
             self._reserved_immediate.add(request_id)
 
     def complete_immediate(self, response: MirrorResponse) -> None:
         with self._condition:
             if response.request_id not in self._reserved_immediate:
-                raise RuntimeError("immediate response 没有对应 reservation")
+                raise RuntimeError("immediate response has no matching reservation")
             self._reserved_immediate.remove(response.request_id)
             self._store_terminal(response)
             self._condition.notify_all()
@@ -124,7 +124,7 @@ class MirrorAdmissionQueue:
                     return None
                 self._condition.wait(remaining)
             if self._active is not None:
-                raise RuntimeError("Mirror admission 只允许一个主线程 active request")
+                raise RuntimeError("Mirror admission only allows a single main-thread active request")
             if not self._pending:
                 return None
             self._active = self._pending.popleft()
@@ -133,7 +133,7 @@ class MirrorAdmissionQueue:
     def complete(self, response: MirrorResponse) -> None:
         with self._condition:
             if self._active is None or self._active.request_id != response.request_id:
-                raise RuntimeError("response 不属于当前 active request")
+                raise RuntimeError("response does not belong to the current active request")
             self._active = None
             self._cancelled.discard(response.request_id)
             self._store_terminal(response)
@@ -145,7 +145,7 @@ class MirrorAdmissionQueue:
             while request_id not in self._terminal:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0.0:
-                    raise TimeoutError(f"等待 Mirror response 超时: {request_id!r}")
+                    raise TimeoutError(f"timed out waiting for Mirror response: {request_id!r}")
                 self._condition.wait(remaining)
             return self._terminal[request_id]
 
@@ -162,7 +162,7 @@ class MirrorAdmissionQueue:
                     MirrorResponse.failure(
                         request_id,
                         code="cancelled",
-                        message="请求在执行前被取消",
+                        message="the request was cancelled before execution",
                         protocol=request.protocol,
                     )
                 )
@@ -211,7 +211,7 @@ class MirrorAdmissionQueue:
                     MirrorResponse.failure(
                         request.request_id,
                         code="estopped",
-                        message="请求因 runtime.estop 被清除",
+                        message="the request was cleared by runtime.estop",
                         protocol=request.protocol,
                     )
                 )
@@ -249,7 +249,7 @@ class MirrorAdmissionQueue:
                     MirrorResponse.failure(
                         request.request_id,
                         code="runtime_closing",
-                        message="Mirror 正在关闭",
+                        message="Mirror is shutting down",
                         protocol=request.protocol,
                     )
                 )

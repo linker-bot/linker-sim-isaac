@@ -68,7 +68,7 @@ class MirrorInterfaceSettings:
         )
         if terminal_history_capacity < admission_capacity:
             raise ConfigurationError(
-                f"{label}.terminal_history_capacity 必须 >= admission_capacity"
+                f"{label}.terminal_history_capacity must be >= admission_capacity"
             )
         return cls(
             admission_capacity=admission_capacity,
@@ -117,22 +117,22 @@ class MirrorInterfaceSettings:
 def _non_negative_six(value: object, *, label: str) -> tuple[float, ...]:
     result = as_float_tuple(value, label=label, length=6)
     if any(item < 0.0 for item in result):
-        raise ConfigurationError(f"{label} 的各项必须 >= 0")
+        raise ConfigurationError(f"{label} entries must each be >= 0")
     return result
 
 
 def _positive_six(value: object, *, label: str) -> tuple[float, ...]:
     result = as_float_tuple(value, label=label, length=6)
     if any(item <= 0.0 for item in result):
-        raise ConfigurationError(f"{label} 的各项必须 > 0")
+        raise ConfigurationError(f"{label} entries must each be > 0")
     return result
 
 
 def _bool_six(value: object, *, label: str) -> tuple[bool, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
-        raise ConfigurationError(f"{label} 必须是长度为 6 的 boolean 序列")
+        raise ConfigurationError(f"{label} must be a boolean sequence of length 6")
     if len(value) != 6:
-        raise ConfigurationError(f"{label} 必须恰好包含 6 项")
+        raise ConfigurationError(f"{label} must contain exactly 6 items")
     return tuple(
         as_bool(item, label=f"{label}[{index}]") for index, item in enumerate(value)
     )
@@ -307,7 +307,7 @@ class HybridContactSettings:
             for exit_value, enter_value in zip(exit_values, enter, strict=True)
         ):
             raise ConfigurationError(
-                f"{label}.exit_abs_wrench 的各项必须小于 enter_abs_wrench"
+                f"{label}.exit_abs_wrench entries must each be less than enter_abs_wrench"
             )
         return cls(
             enter_abs_wrench=enter,
@@ -478,13 +478,13 @@ class HybridForcePositionSettings:
         )
         if frames != ("world",):
             raise ConfigurationError(
-                f"{label}.supported_reference_frames 第一阶段必须精确为 [world]"
+                f"{label}.supported_reference_frames must be exactly [world] in the first phase"
             )
         axes = _bool_six(
             mapping["allowed_force_axes"], label=f"{label}.allowed_force_axes"
         )
         if not any(axes):
-            raise ConfigurationError(f"{label}.allowed_force_axes 至少启用一个轴")
+            raise ConfigurationError(f"{label}.allowed_force_axes must enable at least one axis")
         motion = HybridMotionSettings.from_mapping(
             mapping["motion"], label=f"{label}.motion"
         )
@@ -518,9 +518,9 @@ class HybridForcePositionSettings:
             label=f"{label}.force.integral",
         )
         if posture.stiffness > tuning.max_posture_stiffness:
-            raise ConfigurationError(f"{label}.posture.stiffness 超过 tuning 上限")
+            raise ConfigurationError(f"{label}.posture.stiffness exceeds the tuning limit")
         if posture.damping > tuning.max_posture_damping:
-            raise ConfigurationError(f"{label}.posture.damping 超过 tuning 上限")
+            raise ConfigurationError(f"{label}.posture.damping exceeds the tuning limit")
         return cls(
             minimum_physics_frequency_hz=as_float(
                 mapping["minimum_physics_frequency_hz"],
@@ -557,7 +557,7 @@ def _require_not_above(
     label: str,
 ) -> None:
     if any(value > limit for value, limit in zip(values, maximum, strict=True)):
-        raise ConfigurationError(f"{label} 超过 tuning 上限")
+        raise ConfigurationError(f"{label} exceeds the tuning limit")
 
 
 @dataclass(frozen=True)

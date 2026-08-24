@@ -4,6 +4,14 @@
 # 表示仓库地板碰撞；视觉 mesh 不参与物理。原始模型与纹理仍保留在
 # usd-material/extracted 中，不复制进项目 assets。
 # scene 负责实例 name、prim_path 和 root_pose；本 profile 只保存可复用资产与接触策略。
+#
+# 许可 / License: 上游 Warehouse01 属于 NVIDIA Omniverse / Isaac 示例素材，受 NVIDIA 资产许可条款约束。
+# 本仓库不再分发该 NVIDIA 素材：被引用的 USD 载荷位于被 gitignore 的 usd-material/ 目录，由用户按
+# NVIDIA 条款自行获取，仓库内仅提供轻量 scene 接线。参见 THIRD_PARTY_NOTICES.md。
+# The upstream Warehouse01 is NVIDIA Omniverse / Isaac sample content governed by NVIDIA's asset
+# license terms. This repository does NOT redistribute the NVIDIA asset: the referenced USD payload
+# lives under a gitignored usd-material/ directory that users obtain separately under NVIDIA's terms;
+# only lightweight scene wiring is shipped here. See THIRD_PARTY_NOTICES.md.
 
 object:
   # 资产逻辑名称；scene 按文件名 industrial_warehouse 引用，实例身份使用 objects[].name。

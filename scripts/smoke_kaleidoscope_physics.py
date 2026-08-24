@@ -91,12 +91,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--action-mode",
         choices=ACTION_MODES,
         default=DEFAULT_ACTION_MODE,
-        help="选择 canonical joint smoke 或真实 batch IK/同步直线诊断路径",
+        help="select the canonical joint smoke or the real batch IK / synchronized straight-line diagnostic path",
     )
     parser.add_argument(
         "--exercise-training-adapters",
         action="store_true",
-        help="在 native smoke 后验证真实 Gymnasium/skrl SAME_STEP 边界",
+        help="verify the real Gymnasium/skrl SAME_STEP boundary after the native smoke",
     )
     return parser.parse_args(argv)
 

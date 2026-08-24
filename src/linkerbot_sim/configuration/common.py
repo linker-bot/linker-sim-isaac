@@ -19,11 +19,11 @@ def strict_mapping(value: object, *, label: str) -> dict[str, object]:
     """返回字符串键 mapping，并拒绝 YAML 中难以审计的非字符串键。"""
 
     if not isinstance(value, Mapping):
-        raise ConfigurationError(f"{label} 必须是 mapping")
+        raise ConfigurationError(f"{label} must be a mapping")
     result: dict[str, object] = {}
     for key, item in value.items():
         if not isinstance(key, str) or not key:
-            raise ConfigurationError(f"{label} 的键必须是非空字符串，得到 {key!r}")
+            raise ConfigurationError(f"{label} keys must be non-empty strings, got {key!r}")
         result[key] = item
     return result
 
@@ -41,24 +41,24 @@ def require_keys(
     missing = sorted(set(required) - present)
     unknown = sorted(present - set(required) - set(optional))
     if missing:
-        raise ConfigurationError(f"{label} 缺少必填字段: {', '.join(missing)}")
+        raise ConfigurationError(f"{label} is missing required fields: {', '.join(missing)}")
     if unknown:
-        raise ConfigurationError(f"{label} 包含未知字段: {', '.join(unknown)}")
+        raise ConfigurationError(f"{label} contains unknown fields: {', '.join(unknown)}")
 
 
 def as_string(value: object, *, label: str, choices: set[str] | None = None) -> str:
     if not isinstance(value, str) or not value or value.strip() != value:
-        raise ConfigurationError(f"{label} 必须是首尾无空白的非空字符串")
+        raise ConfigurationError(f"{label} must be a non-empty string without leading or trailing whitespace")
     if choices is not None and value not in choices:
         allowed = ", ".join(sorted(choices))
-        raise ConfigurationError(f"{label} 必须是 {{{allowed}}} 之一，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be one of {{{allowed}}}, got {value!r}")
     return value
 
 
 def as_bool(value: object, *, label: str) -> bool:
     # ``bool`` 是 ``int`` 的子类，因此必须使用精确类型判断，避免 0/1 偷渡。
     if type(value) is not bool:
-        raise ConfigurationError(f"{label} 必须是 YAML boolean，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be a YAML boolean, got {value!r}")
     return value
 
 
@@ -70,11 +70,11 @@ def as_int(
     maximum: int | None = None,
 ) -> int:
     if type(value) is not int:
-        raise ConfigurationError(f"{label} 必须是整数，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be an integer, got {value!r}")
     if minimum is not None and value < minimum:
-        raise ConfigurationError(f"{label} 必须 >= {minimum}，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be >= {minimum}, got {value!r}")
     if maximum is not None and value > maximum:
-        raise ConfigurationError(f"{label} 必须 <= {maximum}，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be <= {maximum}, got {value!r}")
     return value
 
 
@@ -87,16 +87,16 @@ def as_float(
     strictly_positive: bool = False,
 ) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ConfigurationError(f"{label} 必须是有限数值，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be a finite number, got {value!r}")
     result = float(value)
     if not isfinite(result):
-        raise ConfigurationError(f"{label} 必须是有限数值，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be a finite number, got {value!r}")
     if strictly_positive and result <= 0.0:
-        raise ConfigurationError(f"{label} 必须 > 0，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be > 0, got {value!r}")
     if minimum is not None and result < minimum:
-        raise ConfigurationError(f"{label} 必须 >= {minimum}，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be >= {minimum}, got {value!r}")
     if maximum is not None and result > maximum:
-        raise ConfigurationError(f"{label} 必须 <= {maximum}，得到 {value!r}")
+        raise ConfigurationError(f"{label} must be <= {maximum}, got {value!r}")
     return result
 
 
@@ -107,9 +107,9 @@ def as_float_tuple(
     length: int,
 ) -> tuple[float, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        raise ConfigurationError(f"{label} 必须是长度为 {length} 的数值序列")
+        raise ConfigurationError(f"{label} must be a numeric sequence of length {length}")
     if len(value) != length:
-        raise ConfigurationError(f"{label} 必须恰好包含 {length} 项")
+        raise ConfigurationError(f"{label} must contain exactly {length} items")
     return tuple(
         as_float(item, label=f"{label}[{index}]") for index, item in enumerate(value)
     )
@@ -117,12 +117,12 @@ def as_float_tuple(
 
 def as_string_tuple(value: object, *, label: str) -> tuple[str, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        raise ConfigurationError(f"{label} 必须是字符串序列")
+        raise ConfigurationError(f"{label} must be a string sequence")
     result = tuple(
         as_string(item, label=f"{label}[{index}]") for index, item in enumerate(value)
     )
     if len(set(result)) != len(result):
-        raise ConfigurationError(f"{label} 不能包含重复值")
+        raise ConfigurationError(f"{label} must not contain duplicate values")
     return result
 
 
@@ -143,7 +143,7 @@ def reject_forbidden_keys(
             )
             if fragment is not None:
                 raise ConfigurationError(
-                    f"{label}.{raw_key} 属于 Kaleidoscope 禁止配置概念 {fragment!r}"
+                    f"{label}.{raw_key} belongs to Kaleidoscope-forbidden configuration concept {fragment!r}"
                 )
             reject_forbidden_keys(
                 child,

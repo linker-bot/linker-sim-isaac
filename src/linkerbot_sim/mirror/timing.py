@@ -19,9 +19,9 @@ class WallClockStepSynchronizer:
 
     def __post_init__(self) -> None:
         if type(self.enabled) is not bool:
-            raise TypeError("enabled 必须是 boolean")
+            raise TypeError("enabled must be a boolean")
         if not callable(self.monotonic) or not callable(self.sleep):
-            raise TypeError("monotonic 和 sleep 必须可调用")
+            raise TypeError("monotonic and sleep must be callable")
 
     def rebase(self) -> None:
         """让下一步立即执行，并从该步重新建立墙钟 deadline。"""
@@ -33,13 +33,13 @@ class WallClockStepSynchronizer:
 
         dt = float(physics_dt_s)
         if not math.isfinite(dt) or dt <= 0.0:
-            raise ValueError("physics_dt_s 必须是有限正数")
+            raise ValueError("physics_dt_s must be a finite positive number")
         if not self.enabled:
             return
 
         now = float(self.monotonic())
         if not math.isfinite(now):
-            raise RuntimeError("monotonic 返回了非有限时间")
+            raise RuntimeError("monotonic returned a non-finite time")
         deadline = self._next_step_at
         if deadline is None or now >= deadline:
             # 第一 tick 立即执行；若 owner 已落后，也只从当前时间建立下一 deadline，

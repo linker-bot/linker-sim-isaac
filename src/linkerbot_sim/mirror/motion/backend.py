@@ -76,11 +76,11 @@ class MirrorTimelineBackend:
         """绑定产品根拥有的唯一 render transaction，且只允许绑定一次。"""
 
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         if not callable(callback):
-            raise TypeError("timeline render callback 必须可调用")
+            raise TypeError("timeline render callback must be callable")
         if self._render_frame is not None:
-            raise RuntimeError("timeline render callback 已绑定")
+            raise RuntimeError("timeline render callback is already bound")
         self._render_frame = callback
         self._hybrid.bind_render_frame(callback)
 
@@ -88,11 +88,11 @@ class MirrorTimelineBackend:
         """绑定产品根拥有的唯一 physics tick 墙钟。"""
 
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         if not isinstance(synchronizer, WallClockStepSynchronizer):
-            raise TypeError("timeline step synchronizer 类型无效")
+            raise TypeError("timeline step synchronizer has an invalid type")
         if self._step_synchronizer is not None:
-            raise RuntimeError("timeline step synchronizer 已绑定")
+            raise RuntimeError("timeline step synchronizer is already bound")
         self._step_synchronizer = synchronizer
         self._hybrid.bind_before_step(synchronizer.before_step)
 
@@ -103,11 +103,11 @@ class MirrorTimelineBackend:
         """Bind the runtime-owned logical mode query exactly once."""
 
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         if not callable(provider):
-            raise TypeError("timeline control-mode provider 必须可调用")
+            raise TypeError("timeline control-mode provider must be callable")
         if self._control_mode_provider_bound:
-            raise RuntimeError("timeline control-mode provider 已绑定")
+            raise RuntimeError("timeline control-mode provider is already bound")
         self._control_mode_provider = provider
         self._control_mode_provider_bound = True
         self._hybrid.bind_control_mode_provider(provider)
@@ -116,9 +116,9 @@ class MirrorTimelineBackend:
         """Bind the runtime-owned immutable gain snapshot provider."""
 
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         if not callable(provider):
-            raise TypeError("hybrid parameter provider 必须可调用")
+            raise TypeError("hybrid parameter provider must be callable")
         self._hybrid.bind_parameter_provider(provider)  # type: ignore[arg-type]
 
     def bind_runtime_owner(self, runtime: object) -> None:
@@ -227,7 +227,7 @@ class MirrorTimelineBackend:
         """
 
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         self._step = 0
         self._hybrid.invalidate_tare()
         if self._step_synchronizer is not None:
@@ -276,10 +276,10 @@ class MirrorTimelineBackend:
 
     def _require_ready(self) -> None:
         if self._closed:
-            raise RuntimeError("Mirror timeline backend 已关闭")
+            raise RuntimeError("Mirror timeline backend is closed")
         if self._render_required and self._render_frame is None:
             raise RuntimeError(
-                "Mirror rendering 已启用，但 timeline 尚未绑定 RenderCoordinator"
+                "Mirror rendering is enabled, but the timeline has not bound a RenderCoordinator yet"
             )
 
     def close(self) -> object:
@@ -324,7 +324,7 @@ def _all_robot_hold_request(
         )
         if not groups:
             raise RuntimeError(
-                f"Mirror robot {robot.label!r} 没有可执行 reset hold 的 arm/hand group"
+                f"Mirror robot {robot.label!r} has no arm/hand group that can execute a reset hold"
             )
         tracks.append(
             RobotTrackRequest(
@@ -334,7 +334,7 @@ def _all_robot_hold_request(
             )
         )
     if not tracks:
-        raise RuntimeError("Mirror reset hold 至少需要一个机器人")
+        raise RuntimeError("Mirror reset hold requires at least one robot")
     return RobotTimelineRequest(tracks=tuple(tracks))
 
 

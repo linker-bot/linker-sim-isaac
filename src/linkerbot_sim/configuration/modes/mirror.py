@@ -85,46 +85,46 @@ class MirrorConfig:
     def __post_init__(self) -> None:
         if self.mode != "mirror":
             raise ConfigurationError(
-                f"MirrorConfig.mode 必须是 'mirror'，得到 {self.mode!r}"
+                f"MirrorConfig.mode must be 'mirror', got {self.mode!r}"
             )
         if not isinstance(
             self.physics,
             (PhysxCpuSettings, NewtonCpuSettings, NewtonCudaSettings),
         ):
             raise ConfigurationError(
-                "Mirror 只接受 PhysX CPU、Newton CPU 或 Newton CUDA；"
-                "PhysX CUDA 尚未进入 Mirror 支持矩阵"
+                "Mirror only accepts PhysX CPU, Newton CPU, or Newton CUDA; "
+                "PhysX CUDA is not yet in the Mirror support matrix"
             )
         if self.default_controller_bundle not in self.controller_bundles:
             raise ConfigurationError(
-                "Mirror physics 派生的默认 controller bundle 未进入已解析配置图: "
+                "Mirror physics-derived default controller bundle did not enter the resolved configuration graph: "
                 f"{self.default_controller_bundle!r}"
             )
         planner = self.curobo.motion_planner
         if planner is None:
-            raise ConfigurationError("Mirror cuRobo profile 必须声明 motion_planner")
+            raise ConfigurationError("Mirror cuRobo profile must declare motion_planner")
         if planner.use_cuda_graph:
             raise ConfigurationError(
-                "Mirror cuRobo motion_planner.use_cuda_graph 必须为 false："
-                "项目固定的 cuRobo 0.8 runtime 未启用实验性 CUDA graph reset，"
-                "且 Mirror 不依赖该全局开关"
+                "Mirror cuRobo motion_planner.use_cuda_graph must be false: "
+                "the project-pinned cuRobo 0.8 runtime does not enable experimental CUDA graph reset, "
+                "and Mirror does not rely on this global switch"
             )
         if (
             self.planning.request_defaults.avoid_collisions
             and not planner.collision_check
         ):
             raise ConfigurationError(
-                "planning.request_defaults.avoid_collisions=true 要求 "
+                "planning.request_defaults.avoid_collisions=true requires "
                 "curobo.motion_planner.collision_check=true"
             )
         for robot in self.scene.robots:
             if robot.resolved_profile is None:
                 raise ConfigurationError(
-                    "Mirror scene.robots 必须由 catalog 绑定严格 robot profile"
+                    "Mirror scene.robots must be bound to a strict robot profile by the catalog"
                 )
         if self.outputs.camera.enabled and not self.scene.cameras:
             raise ConfigurationError(
-                "outputs.camera.enabled=true 时 scene 至少要声明一个 camera"
+                "scene must declare at least one camera when outputs.camera.enabled=true"
             )
         if self.hybrid_control is not None:
             self._validate_hybrid_control()
@@ -133,20 +133,20 @@ class MirrorConfig:
         hybrid = self.hybrid_control
         assert hybrid is not None
         if not isinstance(self.physics, PhysxCpuSettings):
-            raise ConfigurationError("hybrid_control 第一阶段只支持 Mirror PhysX CPU")
+            raise ConfigurationError("hybrid_control only supports Mirror PhysX CPU in the first phase")
         if self.control.mode != "position":
             raise ConfigurationError(
-                "hybrid_control 要求 Mirror 初始 control.mode=position"
+                "hybrid_control requires the initial Mirror control.mode=position"
             )
         frequency = float(self.scene.physics_frequency_hz)
         if frequency < hybrid.minimum_physics_frequency_hz:
             raise ConfigurationError(
-                "hybrid_control physics frequency 太低："
+                "hybrid_control physics frequency is too low: "
                 f"{frequency} < {hybrid.minimum_physics_frequency_hz}"
             )
         if hybrid.force.wrench_lpf_cutoff_hz >= frequency / 2.0:
             raise ConfigurationError(
-                "hybrid_control wrench_lpf_cutoff_hz 必须小于 physics Nyquist"
+                "hybrid_control wrench_lpf_cutoff_hz must be less than the physics Nyquist"
             )
         minimum_ramp_ticks = math.ceil(
             hybrid.limits.max_abs_joint_effort
@@ -155,7 +155,7 @@ class MirrorConfig:
         )
         if hybrid.limits.ramp_down_ticks < minimum_ramp_ticks:
             raise ConfigurationError(
-                "hybrid_control ramp_down_ticks 不足以在 effort-rate 上限内归零："
+                "hybrid_control ramp_down_ticks is insufficient to reach zero within the effort-rate limit: "
                 f"{hybrid.limits.ramp_down_ticks} < {minimum_ramp_ticks}"
             )
         for instance in self.scene.robots:
@@ -163,15 +163,15 @@ class MirrorConfig:
             assert profile is not None
             if not profile.joint_groups.arm:
                 raise ConfigurationError(
-                    f"hybrid robot {instance.label!r} 必须有非空 arm joint group"
+                    f"hybrid robot {instance.label!r} must have a non-empty arm joint group"
                 )
             if profile.gravity_policy.enabled_for_component("arm"):
                 raise ConfigurationError(
-                    f"hybrid robot {instance.label!r} 第一阶段必须关闭 arm gravity"
+                    f"hybrid robot {instance.label!r} must disable arm gravity in the first phase"
                 )
             if not profile.curobo.binding.enabled or profile.curobo.robot is None:
                 raise ConfigurationError(
-                    f"hybrid robot {instance.label!r} 缺少 physical TCP model"
+                    f"hybrid robot {instance.label!r} is missing a physical TCP model"
                 )
         for name, profiles in self.controller_bundles.items():
             arm = profiles.arm.effort_control
@@ -182,15 +182,15 @@ class MirrorConfig:
             default = default_profile.position_control
             if (arm.mode, arm.method) != ("effort", "direct"):
                 raise ConfigurationError(
-                    f"hybrid controller bundle {name!r} arm 必须是 effort+direct"
+                    f"hybrid controller bundle {name!r} arm must be effort+direct"
                 )
             if (hand.mode, hand.method) != ("position", "implicit"):
                 raise ConfigurationError(
-                    f"hybrid controller bundle {name!r} hand 必须是 position+implicit"
+                    f"hybrid controller bundle {name!r} hand must be position+implicit"
                 )
             if (default.mode, default.method) != ("position", "implicit"):
                 raise ConfigurationError(
-                    f"hybrid controller bundle {name!r} default 必须是 position+implicit"
+                    f"hybrid controller bundle {name!r} default must be position+implicit"
                 )
 
     @property

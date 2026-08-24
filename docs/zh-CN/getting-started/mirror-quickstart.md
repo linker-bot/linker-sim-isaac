@@ -21,7 +21,7 @@ PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
   --mode mirror --profile physx_cpu
 ```
 
-三个 Mirror mode 都引用 `configs/curobo/mirror.yaml` 和 `configs/planning/mirror.yaml`。前者拥有
+四个 Mirror mode 都引用 `configs/curobo/mirror.yaml` 和 `configs/planning/mirror.yaml`。前者拥有
 IK batch 容量，以及单请求 MotionPlanner 的 warmup、seed、CUDA graph、碰撞能力与 cache 容量；
 `kinematics.max_batch_size` 不控制 planner，MotionPlanner context 固定 `max_batch_size=1`。后者只拥有
 duration、采样周期、默认避障、刷新和 coordination，以及不可由 wire 覆盖的每请求 timeout；planning

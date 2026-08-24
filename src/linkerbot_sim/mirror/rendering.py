@@ -30,7 +30,7 @@ class CameraBundle:
 
     def capture(self) -> object:
         if self._closed:
-            raise RuntimeError("CameraBundle 已关闭")
+            raise RuntimeError("CameraBundle is closed")
         if self.capture_hook is not None:
             return self.capture_hook(self.cameras)
         frames: dict[str, object] = {}
@@ -75,12 +75,12 @@ class RenderCoordinator:
         """
 
         if self._closed:
-            raise RuntimeError("RenderCoordinator 已关闭")
+            raise RuntimeError("RenderCoordinator is closed")
         if type(capture) is not bool:
-            raise TypeError("render capture 必须是 boolean")
+            raise TypeError("render capture must be a boolean")
         render = getattr(self.physics_runtime, "render", None)
         if not callable(render):
-            raise RuntimeError("physics runtime 缺少 render contract")
+            raise RuntimeError("physics runtime is missing the render contract")
         targets = self._render_targets()
         selectors = tuple(
             getattr(target, "set_render_active", None) for target, _count in targets
@@ -91,7 +91,7 @@ class RenderCoordinator:
         )
         if selected_render and not all(callable(selector) for selector in selectors):
             raise RuntimeError(
-                "多相机独立 render budget 要求每个 camera 实现 set_render_active"
+                "an independent per-camera render budget requires each camera to implement set_render_active"
             )
 
         # Newton 暴露纯 renderer tick，因此每个 Mirror frame 只发布一次物理快照，
@@ -128,7 +128,7 @@ class RenderCoordinator:
             target = getattr(camera, "camera", camera)
             count = getattr(target, "render_update_count", 1)
             if type(count) is not int or count < 1:
-                raise RuntimeError("camera render_update_count 必须是正整数")
+                raise RuntimeError("camera render_update_count must be a positive integer")
             targets.append((target, count))
         return tuple(targets)
 

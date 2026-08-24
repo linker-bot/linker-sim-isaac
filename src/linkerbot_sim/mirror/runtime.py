@@ -75,7 +75,7 @@ class MirrorRuntime:
     def __post_init__(self) -> None:
         physics_runtime = getattr(self.session, "physics_runtime", None)
         if physics_runtime is None:
-            raise ValueError("MirrorRuntime.session 必须拥有 physics_runtime")
+            raise ValueError("MirrorRuntime.session must own a physics_runtime")
         self.step_synchronizer = WallClockStepSynchronizer(
             enabled=self.config.control.sync_simulation_to_wall_clock
         )
@@ -116,15 +116,15 @@ class MirrorRuntime:
             else 1.0 / float(self.config.scene.physics_frequency_hz)
         )
         if not math.isfinite(dt) or dt <= 0.0:
-            raise RuntimeError("physics runtime 返回无效 get_physics_dt")
+            raise RuntimeError("physics runtime returned an invalid get_physics_dt")
         return dt
 
     def attach_ingress(self, resource: object) -> None:
         self._require_owner_thread("attach_ingress")
         if self._closed:
-            raise RuntimeError("MirrorRuntime 已关闭")
+            raise RuntimeError("MirrorRuntime is closed")
         if any(item is resource for item in self.ingress):
-            raise ValueError("ingress resource 已登记")
+            raise ValueError("ingress resource is already registered")
         self.ingress.append(resource)
 
     def step(self, *, render: bool = False) -> None:
@@ -132,7 +132,7 @@ class MirrorRuntime:
         self._require_owner_thread("step")
         step = getattr(self.physics_runtime, "step", None)
         if not callable(step):
-            raise RuntimeError("physics runtime 缺少 step")
+            raise RuntimeError("physics runtime is missing step")
         self.step_synchronizer.before_step(self.physics_dt_s)
         # 物理步只推进一次；显式渲染由 coordinator 在 step 后处理。
         step(render=False)
@@ -141,7 +141,7 @@ class MirrorRuntime:
         # 同一个 post-step 边界采样，保证每个 physics tick 最多写入一次。
         if render:
             if self.rendering is None:
-                raise RuntimeError("当前 Mirror 配置未启用 rendering")
+                raise RuntimeError("the current Mirror config does not enable rendering")
             # 内部 physics step 只推进 renderer；下面的 scene observer 按 camera frequency
             # 采样并发布一次。显式 runtime.render() 才立即返回 camera frame。
             self.rendering.render_only()
@@ -153,7 +153,7 @@ class MirrorRuntime:
         self._require_open("render")
         self._require_owner_thread("render")
         if self.rendering is None:
-            raise RuntimeError("当前 Mirror 配置未启用 rendering")
+            raise RuntimeError("the current Mirror config does not enable rendering")
         return self.rendering.render_frame()
 
     def get_state(self) -> dict[str, object]:
@@ -202,7 +202,7 @@ class MirrorRuntime:
         """Return runtime control state without touching engine handles."""
 
         if self._closed:
-            raise RuntimeError("MirrorRuntime 已关闭，不能执行 get_control_mode")
+            raise RuntimeError("MirrorRuntime is closed; cannot perform get_control_mode")
         self._require_owner_thread("get_control_mode")
         assert self.control_mode is not None
         return self.control_mode.get_mode()
@@ -218,7 +218,7 @@ class MirrorRuntime:
         self._require_open("set_control_mode")
         self._require_owner_thread("set_control_mode")
         if self.controller.admission.status().estopped:
-            raise RuntimeError("Mirror 已 estop；reset 前拒绝 set_control_mode")
+            raise RuntimeError("Mirror is e-stopped; set_control_mode is rejected before reset")
         assert self.control_mode is not None
         return self.control_mode.set_mode(
             mode,  # type: ignore[arg-type]
@@ -344,15 +344,15 @@ class MirrorRuntime:
 
     def _require_open(self, operation: str) -> None:
         if self._closed:
-            raise RuntimeError(f"MirrorRuntime 已关闭，不能执行 {operation}")
+            raise RuntimeError(f"MirrorRuntime is closed; cannot perform {operation}")
         if self.fatal_error is not None:
             raise RuntimeError(
-                f"MirrorRuntime 已 fail-stop，不能执行 {operation}: {self.fatal_error}"
+                f"MirrorRuntime is fail-stopped; cannot perform {operation}: {self.fatal_error}"
             )
 
     def _require_owner_thread(self, operation: str) -> None:
         if get_ident() != self._owner_thread_id:
-            raise RuntimeError(f"{operation} 必须在 Mirror owner thread 执行")
+            raise RuntimeError(f"{operation} must run on the Mirror owner thread")
 
 
 __all__ = ["MirrorCloseReport", "MirrorRuntime"]

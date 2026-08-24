@@ -19,13 +19,13 @@ from linkerbot_sim.mirror.interface.transport import (
 def _endpoint(value: str) -> tuple[str, int]:
     host, separator, port_text = value.rpartition(":")
     if not separator or not host:
-        raise argparse.ArgumentTypeError("endpoint 必须写成 HOST:PORT")
+        raise argparse.ArgumentTypeError("endpoint must be written as HOST:PORT")
     try:
         port = int(port_text)
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("PORT 必须是整数") from exc
+        raise argparse.ArgumentTypeError("PORT must be an integer") from exc
     if not 1 <= port <= 65_535:
-        raise argparse.ArgumentTypeError("PORT 必须位于 [1, 65535]")
+        raise argparse.ArgumentTypeError("PORT must be within [1, 65535]")
     return host, port
 
 
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--stdin",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="覆盖 profile 中的 stdin JSONL 开关",
+        help="override the stdin JSONL switch in the profile",
     )
     parser.add_argument("--tcp-jsonl", type=_endpoint, metavar="HOST:PORT")
     parser.add_argument("--websocket", type=_endpoint, metavar="HOST:PORT")
@@ -69,7 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else float(args.poll_timeout_s)
     )
     if response_timeout_s <= 0.0 or poll_timeout_s <= 0.0:
-        raise ValueError("timeout 必须 > 0")
+        raise ValueError("timeout must be > 0")
     stdin_enabled = interface.stdin_enabled if args.stdin is None else bool(args.stdin)
     runtime = create_mirror_runtime(config)
     try:
@@ -136,7 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise
     if result.close_report is not None and not result.close_report.stopped:
         raise RuntimeError(
-            "Mirror shutdown 未完成: "
+            "Mirror shutdown did not complete: "
             f"{result.close_report.live_resources} {result.close_report.errors}"
         )
     print("MIRROR_INTERACTIVE_EXIT", flush=True)

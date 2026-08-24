@@ -4,9 +4,9 @@ build-backend = "workspace_build"
 backend-path = ["."]
 
 [project]
-name = "linkerbot-sim"
+name = "linker-sim-isaac"
 version = "0.3.0"
-description = "Isaac Sim manipulation utilities for AR5 and LinkerHand L6 experiments"
+description = "Isaac Sim workspace for robotic manipulation, reality replay, and GPU-parallel reinforcement learning (Mirror and Kaleidoscope)"
 requires-python = "==3.12.*"
 dependencies = [
   "numpy>=2,<3",

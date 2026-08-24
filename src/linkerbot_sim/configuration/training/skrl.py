@@ -67,7 +67,7 @@ class SkrlTrainingSettings:
         )
         if mini_batches > rollout_length:
             raise ConfigurationError(
-                f"{label}.mini_batches 不能大于 {label}.rollout_length"
+                f"{label}.mini_batches must not be greater than {label}.rollout_length"
             )
         return cls(
             framework=as_string(

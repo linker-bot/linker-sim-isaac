@@ -213,7 +213,7 @@ def _mirror_physics(runtime: object):
     if physics is None:
         physics = getattr(runtime, "simulation_world", None)
     if physics is None:
-        raise RuntimeError("timeline runtime 缺少 physics adapter")
+        raise RuntimeError("timeline runtime is missing a physics adapter")
     return physics
 
 

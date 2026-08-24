@@ -36,14 +36,14 @@ def run_mirror(
     """在 session owner thread 消费 admission，并推进单场景物理/渲染。"""
 
     if not isinstance(runtime, MirrorRuntime):
-        raise TypeError("run_mirror 必须接收 MirrorRuntime")
+        raise TypeError("run_mirror must be given a MirrorRuntime")
     timeout = (
         runtime.config.control.interface.queue_poll_timeout_s
         if poll_timeout_s is None
         else float(poll_timeout_s)
     )
     if timeout <= 0.0:
-        raise ValueError("poll_timeout_s 必须 > 0")
+        raise ValueError("poll_timeout_s must be > 0")
     if runtime.config.control.sync_simulation_to_wall_clock:
         # queue wait 也是墙钟时间；同步模式下最多等待一个 physics tick，避免轮询等待
         # 与随后 paced idle batch 叠加，使仿真长期慢于真实时间。

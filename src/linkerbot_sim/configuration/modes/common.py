@@ -19,7 +19,7 @@ class ComputeSettings:
 
     def __post_init__(self) -> None:
         if type(self.cuda_device) is not int or self.cuda_device < 0:
-            raise ConfigurationError("compute.cuda_device 必须是非负整数")
+            raise ConfigurationError("compute.cuda_device must be a non-negative integer")
 
     @classmethod
     def from_mapping(

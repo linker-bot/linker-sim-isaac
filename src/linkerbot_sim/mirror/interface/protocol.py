@@ -60,13 +60,13 @@ def _freeze_json(value: object, *, label: str) -> object:
         return value
     if isinstance(value, float):
         if not (-float("inf") < value < float("inf")):
-            raise ValueError(f"{label} 不能包含 NaN/Infinity")
+            raise ValueError(f"{label} must not contain NaN/Infinity")
         return value
     if isinstance(value, Mapping):
         result: dict[str, object] = {}
         for key, item in value.items():
             if not isinstance(key, str):
-                raise ValueError(f"{label} 的 JSON object key 必须是字符串")
+                raise ValueError(f"{label} JSON object key must be a string")
             result[key] = _freeze_json(item, label=f"{label}.{key}")
         return MappingProxyType(result)
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
@@ -74,7 +74,7 @@ def _freeze_json(value: object, *, label: str) -> object:
             _freeze_json(item, label=f"{label}[{index}]")
             for index, item in enumerate(value)
         )
-    raise ValueError(f"{label} 包含非 JSON 类型 {type(value).__name__}")
+    raise ValueError(f"{label} contains non-JSON type {type(value).__name__}")
 
 
 def _thaw_json(value: object) -> object:
@@ -95,22 +95,22 @@ class MirrorRequest:
     def __post_init__(self) -> None:
         if self.protocol not in _OPERATIONS_BY_PROTOCOL:
             raise ValueError(
-                "protocol 必须是 "
-                f"{MIRROR_PROTOCOL_V1!r}、{MIRROR_PROTOCOL_V2!r} "
-                f"或 {MIRROR_PROTOCOL_V3!r}，"
-                f"得到 {self.protocol!r}"
+                "protocol must be "
+                f"{MIRROR_PROTOCOL_V1!r}, {MIRROR_PROTOCOL_V2!r} "
+                f"or {MIRROR_PROTOCOL_V3!r}, "
+                f"got {self.protocol!r}"
             )
         if not isinstance(self.request_id, str) or not self.request_id.strip():
-            raise ValueError("request_id 必须是非空字符串")
+            raise ValueError("request_id must be a non-empty string")
         if self.request_id.strip() != self.request_id:
-            raise ValueError("request_id 首尾不能包含空白")
+            raise ValueError("request_id must not contain leading or trailing whitespace")
         if self.operation not in _OPERATIONS_BY_PROTOCOL[self.protocol]:
             raise ValueError(
-                f"协议 {self.protocol!r} 不支持 Mirror operation: {self.operation!r}"
+                f"protocol {self.protocol!r} does not support Mirror operation: {self.operation!r}"
             )
         frozen = _freeze_json(self.arguments, label="arguments")
         if not isinstance(frozen, Mapping):
-            raise ValueError("arguments 必须是 JSON object")
+            raise ValueError("arguments must be a JSON object")
         object.__setattr__(self, "arguments", frozen)
 
     def arguments_dict(self) -> dict[str, object]:
@@ -125,11 +125,11 @@ class MirrorError:
 
     def __post_init__(self) -> None:
         if not self.code or not self.message:
-            raise ValueError("MirrorError code/message 必须非空")
+            raise ValueError("MirrorError code/message must be non-empty")
         if self.details is not None:
             frozen = _freeze_json(self.details, label="error.details")
             if not isinstance(frozen, Mapping):
-                raise ValueError("error.details 必须是 mapping")
+                raise ValueError("error.details must be a mapping")
             object.__setattr__(self, "details", frozen)
 
     def as_dict(self) -> dict[str, object]:
@@ -149,11 +149,11 @@ class MirrorResponse:
 
     def __post_init__(self) -> None:
         if self.protocol not in _OPERATIONS_BY_PROTOCOL:
-            raise ValueError("MirrorResponse protocol 非法")
+            raise ValueError("MirrorResponse protocol is invalid")
         if not isinstance(self.request_id, str) or not self.request_id:
-            raise ValueError("MirrorResponse.request_id 必须非空")
+            raise ValueError("MirrorResponse.request_id must be non-empty")
         if self.ok == (self.error is not None):
-            raise ValueError("成功响应只能有 result，失败响应必须有 error")
+            raise ValueError("a success response may only have result, a failure response must have error")
         if self.ok:
             object.__setattr__(
                 self, "result", _freeze_json(self.result, label="result")
@@ -202,25 +202,25 @@ class MirrorResponse:
 
 def request_from_mapping(value: Mapping[str, object]) -> MirrorRequest:
     if not isinstance(value, Mapping):
-        raise ValueError("Mirror request 必须是 JSON object")
+        raise ValueError("Mirror request must be a JSON object")
     unknown = sorted(set(value) - {"protocol", "request_id", "operation", "arguments"})
     missing = sorted({"protocol", "request_id", "operation", "arguments"} - set(value))
     if missing:
-        raise ValueError(f"Mirror request 缺少字段: {', '.join(missing)}")
+        raise ValueError(f"Mirror request is missing fields: {', '.join(missing)}")
     if unknown:
-        raise ValueError(f"Mirror request 包含未知字段: {', '.join(unknown)}")
+        raise ValueError(f"Mirror request contains unknown fields: {', '.join(unknown)}")
     protocol = value["protocol"]
     request_id = value["request_id"]
     operation = value["operation"]
     arguments = value["arguments"]
     if not isinstance(protocol, str):
-        raise ValueError("protocol 必须是字符串")
+        raise ValueError("protocol must be a string")
     if not isinstance(request_id, str):
-        raise ValueError("request_id 必须是字符串")
+        raise ValueError("request_id must be a string")
     if not isinstance(operation, str):
-        raise ValueError("operation 必须是字符串")
+        raise ValueError("operation must be a string")
     if not isinstance(arguments, Mapping):
-        raise ValueError("arguments 必须是 JSON object")
+        raise ValueError("arguments must be a JSON object")
     return MirrorRequest(
         protocol=protocol,
         request_id=request_id,
@@ -233,20 +233,20 @@ def _pairs_without_duplicates(pairs: list[tuple[str, object]]) -> dict[str, obje
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"JSON object 包含重复字段 {key!r}")
+            raise ValueError(f"JSON object contains duplicate field {key!r}")
         result[key] = value
     return result
 
 
 def _reject_constant(value: str) -> object:
-    raise ValueError(f"JSON 不能包含 {value}")
+    raise ValueError(f"JSON must not contain {value}")
 
 
 def decode_request(payload: str | bytes) -> MirrorRequest:
     if isinstance(payload, bytes):
         payload = payload.decode("utf-8", errors="strict")
     if not isinstance(payload, str) or not payload.strip():
-        raise ValueError("request payload 必须是非空 UTF-8 JSON")
+        raise ValueError("request payload must be non-empty UTF-8 JSON")
     try:
         value = json.loads(
             payload,
@@ -254,9 +254,9 @@ def decode_request(payload: str | bytes) -> MirrorRequest:
             parse_constant=_reject_constant,
         )
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise ValueError(f"无效 Mirror JSON: {exc}") from exc
+        raise ValueError(f"invalid Mirror JSON: {exc}") from exc
     if not isinstance(value, Mapping):
-        raise ValueError("Mirror request 顶层必须是 JSON object")
+        raise ValueError("Mirror request top level must be a JSON object")
     return request_from_mapping(value)
 
 

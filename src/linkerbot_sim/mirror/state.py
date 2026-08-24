@@ -21,7 +21,7 @@ class MirrorStateService:
     def get_state(self) -> dict[str, object]:
         value = self.getter()
         if not isinstance(value, Mapping):
-            raise RuntimeError("Mirror state adapter 必须返回 mapping")
+            raise RuntimeError("Mirror state adapter must return a mapping")
         return deepcopy(dict(value))
 
     def set_state(
@@ -31,7 +31,7 @@ class MirrorStateService:
         strict: bool = True,
     ) -> object:
         if not isinstance(state, Mapping):
-            raise ValueError("state 必须是 mapping")
+            raise ValueError("state must be a mapping")
         return self.setter(deepcopy(dict(state)), strict=bool(strict))
 
 

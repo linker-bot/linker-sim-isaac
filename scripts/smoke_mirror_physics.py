@@ -81,7 +81,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--control-modes-only",
         action="store_true",
-        help="仅验证同一 runtime 内 position/velocity/effort 切换",
+        help="only verify position/velocity/effort switching within the same runtime",
     )
     return parser.parse_args(argv)
 

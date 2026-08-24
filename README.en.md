@@ -1,8 +1,8 @@
-# LinkerHand Simulation
+# linker-sim-isaac
 
 Language: [English](README.en.md) | [中文](README.zh-CN.md)
 
-LinkerHand Simulation is an Isaac Sim workspace for robotic manipulation, reality
+linker-sim-isaac is an Isaac Sim workspace for robotic manipulation, reality
 replay, and GPU-parallel reinforcement learning. The repository exposes two product
 modes with deliberately different contracts:
 
@@ -35,7 +35,7 @@ The product factory selects exactly one of seven formal Kit experiences:
 Call a Mirror or Kaleidoscope product entrypoint rather than assembling Kit manually;
 the factory makes the unique choice from the validated physics and render specification.
 Public selectors state the legal execution explicitly: Mirror provides `physx_cpu`,
-`newton_cpu`, and `newton_cuda`; Kaleidoscope provides `physx_cuda` and `newton_cuda`.
+`physx_cpu_hybrid`, `newton_cpu`, and `newton_cuda`; Kaleidoscope provides `physx_cuda` and `newton_cuda`.
 The roots reference the product-namespaced scene selectors `mirror/scene3` and
 `kaleidoscope/tblock_push`, respectively.
 
@@ -76,6 +76,8 @@ from the checkout root with `PYTHONPATH=src`.
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
   --mode mirror --profile physx_cpu
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
+  --mode mirror --profile physx_cpu_hybrid
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
   --mode mirror --profile newton_cpu
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
   --mode mirror --profile newton_cuda
@@ -103,7 +105,7 @@ export OMNI_KIT_ACCEPT_EULA=Y
 PYTHONPATH=src .venv/bin/python scripts/mirror.py --profile physx_cpu
 ```
 
-Mirror accepts strict `linkerbot.mirror.v1` JSON through stdin. Optional TCP JSONL
+Mirror accepts strict `linkerbot.mirror.v1`, `v2`, and `v3` JSON through stdin. Optional TCP JSONL
 and WebSocket listeners are loopback-only and provide neither authentication nor
 TLS. See the [Mirror quickstart](docs/en/getting-started/mirror-quickstart.md).
 
@@ -192,3 +194,9 @@ just test-simulation
 The aggregate includes `smoke-runtime-kits` for all seven formal Kit closures,
 `smoke-mirror` for all four Mirror mode profiles, both Kaleidoscope backends and action
 variants, Newton's 256-world capacity, and the PhysX process-memory budget.
+
+## License
+
+Released under the [MIT License](LICENSE), © Linkerbot (Beijing) Technology Co., Ltd.
+Third-party software and asset licenses are documented in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

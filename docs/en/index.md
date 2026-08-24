@@ -1,4 +1,4 @@
-# LinkerHand Simulation Documentation
+# linker-sim-isaac Documentation
 
 Language: [English](index.md) | [中文](../zh-CN/index.md)
 

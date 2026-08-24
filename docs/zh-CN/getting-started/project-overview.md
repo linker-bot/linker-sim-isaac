@@ -2,7 +2,7 @@
 
 语言：[中文](project-overview.md) | [English](../../en/getting-started/project-overview.md)
 
-LinkerHand Simulation 是面向 Isaac Sim 6.0.1 的 checkout application。它把两类执行目标拆成
+linker-sim-isaac 是面向 Isaac Sim 6.0.1 的 checkout application。它把两类执行目标拆成
 两个互不导入的产品组合根，而不是用一个带大量 optional 字段的通用 runtime：
 
 - **Mirror** 表示一个现实工作站在仿真中的映像。一个 World 中可以有多个机器人和对象；产品

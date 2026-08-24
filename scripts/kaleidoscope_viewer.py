@@ -23,7 +23,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--steps",
         type=int,
         default=0,
-        help="0 表示持续运行到关闭窗口或按下 Ctrl+C",
+        help="0 means run continuously until the window is closed or Ctrl+C is pressed",
     )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--action-source", choices=("hold", "random"), default="hold")

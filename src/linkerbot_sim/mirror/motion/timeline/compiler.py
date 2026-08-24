@@ -126,7 +126,7 @@ class TimelinePlanningSession:
         if physics is None:
             physics = getattr(runtime, "simulation_world", None)
         if physics is None:
-            raise RuntimeError("timeline runtime 缺少 physics adapter")
+            raise RuntimeError("timeline runtime is missing a physics adapter")
         self.physics_dt = float(physics.get_physics_dt())
         self.planner_backend = normalize_planner_backend(planner_backend)
 

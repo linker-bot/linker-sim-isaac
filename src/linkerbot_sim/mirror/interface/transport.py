@@ -27,7 +27,7 @@ def _positive_int(value: object, *, label: str) -> int:
     """拒绝 bool/零值，避免容量配置在运行时退化为无界或全拒绝。"""
 
     if type(value) is not int or value <= 0:
-        raise ValueError(f"{label} 必须是正整数")
+        raise ValueError(f"{label} must be a positive integer")
     return value
 
 
@@ -35,10 +35,10 @@ def _positive_timeout(value: object, *, label: str) -> float:
     """解析严格正 deadline；NaN 也会因比较为假而被拒绝。"""
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"{label} 必须是有限正数")
+        raise ValueError(f"{label} must be a finite positive number")
     parsed = float(value)
     if not parsed > 0.0 or parsed == float("inf"):
-        raise ValueError(f"{label} 必须是有限正数")
+        raise ValueError(f"{label} must be a finite positive number")
     return parsed
 
 
@@ -100,10 +100,10 @@ def _loopback_host(value: str) -> str:
         address = ip_address(value)
     except ValueError as exc:
         raise ValueError(
-            "Mirror transport host 必须是数值 loopback 或 localhost"
+            "Mirror transport host must be a numeric loopback address or localhost"
         ) from exc
     if not address.is_loopback:
-        raise ValueError("Mirror transport 只允许 loopback host")
+        raise ValueError("Mirror transport only allows a loopback host")
     return value
 
 
@@ -141,7 +141,7 @@ class StdinJsonlTransport:
 
     def start(self) -> None:
         if self._thread is not None:
-            raise RuntimeError("stdin transport 已启动")
+            raise RuntimeError("stdin transport is already started")
         self._thread = Thread(
             target=self._run,
             name="mirror-stdin-jsonl",
@@ -224,7 +224,7 @@ class TcpJsonlTransport:
         self._handler = handler
         self.host = _loopback_host(host)
         if type(port) is not int or not 0 <= port <= 65_535:
-            raise ValueError("TCP port 必须位于 [0, 65535]")
+            raise ValueError("TCP port must be in [0, 65535]")
         self.port = port
         self.max_message_bytes = _positive_int(
             max_message_bytes, label="max_message_bytes"
@@ -252,7 +252,7 @@ class TcpJsonlTransport:
 
     def start(self, *, timeout_s: float | None = None) -> None:
         if self._thread is not None:
-            raise RuntimeError("TCP transport 已启动")
+            raise RuntimeError("TCP transport is already started")
         self._thread = Thread(
             target=self._serve,
             name="mirror-tcp-jsonl",
@@ -265,10 +265,10 @@ class TcpJsonlTransport:
             else _positive_timeout(timeout_s, label="TCP start timeout_s")
         )
         if not self._ready.wait(timeout):
-            raise TimeoutError("TCP transport 启动超时")
+            raise TimeoutError("TCP transport startup timed out")
         if self._start_error is not None:
             raise RuntimeError(
-                f"TCP transport 启动失败: {self._start_error}"
+                f"TCP transport failed to start: {self._start_error}"
             ) from self._start_error
 
     def _serve(self) -> None:
@@ -320,7 +320,7 @@ class TcpJsonlTransport:
             connection.settimeout(0.2)
             response = _transport_failure(
                 code="connection_capacity_exceeded",
-                message=f"TCP max_connections={self.max_connections} 已满",
+                message=f"TCP max_connections={self.max_connections} reached",
             )
             connection.sendall((response + "\n").encode("utf-8"))
         except OSError:
@@ -360,7 +360,7 @@ class TcpJsonlTransport:
                         except UnicodeDecodeError as exc:
                             response = _transport_failure(
                                 code="invalid_encoding",
-                                message=f"TCP JSONL 必须是 UTF-8: {exc}",
+                                message=f"TCP JSONL must be UTF-8: {exc}",
                             )
                         else:
                             response = self._handler(payload)
@@ -419,7 +419,7 @@ class WebSocketTransport:
         self._handler = handler
         self.host = _loopback_host(host)
         if type(port) is not int or not 0 <= port <= 65_535:
-            raise ValueError("WebSocket port 必须位于 [0, 65535]")
+            raise ValueError("WebSocket port must be in [0, 65535]")
         self.port = port
         self.max_message_bytes = _positive_int(
             max_message_bytes, label="max_message_bytes"
@@ -450,7 +450,7 @@ class WebSocketTransport:
 
     def start(self, *, timeout_s: float | None = None) -> None:
         if self._thread is not None:
-            raise RuntimeError("WebSocket transport 已启动")
+            raise RuntimeError("WebSocket transport is already started")
         self._thread = Thread(
             target=self._serve,
             name="mirror-websocket",
@@ -463,10 +463,10 @@ class WebSocketTransport:
             else _positive_timeout(timeout_s, label="WebSocket start timeout_s")
         )
         if not self._ready.wait(timeout):
-            raise TimeoutError("WebSocket transport 启动超时")
+            raise TimeoutError("WebSocket transport startup timed out")
         if self._start_error is not None:
             raise RuntimeError(
-                f"WebSocket transport 启动失败: {self._start_error}"
+                f"WebSocket transport failed to start: {self._start_error}"
             ) from self._start_error
 
     def _serve(self) -> None:
@@ -479,7 +479,7 @@ class WebSocketTransport:
                         response = _transport_failure(
                             code="connection_capacity_exceeded",
                             message=(
-                                f"WebSocket max_connections={self.max_connections} 已满"
+                                f"WebSocket max_connections={self.max_connections} reached"
                             ),
                         )
                         connection.send(response)
@@ -556,7 +556,7 @@ class MirrorTransportHub:
             for endpoint in self.endpoints:
                 start = getattr(endpoint, "start", None)
                 if not callable(start):
-                    raise TypeError(f"transport {type(endpoint).__name__} 缺少 start")
+                    raise TypeError(f"transport {type(endpoint).__name__} is missing start")
                 # 先登记再启动：start 在创建部分线程/socket 后抛错时，rollback 仍能关闭它。
                 self._started.append(endpoint)
                 start()

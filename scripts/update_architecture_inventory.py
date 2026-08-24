@@ -195,9 +195,9 @@ def _manifest() -> dict[str, object]:
         MANIFEST_PATH.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader
     )
     if not isinstance(value, dict):
-        raise ValueError(f"{MANIFEST_PATH} 顶层必须是 mapping")
+        raise ValueError(f"{MANIFEST_PATH} top level must be a mapping")
     if value.get("schema_version") != 2:
-        raise ValueError("只支持 module disposition schema_version=2")
+        raise ValueError("only module disposition schema_version=2 is supported")
     return value
 
 
@@ -212,7 +212,7 @@ def _module_name(path: Path) -> str:
 def _source_modules() -> dict[str, Path]:
     modules = {_module_name(path): path for path in SOURCE_ROOT.rglob("*.py")}
     if len(modules) != len(tuple(SOURCE_ROOT.rglob("*.py"))):
-        raise ValueError("多个 Python 文件解析成了同一个 module path")
+        raise ValueError("multiple Python files resolved to the same module path")
     return dict(sorted(modules.items()))
 
 
@@ -258,7 +258,7 @@ def _runtime(module: str, module_map: Mapping[str, object]) -> str:
     )
     for label, prefixes in runtime_prefixes.items():
         if label not in RUNTIME_LABELS:
-            raise ValueError(f"未知 runtime label: {label!r}")
+            raise ValueError(f"unknown runtime label: {label!r}")
         for prefix in _string_sequence(prefixes, label=f"runtime_prefixes.{label}"):
             if _prefix_matches(module, prefix):
                 return str(label)
@@ -288,25 +288,25 @@ def _module_facts(manifest: Mapping[str, object]) -> tuple[ModuleFact, ...]:
     )
     if set(group_layers) != configured_group_set:
         raise ValueError(
-            "module_map.group_layers 必须与 group_order 使用完全相同的 group"
+            "module_map.group_layers must use exactly the same groups as group_order"
         )
     unknown_layers = sorted(set(group_layers.values()) - allowed_layers)
     if unknown_layers:
-        raise ValueError(f"group_layers 含未知 layer: {unknown_layers}")
+        raise ValueError(f"group_layers contains unknown layer(s): {unknown_layers}")
 
     facts: list[ModuleFact] = []
     for module, path in _source_modules().items():
         group = _module_group(module)
         if group not in configured_group_set:
             raise ValueError(
-                f"新一级 package {group!r} 尚未进入 module_map.group_order"
+                f"new top-level package {group!r} is not yet in module_map.group_order"
             )
         target = documentation_targets.get(group)
         if not isinstance(target, str) or not target:
-            raise ValueError(f"module group {group!r} 缺少 documentation target")
+            raise ValueError(f"module group {group!r} is missing a documentation target")
         runtime = _runtime(module, module_map)
         if runtime not in RUNTIME_LABELS:
-            raise ValueError(f"{module} 使用未知 runtime {runtime!r}")
+            raise ValueError(f"{module} uses unknown runtime {runtime!r}")
         facts.append(
             ModuleFact(
                 path=path,
@@ -630,7 +630,7 @@ def _replace_scalar(text: str, key: str, value: object) -> str:
     pattern = re.compile(rf"^(?P<indent>\s*){re.escape(key)}:\s*.*$", re.MULTILINE)
     matches = tuple(pattern.finditer(text))
     if len(matches) != 1:
-        raise ValueError(f"期望 {key!r} 在 allowlist inventory 中恰好出现一次")
+        raise ValueError(f"expected {key!r} to appear exactly once in the allowlist inventory")
     return pattern.sub(rf"\g<indent>{key}: {value}", text, count=1)
 
 
@@ -797,7 +797,7 @@ def _generated_inventory(manifest: Mapping[str, object]) -> str:
 def _manifest_with_generated_inventory(manifest: Mapping[str, object]) -> str:
     text = MANIFEST_PATH.read_text(encoding="utf-8")
     if text.count(GENERATED_START) != 1 or text.count(GENERATED_END) != 1:
-        raise ValueError("manifest 必须各包含一个 generated inventory marker")
+        raise ValueError("each manifest must contain exactly one generated inventory marker")
     before, remainder = text.split(GENERATED_START, maxsplit=1)
     _old, after = remainder.split(GENERATED_END, maxsplit=1)
     return before + _generated_inventory(manifest) + after
@@ -881,9 +881,9 @@ def _static_exports(module: str, path: Path) -> tuple[str, ...]:
         ):
             values.append(tuple(sorted(dictionaries[value.args[0].id])))
     if len(values) != 1:
-        raise ValueError(f"{module} 必须有一个可静态解析的 __all__")
+        raise ValueError(f"{module} must have a statically resolvable __all__")
     if len(values[0]) != len(set(values[0])):
-        raise ValueError(f"{module}.__all__ 包含重复导出")
+        raise ValueError(f"{module}.__all__ contains duplicate exports")
     return values[0]
 
 
@@ -1020,7 +1020,7 @@ def _architecture_violations(
         if "exact" in group:
             parents = {Path(relative).parent for relative in paths}
             if len(parents) != 1:
-                raise ValueError(f"{group_name}.exact 必须位于同一目录")
+                raise ValueError(f"{group_name}.exact must reside in the same directory")
             parent = REPO_ROOT / next(iter(parents))
             actual = {
                 path.relative_to(REPO_ROOT).as_posix()
@@ -1045,7 +1045,7 @@ def _architecture_violations(
             continue
         path = _facade_path(str(module))
         if not path.is_file():
-            violations.append(f"frozen facade 缺少文件: {path.relative_to(REPO_ROOT)}")
+            violations.append(f"frozen facade is missing file: {path.relative_to(REPO_ROOT)}")
             continue
         actual = set(_static_exports(str(module), path))
         expected = set(
@@ -1053,16 +1053,16 @@ def _architecture_violations(
         )
         if actual != expected:
             violations.append(
-                f"{module} facade export 漂移: missing={sorted(expected - actual)}, "
+                f"{module} facade export drift: missing={sorted(expected - actual)}, "
                 f"unexpected={sorted(actual - expected)}"
             )
     if require_final and pending:
-        violations.append(f"facade 尚未冻结: {', '.join(sorted(pending))}")
+        violations.append(f"facade not yet frozen: {', '.join(sorted(pending))}")
 
     layers = _mapping(manifest.get("layers"), label="layers")
     rules = layers.get("dependency_rules")
     if not isinstance(rules, Sequence) or isinstance(rules, (str, bytes)):
-        raise ValueError("layers.dependency_rules 必须是 sequence")
+        raise ValueError("layers.dependency_rules must be a sequence")
     imports_by_module = {
         module: _module_imports(path, module) for module, path in modules.items()
     }
@@ -1099,7 +1099,7 @@ def _architecture_violations(
     )
     roots = retirement.get("scan_roots")
     if not isinstance(roots, Sequence) or isinstance(roots, (str, bytes)):
-        raise ValueError("legacy_retirement.scan_roots 必须是 sequence")
+        raise ValueError("legacy_retirement.scan_roots must be a sequence")
     for raw_root in roots:
         settings = _mapping(raw_root, label="legacy scan root")
         root = REPO_ROOT / str(settings.get("root"))
@@ -1121,15 +1121,15 @@ def _architecture_violations(
 
 def _mapping(value: object, *, label: str) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
-        raise ValueError(f"{label} 必须是 mapping")
+        raise ValueError(f"{label} must be a mapping")
     return value  # type: ignore[return-value]
 
 
 def _string_sequence(value: object, *, label: str) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label} 必须是 string sequence")
+        raise ValueError(f"{label} must be a string sequence")
     if not all(isinstance(item, str) and item for item in value):
-        raise ValueError(f"{label} 只能包含非空字符串")
+        raise ValueError(f"{label} may only contain non-empty strings")
     return tuple(value)
 
 
@@ -1139,18 +1139,18 @@ def _physics_selection_sequence(
     """解析架构清单中的公开 engine/execution 组合，不接受内部 runtime kind。"""
 
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
-        raise ValueError(f"{label} 必须是 physics selection sequence")
+        raise ValueError(f"{label} must be a physics selection sequence")
     result: list[tuple[str, str]] = []
     for index, raw_selection in enumerate(value):
         selection = _mapping(raw_selection, label=f"{label}[{index}]")
         if set(selection) != {"engine", "execution"}:
-            raise ValueError(f"{label}[{index}] 必须且只能包含 engine/execution")
+            raise ValueError(f"{label}[{index}] must contain exactly engine/execution")
         engine = selection["engine"]
         execution = selection["execution"]
         if not isinstance(engine, str) or not engine:
-            raise ValueError(f"{label}[{index}].engine 必须是非空字符串")
+            raise ValueError(f"{label}[{index}].engine must be a non-empty string")
         if not isinstance(execution, str) or not execution:
-            raise ValueError(f"{label}[{index}].execution 必须是非空字符串")
+            raise ValueError(f"{label}[{index}].execution must be a non-empty string")
         result.append((engine, execution))
     return tuple(result)
 
@@ -1185,12 +1185,16 @@ def _drift(desired: Mapping[Path, str]) -> tuple[Path, ...]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--check", action="store_true", help="只检查生成结果与架构规则")
-    mode.add_argument("--write", action="store_true", help="重写所有机械 inventory")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="only check the generated output and the architecture rules",
+    )
+    mode.add_argument("--write", action="store_true", help="rewrite all mechanical inventory")
     parser.add_argument(
         "--require-final",
         action="store_true",
-        help="要求所有 facade 已冻结；用于删除旧路径后的发布门禁",
+        help="require all facades to be frozen; used as a release gate after legacy paths are removed",
     )
     arguments = parser.parse_args(argv)
 

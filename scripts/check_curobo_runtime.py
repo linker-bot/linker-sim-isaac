@@ -330,13 +330,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-planning",
         action="store_true",
-        help="只验证 GPU、FK 和无碰撞 IK，不创建 MotionPlanner 或碰撞世界",
+        help="only verify GPU, FK, and collision-free IK; do not create the MotionPlanner or collision world",
     )
     parser.add_argument(
         "--cuda-device",
         type=_cuda_device_argument,
         default=None,
-        help="显式覆盖 Mirror mode root 的 compute.cuda_device",
+        help="explicitly override compute.cuda_device from the Mirror mode root",
     )
     return parser.parse_args(argv)
 

@@ -1,8 +1,8 @@
-# LinkerHand Simulation
+# linker-sim-isaac
 
 语言：[中文](README.zh-CN.md) | [English](README.en.md)
 
-LinkerHand Simulation 是基于 checkout 运行的 Isaac Sim 机器人操作工作区。项目不再提供可互换的
+linker-sim-isaac 是基于 checkout 运行的 Isaac Sim 机器人操作工作区。项目不再提供可互换的
 “单场景/批量场景”兼容层，而是把两种目标拆成边界明确的产品：
 
 - **Mirror**：把一个真实工作站映射到一个仿真 World，保留交互控制、完整运动规划、碰撞模型、
@@ -27,7 +27,7 @@ LinkerHand Simulation 是基于 checkout 运行的 Isaac Sim 机器人操作工�
 
 调用方启动 Mirror 或 Kaleidoscope 产品入口，不直接拼装 Kit；factory 根据已校验的 physics 与 render
 规格作唯一选择。
-公开 selector 显式包含合法 execution：Mirror 为 `physx_cpu/newton_cpu/newton_cuda`，
+公开 selector 显式包含合法 execution：Mirror 为 `physx_cpu/physx_cpu_hybrid/newton_cpu/newton_cuda`，
 Kaleidoscope 为 `physx_cuda/newton_cuda`。
 两个产品根分别引用带产品命名空间的 scene selector `mirror/scene3` 与
 `kaleidoscope/tblock_push`。
@@ -64,13 +64,14 @@ export OMNI_KIT_ACCEPT_EULA=Y
 
 ```bash
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode mirror --profile physx_cpu
+PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode mirror --profile physx_cpu_hybrid
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode mirror --profile newton_cpu
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode mirror --profile newton_cuda
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode kaleidoscope --profile physx_cuda
 PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py --mode kaleidoscope --profile newton_cuda
 ```
 
-Mirror 三个物理 profile 统一引用 `configs/control/mirror.yaml`，默认 PhysX/Newton controller bundle 由
+Mirror 四个物理 profile 统一引用 `configs/control/mirror.yaml`，默认 PhysX/Newton controller bundle 由
 `physics.engine` 派生。Kaleidoscope 完全没有 control slot：根只引用 `scene/physics/task`，EE/直线 action
 才额外引用可选 `curobo`。Mirror 日志唯一入口是 `outputs.logging`。cuRobo 后端固定使用已验证的 0.8.0
 task bundle 与 float32 dtype，YAML 只保留真实可调的数值容量。
@@ -131,7 +132,7 @@ snapshot/clone fingerprint。训练 step 始终使用 `render=False`，只有显
 - [Mirror 快速入门](docs/zh-CN/getting-started/mirror-quickstart.md)
 - [Kaleidoscope 快速入门](docs/zh-CN/getting-started/kaleidoscope-quickstart.md)
 - [Mirror CLI](docs/zh-CN/reference/mirror-cli.md)
-- [Mirror v1 JSON](docs/zh-CN/reference/mirror-json.md)
+- [Mirror JSON](docs/zh-CN/reference/mirror-json.md)
 - [Kaleidoscope API](docs/zh-CN/reference/kaleidoscope-api.md)
 - [配置参考](docs/zh-CN/reference/configuration.md)
 - [状态、快照与克隆](docs/zh-CN/reference/snapshots.md)
@@ -149,5 +150,10 @@ UV_PROJECT_ENVIRONMENT=.venv-dev just quality
 just test-simulation
 ```
 
-该聚合门禁包含 `smoke-runtime-kits`（七个正式 Kit closure）、`smoke-mirror`（三个 Mirror mode
+该聚合门禁包含 `smoke-runtime-kits`（七个正式 Kit closure）、`smoke-mirror`（四个 Mirror mode
 profile）、Kaleidoscope 双后端/动作 smoke、Newton 256-world 容量和 PhysX 进程显存预算。
+
+## 许可
+
+本项目基于 [MIT License](LICENSE) 发布，© Linkerbot (Beijing) Technology Co., Ltd.。
+第三方软件与素材许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

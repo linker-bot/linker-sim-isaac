@@ -41,20 +41,20 @@ class GpuMemoryBudget:
             or self.max_simulator_process_mib <= 0
         ):
             raise ConfigurationError(
-                "physics.memory.max_simulator_process_mib 必须是正整数"
+                "physics.memory.max_simulator_process_mib must be a positive integer"
             )
         if type(self.min_free_floor_mib) is not int or self.min_free_floor_mib <= 0:
-            raise ConfigurationError("physics.memory.min_free_floor_mib 必须是正整数")
+            raise ConfigurationError("physics.memory.min_free_floor_mib must be a positive integer")
         if not 0.0 < self.min_free_fraction_after_warmup <= 1.0:
             raise ConfigurationError(
-                "physics.memory.min_free_fraction_after_warmup 必须位于 (0, 1]"
+                "physics.memory.min_free_fraction_after_warmup must be within (0, 1]"
             )
         if (
             type(self.max_steady_growth_mib) is not int
             or self.max_steady_growth_mib < 0
         ):
             raise ConfigurationError(
-                "physics.memory.max_steady_growth_mib 必须是非负整数"
+                "physics.memory.max_steady_growth_mib must be a non-negative integer"
             )
 
     @classmethod
@@ -107,7 +107,7 @@ class PhysxCpuSettings:
             or self.solver_type not in {"PGS", "TGS"}
         ):
             raise ConfigurationError(
-                "PhysxCpuSettings 必须使用 engine=physx、execution=cpu 和合法 solver"
+                "PhysxCpuSettings must use engine=physx, execution=cpu and a valid solver"
             )
 
     @classmethod
@@ -152,13 +152,13 @@ class PhysxCudaSettings:
             or self.solver_type not in {"PGS", "TGS"}
         ):
             raise ConfigurationError(
-                "PhysxCudaSettings 必须使用 engine=physx、execution=cuda 和合法 solver"
+                "PhysxCudaSettings must use engine=physx, execution=cuda and a valid solver"
             )
         if self.use_fabric is not True:
-            raise ConfigurationError("PhysX CUDA 必须启用 use_fabric=true")
+            raise ConfigurationError("PhysX CUDA must enable use_fabric=true")
         if type(self.enable_scene_query_support) is not bool:
             raise ConfigurationError(
-                "physics.enable_scene_query_support 必须是 boolean"
+                "physics.enable_scene_query_support must be a boolean"
             )
 
     @classmethod
@@ -279,13 +279,13 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
     """保护直接构造 dataclass 的路径，使 CPU/CUDA 采用同一组不变量。"""
 
     if getattr(value, "constraint_solver") not in _NEWTON_CONSTRAINT_SOLVERS:
-        raise ConfigurationError(f"{owner}.constraint_solver 非法")
+        raise ConfigurationError(f"{owner}.constraint_solver is invalid")
     if getattr(value, "contact_pipeline") not in _NEWTON_CONTACT_PIPELINES:
-        raise ConfigurationError(f"{owner}.contact_pipeline 非法")
+        raise ConfigurationError(f"{owner}.contact_pipeline is invalid")
     for name in _NEWTON_POSITIVE_INT_FIELDS:
         field_value = getattr(value, name)
         if type(field_value) is not int or field_value < 1:
-            raise ConfigurationError(f"physics.{name} 必须是 >= 1 的整数")
+            raise ConfigurationError(f"physics.{name} must be an integer >= 1")
 
 
 @dataclass(frozen=True)
@@ -310,11 +310,11 @@ class NewtonCudaSettings:
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cuda":
             raise ConfigurationError(
-                "NewtonCudaSettings 必须使用 engine=newton、execution=cuda"
+                "NewtonCudaSettings must use engine=newton, execution=cuda"
             )
         _validate_newton_common(self, owner="NewtonCudaSettings")
         if type(self.use_cuda_graph) is not bool:
-            raise ConfigurationError("physics.use_cuda_graph 必须是 boolean")
+            raise ConfigurationError("physics.use_cuda_graph must be a boolean")
 
     @classmethod
     def from_mapping(
@@ -363,12 +363,12 @@ class NewtonCpuSettings:
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cpu":
             raise ConfigurationError(
-                "NewtonCpuSettings 必须使用 engine=newton、execution=cpu"
+                "NewtonCpuSettings must use engine=newton, execution=cpu"
             )
         _validate_newton_common(self, owner="NewtonCpuSettings")
         if self.contact_pipeline == "newton":
             raise ConfigurationError(
-                "Newton CPU 不支持 contact_pipeline=newton；请使用 auto 或 mujoco"
+                "Newton CPU does not support contact_pipeline=newton; use auto or mujoco"
             )
 
     @classmethod
@@ -380,7 +380,7 @@ class NewtonCpuSettings:
         common = _newton_common_from_mapping(mapping, label=label)
         if common["contact_pipeline"] == "newton":
             raise ConfigurationError(
-                "Newton CPU 不支持 contact_pipeline=newton；请使用 auto 或 mujoco"
+                "Newton CPU does not support contact_pipeline=newton; use auto or mujoco"
             )
         return cls(
             engine=as_string(
@@ -429,7 +429,7 @@ def physics_settings_from_mapping(
     if engine == "newton" and execution == "cuda":
         return NewtonCudaSettings.from_mapping(mapping, label=label)
     raise ConfigurationError(
-        f"不支持的 physics engine/execution 组合: {engine}/{execution}"
+        f"unsupported physics engine/execution combination: {engine}/{execution}"
     )
 
 

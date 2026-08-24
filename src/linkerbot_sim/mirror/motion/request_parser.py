@@ -97,12 +97,12 @@ def parse_mirror_motion_request(
     try:
         command_type = _OPERATION_KINDS[operation]
     except KeyError as exc:
-        raise ValueError(f"不支持的 Mirror motion operation: {operation!r}") from exc
+        raise ValueError(f"unsupported Mirror motion operation: {operation!r}") from exc
     if not isinstance(arguments, Mapping):
-        raise ValueError("motion arguments 必须是 JSON object")
+        raise ValueError("motion arguments must be a JSON object")
     forbidden = sorted({"type", "id"}.intersection(arguments))
     if forbidden:
-        raise ValueError(f"motion arguments 不允许旧 envelope 字段: {forbidden}")
+        raise ValueError(f"motion arguments do not allow legacy envelope fields: {forbidden}")
     message = {"type": command_type, "id": request_id, **dict(arguments)}
     configured_defaults = config.planning.request_defaults
     planner_defaults = MirrorPlannerDefaults(

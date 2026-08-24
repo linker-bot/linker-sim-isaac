@@ -22,7 +22,7 @@ def validate_scene_snapshot(value: object) -> SceneSnapshot:
         # 重新经过 mapping 构造，避免调用方把同一 mutable NumPy backing 当作存储副本。
         return SceneSnapshot.from_mapping(value.as_dict())
     if not isinstance(value, Mapping):
-        raise ValueError("scene snapshot 必须是 SceneSnapshot 或 JSON object")
+        raise ValueError("scene snapshot must be a SceneSnapshot or JSON object")
     return SceneSnapshot.from_mapping(value)
 
 
@@ -33,7 +33,7 @@ def load_scene_snapshot(path: str | Path) -> SceneSnapshot:
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"无效 SceneSnapshot JSON: {source}: {exc}") from exc
+        raise ValueError(f"invalid SceneSnapshot JSON: {source}: {exc}") from exc
     return validate_scene_snapshot(payload)
 
 
@@ -52,7 +52,7 @@ def save_scene_snapshot(
     parsed = validate_scene_snapshot(snapshot)
     destination = Path(path)
     if destination.exists() and not replace:
-        raise FileExistsError(f"SceneSnapshot 已存在: {destination}")
+        raise FileExistsError(f"SceneSnapshot already exists: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
     encoded = (
         json.dumps(
@@ -79,7 +79,7 @@ def save_scene_snapshot(
             handle.flush()
             os.fsync(handle.fileno())
         if destination.exists() and not replace:
-            raise FileExistsError(f"SceneSnapshot 已存在: {destination}")
+            raise FileExistsError(f"SceneSnapshot already exists: {destination}")
         os.replace(temporary_path, destination)
         temporary_path = None
     finally:
