@@ -49,6 +49,7 @@ cover/
 
 # Build/runtime logs and generated outputs
 logs/
+artifacts/
 tests/outputs/
 tem-file/
 *.log
@@ -81,6 +82,7 @@ Thumbs.db
 # Local agent/tool state
 .agents/
 .codex/
+.claude/
 
 # CI workflows are local-only.
 .gitea/workflows/
