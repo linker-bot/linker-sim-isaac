@@ -7,7 +7,7 @@ baseline:
   name: S0c
   commit: e111c2d1ebb89c1bcbc996e1f6790b7191661dbe
   captured_at: '2026-07-15T18:06:26+08:00'
-  external_checkpoint: <redacted-internal-checkpoint-path>
+  external_checkpoint: <archived off-repo; contact maintainers for the S0c baseline checkpoint>
   production_python_count: 220
   test_python_count: 102
 
