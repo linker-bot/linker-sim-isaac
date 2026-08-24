@@ -241,6 +241,12 @@ class KaleidoscopeTensorViews:
         self.tcp_orientations_wxyz = torch.zeros(
             (count, len(robot_ports), 4), device=self.device, dtype=torch.float32
         )
+        # Identity wxyz: a valid quaternion fallback for the hold-last-finite guard below,
+        # in case an env reads non-finite before any finite TCP has been recorded (Gitea #67).
+        self.tcp_orientations_wxyz[..., 0] = 1.0
+        # Device-resident count of non-finite TCP link-pose rows held to their last-finite
+        # value; incremented sync-free on the hot path, inspectable on a cold boundary.
+        self._nonfinite_tcp_holds = torch.zeros((), device=self.device, dtype=torch.int64)
         self.block_pose_local_wxyz = torch.zeros(
             (count, 7), device=self.device, dtype=torch.float32
         )
@@ -343,10 +349,25 @@ class KaleidoscopeTensorViews:
                 ids,
                 full_qd,
             )
+            new_tcp_local = tcp_world - origins
+            # Workaround (Gitea #67): at scale PhysX/Fabric intermittently returns a non-finite
+            # (NaN) link transform for an env, and it is sticky -- re-stepping cannot clear it and
+            # the articulation port exposes no link-pose overwrite. Hold each such row's
+            # last-finite TCP (the persistent buffers already carry the previous good value) so no
+            # consumer (observation / cuRobo IK target) ever sees NaN. Unconditional where() keeps
+            # the hot path host-sync-free.
+            tcp_finite = torch.isfinite(new_tcp_local).all(dim=1) & torch.isfinite(
+                tcp_q
+            ).all(dim=1)
+            prev_local = self.tcp_positions_local[:, robot_index].index_select(0, ids)
+            prev_quat = self.tcp_orientations_wxyz[:, robot_index].index_select(0, ids)
+            self._nonfinite_tcp_holds += (~tcp_finite).sum()
             self.tcp_positions_local[:, robot_index].index_copy_(
-                0, ids, tcp_world - origins
+                0, ids, torch.where(tcp_finite[:, None], new_tcp_local, prev_local)
             )
-            self.tcp_orientations_wxyz[:, robot_index].index_copy_(0, ids, tcp_q)
+            self.tcp_orientations_wxyz[:, robot_index].index_copy_(
+                0, ids, torch.where(tcp_finite[:, None], tcp_q, prev_quat)
+            )
         block_world, block_q = self.object_port.read_pose_wxyz(ids)
         block_world = _owned_rows(
             block_world,

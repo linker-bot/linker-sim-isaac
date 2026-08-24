@@ -433,3 +433,49 @@ def test_state_api_makes_one_contiguous_owned_copy_of_noncontiguous_payload() ->
     selected_before = selected.clone()
     canonical.add_(50.0)
     torch.testing.assert_close(selected, selected_before)
+
+
+def test_nonfinite_tcp_pose_holds_last_finite_value() -> None:
+    # Gitea #67: at scale PhysX/Fabric intermittently returns a non-finite (sticky) TCP link
+    # transform for an env; the readback must hold that env's last-finite pose so no consumer
+    # (observation / cuRobo IK target) ever sees NaN.
+    origins = torch.tensor(
+        [[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0]],
+        device="cuda",
+    )
+    robot = _RobotPort("arm", origins, 0.1)
+    block = _ObjectPort(origins)
+    views = KaleidoscopeTensorViews(
+        robot_ports=(robot,), object_port=block, env_origins=origins
+    )
+
+    # First refresh records a finite last-known TCP for every env.
+    first = views.refresh()
+    torch.testing.assert_close(
+        first.tcp_positions_local[:, 0],
+        torch.tensor([[0.1, 0.0, -0.3]] * 3, device="cuda"),
+    )
+    assert int(views._nonfinite_tcp_holds.item()) == 0
+
+    # PhysX/Fabric returns a non-finite link transform for env 1 only; env 0 moves.
+    robot.tcp_world[1] = float("nan")
+    robot.tcp_q[1] = float("nan")
+    robot.tcp_world[0] = origins[0] + torch.tensor([0.5, 0.0, -0.3], device="cuda")
+
+    second = views.refresh()
+    # env 1 holds its last-finite pose; env 0 updates; nothing is NaN.
+    assert torch.isfinite(second.tcp_positions_local).all()
+    assert torch.isfinite(second.tcp_orientations_wxyz).all()
+    torch.testing.assert_close(
+        second.tcp_positions_local[1, 0],
+        torch.tensor([0.1, 0.0, -0.3], device="cuda"),
+    )
+    torch.testing.assert_close(
+        second.tcp_orientations_wxyz[1, 0],
+        torch.tensor([1.0, 0.0, 0.0, 0.0], device="cuda"),
+    )
+    torch.testing.assert_close(
+        second.tcp_positions_local[0, 0],
+        torch.tensor([0.5, 0.0, -0.3], device="cuda"),
+    )
+    assert int(views._nonfinite_tcp_holds.item()) == 1
