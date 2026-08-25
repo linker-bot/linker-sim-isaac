@@ -114,7 +114,20 @@ skip_covered = true
 [tool.linkerbot_sim.coverage]
 pure_fail_under = 84
 
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Keep the accepted lint contract independent from Ruff release defaults. Rule-set
+# expansion is a reviewed code-quality change, not an implicit dependency side effect.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E402"]
 "tests/test_system_configs.py" = ["E402"]
 "tools/object_assets/*/*/build_asset.py" = ["E402"]
+
+[tool.ruff.format]
+# Ruff 0.16 started formatting Markdown code fences by default. Documentation has a
+# separate maintained contract; keep this recipe scoped to Python source.
+exclude = ["*.md"]

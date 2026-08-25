@@ -66,6 +66,10 @@ runtime 标签会同步改变覆盖范围，必须接受与模块图其他变更
 不要添加全局抑制，只有路径在 CPU 开发环境中通过后才能扩大该范围。详见
 [静态类型检查](docs/zh-CN/development/type-checking.md)。
 
+Ruff 的 lint 规则与 Python 目标版本属于显式项目策略。扩大规则集应与依赖升级分开审查，
+并让 Markdown 保持在 Python formatter 门禁之外。详见
+[Lint 与格式化策略](docs/zh-CN/development/linting.md)。
+
 移动源码模块后，刷新并检查架构清单：
 
 ```bash
