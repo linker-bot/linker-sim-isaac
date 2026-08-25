@@ -32,6 +32,10 @@ check-docs:
     # 门禁迫使开发工具改写用户 index。干净 CI checkout 中该集合仍等于 tracked files。
     {{uv_dev}} python scripts/check_markdown_links.py --allow-untracked-existing
 
+# 该检查读取 GitHub 上已生效的规则，不属于离线 CPU quality。它不会创建或修改 ruleset。
+check-repository-policy repository="linker-bot/linker-sim-isaac":
+    {{python_dev}} scripts/check_repository_ruleset.py --repository {{repository}}
+
 test:
     {{uv_simulation}} coverage erase
     {{uv_simulation}} coverage run -m pytest -q

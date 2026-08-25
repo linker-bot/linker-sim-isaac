@@ -99,11 +99,16 @@ just test-simulation
 也不要仅为通过 CI 而增加 advisory 忽略项。即使依赖审计干净，仿真运行时依赖更新仍须执行
 受信任的 GPU 矩阵。详见[依赖安全与更新](docs/zh-CN/operations/dependency-security.md)。
 
+默认分支必须要求经过审查的 Pull Request 和严格的 `CPU quality` 检查。声明式策略及只读漂移
+检查见[仓库治理](docs/zh-CN/operations/repository-governance.md)。仓库设置仍需管理员操作；
+只合并 JSON 策略不会让它自动生效。
+
 ## Pull Request 检查表
 
 - 变更范围单一、明确，并说明所属产品边界。
 - 公开 API、配置或 wire 变更包含测试和双语文档。
 - `just quality` 通过。
+- 必检 `CPU quality` 和批准 review 未被绕过。
 - Pyright 必检范围保持零诊断；新增行级例外有准确说明和独立测试保护。
 - 依赖变更同时包含 `pyproject.toml` 与 `uv.lock`，没有新增审计 finding，并保持文档规定的
   兼容性分组。

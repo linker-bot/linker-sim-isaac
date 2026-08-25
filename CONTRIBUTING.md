@@ -114,11 +114,17 @@ advisory solely to pass CI. Simulation-runtime dependency updates require the tr
 GPU matrix even when the dependency audit is clean. See
 [Dependency Security And Updates](docs/en/operations/dependency-security.md).
 
+The default branch must require reviewed pull requests and the strict `CPU quality`
+check. The declarative policy and read-only drift audit are documented in
+[Repository Governance](docs/en/operations/repository-governance.md). Repository
+settings remain an administrator action; merging the JSON policy does not activate it.
+
 ## Pull Request Checklist
 
 - The change has one clear scope and explains its product boundary.
 - Public API/configuration/wire changes include tests and bilingual documentation.
 - `just quality` passes.
+- The required `CPU quality` check and approving review are not bypassed.
 - The required Pyright scope remains at zero diagnostics; new line-local exceptions
   are narrowly documented and independently tested.
 - Dependency changes contain `pyproject.toml` and `uv.lock` together, introduce no new
