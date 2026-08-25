@@ -28,7 +28,7 @@ runtime 中切换。
 
 Mirror 请求有明确 request ID、有界 admission、cancel、estop 和 quit。它适合低频业务控制，
 不是强化学习逐步 IPC。参见 [Mirror CLI](../reference/mirror-cli.md)与
-[Mirror v1 JSON](../reference/mirror-json.md)。
+[Mirror JSON](../reference/mirror-json.md)。
 
 ## Kaleidoscope 接口
 

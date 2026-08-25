@@ -48,7 +48,7 @@ Catalog 只在显式调用时执行 YAML I/O；配置对象不创建 runtime res
 | `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, max_iterations=None, close_on_exit=True)` | 主线程 admission/physics/render loop；省略 poll timeout 时读取 strict control profile |
 
 Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现细节；外部进程按
-[Mirror v1 JSON](mirror-json.md)集成，不依赖内部 module path。
+[Mirror JSON](mirror-json.md)集成，不依赖内部 module path。
 
 ### `MirrorRuntime`
 

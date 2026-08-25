@@ -63,7 +63,7 @@ Kaleidoscope closure 中误加的 camera/planning/telemetry 字段。
 - Envelope 必须含精确的 `protocol/request_id/operation/arguments`；
 - request ID 不能重复；JSON 不允许 NaN/Infinity/重复字段；
 - estop 后先成功 reset；
-- queue capacity/error code 见 [Mirror v1 JSON](../reference/mirror-json.md)。
+- queue capacity/error code 见 [Mirror JSON](../reference/mirror-json.md)。
 
 ## Camera/telemetry 无输出
 

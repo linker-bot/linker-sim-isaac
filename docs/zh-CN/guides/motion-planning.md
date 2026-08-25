@@ -53,5 +53,5 @@ Planner 的 graph/trajopt seed、collision cache、候选 trajectory 和 debug b
 - Kaleidoscope：逐 env failure mask，失败行 hold，reward penalty，并按 task policy truncate；
 - 两者都禁止把 NaN、shape mismatch 或未知 frame 猜成默认值。
 
-完整请求与 wire operation 见 [Mirror v1 JSON 与运动示例](../reference/mirror-json.md)，动作节奏见
+完整请求与 wire operation 见 [Mirror JSON 与运动示例](../reference/mirror-json.md)，动作节奏见
 [控制与轨迹](control-and-trajectories.md)。

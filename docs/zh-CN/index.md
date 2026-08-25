@@ -11,7 +11,7 @@
 | 启动现实工作站映像 | [Mirror 快速入门](getting-started/mirror-quickstart.md) |
 | 构造 Torch/Gymnasium 并行环境 | [Kaleidoscope 快速入门](getting-started/kaleidoscope-quickstart.md) |
 | 运行 Mirror 命令行和 transport | [Mirror CLI](reference/mirror-cli.md) |
-| 发送严格 JSON 请求，编写关节、IK、规划和双臂同步运动 | [Mirror v1 JSON 与运动示例](reference/mirror-json.md) |
+| 发送严格 JSON 请求，编写关节、IK、规划和双臂同步运动 | [Mirror JSON 与运动示例](reference/mirror-json.md) |
 | 调用 Torch、Gymnasium、state 与 clone API | [Kaleidoscope API](reference/kaleidoscope-api.md) |
 | 组合 mode、scene、physics、task 与 output profile | [配置指南](guides/configuration.md) |
 | 查询精确配置边界 | [配置参考](reference/configuration.md) |
@@ -44,7 +44,7 @@
 
 - [YAML 配置](reference/configuration.md)
 - [Mirror CLI](reference/mirror-cli.md)
-- [Mirror v1 JSON](reference/mirror-json.md)
+- [Mirror JSON](reference/mirror-json.md)
 - [Kaleidoscope API](reference/kaleidoscope-api.md)
 - [Python facade](reference/python-api.md)
 - [状态、快照与克隆](reference/snapshots.md)
