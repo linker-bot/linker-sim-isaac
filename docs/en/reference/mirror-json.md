@@ -780,8 +780,10 @@ physics is frozen, but it also does not clear the latch. Only a successful
 - The queue is bounded; overflow returns `queue_capacity_exceeded`.
 - A retained request ID cannot be reused; duplicates return
   `duplicate_request_id`.
-- A transport response timeout does not prove the owner-thread operation was rolled
-  back. Query status with a new ID before retrying non-idempotent motion.
+- A transport response timeout atomically expires a request that is still pending, so
+  it cannot be claimed and executed later. An already-active operation receives
+  cooperative cancellation but may have crossed a mutation boundary; query status
+  before retrying non-idempotent motion.
 - Each connection preserves request/response order, but several ingress connections
   may submit concurrently.
 

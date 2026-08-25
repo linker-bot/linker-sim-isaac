@@ -681,4 +681,6 @@ response 的 `result` 包含 `event: motion_completed`、原 operation 和 runti
 ## Transport 安全
 
 Server 只绑定 loopback，无认证、授权或 TLS。不要将端口直接暴露到非受信网络。每个连接和消息
-大小均有上限；response timeout 只结束等待，不转移或提前销毁仍由 owner 持有的 runtime 资源。
+大小均有上限。response timeout 会在 admission 锁内移除仍在 pending 的请求，保证它不会稍后被
+owner 取出执行；已经 active 的请求只会收到协作取消，且可能已越过状态修改边界，因此重试前仍需
+查询状态。timeout 不转移或提前销毁仍由 owner 持有的 runtime 资源。

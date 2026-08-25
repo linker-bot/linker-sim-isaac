@@ -113,6 +113,60 @@ def test_admission_is_bounded_and_rejects_duplicate_ids() -> None:
         queue.submit(_request("r-2", "runtime.status"))
 
 
+def test_response_timeout_atomically_expires_pending_request() -> None:
+    queue = MirrorAdmissionQueue(capacity=1, terminal_capacity=2)
+    request = _request("slow-v2", "control.get_mode", protocol=MIRROR_PROTOCOL_V2)
+    queue.submit(request)
+
+    with pytest.raises(TimeoutError, match="slow-v2"):
+        queue.wait_response(request.request_id, timeout_s=0.0)
+
+    assert queue.claim(timeout_s=0.0) is None
+    timeout_response = queue.wait_response(request.request_id, timeout_s=0.0)
+    assert timeout_response.ok is False
+    assert timeout_response.protocol == MIRROR_PROTOCOL_V2
+    assert timeout_response.error is not None
+    assert timeout_response.error.code == "response_timeout"
+    with pytest.raises(DuplicateRequestError):
+        queue.submit(request)
+
+
+def test_response_timeout_requests_cancellation_for_active_request() -> None:
+    queue = MirrorAdmissionQueue(capacity=1, terminal_capacity=1)
+    request = _request("active-timeout", "motion.joint_delta")
+    queue.submit(request)
+    assert queue.claim(timeout_s=0.0) == request
+
+    with pytest.raises(TimeoutError, match="active-timeout"):
+        queue.wait_response(request.request_id, timeout_s=0.0)
+
+    assert queue.should_cancel(request.request_id) is True
+    queue.complete(
+        MirrorResponse.failure(
+            request.request_id,
+            code="cancelled",
+            message="cancelled at the next execution boundary",
+        )
+    )
+    assert queue.should_cancel(request.request_id) is False
+
+
+def test_controller_timeout_never_executes_request_left_pending() -> None:
+    controller, motion = _controller()
+    request = _request(
+        "late-motion",
+        "motion.joint_delta",
+        robot_id=0,
+        positions=[0.1],
+    )
+
+    with pytest.raises(TimeoutError, match="late-motion"):
+        controller.submit_and_wait(request, timeout_s=0.0)
+
+    assert controller.process_next(timeout_s=0.0) is None
+    assert motion.calls == []
+
+
 def test_controller_dispatches_motion_reset_snapshot_and_status() -> None:
     controller, motion = _controller()
 

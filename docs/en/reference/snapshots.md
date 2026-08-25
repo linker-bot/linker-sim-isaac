@@ -180,6 +180,8 @@ explicitly cold and must not run in the training step/reset hot path.
 - Capture only at a completed runtime boundary, not while an engine writer is active.
 - Do not retain borrowed tensors returned with `clone=False` across a step, reset, or
   state write.
-- Do not treat transport timeout as proof that a Mirror restore did not execute.
+- A timed-out Mirror restore that was still pending is expired before execution. If
+  the restore was already active, cancellation is cooperative and the transaction may
+  already have committed; query state before retrying.
 - Never restore a snapshot from a different schema or device without using the
   documented conversion boundary.

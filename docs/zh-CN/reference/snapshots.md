@@ -110,6 +110,9 @@ env.clone_state(source_env_ids, target_env_ids, include_rng=True)
 放入每步 callback。文件必须带 schema/version、字段名、dtype/shape 和 env ID；加载后重新生成 owned
 CUDA tensor，不能使用 memory-mapped CPU array 充当 live state。
 
+Mirror restore 在 response timeout 时如果仍为 pending，会在执行前被移除；如果已经 active，取消是
+协作式的，restore 事务可能已经提交，重试前必须先查询当前状态。
+
 ## 坐标
 
 Kaleidoscope snapshot 中的 object/TCP pose 使用 env-local canonical frame。Clone 到 target env 时，

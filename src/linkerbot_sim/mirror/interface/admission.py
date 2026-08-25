@@ -91,7 +91,9 @@ class MirrorAdmissionQueue:
                     "Mirror is estopped; new motion, state.set and control.set_mode are rejected until reset"
                 )
             if self._known(request.request_id):
-                raise DuplicateRequestError(f"duplicate request_id: {request.request_id!r}")
+                raise DuplicateRequestError(
+                    f"duplicate request_id: {request.request_id!r}"
+                )
             if len(self._pending) + int(self._active is not None) >= self.capacity:
                 raise AdmissionCapacityError("Mirror admission queue is full")
             self._pending.append(request)
@@ -124,7 +126,9 @@ class MirrorAdmissionQueue:
                     return None
                 self._condition.wait(remaining)
             if self._active is not None:
-                raise RuntimeError("Mirror admission only allows a single main-thread active request")
+                raise RuntimeError(
+                    "Mirror admission only allows a single main-thread active request"
+                )
             if not self._pending:
                 return None
             self._active = self._pending.popleft()
@@ -133,21 +137,55 @@ class MirrorAdmissionQueue:
     def complete(self, response: MirrorResponse) -> None:
         with self._condition:
             if self._active is None or self._active.request_id != response.request_id:
-                raise RuntimeError("response does not belong to the current active request")
+                raise RuntimeError(
+                    "response does not belong to the current active request"
+                )
             self._active = None
             self._cancelled.discard(response.request_id)
             self._store_terminal(response)
             self._condition.notify_all()
 
     def wait_response(self, request_id: str, *, timeout_s: float) -> MirrorResponse:
+        """等待 terminal response，并在 deadline 到期时原子终止 admission。
+
+        pending 请求会在持有 condition 锁时从队列移除，因此 owner thread 不可能在
+        timeout 返回后再 claim 它。已经被 owner claim 的 active 请求不能在 ingress
+        线程强制回滚；这里只设置 cooperative-cancel，执行器会在下一个取消边界停止。
+        """
+
         deadline = time.monotonic() + float(timeout_s)
         with self._condition:
             while request_id not in self._terminal:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0.0:
-                    raise TimeoutError(f"timed out waiting for Mirror response: {request_id!r}")
+                    self._expire_response_wait(request_id)
+                    raise TimeoutError(
+                        f"timed out waiting for Mirror response: {request_id!r}"
+                    )
                 self._condition.wait(remaining)
             return self._terminal[request_id]
+
+    def _expire_response_wait(self, request_id: str) -> None:
+        """在 condition 锁内终止 pending 请求或取消 active 请求。"""
+
+        if self._active is not None and self._active.request_id == request_id:
+            self._cancelled.add(request_id)
+            self._condition.notify_all()
+            return
+        for request in tuple(self._pending):
+            if request.request_id != request_id:
+                continue
+            self._pending.remove(request)
+            self._store_terminal(
+                MirrorResponse.failure(
+                    request_id,
+                    code="response_timeout",
+                    message=f"timed out waiting for Mirror response: {request_id!r}",
+                    protocol=request.protocol,
+                )
+            )
+            self._condition.notify_all()
+            return
 
     def cancel(self, request_id: str) -> bool:
         with self._condition:
