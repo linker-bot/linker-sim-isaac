@@ -53,6 +53,7 @@ camera, transport, telemetry, and persistent output from its hot runtime closure
 - [Contributing](../../CONTRIBUTING.md)
 - [Naming And Ownership](development/naming.md)
 - [Module Map](development/module-map.md)
+- [Static Type Checking](development/type-checking.md)
 - [Object Assets](development/object-assets.md)
 - [Collision Approximation](development/collision-approximation.md)
 - [USD Preview](development/usd-preview.md)

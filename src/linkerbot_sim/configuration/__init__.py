@@ -90,7 +90,9 @@ _EXPORTS = {
     ),
 }
 
-__all__ = sorted(_EXPORTS)
+# This facade is intentionally lazy. Architecture tests independently freeze and
+# verify the computed public export surface.
+__all__ = sorted(_EXPORTS)  # pyright: ignore[reportUnsupportedDunderAll]
 
 
 def __getattr__(name: str) -> Any:

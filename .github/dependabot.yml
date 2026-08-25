@@ -28,6 +28,7 @@ updates:
       development-tooling:
         patterns:
           - "coverage"
+          - "pyright"
           - "pytest"
           - "ruff"
           - "usd-core"

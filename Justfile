@@ -24,6 +24,9 @@ format-check:
 lint:
     {{uv_dev}} ruff check .
 
+type-check:
+    {{uv_dev}} pyright --project pyrightconfig.ci.json
+
 check-docs:
     # 本地重构会先产生尚未暂存的新文档；只接受 Git 未忽略的 worktree 文件，避免质量
     # 门禁迫使开发工具改写用户 index。干净 CI checkout 中该集合仍等于 tracked files。
@@ -131,4 +134,4 @@ validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode kaleidoscope --profile physx_cuda
     {{uv_dev}} python scripts/validate_mode_config.py --mode kaleidoscope --profile newton_cuda
 
-quality: whitespace format-check lint check-docs validate-config test-architecture test-pure
+quality: whitespace format-check lint type-check check-docs validate-config test-architecture test-pure

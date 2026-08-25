@@ -24,6 +24,7 @@ test = [
 ]
 dev = [
   "coverage==7.4.4",
+  "pyright==1.1.411",
   "pytest==9.1.1",
   "ruff==0.15.21",
   # CPU-only USD tests use PyPI USD. Never combine this extra with simulation:

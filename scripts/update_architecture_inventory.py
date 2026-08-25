@@ -290,7 +290,12 @@ def _module_facts(manifest: Mapping[str, object]) -> tuple[ModuleFact, ...]:
         raise ValueError(
             "module_map.group_layers must use exactly the same groups as group_order"
         )
-    unknown_layers = sorted(set(group_layers.values()) - allowed_layers)
+    layer_values = set(group_layers.values())
+    if not all(isinstance(value, str) for value in layer_values):
+        raise ValueError("module_map.group_layers values must be strings")
+    unknown_layers = sorted(
+        {value for value in layer_values if isinstance(value, str)} - allowed_layers
+    )
     if unknown_layers:
         raise ValueError(f"group_layers contains unknown layer(s): {unknown_layers}")
 
