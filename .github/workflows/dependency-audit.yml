@@ -1,0 +1,78 @@
+name: Dependency Audit
+
+on:
+  pull_request:
+    paths:
+      - .github/dependabot.yml
+      - .github/workflows/dependency-audit.yml
+      - pyproject.toml
+      - scripts/check_dependency_audit_delta.py
+      - uv.lock
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Trusted base Git ref to compare
+        required: true
+        default: master
+      head_ref:
+        description: Head Git ref to audit
+        required: true
+        default: master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-delta:
+    name: Locked graph delta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+      UV_NO_PROGRESS: "1"
+    steps:
+      - name: Check out trusted base
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha || inputs.base_ref }}
+          path: audit-base
+          persist-credentials: false
+
+      - name: Check out proposed head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.head_ref }}
+          path: audit-head
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            audit-base/uv.lock
+            audit-head/uv.lock
+
+      # Execute the checker from the trusted base checkout. A pull request may
+      # change only the data being audited, not the comparison policy itself.
+      # The head fallback is reachable only by the one-time rollout PR whose
+      # base predates this checker.
+      - name: Reject new dependency findings
+        shell: bash
+        run: |
+          set -euo pipefail
+          checker=audit-base/scripts/check_dependency_audit_delta.py
+          if [[ ! -f "${checker}" ]]; then
+            echo "::notice::Trusted base predates the dependency checker; using the rollout candidate."
+            checker=audit-head/scripts/check_dependency_audit_delta.py
+          fi
+          python "${checker}" \
+            --base-project audit-base \
+            --head-project audit-head

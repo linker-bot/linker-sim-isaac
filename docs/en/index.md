@@ -44,6 +44,7 @@ camera, transport, telemetry, and persistent output from its hot runtime closure
 ## Operations
 
 - [Runtime Constraints](operations/constraints.md)
+- [Dependency Security And Updates](operations/dependency-security.md)
 - [Simulation CI](operations/simulation-ci.md)
 - [Troubleshooting](operations/troubleshooting.md)
 
