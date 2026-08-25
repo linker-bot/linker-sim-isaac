@@ -38,6 +38,7 @@ Choose only the extras the workflow needs:
 | `simulation` | Isaac Sim, PyTorch CUDA, cuRobo, Warp, CUDA bindings | Required for either product |
 | `visualization` | Foxglove SDK | Mirror telemetry visualization |
 | `training` | Gymnasium and skrl | Kaleidoscope adapters and training |
+| `test` | pytest and coverage | Tests in either CPU or simulation environments |
 | `dev` | pytest, coverage, Ruff, PyPI USD | CPU-only development checks |
 
 A complete runtime environment is:
@@ -154,7 +155,9 @@ OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
 ```
 
 For the complete GPU/Isaac acceptance matrix, run `just test-simulation`. It is
-intentionally separate from the CPU `just quality` gate.
+intentionally separate from the CPU `just quality` gate. The recipe adds the compatible
+`test` extra itself; it never adds `dev` or PyPI `usd-core`. See
+[Simulation CI](../operations/simulation-ci.md) for the trusted runner contract.
 
 ## Next Steps
 

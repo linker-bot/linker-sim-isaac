@@ -90,6 +90,10 @@ just test-simulation
 
 If the complete simulation matrix is too large for an iteration, run the narrowest
 relevant recipe first, then record exactly which GPU gates remain outstanding.
+Maintainers can run the same matrix through the trusted
+[Simulation CI workflow](docs/en/operations/simulation-ci.md). It deliberately has no
+pull-request trigger; select only a reviewed in-repository branch for a manual run and
+include the resulting Actions URL in the pull request.
 
 ## Pull Request Checklist
 

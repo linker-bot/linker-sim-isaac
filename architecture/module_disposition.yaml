@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 114
-    path_sha256: dede0389a8fde0828c5b4bc18353a4cc69f9cdb23b6cd5fdf7c244b2bd95be00
-    path_content_sha256: d50d2b4395807e8cf670d301ffc843933b7d22cdd03f63895cb41a4a2bec5aaf
+    count: 115
+    path_sha256: d83fb5f8d855879806c2c9cdcfa3272cf7b7506476df396de81509c5f75a72df
+    path_content_sha256: fe799902591045c803434c0be7203ccb7c3c59c23b847904159e303705a3dd54
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2589,6 +2589,8 @@ generated_inventory:
       sha256: a18bba4e952943532b450a86347bb5da8ff3c6270b7afe858b14a7ecd752fd28
     - path: tests/test_simulation_app_lifecycle.py
       sha256: 88e08e4c842807f7241e5194177b9e589f9368655aef148b960c6092510e93a4
+    - path: tests/test_simulation_workflow.py
+      sha256: 3aea7def52a354b689d5cbfc202814b1ed01b8225bb0b221e5972daf6cea5550
     - path: tests/test_skrl_cuda_integration.py
       sha256: cb3991cb984c5c984076d1bdab478980d6175af14cd69a5f9edc58006e309de9
     - path: tests/test_snapshot_object_velocities.py
@@ -2752,9 +2754,9 @@ generated_inventory:
     - path: ci/simulation.sh
       sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
   maintained_docs:
-    count: 57
-    path_sha256: 348f476080e2a13ee30d642f9c734f896a83c7a97943356747952afaa8fe2e4d
-    path_content_sha256: 0e5c24358eb278bffc2e7001490eb8cee15c541fa13a766b2b9229475372789d
+    count: 59
+    path_sha256: 1ae7de2400fc8983479174e7e07b86d08c3790f9dfdf7c9c465bfb84c051e734
+    path_content_sha256: 3fc314dc3a271d3c6bc0a9ff99043d9fd94de6725307d2a81063c66c7d46c3ce
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2771,7 +2773,7 @@ generated_inventory:
     - path: docs/en/getting-started/choose-runtime-and-api.md
       sha256: efca7b65828c4246ff8a5456a693815807034a22d24de6fd7d89db5a0a1955b9
     - path: docs/en/getting-started/installation.md
-      sha256: 90d62ea9244515b03d5dd97485c7c1c3059c263de205f78dbe403995ce3cd07b
+      sha256: 89545702f38e9c1a6d8e894bda0aae9640ce8ac47ed30a98caec36d3c650c153
     - path: docs/en/getting-started/kaleidoscope-quickstart.md
       sha256: ed8842fb63ad82708431a25ef3962d5d00b7fc1a542609c5d30e07de044b9c5d
     - path: docs/en/getting-started/mirror-quickstart.md
@@ -2793,11 +2795,13 @@ generated_inventory:
     - path: docs/en/guides/telemetry.md
       sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
     - path: docs/en/index.md
-      sha256: 8b15fb572697a5660f0e8d7967c2e1a0cfd27a49d838fddcb93c7e957538f835
+      sha256: 80b024979c745c366a9f1a9291867d2fad05751662dda0fab047cfd871193c9f
     - path: docs/en/maintenance/documentation-guide.md
       sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
     - path: docs/en/operations/constraints.md
       sha256: 597e81d8f00c2ce44a13bcb3859d4ed8c115b138b059560f0e15281f72a41a12
+    - path: docs/en/operations/simulation-ci.md
+      sha256: e1c267f86dc06b2052b65b3c9eb1ddf06921e97e1c989a397062f4626cfec1ca
     - path: docs/en/operations/troubleshooting.md
       sha256: c6873ee57f92fa33cdfb810c92fa652ef0b3c753a3817f09963339818459071a
     - path: docs/en/reference/configuration.md
@@ -2827,7 +2831,7 @@ generated_inventory:
     - path: docs/zh-CN/getting-started/choose-runtime-and-api.md
       sha256: 129f50f0a9008fe7560d385d58062416e7218d396ccf4c42f0a35c54d693bb02
     - path: docs/zh-CN/getting-started/installation.md
-      sha256: 3aefa92d332784bda4704be6ec995b464d204461ed271ad78cba9a5d7dd83a8c
+      sha256: 48a8c1bda069b83d569e97b9ea3e203b8bd6178c03fbd96d7f0e1fcf637b29f5
     - path: docs/zh-CN/getting-started/kaleidoscope-quickstart.md
       sha256: 6dc1ccb820fc403612d489d41c6f549d25044111e977ff5e0f65fd0f2bd2ce8e
     - path: docs/zh-CN/getting-started/mirror-quickstart.md
@@ -2849,11 +2853,13 @@ generated_inventory:
     - path: docs/zh-CN/guides/telemetry.md
       sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
     - path: docs/zh-CN/index.md
-      sha256: d7f2abbbb58d91e23647980088979bca5ee7bbe24ea4c7987e315f6d7a53eef0
+      sha256: 43b961f55059d1b0e9635f402a6a77dcee207794248e3bdd7a601af7d0d62b25
     - path: docs/zh-CN/maintenance/documentation-guide.md
       sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
     - path: docs/zh-CN/operations/constraints.md
       sha256: 15ff01d800b0991777171f1f6a4c798997bd2c6807cbe7177bb225467926434a
+    - path: docs/zh-CN/operations/simulation-ci.md
+      sha256: aa1eeb2a723c82b17e4363d69be99248eb0e8ad155323a6952bb1a849c95a98f
     - path: docs/zh-CN/operations/troubleshooting.md
       sha256: 1586926ae7e5ad8b631cd6a7cf644e1fefbda1587d5d3a35a82464263c155536
     - path: docs/zh-CN/reference/configuration.md

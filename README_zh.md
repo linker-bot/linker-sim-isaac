@@ -205,6 +205,8 @@ just test-simulation
 该聚合门禁包含针对全部七个正式 Kit closure 的 `smoke-runtime-kits`、针对全部四个 Mirror mode
 profile 的 `smoke-mirror`、Kaleidoscope 两个后端及其动作变体、Newton 的 256-world 容量以及
 PhysX 进程显存预算。
+受信任 NVIDIA runner 的自动化方式、触发边界和配置要求见
+[Simulation CI](docs/zh-CN/operations/simulation-ci.md)。
 
 ## 许可
 

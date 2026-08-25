@@ -16,6 +16,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Test tooling is compatible with both the CPU-only and Isaac environments. Keep it
+# separate from dev because dev's usd-core must never share an environment with Kit.
+test = [
+  "coverage==7.4.4",
+  "pytest==9.1.1",
+]
 dev = [
   "coverage==7.4.4",
   "pytest==9.1.1",

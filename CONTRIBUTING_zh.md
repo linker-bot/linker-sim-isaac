@@ -79,6 +79,9 @@ just test-simulation
 
 如果完整仿真矩阵在一次迭代中成本过高，应先运行最相关的窄门禁，并在 Pull Request 中准确列出
 尚未执行的 GPU 检查。
+维护者也可以通过受信任的 [Simulation CI 工作流](docs/zh-CN/operations/simulation-ci.md)
+运行同一套矩阵。该工作流刻意不响应 Pull Request 事件；手动运行时只能选择已经审查的仓库内
+分支，并在 Pull Request 中附上对应的 Actions 链接。
 
 ## Pull Request 检查表
 
