@@ -8,9 +8,16 @@ from collections.abc import Sequence
 from dataclasses import replace
 import json
 
+from linkerbot_sim import __version__
+
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"linker-sim-isaac {__version__}",
+    )
     parser.add_argument(
         "--profile",
         choices=("physx_cuda", "newton_cuda"),

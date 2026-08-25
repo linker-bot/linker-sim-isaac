@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
+from linkerbot_sim import __version__
 from linkerbot_sim.configuration import load_mirror_config
 from linkerbot_sim.mirror.app import run_mirror
 from linkerbot_sim.mirror.bootstrap import create_mirror_runtime
@@ -31,6 +32,11 @@ def _endpoint(value: str) -> tuple[str, int]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="LinkerBot Mirror reality simulation")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"linker-sim-isaac {__version__}",
+    )
     parser.add_argument(
         "--profile",
         choices=(

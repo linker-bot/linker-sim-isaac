@@ -55,6 +55,7 @@ camera, transport, telemetry, and persistent output from its hot runtime closure
 - [Module Map](development/module-map.md)
 - [Lint And Format Policy](development/linting.md)
 - [Static Type Checking](development/type-checking.md)
+- [Version And Revision Identity](development/versioning.md)
 - [Object Assets](development/object-assets.md)
 - [Collision Approximation](development/collision-approximation.md)
 - [USD Preview](development/usd-preview.md)

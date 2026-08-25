@@ -62,6 +62,7 @@
 - [源码模块图](development/module-map.md)
 - [Lint 与格式化策略](development/linting.md)
 - [静态类型检查](development/type-checking.md)
+- [版本与修订标识](development/versioning.md)
 - [命名规范](development/naming.md)
 - [物体资产](development/object-assets.md)
 - [碰撞近似](development/collision-approximation.md)

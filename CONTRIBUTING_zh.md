@@ -70,6 +70,10 @@ Ruff 的 lint 规则与 Python 目标版本属于显式项目策略。扩大规�
 并让 Markdown 保持在 Python formatter 门禁之外。详见
 [Lint 与格式化策略](docs/zh-CN/development/linting.md)。
 
+发布变更必须同步更新项目 metadata 与可安全导入的运行时版本。开发 checkout 的问题报告应
+同时提供兼容版本和精确 commit。详见
+[版本与修订标识](docs/zh-CN/development/versioning.md)。
+
 移动源码模块后，刷新并检查架构清单：
 
 ```bash

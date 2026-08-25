@@ -16,4 +16,6 @@
 
 from linkerbot_sim.utils.paths import REPO_ROOT
 
-__all__ = ["REPO_ROOT"]
+__version__ = "0.3.0"
+
+__all__ = ["REPO_ROOT", "__version__"]

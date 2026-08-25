@@ -20,6 +20,8 @@ assignees: []
 - **OS** (e.g. Ubuntu 22.04):
 - **Python version** (3.12.x):
 - **Isaac Sim version** (e.g. 6.0.1):
+- **linker-sim-isaac version** (`python scripts/mirror.py --version`):
+- **Commit** (`git rev-parse HEAD`):
 - **Product** (mirror / kaleidoscope):
 - **Profile** (if relevant):
 
