@@ -114,7 +114,9 @@ class KaleidoscopeEnvironmentSettings:
             (origin_xyz[0], origin_xyz[1], origin_xyz[2]),
         )
         if not self.base_env_path.startswith("/"):
-            raise ConfigurationError("environments.base_env_path must be an absolute USD path")
+            raise ConfigurationError(
+                "environments.base_env_path must be an absolute USD path"
+            )
         if self.base_env_path == "/":
             raise ConfigurationError(
                 "environments.base_env_path must be a non-root USD container path"

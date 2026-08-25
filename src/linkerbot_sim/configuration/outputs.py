@@ -370,7 +370,9 @@ class TelemetryOutputSettings:
             or include_scene_markers
             or include_hybrid_control
         ):
-            raise ConfigurationError(f"{label} must select at least one telemetry modality when enabled")
+            raise ConfigurationError(
+                f"{label} must select at least one telemetry modality when enabled"
+            )
         include_efforts = as_bool(
             mapping["include_efforts"], label=f"{label}.include_efforts"
         )
@@ -448,7 +450,9 @@ class TelemetryTopicSettings:
             name: as_string(mapping[name], label=f"{label}.{name}") for name in names
         }
         if any(not value.startswith("/") or ".." in value for value in values.values()):
-            raise ConfigurationError(f"{label} topics must be absolute paths without '..'")
+            raise ConfigurationError(
+                f"{label} topics must be absolute paths without '..'"
+            )
         if len(set(values.values())) != len(values):
             raise ConfigurationError(f"{label} topics must be distinct")
         return cls(**values)

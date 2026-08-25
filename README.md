@@ -1,5 +1,7 @@
 # linker-sim-isaac
 
+[![Quality](https://github.com/linker-bot/linker-sim-isaac/actions/workflows/quality.yml/badge.svg)](https://github.com/linker-bot/linker-sim-isaac/actions/workflows/quality.yml)
+
 Language: [English](README.md) | [中文](README_zh.md)
 
 Start here: [Installation](docs/en/getting-started/installation.md) ·

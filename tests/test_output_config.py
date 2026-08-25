@@ -111,5 +111,5 @@ def test_hybrid_control_topic_must_not_collide() -> None:
     topics["hybrid_control"] = topics["state"]
     raw["topics"] = topics
 
-    with pytest.raises(ConfigurationError, match="互不相同"):
+    with pytest.raises(ConfigurationError, match="must be distinct"):
         TelemetryOutputSettings.from_mapping(raw, label="outputs.telemetry")

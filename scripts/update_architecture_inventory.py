@@ -303,7 +303,9 @@ def _module_facts(manifest: Mapping[str, object]) -> tuple[ModuleFact, ...]:
             )
         target = documentation_targets.get(group)
         if not isinstance(target, str) or not target:
-            raise ValueError(f"module group {group!r} is missing a documentation target")
+            raise ValueError(
+                f"module group {group!r} is missing a documentation target"
+            )
         runtime = _runtime(module, module_map)
         if runtime not in RUNTIME_LABELS:
             raise ValueError(f"{module} uses unknown runtime {runtime!r}")
@@ -630,7 +632,9 @@ def _replace_scalar(text: str, key: str, value: object) -> str:
     pattern = re.compile(rf"^(?P<indent>\s*){re.escape(key)}:\s*.*$", re.MULTILINE)
     matches = tuple(pattern.finditer(text))
     if len(matches) != 1:
-        raise ValueError(f"expected {key!r} to appear exactly once in the allowlist inventory")
+        raise ValueError(
+            f"expected {key!r} to appear exactly once in the allowlist inventory"
+        )
     return pattern.sub(rf"\g<indent>{key}: {value}", text, count=1)
 
 
@@ -797,7 +801,9 @@ def _generated_inventory(manifest: Mapping[str, object]) -> str:
 def _manifest_with_generated_inventory(manifest: Mapping[str, object]) -> str:
     text = MANIFEST_PATH.read_text(encoding="utf-8")
     if text.count(GENERATED_START) != 1 or text.count(GENERATED_END) != 1:
-        raise ValueError("each manifest must contain exactly one generated inventory marker")
+        raise ValueError(
+            "each manifest must contain exactly one generated inventory marker"
+        )
     before, remainder = text.split(GENERATED_START, maxsplit=1)
     _old, after = remainder.split(GENERATED_END, maxsplit=1)
     return before + _generated_inventory(manifest) + after
@@ -1020,7 +1026,9 @@ def _architecture_violations(
         if "exact" in group:
             parents = {Path(relative).parent for relative in paths}
             if len(parents) != 1:
-                raise ValueError(f"{group_name}.exact must reside in the same directory")
+                raise ValueError(
+                    f"{group_name}.exact must reside in the same directory"
+                )
             parent = REPO_ROOT / next(iter(parents))
             actual = {
                 path.relative_to(REPO_ROOT).as_posix()
@@ -1045,7 +1053,9 @@ def _architecture_violations(
             continue
         path = _facade_path(str(module))
         if not path.is_file():
-            violations.append(f"frozen facade is missing file: {path.relative_to(REPO_ROOT)}")
+            violations.append(
+                f"frozen facade is missing file: {path.relative_to(REPO_ROOT)}"
+            )
             continue
         actual = set(_static_exports(str(module), path))
         expected = set(
@@ -1190,7 +1200,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="only check the generated output and the architecture rules",
     )
-    mode.add_argument("--write", action="store_true", help="rewrite all mechanical inventory")
+    mode.add_argument(
+        "--write", action="store_true", help="rewrite all mechanical inventory"
+    )
     parser.add_argument(
         "--require-final",
         action="store_true",

@@ -102,7 +102,9 @@ class MirrorConfig:
             )
         planner = self.curobo.motion_planner
         if planner is None:
-            raise ConfigurationError("Mirror cuRobo profile must declare motion_planner")
+            raise ConfigurationError(
+                "Mirror cuRobo profile must declare motion_planner"
+            )
         if planner.use_cuda_graph:
             raise ConfigurationError(
                 "Mirror cuRobo motion_planner.use_cuda_graph must be false: "
@@ -133,7 +135,9 @@ class MirrorConfig:
         hybrid = self.hybrid_control
         assert hybrid is not None
         if not isinstance(self.physics, PhysxCpuSettings):
-            raise ConfigurationError("hybrid_control only supports Mirror PhysX CPU in the first phase")
+            raise ConfigurationError(
+                "hybrid_control only supports Mirror PhysX CPU in the first phase"
+            )
         if self.control.mode != "position":
             raise ConfigurationError(
                 "hybrid_control requires the initial Mirror control.mode=position"

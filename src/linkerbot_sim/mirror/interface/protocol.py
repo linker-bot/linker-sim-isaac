@@ -103,7 +103,9 @@ class MirrorRequest:
         if not isinstance(self.request_id, str) or not self.request_id.strip():
             raise ValueError("request_id must be a non-empty string")
         if self.request_id.strip() != self.request_id:
-            raise ValueError("request_id must not contain leading or trailing whitespace")
+            raise ValueError(
+                "request_id must not contain leading or trailing whitespace"
+            )
         if self.operation not in _OPERATIONS_BY_PROTOCOL[self.protocol]:
             raise ValueError(
                 f"protocol {self.protocol!r} does not support Mirror operation: {self.operation!r}"
@@ -153,7 +155,9 @@ class MirrorResponse:
         if not isinstance(self.request_id, str) or not self.request_id:
             raise ValueError("MirrorResponse.request_id must be non-empty")
         if self.ok == (self.error is not None):
-            raise ValueError("a success response may only have result, a failure response must have error")
+            raise ValueError(
+                "a success response may only have result, a failure response must have error"
+            )
         if self.ok:
             object.__setattr__(
                 self, "result", _freeze_json(self.result, label="result")
@@ -208,7 +212,9 @@ def request_from_mapping(value: Mapping[str, object]) -> MirrorRequest:
     if missing:
         raise ValueError(f"Mirror request is missing fields: {', '.join(missing)}")
     if unknown:
-        raise ValueError(f"Mirror request contains unknown fields: {', '.join(unknown)}")
+        raise ValueError(
+            f"Mirror request contains unknown fields: {', '.join(unknown)}"
+        )
     protocol = value["protocol"]
     request_id = value["request_id"]
     operation = value["operation"]

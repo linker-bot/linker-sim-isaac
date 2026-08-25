@@ -208,7 +208,9 @@ def create_mirror_runtime(
             "control_mode_state_provider",
         ):
             if assembly.scene_resources.control_mode_state_provider is not None:
-                raise RuntimeError("Mirror snapshot control-mode provider is already bound")
+                raise RuntimeError(
+                    "Mirror snapshot control-mode provider is already bound"
+                )
             assembly.scene_resources.control_mode_state_provider = control_mode.get_mode
         bind_control_mode_provider = getattr(
             assembly.motion_backend,

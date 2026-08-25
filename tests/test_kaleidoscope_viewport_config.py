@@ -63,10 +63,14 @@ def test_viewport_config_accepts_explicit_path_within_config_root(
 @pytest.mark.parametrize(
     ("old", "new", "expected"),
     [
-        ("  selected_env: 0", "  selected_env: false", "selected_env 必须是整数"),
-        ("  render_every_n_steps: 1", "  render_every_n_steps: 0", "必须 >= 1"),
-        ("  denoiser: false", "  denoiser: 0", "denoiser 必须是 YAML boolean"),
-        ("  renderer: RaytracedLighting", "  renderer: ' '", "renderer 必须"),
+        (
+            "  selected_env: 0",
+            "  selected_env: false",
+            "selected_env must be an integer",
+        ),
+        ("  render_every_n_steps: 1", "  render_every_n_steps: 0", "must be >= 1"),
+        ("  denoiser: false", "  denoiser: 0", "denoiser must be a YAML boolean"),
+        ("  renderer: RaytracedLighting", "  renderer: ' '", "renderer must be"),
     ],
 )
 def test_viewport_config_rejects_invalid_scalar_types_and_ranges(
@@ -93,7 +97,7 @@ def test_viewport_config_rejects_unknown_root_and_nested_visual_keys(
         root,
         text.replace("  selected_env: 0", "  typo: true\n  selected_env: 0", 1),
     )
-    with pytest.raises(ConfigurationError, match="包含未知字段: typo"):
+    with pytest.raises(ConfigurationError, match="contains unknown fields: typo"):
         load_kaleidoscope_viewport_config(configs_root=root)
 
     _write_viewport(
@@ -106,7 +110,7 @@ def test_viewport_config_rejects_unknown_root_and_nested_visual_keys(
     )
     with pytest.raises(
         ConfigurationError,
-        match="visuals 包含未知字段: unsupported",
+        match="visuals contains unknown fields: unsupported",
     ):
         load_kaleidoscope_viewport_config(configs_root=root)
 

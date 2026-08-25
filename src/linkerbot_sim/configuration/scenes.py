@@ -91,7 +91,9 @@ class ObjectInstanceSettings:
 
     def __post_init__(self) -> None:
         if not self.prim_path.startswith("/"):
-            raise ConfigurationError("scene.objects[].prim_path must be an absolute USD path")
+            raise ConfigurationError(
+                "scene.objects[].prim_path must be an absolute USD path"
+            )
 
     @classmethod
     def from_mapping(cls, value: object, *, label: str) -> "ObjectInstanceSettings":
@@ -183,7 +185,9 @@ class CameraSettings:
         if not self.parent_prim_path.startswith("/") or not self.prim_path.startswith(
             "/"
         ):
-            raise ConfigurationError("scene.cameras prim path must be an absolute USD path")
+            raise ConfigurationError(
+                "scene.cameras prim path must be an absolute USD path"
+            )
         if not self.prim_path.startswith(self.parent_prim_path.rstrip("/") + "/"):
             raise ConfigurationError(
                 "camera prim_path must be under the parent_prim_path namespace"
@@ -192,7 +196,9 @@ class CameraSettings:
             self.clipping_range_m[0] <= 0
             or self.clipping_range_m[1] <= self.clipping_range_m[0]
         ):
-            raise ConfigurationError("camera clipping_range_m must satisfy 0 < near < far")
+            raise ConfigurationError(
+                "camera clipping_range_m must satisfy 0 < near < far"
+            )
 
     @classmethod
     def from_mapping(cls, value: object, *, label: str) -> "CameraSettings":

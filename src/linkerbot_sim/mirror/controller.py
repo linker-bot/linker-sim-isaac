@@ -56,7 +56,9 @@ def _exact_arguments(
     if missing:
         raise ValueError(f"{operation} is missing arguments: {', '.join(missing)}")
     if unknown:
-        raise ValueError(f"{operation} contains unknown arguments: {', '.join(unknown)}")
+        raise ValueError(
+            f"{operation} contains unknown arguments: {', '.join(unknown)}"
+        )
 
 
 def _json_result(value: object) -> object:
@@ -360,7 +362,9 @@ class MirrorController:
             # state mutation 必须留在 owner thread；急停只允许继续读取状态，不能通过
             # state.set 改写仿真或隐式解除 latch。普通 ingress 在 admission 层也执行同一检查。
             if self.admission.status().estopped:
-                raise RuntimeEstoppedError("Mirror is e-stopped; state.set is rejected before reset")
+                raise RuntimeEstoppedError(
+                    "Mirror is e-stopped; state.set is rejected before reset"
+                )
             return self.state.set_state(state, strict=strict)
         if operation == "snapshot.get":
             _exact_arguments(arguments, allowed=set(), operation=operation)

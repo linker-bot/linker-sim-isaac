@@ -44,7 +44,9 @@ class GpuMemoryBudget:
                 "physics.memory.max_simulator_process_mib must be a positive integer"
             )
         if type(self.min_free_floor_mib) is not int or self.min_free_floor_mib <= 0:
-            raise ConfigurationError("physics.memory.min_free_floor_mib must be a positive integer")
+            raise ConfigurationError(
+                "physics.memory.min_free_floor_mib must be a positive integer"
+            )
         if not 0.0 < self.min_free_fraction_after_warmup <= 1.0:
             raise ConfigurationError(
                 "physics.memory.min_free_fraction_after_warmup must be within (0, 1]"

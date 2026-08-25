@@ -102,7 +102,9 @@ def parse_mirror_motion_request(
         raise ValueError("motion arguments must be a JSON object")
     forbidden = sorted({"type", "id"}.intersection(arguments))
     if forbidden:
-        raise ValueError(f"motion arguments do not allow legacy envelope fields: {forbidden}")
+        raise ValueError(
+            f"motion arguments do not allow legacy envelope fields: {forbidden}"
+        )
     message = {"type": command_type, "id": request_id, **dict(arguments)}
     configured_defaults = config.planning.request_defaults
     planner_defaults = MirrorPlannerDefaults(

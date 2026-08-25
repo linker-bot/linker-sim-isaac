@@ -36,5 +36,5 @@ def test_physx_cuda_configuration_rejects_removed_gpu_buffer_overrides() -> None
     mapping = _physx_cuda_mapping()
     mapping["gpu_buffers"] = {"max_rigid_contact_count": 1}
 
-    with pytest.raises(ConfigurationError, match=r"未知字段: gpu_buffers"):
+    with pytest.raises(ConfigurationError, match=r"unknown fields: gpu_buffers"):
         physics_settings_from_mapping(mapping)

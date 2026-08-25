@@ -484,7 +484,9 @@ class HybridForcePositionSettings:
             mapping["allowed_force_axes"], label=f"{label}.allowed_force_axes"
         )
         if not any(axes):
-            raise ConfigurationError(f"{label}.allowed_force_axes must enable at least one axis")
+            raise ConfigurationError(
+                f"{label}.allowed_force_axes must enable at least one axis"
+            )
         motion = HybridMotionSettings.from_mapping(
             mapping["motion"], label=f"{label}.motion"
         )
@@ -518,9 +520,13 @@ class HybridForcePositionSettings:
             label=f"{label}.force.integral",
         )
         if posture.stiffness > tuning.max_posture_stiffness:
-            raise ConfigurationError(f"{label}.posture.stiffness exceeds the tuning limit")
+            raise ConfigurationError(
+                f"{label}.posture.stiffness exceeds the tuning limit"
+            )
         if posture.damping > tuning.max_posture_damping:
-            raise ConfigurationError(f"{label}.posture.damping exceeds the tuning limit")
+            raise ConfigurationError(
+                f"{label}.posture.damping exceeds the tuning limit"
+            )
         return cls(
             minimum_physics_frequency_hz=as_float(
                 mapping["minimum_physics_frequency_hz"],
