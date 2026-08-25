@@ -2,6 +2,10 @@
 
 语言：[中文](README_zh.md) | [English](README.md)
 
+快速入口：[安装与环境准备](docs/zh-CN/getting-started/installation.md) ·
+[选择产品与接口](docs/zh-CN/getting-started/choose-runtime-and-api.md) ·
+[完整文档](docs/zh-CN/index.md)
+
 linker-sim-isaac 是一个面向机器人操作、现实回放以及 GPU 并行强化学习的 Isaac Sim
 工作区。仓库以两种边界明确、契约刻意不同的产品模式对外暴露：
 
@@ -12,6 +16,16 @@ linker-sim-isaac 是一个面向机器人操作、现实回放以及 GPU 并行�
   调试 viewport。该产品拥有 device-resident state、snapshot 与 clone、批量 IK、同步直线
   end-effector action、Gymnasium 集成以及 CUDA-native 的 skrl 路径；它不包含批量轨迹
   planner、避障服务、相机、SyntheticData、Replicator、录制、transport 或遥测。
+
+应先选择产品，再选择物理后端和调用接口：
+
+| 如果需要…… | 建议入口 |
+| --- | --- |
+| 映射一个真实工作站、交互控制、运动规划、相机或 JSON 接口 | **Mirror** |
+| 运行大量同构 GPU 强化学习环境 | **Kaleidoscope** |
+| 跨语言进程控制 | **Mirror JSON** |
+| 保持训练数据在 CUDA | **Kaleidoscope 原生 Torch 或 skrl** |
+| 接入 Gymnasium 生态 | **Kaleidoscope Gymnasium adapter** |
 
 这些名称即为公开 API；对已废弃的 mode 名称或入口不提供任何兼容性契约。
 
@@ -42,7 +56,10 @@ physics 与 render 规格作出唯一选择。公开 selector 显式声明合法
 - 规划或 end-effector action 需要 NVIDIA cuRobo 0.8.0
 - Kaleidoscope 与 Newton 需要兼容的 NVIDIA GPU
 
-从 checkout 根目录安装仿真工作区：
+关于仓库克隆、`uv`、依赖 extra、GPU 预检和可选 NVIDIA Warehouse 素材，请先阅读
+[安装与环境准备](docs/zh-CN/getting-started/installation.md)。
+
+从 checkout 根目录安装完整仿真工作区：
 
 ```bash
 uv sync --extra simulation --extra visualization --extra training
@@ -62,6 +79,10 @@ export OMNI_KIT_ACCEPT_EULA=Y
 
 本仓库是 workspace application，而非可安装的 wheel。请从 checkout 根目录、带
 `PYTHONPATH=src` 运行命令。
+
+> 默认 Mirror `scene3` 引用了本仓库不再分发的 NVIDIA Industrial Warehouse 原始素材。
+> 项目自有的包装层与解析地面仍在仓库中，但在依赖仓库视觉效果前，需要按文档将获得许可的
+> 素材放到指定路径。Kaleidoscope 不依赖该素材。
 
 ## 校验配置（不启动 Isaac）
 
@@ -155,6 +176,7 @@ viewer 单独读取 `configs/visualization/kaleidoscope.yaml`，与 task/physics
 ## 文档
 
 - [文档索引](docs/zh-CN/index.md)
+- [安装与环境准备](docs/zh-CN/getting-started/installation.md)
 - [项目概览](docs/zh-CN/getting-started/project-overview.md)
 - [选择 mode 与 API](docs/zh-CN/getting-started/choose-runtime-and-api.md)
 - [Mirror CLI](docs/zh-CN/reference/mirror-cli.md)
@@ -162,7 +184,9 @@ viewer 单独读取 `configs/visualization/kaleidoscope.yaml`，与 task/physics
 - [Kaleidoscope API](docs/zh-CN/reference/kaleidoscope-api.md)
 - [配置参考](docs/zh-CN/reference/configuration.md)
 - [Python API](docs/zh-CN/reference/python-api.md)
+- [故障排查](docs/zh-CN/operations/troubleshooting.md)
 - [源码模块地图](docs/zh-CN/development/module-map.md)
+- [贡献指南](CONTRIBUTING_zh.md)
 
 ## 质量门禁
 

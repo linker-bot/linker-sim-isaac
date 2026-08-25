@@ -6,6 +6,7 @@
 
 | 目标 | 文档 |
 | --- | --- |
+| 安装锁定环境并准备可选外部素材 | [安装与环境准备](getting-started/installation.md) |
 | 理解两个产品、物理 backend 与资源 owner | [项目概览](getting-started/project-overview.md) |
 | 选择交互仿真或 GPU 强化学习接口 | [选择 Mirror 或 Kaleidoscope](getting-started/choose-runtime-and-api.md) |
 | 启动现实工作站映像 | [Mirror 快速入门](getting-started/mirror-quickstart.md) |
@@ -25,6 +26,7 @@
 
 ## 入门
 
+- [安装与环境准备](getting-started/installation.md)
 - [项目概览](getting-started/project-overview.md)
 - [选择 Mirror 或 Kaleidoscope](getting-started/choose-runtime-and-api.md)
 - [Mirror 快速入门](getting-started/mirror-quickstart.md)
@@ -52,6 +54,7 @@
 
 ## 运维与开发
 
+- [贡献指南](../../CONTRIBUTING_zh.md)
 - [约束与安全边界](operations/constraints.md)
 - [故障排查](operations/troubleshooting.md)
 - [源码模块图](development/module-map.md)

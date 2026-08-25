@@ -11,6 +11,7 @@ composition, request/action validation, or shutdown.
 | --- | --- |
 | EULA error | Export `OMNI_KIT_ACCEPT_EULA=Y` in the process environment. |
 | `pxr` or extension mismatch | Remove the CPU `dev` extra from the Isaac environment and recreate it with `simulation`. |
+| Missing or blank warehouse visuals | Verify the licensed NVIDIA payload at `usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial/Buildings/Warehouse/Warehouse01.usd`; configuration validation does not fetch it. |
 | Mode/profile error | Run `scripts/validate_mode_config.py` with the exact mode and profile. |
 | Unknown configuration field | Move the fact to its owning leaf or remove an unsupported capability; do not bypass strict validation. |
 | Unsupported physics selection | Mirror accepts PhysX/CPU and Newton/CPU or CUDA; Kaleidoscope accepts PhysX/CUDA or Newton/CUDA. |
