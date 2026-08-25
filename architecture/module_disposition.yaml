@@ -168,7 +168,7 @@ public_facades:
   linkerbot_sim:
     freeze_status: frozen
     runtime: pure
-    exports: [REPO_ROOT]
+    exports: [REPO_ROOT, __version__]
   linkerbot_sim.configuration:
     freeze_status: frozen
     runtime: pure
@@ -406,10 +406,10 @@ generated_inventory:
   production_python:
     count: 247
     path_sha256: fa145cceb481034c7aa8f3a6276c659c1ac112b83988ac6906a6cb4f083cc180
-    path_content_sha256: 653fd9937d223da7618e1ee845be7299ff2206a81f3d19b74dd0315473ab850b
+    path_content_sha256: f80fb2b058a8c2947a06930b34d980b0c7596f0bb7b3b23357aafbcb82bc0e78
     files:
     - path: src/linkerbot_sim/__init__.py
-      sha256: 5e43f3c99689ee492aef09d75e2caa2d47e8d667158c186b5d65b2083ae28acc
+      sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
       module: linkerbot_sim
       group: root
       layer: foundation
@@ -1537,7 +1537,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/mirror/cli.py
-      sha256: a5c44d62e7751d96a20d49b78a940084e06f6083aed6fc775075a57591018204
+      sha256: e5b9dc333060632a9d22b6365155262595dd76f0627aa9e1b528eb3f2c79c5e4
       module: linkerbot_sim.mirror.cli
       group: mirror
       layer: product
@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 118
-    path_sha256: 2d1fe20d1129075e4007cd6643e72938d3a5e4e4dd80b96c234213f27e1f1668
-    path_content_sha256: ef7af3f6bdfa2bc272094d29064f88a534a356e4778f2feae8bc1f411967ae15
+    count: 119
+    path_sha256: afff54c0fa526b2b4c682e3165345731e86c16c7dbc65f5669370f8f4a23d7b9
+    path_content_sha256: 346b7dd55fd7fe01b37a73692cbe1e13c2e765090a1c0bae4faecc6f34c3f1ab
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2621,6 +2621,8 @@ generated_inventory:
       sha256: 3f21260c85c79591d04b07f1b71bb27d5a5a040e8a68d384445d2d7d673b7070
     - path: tests/test_type_check_gate.py
       sha256: 1370819b49bddf11a6f466b6a292efdb75a402638afed5a025c61f4f93b044fc
+    - path: tests/test_version_contract.py
+      sha256: 7867779bc6c2ae69d4323e3613ae3a4948268fc88cc490fae0dfd66ac15a0627
     - path: tests/test_viewport.py
       sha256: 13f1c23cb6a2bc7e91b157775e838e7c7bebec487090f6a246433113e28ee951
     - path: tests/test_workspace_build.py
@@ -2724,7 +2726,7 @@ generated_inventory:
   entry_scripts:
     count: 13
     path_sha256: f474f5a34397a56f391c5c92c18f1791c1dfa7c70f907ef353c52f457c51b444
-    path_content_sha256: 1a5d5ade3a4ffd127273be560c35854677015f65250799f78ad37d65a8d82321
+    path_content_sha256: c96a663be1f7187ea50418706acbc01865cbc66993299a732030627b677cc0dd
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -2737,7 +2739,7 @@ generated_inventory:
     - path: scripts/check_pure_coverage.py
       sha256: 3178f23fdbd18c81f132bafea292be6baa26c064c46ffbaf89934282ebde05bd
     - path: scripts/kaleidoscope_viewer.py
-      sha256: 70729930cf64ef7d76cdc5d1c7dbc609dc65b7eaf0b563bc06f9aeb345d4aea2
+      sha256: d8117cb1f3b1d8a718b6b406f232dfbcfc334fe1618f537dac5e8556866cd203
     - path: scripts/mirror.py
       sha256: ef7c21b3b2ac0c1f3c0004fabf1ae2e7c25ae4a035093e604c66406ee53e9b9a
     - path: scripts/runtime_worker_supervisor.py
@@ -2762,9 +2764,9 @@ generated_inventory:
     - path: ci/simulation.sh
       sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
   maintained_docs:
-    count: 65
-    path_sha256: e334b257b34d6321c3611208c140668c46fe7d771e6b2c495957468e5ce0518d
-    path_content_sha256: 4262adea77b93cef6325c08557adbe696e21b650894e7d9d54b7a78eb95b16c0
+    count: 67
+    path_sha256: 11225b2d63bf5f6dc23d9749a6965f3bc700d6285b83c4c0d2ef3b1bdbd9d2e6
+    path_content_sha256: 1f5be74bd93255498b2d802539cdc36c17a1730b106c9d59176ebb295bd273d8
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2782,6 +2784,8 @@ generated_inventory:
       sha256: 65b1d89dac3007d138b7390913c6d7825b2b7ed778330eb2c55def32deb59211
     - path: docs/en/development/usd-preview.md
       sha256: bb26bb2207da77cf8b6073d926000fa7ae5783732247f07041cb03b6370d62df
+    - path: docs/en/development/versioning.md
+      sha256: 8dc8fc103ce8a7613ef09de61d9e4d99a71ac1ab042ebf5c81a6754651acc0ce
     - path: docs/en/getting-started/choose-runtime-and-api.md
       sha256: efca7b65828c4246ff8a5456a693815807034a22d24de6fd7d89db5a0a1955b9
     - path: docs/en/getting-started/installation.md
@@ -2807,7 +2811,7 @@ generated_inventory:
     - path: docs/en/guides/telemetry.md
       sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
     - path: docs/en/index.md
-      sha256: 689c629c9ec9e3a96fb2a03b2f0226443c4595f21ecab3f8964632229c3e3b6d
+      sha256: 5f208e7343b18d1e99576d965a9dfc40908dbce0d51838dac6dad3e58ddb96ee
     - path: docs/en/maintenance/documentation-guide.md
       sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
     - path: docs/en/operations/constraints.md
@@ -2823,13 +2827,13 @@ generated_inventory:
     - path: docs/en/reference/kaleidoscope-api.md
       sha256: 02e65bf094c8b08a775702a89b2c5096a08ae93b7fb3480af024d787620718a3
     - path: docs/en/reference/mirror-cli.md
-      sha256: 4db21216d5498abf5ca3d4c18836fb0e57d8b44496a23c02266f9d821f5f9c1e
+      sha256: 2f6481612a6e4e09873c767c3ed1f89ec11eaaddb60af293c2f459f5c6811015
     - path: docs/en/reference/mirror-json.md
       sha256: 38b2f856d2cee7d9ad05d8d59e6b9fb917472f3c70f211e785e369b77bac4d2b
     - path: docs/en/reference/outputs.md
       sha256: 527ffb32b82f379b77e02b39708f5add86acc82150b10ffa3cdbcdd253b2b3f0
     - path: docs/en/reference/python-api.md
-      sha256: 8f1d234a0b01180beb2409be82e8e3a5642b4afdd9967ec81865120f669a21c4
+      sha256: d545c6423aab25089a0c7685b04aa655b113287690aac2e928dd79a46562ce1c
     - path: docs/en/reference/snapshots.md
       sha256: 58b7dc42321eec11cefa00c1a13251b44b76ef228c8609c88159a0c6956d25c4
     - path: docs/zh-CN/development/collision-approximation.md
@@ -2846,6 +2850,8 @@ generated_inventory:
       sha256: f52675f5db35a2a2109c947ead73adaa5c5b422c656f7b1b3e97308d43af45a2
     - path: docs/zh-CN/development/usd-preview.md
       sha256: d004f62291264d15e772012538262634140f793d2e6692c60c96b772c8336e95
+    - path: docs/zh-CN/development/versioning.md
+      sha256: c8e9e67116c08f677e9fcf3790ce747e6ea51b90501816a5d2d76eee3aac51db
     - path: docs/zh-CN/getting-started/choose-runtime-and-api.md
       sha256: 129f50f0a9008fe7560d385d58062416e7218d396ccf4c42f0a35c54d693bb02
     - path: docs/zh-CN/getting-started/installation.md
@@ -2871,7 +2877,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/telemetry.md
       sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
     - path: docs/zh-CN/index.md
-      sha256: 7ed34fa2b594f82aeb9322d3a082250fb771320adf4fb5b90e1f45c5befc15de
+      sha256: f56cd20f124a979bac059b0f7d5489b79f71c7a630ab7d078f5ded605c580aa6
     - path: docs/zh-CN/maintenance/documentation-guide.md
       sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
     - path: docs/zh-CN/operations/constraints.md
@@ -2887,13 +2893,13 @@ generated_inventory:
     - path: docs/zh-CN/reference/kaleidoscope-api.md
       sha256: 5ae26293083198351a747ca9d78175d0fa4921915389eb038c25d23dd89bad88
     - path: docs/zh-CN/reference/mirror-cli.md
-      sha256: 80634d42eb33b6cc970b8a151089c2d69ec2219d2163bd4c7d5a15e00b0b5e56
+      sha256: 764ba6e7b195cec05a35d467d67a3da8b209b551aa53a4d5ce2db867181b5505
     - path: docs/zh-CN/reference/mirror-json.md
       sha256: b58e7f2024e8a1c06b6e403184163436b8bdc67e7b96b9c0b7e7648d9139baf2
     - path: docs/zh-CN/reference/outputs.md
       sha256: fd4e043acf2966562e6bb2a49bf45975796822ebc7fbd8e569dd129f2c200106
     - path: docs/zh-CN/reference/python-api.md
-      sha256: e15a65368cd608947df0c44c5c68af013cf033a57ca64964737d1b62aab2a243
+      sha256: 3cfe065a6b989ba3fdb4c7b346dae476f59ac8cc3e12b0337d6e0e8b10305544
     - path: docs/zh-CN/reference/snapshots.md
       sha256: 61a00ad154df5d0e574de632e3cbdc98ad84c2f542394a76661fe7f5b7d20b06
 # generated-inventory:end

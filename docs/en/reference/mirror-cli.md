@@ -14,6 +14,7 @@ PYTHONPATH=src .venv/bin/python scripts/mirror.py [OPTIONS]
 
 | Option | Default | Meaning |
 | --- | --- | --- |
+| `--version` | - | Print the workspace compatibility version without starting Isaac, then exit. |
 | `--profile NAME` | `physx_cpu` | Load `configs/modes/mirror/NAME.yaml`; accepted values are `physx_cpu`, `physx_cpu_hybrid`, `newton_cpu`, and `newton_cuda`. |
 | `--stdin` / `--no-stdin` | enabled | Enable or disable one-request-per-line JSON on standard input. |
 | `--tcp-jsonl HOST:PORT` | disabled | Start a loopback TCP JSONL listener. CLI ports are in `[1, 65535]`. |

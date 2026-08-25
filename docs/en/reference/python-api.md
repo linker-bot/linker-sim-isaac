@@ -11,6 +11,7 @@ surfaces. Importing a facade does not start Kit, initialize CUDA, or read YAML.
 | Symbol | Contract |
 | --- | --- |
 | `REPO_ROOT` | Checkout root. |
+| `__version__` | Workspace compatibility version; use the Git commit for an exact development revision. |
 
 ## `linkerbot_sim.configuration`
 

@@ -10,6 +10,7 @@
 | 导出 | 语义 |
 | --- | --- |
 | `REPO_ROOT` | checkout 根路径 |
+| `__version__` | workspace 兼容版本；开发中精确修订仍以 Git commit 为准 |
 
 ## `linkerbot_sim.configuration`
 

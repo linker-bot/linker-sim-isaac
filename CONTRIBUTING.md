@@ -81,6 +81,10 @@ Ruff's selected lint rules and Python target are explicit project policy. Review
 expansion separately from dependency upgrades and keep Markdown outside the Python
 formatter gate. See [Lint And Format Policy](docs/en/development/linting.md).
 
+Release changes must update the project metadata and import-safe runtime version
+together. Bug reports from development checkouts need both the compatibility version
+and exact commit. See [Version And Revision Identity](docs/en/development/versioning.md).
+
 If source modules move, refresh and verify the architecture inventory:
 
 ```bash

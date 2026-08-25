@@ -12,6 +12,7 @@ PYTHONPATH=src .venv/bin/python scripts/mirror.py [options]
 
 | 参数 | 默认值 | 语义 |
 | --- | --- | --- |
+| `--version` | - | 不启动 Isaac，输出 workspace 兼容版本后退出 |
 | `--profile NAME` | `physx_cpu` | 加载 `configs/modes/mirror/NAME.yaml`；只接受 `physx_cpu`、`physx_cpu_hybrid`、`newton_cpu` 或 `newton_cuda` |
 | `--stdin` / `--no-stdin` | enabled | 启用或禁用 stdin JSONL ingress |
 | `--tcp-jsonl HOST:PORT` | disabled | 开启 loopback TCP JSONL server |
