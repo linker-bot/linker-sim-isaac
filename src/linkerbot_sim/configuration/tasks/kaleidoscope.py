@@ -291,7 +291,9 @@ def _action_from_mapping(value: object, *, label: str) -> ActionSettings:
         "ee_pose_position, ee_pose_full, "
         "ee_linear_path_position, ee_linear_path_full"
     )
-    raise ConfigurationError(f"{label}.mode must be one of the fixed action variants: {allowed}")
+    raise ConfigurationError(
+        f"{label}.mode must be one of the fixed action variants: {allowed}"
+    )
 
 
 @dataclass(frozen=True)
@@ -392,7 +394,9 @@ class TerminationSettings:
             mapping["failure_aabb_max"], label=f"{label}.failure_aabb_max", length=3
         )
         if any(low >= high for low, high in zip(minimum, maximum, strict=True)):
-            raise ConfigurationError(f"{label} failure AABB requires each min to be less than max")
+            raise ConfigurationError(
+                f"{label} failure AABB requires each min to be less than max"
+            )
         return cls(
             horizon_decisions=as_int(
                 mapping["horizon_decisions"],

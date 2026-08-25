@@ -141,7 +141,9 @@ class MirrorRuntime:
         # 同一个 post-step 边界采样，保证每个 physics tick 最多写入一次。
         if render:
             if self.rendering is None:
-                raise RuntimeError("the current Mirror config does not enable rendering")
+                raise RuntimeError(
+                    "the current Mirror config does not enable rendering"
+                )
             # 内部 physics step 只推进 renderer；下面的 scene observer 按 camera frequency
             # 采样并发布一次。显式 runtime.render() 才立即返回 camera frame。
             self.rendering.render_only()
@@ -202,7 +204,9 @@ class MirrorRuntime:
         """Return runtime control state without touching engine handles."""
 
         if self._closed:
-            raise RuntimeError("MirrorRuntime is closed; cannot perform get_control_mode")
+            raise RuntimeError(
+                "MirrorRuntime is closed; cannot perform get_control_mode"
+            )
         self._require_owner_thread("get_control_mode")
         assert self.control_mode is not None
         return self.control_mode.get_mode()
@@ -218,7 +222,9 @@ class MirrorRuntime:
         self._require_open("set_control_mode")
         self._require_owner_thread("set_control_mode")
         if self.controller.admission.status().estopped:
-            raise RuntimeError("Mirror is e-stopped; set_control_mode is rejected before reset")
+            raise RuntimeError(
+                "Mirror is e-stopped; set_control_mode is rejected before reset"
+            )
         assert self.control_mode is not None
         return self.control_mode.set_mode(
             mode,  # type: ignore[arg-type]

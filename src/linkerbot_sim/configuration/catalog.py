@@ -63,15 +63,21 @@ def load_yaml_mapping(path: str | Path) -> dict[str, object]:
         resolved = candidate.resolve()
         data = load_yaml(resolved)
     except OSError as exc:
-        raise ConfigurationError(f"failed to read YAML configuration {candidate}: {exc}") from exc
+        raise ConfigurationError(
+            f"failed to read YAML configuration {candidate}: {exc}"
+        ) from exc
     except ValueError as exc:
-        raise ConfigurationError(f"invalid YAML configuration {resolved}: {exc}") from exc
+        raise ConfigurationError(
+            f"invalid YAML configuration {resolved}: {exc}"
+        ) from exc
     try:
         document = strict_mapping(data, label=str(resolved))
         _require_string_mapping_keys(document, label=str(resolved))
         return document
     except ConfigurationError as exc:
-        raise ConfigurationError(f"invalid YAML configuration {resolved}: {exc}") from exc
+        raise ConfigurationError(
+            f"invalid YAML configuration {resolved}: {exc}"
+        ) from exc
 
 
 def _require_string_mapping_keys(
@@ -93,7 +99,9 @@ def _require_string_mapping_keys(
     ancestors = set() if _ancestors is None else _ancestors
     identity = id(value)
     if identity in ancestors:
-        raise ConfigurationError(f"{label}:{path} must not contain recursive YAML alias")
+        raise ConfigurationError(
+            f"{label}:{path} must not contain recursive YAML alias"
+        )
     ancestors.add(identity)
     try:
         if is_mapping:
@@ -129,12 +137,18 @@ def _profile_reference(reference: str, *, label: str) -> tuple[str, ...]:
     if not isinstance(reference, str) or not reference:
         raise ConfigurationError(f"{label} must be a non-empty profile reference")
     if "\\" in reference:
-        raise ConfigurationError(f"{label} must use '/' as the profile namespace separator")
+        raise ConfigurationError(
+            f"{label} must use '/' as the profile namespace separator"
+        )
     if reference.startswith("/") or reference.endswith(".yaml"):
-        raise ConfigurationError(f"{label} must be a relative profile stem without an extension")
+        raise ConfigurationError(
+            f"{label} must be a relative profile stem without an extension"
+        )
     parts = tuple(reference.split("/"))
     if any(not part or part in {".", ".."} for part in parts):
-        raise ConfigurationError(f"{label} contains an invalid path component: {reference!r}")
+        raise ConfigurationError(
+            f"{label} contains an invalid path component: {reference!r}"
+        )
     if any("." in part for part in parts):
         raise ConfigurationError(f"{label} profile stem must not contain '.'")
     return parts
@@ -148,7 +162,9 @@ def _within(path: Path, root: Path, *, label: str) -> Path:
     try:
         resolved.relative_to(resolved_root)
     except ValueError as exc:
-        raise ConfigurationError(f"{label} escapes the configuration root directory: {resolved}") from exc
+        raise ConfigurationError(
+            f"{label} escapes the configuration root directory: {resolved}"
+        ) from exc
     return resolved
 
 
@@ -184,7 +200,9 @@ class _ConfigurationGraphReader:
                 )
         candidate = _within(candidate, self.configs_root, label="mode config")
         if candidate.suffix != ".yaml":
-            raise ConfigurationError(f"mode config must use the .yaml extension: {candidate}")
+            raise ConfigurationError(
+                f"mode config must use the .yaml extension: {candidate}"
+            )
         expected_parent = self.configs_root / "modes" / mode
         _within(candidate, expected_parent, label=f"{mode} mode config")
         self.sources["mode"] = candidate
@@ -674,7 +692,9 @@ def load_kaleidoscope_viewport_config(
             candidate = cwd_candidate if cwd_candidate.exists() else root / candidate
         path = _within(candidate, group_root, label="viewport config")
         if path.suffix != ".yaml":
-            raise ConfigurationError(f"viewport config must use the .yaml extension: {path}")
+            raise ConfigurationError(
+                f"viewport config must use the .yaml extension: {path}"
+            )
     else:
         parts = _profile_reference(source, label="viewport profile")
         path = _within(
@@ -715,7 +735,9 @@ def load_skrl_training_settings(
             candidate = cwd_candidate if cwd_candidate.exists() else root / candidate
         path = _within(candidate, group_root, label="training config")
         if path.suffix != ".yaml":
-            raise ConfigurationError(f"training config must use the .yaml extension: {path}")
+            raise ConfigurationError(
+                f"training config must use the .yaml extension: {path}"
+            )
     else:
         parts = _profile_reference(source, label="training profile")
         path = _within(

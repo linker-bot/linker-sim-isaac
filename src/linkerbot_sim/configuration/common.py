@@ -23,7 +23,9 @@ def strict_mapping(value: object, *, label: str) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, item in value.items():
         if not isinstance(key, str) or not key:
-            raise ConfigurationError(f"{label} keys must be non-empty strings, got {key!r}")
+            raise ConfigurationError(
+                f"{label} keys must be non-empty strings, got {key!r}"
+            )
         result[key] = item
     return result
 
@@ -41,14 +43,20 @@ def require_keys(
     missing = sorted(set(required) - present)
     unknown = sorted(present - set(required) - set(optional))
     if missing:
-        raise ConfigurationError(f"{label} is missing required fields: {', '.join(missing)}")
+        raise ConfigurationError(
+            f"{label} is missing required fields: {', '.join(missing)}"
+        )
     if unknown:
-        raise ConfigurationError(f"{label} contains unknown fields: {', '.join(unknown)}")
+        raise ConfigurationError(
+            f"{label} contains unknown fields: {', '.join(unknown)}"
+        )
 
 
 def as_string(value: object, *, label: str, choices: set[str] | None = None) -> str:
     if not isinstance(value, str) or not value or value.strip() != value:
-        raise ConfigurationError(f"{label} must be a non-empty string without leading or trailing whitespace")
+        raise ConfigurationError(
+            f"{label} must be a non-empty string without leading or trailing whitespace"
+        )
     if choices is not None and value not in choices:
         allowed = ", ".join(sorted(choices))
         raise ConfigurationError(f"{label} must be one of {{{allowed}}}, got {value!r}")
@@ -107,7 +115,9 @@ def as_float_tuple(
     length: int,
 ) -> tuple[float, ...]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
-        raise ConfigurationError(f"{label} must be a numeric sequence of length {length}")
+        raise ConfigurationError(
+            f"{label} must be a numeric sequence of length {length}"
+        )
     if len(value) != length:
         raise ConfigurationError(f"{label} must contain exactly {length} items")
     return tuple(

@@ -556,7 +556,9 @@ class MirrorTransportHub:
             for endpoint in self.endpoints:
                 start = getattr(endpoint, "start", None)
                 if not callable(start):
-                    raise TypeError(f"transport {type(endpoint).__name__} is missing start")
+                    raise TypeError(
+                        f"transport {type(endpoint).__name__} is missing start"
+                    )
                 # 先登记再启动：start 在创建部分线程/socket 后抛错时，rollback 仍能关闭它。
                 self._started.append(endpoint)
                 start()

@@ -246,7 +246,9 @@ class KaleidoscopeTensorViews:
         self.tcp_orientations_wxyz[..., 0] = 1.0
         # Device-resident count of non-finite TCP link-pose rows held to their last-finite
         # value; incremented sync-free on the hot path, inspectable on a cold boundary.
-        self._nonfinite_tcp_holds = torch.zeros((), device=self.device, dtype=torch.int64)
+        self._nonfinite_tcp_holds = torch.zeros(
+            (), device=self.device, dtype=torch.int64
+        )
         self.block_pose_local_wxyz = torch.zeros(
             (count, 7), device=self.device, dtype=torch.float32
         )

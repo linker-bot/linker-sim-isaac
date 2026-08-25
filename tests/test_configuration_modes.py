@@ -409,25 +409,25 @@ def test_mirror_scene_rejects_unknown_planning_startup_policy(tmp_path: Path) ->
             Path("objects/TblockV1_default.yaml"),
             "    static: false",
             "    static: true",
-            "恰好包含一个非静态 rigid object",
+            "Kaleidoscope scene must contain exactly one non-static rigid object",
         ),
         (
             Path("objects/workstation_armbase.yaml"),
             "    static: true",
             "    static: false",
-            "恰好包含一个非静态 rigid object",
+            "Kaleidoscope scene must contain exactly one non-static rigid object",
         ),
         (
             Path("tasks/kaleidoscope/tblock_push_v1.yaml"),
             "  dynamic_object: Tblock",
             "  dynamic_object: workstation",
-            "必须命名 scene 中唯一的非静态 rigid object",
+            "task.dynamic_object must name the unique non-static rigid object",
         ),
         (
             Path("scenes/kaleidoscope/tblock_push.yaml"),
             "      object_profile: workstation_armbase",
             "      object_profile: capsule_rope",
-            "不支持 dynamic_chain",
+            "not dynamic_chain",
         ),
     ],
 )
@@ -671,7 +671,7 @@ def test_mirror_rejects_motion_planner_cuda_graph(tmp_path: Path) -> None:
     )
 
     with pytest.raises(
-        ConfigurationError, match=r"motion_planner\.use_cuda_graph 必须为 false"
+        ConfigurationError, match=r"motion_planner\.use_cuda_graph must be false"
     ):
         load_mirror_config("physx_cpu", configs_root=root)
 
@@ -805,17 +805,17 @@ def test_kaleidoscope_environments_rejects_backend_replication_policy(
         (
             "  base_env_path: /World/envs",
             "  base_env_path: World/envs",
-            "base_env_path.*绝对 USD path",
+            "base_env_path.*absolute USD path",
         ),
         (
             "  base_env_path: /World/envs",
             "  base_env_path: /",
-            "base_env_path.*非根",
+            "base_env_path.*non-root",
         ),
         (
             "  base_env_path: /World/envs",
             "  base_env_path: /World//envs",
-            "base_env_path.*空 USD path component",
+            "base_env_path.*empty USD path component",
         ),
         ("  env_prefix: env", "  env_prefix: env/nested", "env_prefix"),
         ("  env_prefix: env", "  env_prefix: ''", "env_prefix"),
@@ -1068,7 +1068,7 @@ def test_profile_reference_cannot_escape_group_directory(tmp_path: Path) -> None
         "task: ../modes/kaleidoscope/physx",
     )
 
-    with pytest.raises(ConfigurationError, match="非法路径分量"):
+    with pytest.raises(ConfigurationError, match="invalid path component"):
         load_kaleidoscope_config("physx_cuda", configs_root=root)
 
 
@@ -1095,21 +1095,21 @@ def test_profile_reference_cannot_escape_group_directory(tmp_path: Path) -> None
             "physx_cpu",
             "mirror/scene3",
             r"mirror\scene3",
-            "namespace 分隔符",
+            "namespace separator",
         ),
         (
             "mirror",
             "physx_cpu",
             "mirror/scene3",
             "mirror/scene3.yaml",
-            "不带扩展名",
+            "without an extension",
         ),
         (
             "mirror",
             "physx_cpu",
             "mirror/scene3",
             "mirror/scene3.v2",
-            "不能包含",
+            "must not contain",
         ),
     ],
 )
@@ -1138,7 +1138,7 @@ def test_scene_profile_symlink_cannot_cross_product_namespace(tmp_path: Path) ->
 
     with pytest.raises(
         ConfigurationError,
-        match=r"profiles\.scenes 'mirror' namespace.*逃逸",
+        match=r"profiles\.scenes 'mirror' namespace.*escapes",
     ):
         load_mirror_config("physx_cpu", configs_root=root)
 
@@ -1153,7 +1153,7 @@ def test_scene_group_root_symlink_cannot_escape_configs_root(tmp_path: Path) -> 
 
     with pytest.raises(
         ConfigurationError,
-        match=r"profiles\.scenes root.*逃逸配置根目录",
+        match=r"profiles\.scenes root.*escapes the configuration root directory",
     ):
         load_mirror_config("physx_cpu", configs_root=root)
 
@@ -1168,7 +1168,7 @@ def test_scene_namespace_directory_cannot_alias_another_product(
 
     with pytest.raises(
         ConfigurationError,
-        match=r"profiles\.scenes 'mirror' namespace 根目录不能是符号链接",
+        match=r"profiles\.scenes 'mirror' namespace root directory must not be a symbolic link",
     ):
         load_mirror_config("physx_cpu", configs_root=root)
 
@@ -1182,7 +1182,7 @@ def test_missing_scene_selector_is_reported_as_configuration_error(
 
     with pytest.raises(
         ConfigurationError,
-        match=r"无法读取 YAML 配置 .*scenes/mirror/missing\.yaml",
+        match=r"failed to read YAML configuration .*scenes/mirror/missing\.yaml",
     ):
         load_mirror_config("physx_cpu", configs_root=root)
 
@@ -1404,7 +1404,7 @@ def test_new_loader_rejects_non_string_keys_at_any_depth(tmp_path: Path) -> None
 
     with pytest.raises(
         ConfigurationError,
-        match=r"object\.physics\.material 的键必须是非空字符串，得到 1",
+        match=r"object\.physics\.material keys must be non-empty strings, got 1",
     ):
         load_yaml_mapping(path)
 
@@ -1413,7 +1413,9 @@ def test_new_loader_rejects_recursive_yaml_aliases(tmp_path: Path) -> None:
     path = tmp_path / "recursive-alias.yaml"
     path.write_text("root: &root\n  self: *root\n", encoding="utf-8")
 
-    with pytest.raises(ConfigurationError, match=r"root\.self 不得包含递归 YAML alias"):
+    with pytest.raises(
+        ConfigurationError, match=r"root\.self must not contain recursive YAML alias"
+    ):
         load_yaml_mapping(path)
 
 

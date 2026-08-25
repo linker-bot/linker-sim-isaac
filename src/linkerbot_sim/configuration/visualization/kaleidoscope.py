@@ -43,9 +43,13 @@ class KaleidoscopeViewportSettings:
         """也约束直接构造/``dataclasses.replace``，避免绕过 YAML parser。"""
 
         if type(self.selected_env) is not int or self.selected_env < 0:
-            raise ConfigurationError("viewport.selected_env must be a non-negative integer")
+            raise ConfigurationError(
+                "viewport.selected_env must be a non-negative integer"
+            )
         if type(self.render_every_n_steps) is not int or self.render_every_n_steps < 1:
-            raise ConfigurationError("viewport.render_every_n_steps must be a positive integer")
+            raise ConfigurationError(
+                "viewport.render_every_n_steps must be a positive integer"
+            )
         for name in ("width", "height", "window_width", "window_height"):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
@@ -55,9 +59,13 @@ class KaleidoscopeViewportSettings:
             or not self.renderer
             or self.renderer.strip() != self.renderer
         ):
-            raise ConfigurationError("viewport.renderer must be a non-empty string with no leading or trailing whitespace")
+            raise ConfigurationError(
+                "viewport.renderer must be a non-empty string with no leading or trailing whitespace"
+            )
         if type(self.anti_aliasing) is not int or self.anti_aliasing < 0:
-            raise ConfigurationError("viewport.anti_aliasing must be a non-negative integer")
+            raise ConfigurationError(
+                "viewport.anti_aliasing must be a non-negative integer"
+            )
         if (
             type(self.samples_per_pixel_per_frame) is not int
             or self.samples_per_pixel_per_frame < 1
@@ -100,7 +108,9 @@ class KaleidoscopeViewportSettings:
                 {"visuals": visuals_mapping}
             )
         except ValueError as exc:
-            raise ConfigurationError(f"{label} contains invalid visual settings: {exc}") from exc
+            raise ConfigurationError(
+                f"{label} contains invalid visual settings: {exc}"
+            ) from exc
         return cls(
             selected_env=as_int(
                 mapping["selected_env"],

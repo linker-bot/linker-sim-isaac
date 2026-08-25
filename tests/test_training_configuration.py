@@ -32,7 +32,9 @@ def test_default_skrl_profile_is_strictly_typed() -> None:
 
 
 def test_skrl_settings_reject_more_batches_than_rollout() -> None:
-    with pytest.raises(ConfigurationError, match="mini_batches 不能大于"):
+    with pytest.raises(
+        ConfigurationError, match="mini_batches must not be greater than"
+    ):
         SkrlTrainingSettings.from_mapping(
             {
                 "framework": "skrl",
@@ -68,5 +70,5 @@ def test_skrl_schema_rejects_unknown_yaml_fields(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    with pytest.raises(ConfigurationError, match="包含未知字段: typo"):
+    with pytest.raises(ConfigurationError, match="contains unknown fields: typo"):
         SkrlTrainingSettings.from_mapping(load_yaml(profile)["training"])

@@ -94,10 +94,14 @@ def reset_mirror_scene(
     if not isinstance(object_configs, tuple) or not all(
         isinstance(item, RuntimeObjectConfig) for item in object_configs
     ):
-        raise RuntimeError("Mirror runtime is missing the runtime_object_configs frozen at construction time")
+        raise RuntimeError(
+            "Mirror runtime is missing the runtime_object_configs frozen at construction time"
+        )
     scene = getattr(runtime, "scene", None)
     if scene is None or not hasattr(scene, "gravity_z"):
-        raise RuntimeError("Mirror runtime is missing the typed scene frozen at construction time")
+        raise RuntimeError(
+            "Mirror runtime is missing the typed scene frozen at construction time"
+        )
     target_gravity_z = float(scene.gravity_z)
     physics_runtime = getattr(runtime.session, "physics_runtime", None)
     newton_runtime = getattr(physics_runtime, "backend", None) == "newton"

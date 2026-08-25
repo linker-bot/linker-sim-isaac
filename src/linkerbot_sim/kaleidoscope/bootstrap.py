@@ -5,13 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from linkerbot_sim.kaleidoscope.env import TorchKaleidoscopeEnv
-
 if TYPE_CHECKING:
     from linkerbot_sim.configuration.modes.kaleidoscope import KaleidoscopeConfig
     from linkerbot_sim.kaleidoscope.adapters.gymnasium import (
         GymnasiumKaleidoscopeAdapter,
     )
+    from linkerbot_sim.kaleidoscope.env import TorchKaleidoscopeEnv
     from linkerbot_sim.kaleidoscope.runtime import KaleidoscopeRuntime
 
 RuntimeFactory = Callable[..., "KaleidoscopeRuntime"]
@@ -23,7 +22,7 @@ def make_torch_env(
     profile: str = "physx_cuda",
     num_envs: int | None = None,
     runtime_factory: RuntimeFactory | None = None,
-) -> TorchKaleidoscopeEnv:
+) -> "TorchKaleidoscopeEnv":
     """加载严格配置并构造 PhysX CUDA 或项目自管 Newton native 环境。
 
     ``runtime_factory`` 是真实 Isaac adapter 与 pure/fake 测试之间唯一的替换点；生产默认工厂
@@ -55,7 +54,7 @@ def make_torch_env(
 
         runtime_factory = create_kaleidoscope_runtime
     runtime = runtime_factory(config=config, num_envs=num_envs)
-    return TorchKaleidoscopeEnv(runtime)
+    return _torch_env(runtime)
 
 
 def make_viewport_env(
@@ -66,7 +65,7 @@ def make_viewport_env(
     viewport_profile: str = "kaleidoscope",
     num_envs: int | None = None,
     runtime_factory: RuntimeFactory | None = None,
-) -> TorchKaleidoscopeEnv:
+) -> "TorchKaleidoscopeEnv":
     """构造显式 human viewport 环境；默认训练入口仍保持 renderer-free。
 
     viewport 是独立冷配置，不参与 episode snapshot 的语义指纹。它只选择 Kit、
@@ -100,6 +99,14 @@ def make_viewport_env(
         num_envs=num_envs,
         viewport=viewport,
     )
+    return _torch_env(runtime)
+
+
+def _torch_env(runtime: "KaleidoscopeRuntime") -> "TorchKaleidoscopeEnv":
+    """Import the Torch runtime only when a native environment is constructed."""
+
+    from linkerbot_sim.kaleidoscope.env import TorchKaleidoscopeEnv
+
     return TorchKaleidoscopeEnv(runtime)
 
 

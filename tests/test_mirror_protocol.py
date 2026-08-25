@@ -100,7 +100,7 @@ def test_mirror_v3_adds_only_hybrid_operations() -> None:
     ],
 )
 def test_older_protocols_reject_v3_operations(protocol: str, operation: str) -> None:
-    with pytest.raises(ValueError, match="不支持"):
+    with pytest.raises(ValueError, match="does not support"):
         decode_request(_request(protocol=protocol, operation=operation))
 
 
@@ -109,7 +109,7 @@ def test_older_protocols_reject_v3_operations(protocol: str, operation: str) -> 
     ["control.get_mode", "control.set_mode", "motion.joint_effort"],
 )
 def test_mirror_v1_rejects_v2_operations(operation: str) -> None:
-    with pytest.raises(ValueError, match="不支持"):
+    with pytest.raises(ValueError, match="does not support"):
         decode_request(_request(operation=operation))
 
 

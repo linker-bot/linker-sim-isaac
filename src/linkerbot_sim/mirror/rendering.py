@@ -128,7 +128,9 @@ class RenderCoordinator:
             target = getattr(camera, "camera", camera)
             count = getattr(target, "render_update_count", 1)
             if type(count) is not int or count < 1:
-                raise RuntimeError("camera render_update_count must be a positive integer")
+                raise RuntimeError(
+                    "camera render_update_count must be a positive integer"
+                )
             targets.append((target, count))
         return tuple(targets)
 
