@@ -11,6 +11,7 @@ public behavior.
 ## Before Opening A Change
 
 - Search existing issues and pull requests.
+- Use the routes and diagnostic requirements in [SUPPORT.md](SUPPORT.md).
 - Use a focused issue for behavior that changes a public facade, configuration
   schema, wire protocol, Kit closure, physics owner, or third-party asset policy.
 - Keep Mirror and Kaleidoscope capabilities separate. Do not add a Kaleidoscope
@@ -107,6 +108,7 @@ Maintainers can run the same matrix through the trusted
 [Simulation CI workflow](docs/en/operations/simulation-ci.md). It deliberately has no
 pull-request trigger; select only a reviewed in-repository branch for a manual run and
 include the resulting Actions URL in the pull request.
+It is temporarily manual-only while runner stability issues are resolved.
 
 Dependency changes also run the locked-graph delta gate. Review Dependabot groups by
 their compatibility boundary, do not hand-edit `uv.lock`, and do not add an ignored
@@ -136,3 +138,5 @@ settings remain an administrator action; merging the JSON policy does not activa
   third-party asset is committed.
 - License and attribution changes are reflected in
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- User-visible changes update [CHANGELOG.md](CHANGELOG.md) and
+  [CHANGELOG_zh.md](CHANGELOG_zh.md), or explain why no entry is needed.

@@ -1,23 +1,6 @@
 name: Simulation
 
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - .github/workflows/simulation.yml
-      - apps/**
-      - assets/**
-      - ci/simulation.sh
-      - configs/**
-      - Justfile
-      - pyproject.toml
-      - scripts/**
-      - src/**
-      - tests/**
-      - tools/**
-      - uv.lock
-      - workspace_build.py
   workflow_dispatch:
 
 permissions:

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/linker-bot/linker-sim-isaac/blob/master/docs/en/index.md
+    about: Read the maintained setup, operation, and API documentation.
+  - name: Support guide
+    url: https://github.com/linker-bot/linker-sim-isaac/blob/master/SUPPORT.md
+    about: Choose the correct public support route and diagnostic information.
+  - name: Private security reports
+    url: https://github.com/linker-bot/linker-sim-isaac/blob/master/SECURITY.md
+    about: Follow the private reporting instructions for suspected vulnerabilities.

@@ -9,14 +9,17 @@ contracts.
 
 ## Trigger And Trust Boundary
 
-The workflow runs after a relevant path is pushed to `master`, or when a maintainer
-explicitly dispatches it. It has no `pull_request` or `pull_request_target` trigger.
-This repository is public, and unreviewed pull-request code must never execute on a
-self-hosted runner that may retain machine state.
+The workflow runs only when a maintainer explicitly dispatches it. Automatic
+`master` push execution is temporarily disabled while the self-hosted runner's
+stability issues are resolved. It has no `push`, `pull_request`, or
+`pull_request_target` trigger. This repository is public, and unreviewed pull-request
+code must never execute on a self-hosted runner that may retain machine state.
 
 For pre-merge evidence, open **Actions → Simulation → Run workflow**, select a reviewed
 branch that belongs to this repository, and record the run URL in the pull request.
 Fork code must first pass review and be copied to a trusted in-repository branch.
+Release acceptance must select the annotated tag or an in-repository branch at the
+same commit; the [release workflow](releases.md) verifies that exact revision.
 
 ## Runner Contract
 

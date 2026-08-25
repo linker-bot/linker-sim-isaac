@@ -58,6 +58,7 @@
 - [约束与安全边界](operations/constraints.md)
 - [依赖安全与更新](operations/dependency-security.md)
 - [仓库治理](operations/repository-governance.md)
+- [发布](operations/releases.md)
 - [Simulation CI](operations/simulation-ci.md)
 - [故障排查](operations/troubleshooting.md)
 - [源码模块图](development/module-map.md)
@@ -69,3 +70,5 @@
 - [碰撞近似](development/collision-approximation.md)
 - [USD 预览](development/usd-preview.md)
 - [文档维护](maintenance/documentation-guide.md)
+- [支持](../../SUPPORT_zh.md)
+- [变更记录](../../CHANGELOG_zh.md)

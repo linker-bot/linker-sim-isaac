@@ -203,8 +203,11 @@ is added.
 - [Configuration reference](docs/en/reference/configuration.md)
 - [Python API](docs/en/reference/python-api.md)
 - [Troubleshooting](docs/en/operations/troubleshooting.md)
+- [Releases](docs/en/operations/releases.md)
 - [Source module map](docs/en/development/module-map.md)
 - [Contributing](CONTRIBUTING.md)
+- [Support](SUPPORT.md)
+- [Changelog](CHANGELOG.md)
 
 ## Quality Checks
 
@@ -224,6 +227,7 @@ The aggregate includes `smoke-runtime-kits` for all seven formal Kit closures,
 variants, Newton's 256-world capacity, and the PhysX process-memory budget.
 Trusted NVIDIA-runner automation, triggers, and setup requirements are documented in
 [Simulation CI](docs/en/operations/simulation-ci.md).
+The workflow is currently manual-only while runner stability issues are resolved.
 
 ## License
 
