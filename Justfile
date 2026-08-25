@@ -35,7 +35,9 @@ test:
     {{uv_simulation}} coverage report
 
 test-pure:
-    {{python_dev}} -m pytest -q --ignore=tests/test_curobo_device_batch_ik.py --ignore=tests/test_curobo_kinematics_context.py --ignore=tests/test_kaleidoscope_composition.py --ignore=tests/test_kaleidoscope_isaac_views.py --ignore=tests/test_kaleidoscope_physics_smoke.py --ignore=tests/test_kaleidoscope_physx_ports.py --ignore=tests/test_kaleidoscope_scene_assembly.py --ignore=tests/test_kaleidoscope_viewer.py --ignore=tests/test_physx_gpu_memory_budget_smoke.py --ignore=tests/test_skrl_cuda_integration.py --ignore=tests/test_target_architecture.py
+    {{python_dev}} -m coverage erase
+    {{python_dev}} -m coverage run -m pytest -q --ignore=tests/test_curobo_device_batch_ik.py --ignore=tests/test_curobo_kinematics_context.py --ignore=tests/test_kaleidoscope_composition.py --ignore=tests/test_kaleidoscope_isaac_views.py --ignore=tests/test_kaleidoscope_physics_smoke.py --ignore=tests/test_kaleidoscope_physx_ports.py --ignore=tests/test_kaleidoscope_scene_assembly.py --ignore=tests/test_kaleidoscope_viewer.py --ignore=tests/test_physx_gpu_memory_budget_smoke.py --ignore=tests/test_skrl_cuda_integration.py --ignore=tests/test_target_architecture.py
+    {{python_dev}} scripts/check_pure_coverage.py
 
 # 架构清单的手写规则与机械 inventory 分离。开发中移动文件后显式执行 write；
 # 发布门禁只执行 check，并要求所有 facade 已完成最终冻结。

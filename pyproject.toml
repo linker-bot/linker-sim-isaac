@@ -101,6 +101,12 @@ fail_under = 75
 show_missing = true
 skip_covered = true
 
+# CPU CI cannot import the Isaac/CUDA owners. Its coverage scope is derived from
+# architecture/module_disposition.yaml entries whose runtime is explicitly pure.
+# The all-source simulation test recipe continues to use tool.coverage.report above.
+[tool.linkerbot_sim.coverage]
+pure_fail_under = 84
+
 [tool.ruff.lint.per-file-ignores]
 "scripts/*.py" = ["E402"]
 "tests/test_system_configs.py" = ["E402"]

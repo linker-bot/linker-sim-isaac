@@ -56,6 +56,12 @@ UV_PROJECT_ENVIRONMENT=.venv-dev \
 UV_PROJECT_ENVIRONMENT=.venv-dev just quality
 ```
 
+该门禁只统计 `architecture/module_disposition.yaml` 中标记为 `runtime: pure` 的生产模块，
+并执行 `tool.linkerbot_sim.coverage.pure_fail_under` 阈值。覆盖范围直接来自架构清单，既不会
+因为 CPU 环境缺少 Isaac/CUDA import 而误报，也不依赖任意维护的文件排除列表；因此修改模块
+runtime 标签会同步改变覆盖范围，必须接受与模块图其他变更相同的架构审查。独立的
+`just test` 使用仿真环境，并继续执行 `tool.coverage.report` 中面向全源码的覆盖率阈值。
+
 移动源码模块后，刷新并检查架构清单：
 
 ```bash

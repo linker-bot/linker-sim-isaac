@@ -63,6 +63,15 @@ Run the CPU gate for every change:
 UV_PROJECT_ENVIRONMENT=.venv-dev just quality
 ```
 
+The gate measures production modules marked `runtime: pure` in
+`architecture/module_disposition.yaml` and enforces the
+`tool.linkerbot_sim.coverage.pure_fail_under` floor. This architecture-derived scope
+keeps missing Isaac/CUDA imports out of CPU coverage without allowing an arbitrary
+file omit list. Runtime-label changes therefore change the coverage scope and require
+the same architecture review as other module-map changes. The separate `just test`
+recipe uses the simulation environment and retains the all-source coverage floor in
+`tool.coverage.report`.
+
 If source modules move, refresh and verify the architecture inventory:
 
 ```bash

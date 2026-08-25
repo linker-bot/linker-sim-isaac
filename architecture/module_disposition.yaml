@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 113
-    path_sha256: a1494beb3ee5bf2c2164d619dcde3e2ba77bdc530b7264bf6c658de9387527e3
-    path_content_sha256: 4b22632e131a548e308598f7f66b04499dbe6eeb7cb561d8ceabde928ab7d247
+    count: 114
+    path_sha256: dede0389a8fde0828c5b4bc18353a4cc69f9cdb23b6cd5fdf7c244b2bd95be00
+    path_content_sha256: d50d2b4395807e8cf670d301ffc843933b7d22cdd03f63895cb41a4a2bec5aaf
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2557,6 +2557,8 @@ generated_inventory:
       sha256: 164d5a6b2d92a533471e1541a1a9844b146ba4ef52958ef7877cb071b644e0a4
     - path: tests/test_planner_backend.py
       sha256: e2de778fd9fa189e46bf17443f8bfa044deee3297389a54d0d864d1269aca7c8
+    - path: tests/test_pure_coverage_gate.py
+      sha256: 5d254a2919ec75e0f10e0ebbcabf919b7472e6b88ef8f33f67c7da1ffaa3a998
     - path: tests/test_robot_capabilities.py
       sha256: 46ff5562840acde468dd7ab54cd25c04a330e983a5b8f99a7c257eecab7e1413
     - path: tests/test_robot_instances.py
@@ -2712,9 +2714,9 @@ generated_inventory:
     - path: apps/linkerbot_sim.mirror.physx.python.kit
       sha256: cb681f4b33ad9f6185cc8ad3977d737e0fca0d87111a70c29f17c2c0d4df0e4e
   entry_scripts:
-    count: 11
-    path_sha256: cec3f2b5d9bb4d7e65aedf9529b347b0d684c9af3a954d5426dfb609bf1db5f3
-    path_content_sha256: e31d902c0a23e5d62f5d744b5643422d736e63b25d0c740b9cb7df2aa20e0342
+    count: 12
+    path_sha256: 517602f8580793d57a6cd5c801cd291256be9a1be96a3cb182dae42f40b19a72
+    path_content_sha256: e6827650fab2896832ad73176abfa30a217cd122e33aa1703c87242529dbe2ab
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -2722,6 +2724,8 @@ generated_inventory:
       sha256: 5970f73bfee141dd55ad3dd3635e0a31531f904ef5020317bf9bcee0dce25114
     - path: scripts/check_markdown_links.py
       sha256: f05deece4665f29cebf47ea324b91153406bf37fdd0fd2283c6a3df6fdf01d4f
+    - path: scripts/check_pure_coverage.py
+      sha256: 3178f23fdbd18c81f132bafea292be6baa26c064c46ffbaf89934282ebde05bd
     - path: scripts/kaleidoscope_viewer.py
       sha256: 70729930cf64ef7d76cdc5d1c7dbc609dc65b7eaf0b563bc06f9aeb345d4aea2
     - path: scripts/mirror.py
