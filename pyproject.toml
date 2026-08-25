@@ -32,7 +32,7 @@ dev = [
   "usd-core==26.5",
 ]
 visualization = [
-  "foxglove-sdk==0.25.2",
+  "foxglove-sdk==0.26.0",
 ]
 training = [
   # Gymnasium is deliberately kept at the NumPy process boundary. Native
