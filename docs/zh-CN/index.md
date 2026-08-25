@@ -60,6 +60,7 @@
 - [Simulation CI](operations/simulation-ci.md)
 - [故障排查](operations/troubleshooting.md)
 - [源码模块图](development/module-map.md)
+- [Lint 与格式化策略](development/linting.md)
 - [静态类型检查](development/type-checking.md)
 - [命名规范](development/naming.md)
 - [物体资产](development/object-assets.md)

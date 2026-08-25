@@ -77,6 +77,10 @@ defined by `pyrightconfig.ci.json`; keep that baseline free of global suppressio
 expand it only after a path passes in the CPU development environment. See
 [Static Type Checking](docs/en/development/type-checking.md).
 
+Ruff's selected lint rules and Python target are explicit project policy. Review rule
+expansion separately from dependency upgrades and keep Markdown outside the Python
+formatter gate. See [Lint And Format Policy](docs/en/development/linting.md).
+
 If source modules move, refresh and verify the architecture inventory:
 
 ```bash

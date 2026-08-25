@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 117
-    path_sha256: deb2c143ab3548ac261bf9e96c50f6fb8e1800281af98af3f4305c0de17b72a5
-    path_content_sha256: 0244e45801df106fe99e7de7adac0331d915482ae50f410f894e78994744e2f1
+    count: 118
+    path_sha256: 2d1fe20d1129075e4007cd6643e72938d3a5e4e4dd80b96c234213f27e1f1668
+    path_content_sha256: ef7af3f6bdfa2bc272094d29064f88a534a356e4778f2feae8bc1f411967ae15
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2481,6 +2481,8 @@ generated_inventory:
       sha256: 191ea4965ead0d688580dcbdf83ba080169603b57709ab0e7ba9e154e7af1e0d
     - path: tests/test_kaleidoscope_viewport_config.py
       sha256: 43e6758934253d043d605fab5d9c270ef56334f42f4d885d26da21850d33310a
+    - path: tests/test_lint_gate.py
+      sha256: f9df1b6e81294fad34a8255f89131884b265f8d781b7c11113913767e69f3a61
     - path: tests/test_logging_config.py
       sha256: 38fab4e95ee9f9585e465131a89000404e4ecf0cf9f4b6802348798197b769a8
     - path: tests/test_markdown_links.py
@@ -2760,14 +2762,16 @@ generated_inventory:
     - path: ci/simulation.sh
       sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
   maintained_docs:
-    count: 63
-    path_sha256: 91e59784a8e25d688099c486dfcd21561d5c243d50f49b8d432a67eb6c9fd7e0
-    path_content_sha256: 01ad0a2c6c78cb8709d8a0bcc0b6ab10f31dbecb1a54f3528588e2079f96f923
+    count: 65
+    path_sha256: e334b257b34d6321c3611208c140668c46fe7d771e6b2c495957468e5ce0518d
+    path_content_sha256: 4262adea77b93cef6325c08557adbe696e21b650894e7d9d54b7a78eb95b16c0
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
     - path: docs/en/development/collision-approximation.md
       sha256: d837bc0753f874fa24c3d10682285d4b90295d11d9b49e4d3041de1185f9a290
+    - path: docs/en/development/linting.md
+      sha256: 9977fdc41a4e16f7cb1fc433d0b674032c96e152cbb8b5ac605bb887d6d21c9d
     - path: docs/en/development/module-map.md
       sha256: c68c7345b7157976b982a88b11a69316ae37bdb00bc9046e752830608c8b7b5e
     - path: docs/en/development/naming.md
@@ -2803,7 +2807,7 @@ generated_inventory:
     - path: docs/en/guides/telemetry.md
       sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
     - path: docs/en/index.md
-      sha256: cc8867092bde7e447f887b59c2a60cdfd49d6cf0db76ad668923fcf2bff54221
+      sha256: 689c629c9ec9e3a96fb2a03b2f0226443c4595f21ecab3f8964632229c3e3b6d
     - path: docs/en/maintenance/documentation-guide.md
       sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
     - path: docs/en/operations/constraints.md
@@ -2830,6 +2834,8 @@ generated_inventory:
       sha256: 58b7dc42321eec11cefa00c1a13251b44b76ef228c8609c88159a0c6956d25c4
     - path: docs/zh-CN/development/collision-approximation.md
       sha256: 8e5b2dcffee91a6d52e43ab41d963dff6134d92ca4553336e2cda17549984317
+    - path: docs/zh-CN/development/linting.md
+      sha256: 23d4a0bba09b683755b6b44f9a1ae7fb9579ecf71692be84ce7007c6023fce38
     - path: docs/zh-CN/development/module-map.md
       sha256: bd885d295bef42c0cb13a01e3bc08993c7caa7c77cc15c989a1d5d2a8cecf5c1
     - path: docs/zh-CN/development/naming.md
@@ -2865,7 +2871,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/telemetry.md
       sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
     - path: docs/zh-CN/index.md
-      sha256: 8d2885155cac989dd7cf652d1c3952c499d15fe14d676e7d471e80c94a78ddf8
+      sha256: 7ed34fa2b594f82aeb9322d3a082250fb771320adf4fb5b90e1f45c5befc15de
     - path: docs/zh-CN/maintenance/documentation-guide.md
       sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
     - path: docs/zh-CN/operations/constraints.md
