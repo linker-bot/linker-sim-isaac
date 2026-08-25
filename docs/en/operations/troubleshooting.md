@@ -47,7 +47,7 @@ The explicit viewer selects the matching `physx_cuda_viewport` or
 | Queue full | Reduce concurrent submissions or increase admission capacity at embedded construction after a memory/latency review. |
 | Motion rejected after stop | Call `runtime.status`, then a successful `runtime.reset` to clear the emergency-stop latch. |
 | Cancel appears late | Cancellation is cooperative; inspect the active operation and its execution boundary. |
-| Response timeout | Do not assume the operation was rolled back. Query status with a new ID before retrying. |
+| Response timeout | A request that was still pending was expired and cannot execute later. An already-active operation receives cooperative cancellation but may have crossed a mutation boundary; query status before retrying. |
 | TCP/WebSocket host rejected | Use `localhost` or a numeric loopback address. |
 
 ## Mirror Motion

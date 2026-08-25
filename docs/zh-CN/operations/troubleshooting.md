@@ -75,6 +75,8 @@ usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial/Buildings/
 - request ID 不能重复；JSON 不允许 NaN/Infinity/重复字段；
 - estop 后先成功 reset；
 - queue capacity/error code 见 [Mirror JSON](../reference/mirror-json.md)。
+- response timeout 会原子移除仍在 pending 的请求，之后不会再执行；如果请求已经 active，
+  timeout 只触发协作取消，操作可能已越过状态修改边界，重试前应先查询状态。
 
 ## Camera/telemetry 无输出
 
