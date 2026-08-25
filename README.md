@@ -2,6 +2,10 @@
 
 Language: [English](README.md) | [中文](README_zh.md)
 
+Start here: [Installation](docs/en/getting-started/installation.md) ·
+[Choose a product and API](docs/en/getting-started/choose-runtime-and-api.md) ·
+[Documentation](docs/en/index.md)
+
 linker-sim-isaac is an Isaac Sim workspace for robotic manipulation, reality
 replay, and GPU-parallel reinforcement learning. The repository exposes two product
 modes with deliberately different contracts:
@@ -16,6 +20,16 @@ modes with deliberately different contracts:
   cloning, batched IK, synchronous linear end-effector actions, Gymnasium integration,
   and a CUDA-native skrl path. It has no batch trajectory planner, avoidance service,
   camera, SyntheticData, Replicator, recording, transport, or telemetry.
+
+Choose the product before choosing a physics backend or client API:
+
+| If you need... | Start with |
+| --- | --- |
+| One reality-mapped workcell, interactive control, motion planning, cameras, or JSON | **Mirror** |
+| Many homogeneous GPU environments for reinforcement learning | **Kaleidoscope** |
+| Language-neutral process control | **Mirror JSON** |
+| CUDA-resident training | **Kaleidoscope native Torch or skrl** |
+| Gymnasium compatibility | **Kaleidoscope Gymnasium adapter** |
 
 These names are the public API. There is no compatibility contract for the retired
 mode names or entrypoints.
@@ -48,7 +62,11 @@ The roots reference the product-namespaced scene selectors `mirror/scene3` and
 - NVIDIA cuRobo 0.8.0 for planning or end-effector actions
 - A compatible NVIDIA GPU for Kaleidoscope and Newton
 
-Install the simulation workspace from the checkout root:
+For cloning, `uv` setup, dependency extras, GPU preflight, and the optional NVIDIA
+Warehouse payload, read the
+[installation guide](docs/en/getting-started/installation.md).
+
+Install the complete simulation workspace from the checkout root:
 
 ```bash
 uv sync --extra simulation --extra visualization --extra training
@@ -69,6 +87,11 @@ export OMNI_KIT_ACCEPT_EULA=Y
 
 This repository is a workspace application, not an installable wheel. Run commands
 from the checkout root with `PYTHONPATH=src`.
+
+> The default Mirror `scene3` references an NVIDIA Industrial Warehouse payload that
+> is not redistributed by this repository. The project-owned wrapper and analytic
+> floor remain in the checkout, but install the licensed payload at the documented path
+> before relying on warehouse visuals. Kaleidoscope does not require this payload.
 
 ## Validate Configuration Without Starting Isaac
 
@@ -169,6 +192,7 @@ is added.
 ## Documentation
 
 - [Documentation index](docs/en/index.md)
+- [Installation and environment setup](docs/en/getting-started/installation.md)
 - [Project overview](docs/en/getting-started/project-overview.md)
 - [Choose a mode and API](docs/en/getting-started/choose-runtime-and-api.md)
 - [Mirror CLI](docs/en/reference/mirror-cli.md)
@@ -176,7 +200,9 @@ is added.
 - [Kaleidoscope API](docs/en/reference/kaleidoscope-api.md)
 - [Configuration reference](docs/en/reference/configuration.md)
 - [Python API](docs/en/reference/python-api.md)
+- [Troubleshooting](docs/en/operations/troubleshooting.md)
 - [Source module map](docs/en/development/module-map.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Quality Checks
 

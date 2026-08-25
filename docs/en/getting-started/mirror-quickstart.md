@@ -3,7 +3,8 @@
 Language: [English](mirror-quickstart.md) | [中文](../../zh-CN/getting-started/mirror-quickstart.md)
 
 This walkthrough validates a Mirror configuration, starts one reality-mapped world,
-queries status, and requests an orderly shutdown.
+queries status, and requests an orderly shutdown. Complete the
+[installation guide](installation.md) first if this is a new checkout.
 
 ## 1. Prepare The Environment
 
@@ -17,6 +18,11 @@ export PYTHONPATH=src
 
 Use a separate `.venv-dev` for CPU tests; do not install `usd-core` into the Isaac
 environment.
+
+The default `mirror/scene3` references an NVIDIA Warehouse visual payload that is
+not redistributed. Its expected location and verification command are documented in
+[Installation](installation.md). Configuration validation can succeed without that
+payload, so verify it separately when warehouse visuals are part of the workflow.
 
 ## 2. Validate The Composition
 

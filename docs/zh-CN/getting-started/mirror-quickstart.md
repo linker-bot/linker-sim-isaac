@@ -5,7 +5,8 @@
 Mirror 将 selector `mirror/scene3`（文件 `configs/scenes/mirror/scene3.yaml`，内部
 `scene.id: scene3`）映射为一个交互仿真 World。CLI 默认的 `physx_cpu` 使用 PhysX CPU；
 `physx_cpu_hybrid` 使用 240 Hz PhysX CPU 专用 hybrid composition；`newton_cpu` 与 `newton_cuda`
-分别选择 Newton CPU/CUDA，四者都由 Mirror 派生一个 world。
+分别选择 Newton CPU/CUDA，四者都由 Mirror 派生一个 world。首次使用新的 checkout 时，
+请先完成[安装与环境准备](installation.md)。
 
 ## 1. 准备
 
@@ -13,6 +14,10 @@ Mirror 将 selector `mirror/scene3`（文件 `configs/scenes/mirror/scene3.yaml`
 uv sync --extra simulation --extra visualization
 export OMNI_KIT_ACCEPT_EULA=Y
 ```
+
+默认 `mirror/scene3` 引用本仓库不再分发的 NVIDIA Warehouse 视觉素材。具体目标路径和
+检查命令见[安装与环境准备](installation.md)。配置图校验并不会下载该素材，因此需要仓库视觉
+效果时应单独确认文件存在。
 
 先做不启动 Isaac 的配置校验：
 

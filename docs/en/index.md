@@ -10,6 +10,7 @@ and message formats are not supported aliases.
 
 | Goal | Read |
 | --- | --- |
+| Install the pinned environments and prepare optional assets | [Installation](getting-started/installation.md) |
 | Understand the two products and their ownership boundaries | [Project Overview](getting-started/project-overview.md) |
 | Choose between JSON, native Torch, Gymnasium, and skrl | [Mode And API Chooser](getting-started/choose-runtime-and-api.md) |
 | Write joint, IK, planning, and synchronized motion JSON | [Mirror JSON Protocol And Motion Examples](reference/mirror-json.md) |
@@ -47,6 +48,7 @@ camera, transport, telemetry, and persistent output from its hot runtime closure
 
 ## Development
 
+- [Contributing](../../CONTRIBUTING.md)
 - [Naming And Ownership](development/naming.md)
 - [Module Map](development/module-map.md)
 - [Object Assets](development/object-assets.md)

@@ -27,6 +27,17 @@ Kaleidoscope closure 中误加的 camera/planning/telemetry 字段。
   `linkerbot_sim.kaleidoscope.newton.python.kit`；显式 viewer 分别选择对应的
   `physx_cuda_viewport` 或 `newton_cuda_viewport` Kit，不要手工拼接闭包。
 
+## Mirror 仓库背景缺失
+
+默认 `mirror/scene3` 的包装资产会引用下面的外部 NVIDIA 文件：
+
+```text
+usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial/Buildings/Warehouse/Warehouse01.usd
+```
+
+该素材受 NVIDIA 许可约束，不随仓库分发。配置图校验不会下载或补全它；如果启动日志提示
+未解析 payload，或场景中仓库视觉为空，请确认文件放在上述精确路径。Kaleidoscope 不依赖该素材。
+
 ## Kaleidoscope backend 启动失败
 
 - PhysX CUDA：检查 Fabric/GPU pipeline 诊断和进程显存门禁；
