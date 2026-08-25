@@ -1280,6 +1280,10 @@ simulation = [
     { name = "torchvision" },
     { name = "warp-lang" },
 ]
+test = [
+    { name = "coverage" },
+    { name = "pytest" },
+]
 training = [
     { name = "gymnasium" },
     { name = "skrl", extra = ["torch"] },
@@ -1291,6 +1295,7 @@ visualization = [
 [package.metadata]
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.4.4" },
+    { name = "coverage", marker = "extra == 'test'", specifier = "==7.4.4" },
     { name = "cuda-bindings", extras = ["all"], marker = "extra == 'simulation'", specifier = "==12.9.7" },
     { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.25.2" },
     { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.3.0" },
@@ -1298,6 +1303,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
+    { name = "pytest", marker = "extra == 'test'", specifier = "==9.1.1" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.21" },
     { name = "scipy", specifier = "==1.17.0" },
@@ -1310,7 +1316,7 @@ requires-dist = [
     { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.13.0" },
     { name = "websockets", specifier = "==12.0" },
 ]
-provides-extras = ["dev", "visualization", "training", "simulation"]
+provides-extras = ["test", "dev", "visualization", "training", "simulation"]
 
 [[package]]
 name = "llvmlite"

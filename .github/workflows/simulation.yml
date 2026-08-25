@@ -1,0 +1,102 @@
+name: Simulation
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/simulation.yml
+      - apps/**
+      - assets/**
+      - ci/simulation.sh
+      - configs/**
+      - Justfile
+      - pyproject.toml
+      - scripts/**
+      - src/**
+      - tests/**
+      - tools/**
+      - uv.lock
+      - workspace_build.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Do not terminate a live Kit process to make room for a newer revision. GitHub keeps
+# at most one pending run in this group while the current trusted run drains normally.
+concurrency:
+  group: simulation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gpu-simulation:
+    name: GPU / Isaac simulation
+    runs-on: [self-hosted, linux, x64, nvidia-gpu, isaac-sim]
+    environment: simulation
+    timeout-minutes: 240
+    env:
+      OMNI_KIT_ACCEPT_EULA: ${{ vars.OMNI_KIT_ACCEPT_EULA }}
+      PYTHONUTF8: "1"
+      UV_NO_PROGRESS: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.58.0"
+
+      - name: Verify trusted NVIDIA runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${OMNI_KIT_ACCEPT_EULA:-}" = Y || {
+            echo "::error::Set the simulation environment variable OMNI_KIT_ACCEPT_EULA=Y after reviewing NVIDIA's terms."
+            exit 1
+          }
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          command -v nvidia-smi
+          nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Sync simulation test environment
+        run: >-
+          uv sync --frozen --extra simulation --extra visualization
+          --extra training --extra test
+
+      - name: Verify Python and CUDA stack
+        run: |
+          .venv/bin/python - <<'PY'
+          import coverage
+          import pytest
+          import torch
+
+          assert torch.cuda.is_available(), "CUDA is required for simulation CI"
+          print(
+              {
+                  "coverage": coverage.__version__,
+                  "cuda": torch.version.cuda,
+                  "device": torch.cuda.get_device_name(0),
+                  "pytest": pytest.__version__,
+                  "torch": torch.__version__,
+              }
+          )
+          PY
+
+      - name: Run GPU and Isaac acceptance matrix
+        run: bash ci/simulation.sh

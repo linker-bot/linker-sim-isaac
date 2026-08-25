@@ -5,7 +5,7 @@ set shell := ["bash", "-uc"]
 uv_dev := "UV_PROJECT_ENVIRONMENT=.venv-dev uv run --frozen --extra dev"
 # 显式列出仿真实际需要的 extras，与 README 安装命令一致。不能用 --all-extras：它会
 # 连带启用 dev extra，把 usd-core==26.5 装进 .venv，污染 Isaac 的 pxr 来源。
-uv_simulation := "uv run --frozen --extra simulation --extra visualization --extra training"
+uv_simulation := "uv run --frozen --extra simulation --extra visualization --extra training --extra test"
 python := ".venv/bin/python"
 python_dev := ".venv-dev/bin/python"
 

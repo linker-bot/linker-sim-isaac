@@ -222,6 +222,8 @@ just test-simulation
 The aggregate includes `smoke-runtime-kits` for all seven formal Kit closures,
 `smoke-mirror` for all four Mirror mode profiles, both Kaleidoscope backends and action
 variants, Newton's 256-world capacity, and the PhysX process-memory budget.
+Trusted NVIDIA-runner automation, triggers, and setup requirements are documented in
+[Simulation CI](docs/en/operations/simulation-ci.md).
 
 ## License
 

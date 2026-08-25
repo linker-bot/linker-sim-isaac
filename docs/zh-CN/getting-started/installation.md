@@ -37,6 +37,7 @@ uv python install 3.12
 | `simulation` | Isaac Sim、PyTorch CUDA、cuRobo、Warp、CUDA bindings | 两个产品的运行基础 |
 | `visualization` | Foxglove SDK | Mirror 遥测可视化 |
 | `training` | Gymnasium 与 skrl | Kaleidoscope adapter 与训练 |
+| `test` | pytest 与 coverage | CPU 与仿真环境共用的测试工具 |
 | `dev` | pytest、coverage、Ruff、PyPI USD | 仅用于 CPU 开发检查 |
 
 完整运行环境：
@@ -144,7 +145,9 @@ OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
   --profile physx_cuda --num-envs 2 --steps 2
 ```
 
-完整 GPU/Isaac 验收矩阵使用 `just test-simulation`，它与 CPU `just quality` 门禁刻意分离。
+完整 GPU/Isaac 验收矩阵使用 `just test-simulation`，它与 CPU `just quality` 门禁刻意分离。该 recipe
+会自行加入兼容的 `test` extra，绝不加入 `dev` 或 PyPI `usd-core`。受信任 runner 合同见
+[Simulation CI](../operations/simulation-ci.md)。
 
 ## 后续阅读
 
