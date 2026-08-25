@@ -83,11 +83,17 @@ just test-simulation
 运行同一套矩阵。该工作流刻意不响应 Pull Request 事件；手动运行时只能选择已经审查的仓库内
 分支，并在 Pull Request 中附上对应的 Actions 链接。
 
+依赖变更还会运行锁图增量门禁。应按兼容性边界审查 Dependabot 分组，不要手改 `uv.lock`，
+也不要仅为通过 CI 而增加 advisory 忽略项。即使依赖审计干净，仿真运行时依赖更新仍须执行
+受信任的 GPU 矩阵。详见[依赖安全与更新](docs/zh-CN/operations/dependency-security.md)。
+
 ## Pull Request 检查表
 
 - 变更范围单一、明确，并说明所属产品边界。
 - 公开 API、配置或 wire 变更包含测试和双语文档。
 - `just quality` 通过。
+- 依赖变更同时包含 `pyproject.toml` 与 `uv.lock`，没有新增审计 finding，并保持文档规定的
+  兼容性分组。
 - 相关仿真 smoke 通过；未执行时说明具体原因。
 - 新增的仓库内 Markdown 链接可解析。
 - 移动模块后架构清单已更新。

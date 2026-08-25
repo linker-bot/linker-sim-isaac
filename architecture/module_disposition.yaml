@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 115
-    path_sha256: d83fb5f8d855879806c2c9cdcfa3272cf7b7506476df396de81509c5f75a72df
-    path_content_sha256: fe799902591045c803434c0be7203ccb7c3c59c23b847904159e303705a3dd54
+    count: 116
+    path_sha256: a98786a35f1c9cbf921d555f4bf232852d8baba0a9212687f08f64873eb8fc3b
+    path_content_sha256: 8e7af05e35bff9aef7104dd5d5ce0ca87191a554c9faae4f895fdeee2585e528
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2415,6 +2415,8 @@ generated_inventory:
       sha256: 603b383bb8f7f2b81d0bbe6c2e57a6c28c61bbb882f808b88268a8094173f369
     - path: tests/test_curobo_trajectory_adapter.py
       sha256: a5a1f3b3113d6091feceabf705cd356f6838bac23ea6241a013ea42b3779587c
+    - path: tests/test_dependency_audit.py
+      sha256: 2e1561c33aefd8bfaab77b4142e1aa30c2cb598fca787454d620eb22eee1cf11
     - path: tests/test_documentation_contracts.py
       sha256: f9f13d893fbcf4c5bea7856c4e7d513d2650e527450879a65b62a4701df5cc14
     - path: tests/test_documented_module_map.py
@@ -2716,12 +2718,14 @@ generated_inventory:
     - path: apps/linkerbot_sim.mirror.physx.python.kit
       sha256: cb681f4b33ad9f6185cc8ad3977d737e0fca0d87111a70c29f17c2c0d4df0e4e
   entry_scripts:
-    count: 12
-    path_sha256: 517602f8580793d57a6cd5c801cd291256be9a1be96a3cb182dae42f40b19a72
-    path_content_sha256: e6827650fab2896832ad73176abfa30a217cd122e33aa1703c87242529dbe2ab
+    count: 13
+    path_sha256: f474f5a34397a56f391c5c92c18f1791c1dfa7c70f907ef353c52f457c51b444
+    path_content_sha256: 2f6aa1af50c440e0b358f3a6b78f61d256011f0985968822969ba6257835ae61
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
+    - path: scripts/check_dependency_audit_delta.py
+      sha256: 6946a6096b089501bdffc0f4879aa8e720e1432b1f5e416fec33ada567ab347e
     - path: scripts/check_isaac_runtime.py
       sha256: 5970f73bfee141dd55ad3dd3635e0a31531f904ef5020317bf9bcee0dce25114
     - path: scripts/check_markdown_links.py
@@ -2754,9 +2758,9 @@ generated_inventory:
     - path: ci/simulation.sh
       sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
   maintained_docs:
-    count: 59
-    path_sha256: 1ae7de2400fc8983479174e7e07b86d08c3790f9dfdf7c9c465bfb84c051e734
-    path_content_sha256: 3fc314dc3a271d3c6bc0a9ff99043d9fd94de6725307d2a81063c66c7d46c3ce
+    count: 61
+    path_sha256: 56a4e7dee6a7ed77de68aa144e0244112daa429d82390eba42c555ddb832f457
+    path_content_sha256: 2a55d450e650bd33577dc658c58b4e1e05d0f6abc44545f72aa04de7782a13a9
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2795,11 +2799,13 @@ generated_inventory:
     - path: docs/en/guides/telemetry.md
       sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
     - path: docs/en/index.md
-      sha256: 80b024979c745c366a9f1a9291867d2fad05751662dda0fab047cfd871193c9f
+      sha256: 3f6c5e005a1aaaf6f5d14bcaa9e8ead5a9c22cb5f2318a0ef73266adda5c7295
     - path: docs/en/maintenance/documentation-guide.md
       sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
     - path: docs/en/operations/constraints.md
       sha256: 597e81d8f00c2ce44a13bcb3859d4ed8c115b138b059560f0e15281f72a41a12
+    - path: docs/en/operations/dependency-security.md
+      sha256: eb56f523b38ca141107dfa58bb1c310b52733deb2f6ac7144d9e6a4f97b09580
     - path: docs/en/operations/simulation-ci.md
       sha256: e1c267f86dc06b2052b65b3c9eb1ddf06921e97e1c989a397062f4626cfec1ca
     - path: docs/en/operations/troubleshooting.md
@@ -2853,11 +2859,13 @@ generated_inventory:
     - path: docs/zh-CN/guides/telemetry.md
       sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
     - path: docs/zh-CN/index.md
-      sha256: 43b961f55059d1b0e9635f402a6a77dcee207794248e3bdd7a601af7d0d62b25
+      sha256: f3a5ae2512484581aa9c36c4e02a91d6eb8560fbbd72c4f73aa9c06bfe8d5cea
     - path: docs/zh-CN/maintenance/documentation-guide.md
       sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
     - path: docs/zh-CN/operations/constraints.md
       sha256: 15ff01d800b0991777171f1f6a4c798997bd2c6807cbe7177bb225467926434a
+    - path: docs/zh-CN/operations/dependency-security.md
+      sha256: 4cc22a95e70415d6e72b4bebb32f0de7b532109cf5c247355b0a8245ec6a63ec
     - path: docs/zh-CN/operations/simulation-ci.md
       sha256: aa1eeb2a723c82b17e4363d69be99248eb0e8ad155323a6952bb1a849c95a98f
     - path: docs/zh-CN/operations/troubleshooting.md

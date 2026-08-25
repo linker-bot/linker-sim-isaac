@@ -56,6 +56,7 @@
 
 - [贡献指南](../../CONTRIBUTING_zh.md)
 - [约束与安全边界](operations/constraints.md)
+- [依赖安全与更新](operations/dependency-security.md)
 - [Simulation CI](operations/simulation-ci.md)
 - [故障排查](operations/troubleshooting.md)
 - [源码模块图](development/module-map.md)

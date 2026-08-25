@@ -95,11 +95,19 @@ Maintainers can run the same matrix through the trusted
 pull-request trigger; select only a reviewed in-repository branch for a manual run and
 include the resulting Actions URL in the pull request.
 
+Dependency changes also run the locked-graph delta gate. Review Dependabot groups by
+their compatibility boundary, do not hand-edit `uv.lock`, and do not add an ignored
+advisory solely to pass CI. Simulation-runtime dependency updates require the trusted
+GPU matrix even when the dependency audit is clean. See
+[Dependency Security And Updates](docs/en/operations/dependency-security.md).
+
 ## Pull Request Checklist
 
 - The change has one clear scope and explains its product boundary.
 - Public API/configuration/wire changes include tests and bilingual documentation.
 - `just quality` passes.
+- Dependency changes contain `pyproject.toml` and `uv.lock` together, introduce no new
+  audit finding, and preserve the documented compatibility groups.
 - Relevant simulation smokes pass, or the pull request states why they could not run.
 - New local Markdown links resolve.
 - Architecture inventory is current when modules moved.
