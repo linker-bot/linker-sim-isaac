@@ -62,6 +62,10 @@ UV_PROJECT_ENVIRONMENT=.venv-dev just quality
 runtime 标签会同步改变覆盖范围，必须接受与模块图其他变更相同的架构审查。独立的
 `just test` 使用仿真环境，并继续执行 `tool.coverage.report` 中面向全源码的覆盖率阈值。
 
+质量门禁还会运行 `just type-check`。`pyrightconfig.ci.json` 定义必须保持零诊断的范围；
+不要添加全局抑制，只有路径在 CPU 开发环境中通过后才能扩大该范围。详见
+[静态类型检查](docs/zh-CN/development/type-checking.md)。
+
 移动源码模块后，刷新并检查架构清单：
 
 ```bash
@@ -92,6 +96,7 @@ just test-simulation
 - 变更范围单一、明确，并说明所属产品边界。
 - 公开 API、配置或 wire 变更包含测试和双语文档。
 - `just quality` 通过。
+- Pyright 必检范围保持零诊断；新增行级例外有准确说明和独立测试保护。
 - 依赖变更同时包含 `pyproject.toml` 与 `uv.lock`，没有新增审计 finding，并保持文档规定的
   兼容性分组。
 - 相关仿真 smoke 通过；未执行时说明具体原因。

@@ -406,7 +406,7 @@ generated_inventory:
   production_python:
     count: 247
     path_sha256: fa145cceb481034c7aa8f3a6276c659c1ac112b83988ac6906a6cb4f083cc180
-    path_content_sha256: 2024da407b645f3e5ef93c4966bd175c4d4e93a6bb827c9a3e5cadb03dede686
+    path_content_sha256: 653fd9937d223da7618e1ee845be7299ff2206a81f3d19b74dd0315473ab850b
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5e43f3c99689ee492aef09d75e2caa2d47e8d667158c186b5d65b2083ae28acc
@@ -665,7 +665,7 @@ generated_inventory:
       runtime: cuRobo/CUDA
       classification: internal
     - path: src/linkerbot_sim/configuration/__init__.py
-      sha256: c028b466e22d1663a9efe492df3f9d84511f46f11ca3827c5c4a020df9a01e1a
+      sha256: a9e13178baad32b6114738d03dc66722da87553b8737908f65729958bcb174d8
       module: linkerbot_sim.configuration
       group: configuration
       layer: configuration
@@ -673,7 +673,7 @@ generated_inventory:
       runtime: pure
       classification: documented facade
     - path: src/linkerbot_sim/configuration/catalog.py
-      sha256: 7418ea9511c7d541497f13b8fff9bf7ef233cf581acfaab0a52b58b7120e204b
+      sha256: a6bfdebbbebf219b2787c11066f96a5f798dc2bc8ede48af427eb993174e48e8
       module: linkerbot_sim.configuration.catalog
       group: configuration
       layer: configuration
@@ -2385,9 +2385,9 @@ generated_inventory:
       runtime: pure
       classification: internal
   test_python:
-    count: 116
-    path_sha256: a98786a35f1c9cbf921d555f4bf232852d8baba0a9212687f08f64873eb8fc3b
-    path_content_sha256: 8e7af05e35bff9aef7104dd5d5ce0ca87191a554c9faae4f895fdeee2585e528
+    count: 117
+    path_sha256: deb2c143ab3548ac261bf9e96c50f6fb8e1800281af98af3f4305c0de17b72a5
+    path_content_sha256: 0244e45801df106fe99e7de7adac0331d915482ae50f410f894e78994744e2f1
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2617,6 +2617,8 @@ generated_inventory:
       sha256: 367527f3615641debba69b351ed5ed0b00f815407854bff3e01d8fc38386cf63
     - path: tests/test_trajectory_retiming.py
       sha256: 3f21260c85c79591d04b07f1b71bb27d5a5a040e8a68d384445d2d7d673b7070
+    - path: tests/test_type_check_gate.py
+      sha256: 1370819b49bddf11a6f466b6a292efdb75a402638afed5a025c61f4f93b044fc
     - path: tests/test_viewport.py
       sha256: 13f1c23cb6a2bc7e91b157775e838e7c7bebec487090f6a246433113e28ee951
     - path: tests/test_workspace_build.py
@@ -2720,12 +2722,12 @@ generated_inventory:
   entry_scripts:
     count: 13
     path_sha256: f474f5a34397a56f391c5c92c18f1791c1dfa7c70f907ef353c52f457c51b444
-    path_content_sha256: 2f6aa1af50c440e0b358f3a6b78f61d256011f0985968822969ba6257835ae61
+    path_content_sha256: 1a5d5ade3a4ffd127273be560c35854677015f65250799f78ad37d65a8d82321
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
     - path: scripts/check_dependency_audit_delta.py
-      sha256: 6946a6096b089501bdffc0f4879aa8e720e1432b1f5e416fec33ada567ab347e
+      sha256: 4d07ef86d2641d83f3f39f8b7be60b7dea7e126e4d04b89455e8514913762856
     - path: scripts/check_isaac_runtime.py
       sha256: 5970f73bfee141dd55ad3dd3635e0a31531f904ef5020317bf9bcee0dce25114
     - path: scripts/check_markdown_links.py
@@ -2745,7 +2747,7 @@ generated_inventory:
     - path: scripts/smoke_physx_gpu_memory_budget.py
       sha256: 9c6e84f31aa41f9feb3e48195d1fb7d7892a90f6a7e9ea7881255718bbf8a3bf
     - path: scripts/update_architecture_inventory.py
-      sha256: d4624c15cdfeb7c4fc0cd84287e9d64e42aaf97b123c98ffce884f6ea2ff83b9
+      sha256: c4f0dd7186001aa9c59ef134081268a28d2cf21af0473830a377b47e7f6ed749
     - path: scripts/validate_mode_config.py
       sha256: 5f5849cb4438f96234037f0bb4ad42f907e1ba9a70d5d695548477d9e3aa8f15
   automation_scripts:
@@ -2758,9 +2760,9 @@ generated_inventory:
     - path: ci/simulation.sh
       sha256: 866d0f46636f49d54dae96d39f5f4238fbb9c5f84b276a08894fd55563058c43
   maintained_docs:
-    count: 61
-    path_sha256: 56a4e7dee6a7ed77de68aa144e0244112daa429d82390eba42c555ddb832f457
-    path_content_sha256: 2a55d450e650bd33577dc658c58b4e1e05d0f6abc44545f72aa04de7782a13a9
+    count: 63
+    path_sha256: 91e59784a8e25d688099c486dfcd21561d5c243d50f49b8d432a67eb6c9fd7e0
+    path_content_sha256: 01ad0a2c6c78cb8709d8a0bcc0b6ab10f31dbecb1a54f3528588e2079f96f923
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2772,6 +2774,8 @@ generated_inventory:
       sha256: 9b2d31b5c890b439043b2606ea2997f3826e827269d0f8b0818182b896b505b3
     - path: docs/en/development/object-assets.md
       sha256: ce0a1bdef0d00b6fa9e5d3d3400826306f0d7d1b8e715dde9ce7050e0fac1897
+    - path: docs/en/development/type-checking.md
+      sha256: 65b1d89dac3007d138b7390913c6d7825b2b7ed778330eb2c55def32deb59211
     - path: docs/en/development/usd-preview.md
       sha256: bb26bb2207da77cf8b6073d926000fa7ae5783732247f07041cb03b6370d62df
     - path: docs/en/getting-started/choose-runtime-and-api.md
@@ -2799,7 +2803,7 @@ generated_inventory:
     - path: docs/en/guides/telemetry.md
       sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
     - path: docs/en/index.md
-      sha256: 3f6c5e005a1aaaf6f5d14bcaa9e8ead5a9c22cb5f2318a0ef73266adda5c7295
+      sha256: cc8867092bde7e447f887b59c2a60cdfd49d6cf0db76ad668923fcf2bff54221
     - path: docs/en/maintenance/documentation-guide.md
       sha256: 9aa74002b0e1b98ae6d1bde61342af398b1bef2b6485b030e7bd0b5a82a164b1
     - path: docs/en/operations/constraints.md
@@ -2832,6 +2836,8 @@ generated_inventory:
       sha256: 15e1bcd3a09682252a23083f0d0d90df25a2c1fa8d40e1cddca1795169f2c6ec
     - path: docs/zh-CN/development/object-assets.md
       sha256: db6fcc87d9522926123c9ece6704cd766a1daac18f1d21193ae96c05932d795b
+    - path: docs/zh-CN/development/type-checking.md
+      sha256: f52675f5db35a2a2109c947ead73adaa5c5b422c656f7b1b3e97308d43af45a2
     - path: docs/zh-CN/development/usd-preview.md
       sha256: d004f62291264d15e772012538262634140f793d2e6692c60c96b772c8336e95
     - path: docs/zh-CN/getting-started/choose-runtime-and-api.md
@@ -2859,7 +2865,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/telemetry.md
       sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
     - path: docs/zh-CN/index.md
-      sha256: f3a5ae2512484581aa9c36c4e02a91d6eb8560fbbd72c4f73aa9c06bfe8d5cea
+      sha256: 8d2885155cac989dd7cf652d1c3952c499d15fe14d676e7d471e80c94a78ddf8
     - path: docs/zh-CN/maintenance/documentation-guide.md
       sha256: f88657108d65de1dbb2db5c68fa85916b8e8993b0270b46ca23b67d97598bf94
     - path: docs/zh-CN/operations/constraints.md

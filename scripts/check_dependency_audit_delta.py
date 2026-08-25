@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+from typing import Literal, cast, overload
 
 
 class AuditError(RuntimeError):
@@ -50,13 +51,21 @@ def _mapping(value: object, *, label: str) -> Mapping[str, object]:
         raise AuditError(f"{label} must be a JSON object")
     if not all(isinstance(key, str) for key in value):
         raise AuditError(f"{label} contains a non-string key")
-    return value  # type: ignore[return-value]
+    return cast(Mapping[str, object], value)
 
 
 def _sequence(value: object, *, label: str) -> Sequence[object]:
     if not isinstance(value, list):
         raise AuditError(f"{label} must be a JSON array")
     return value
+
+
+@overload
+def _text(value: object, *, label: str, optional: Literal[False] = False) -> str: ...
+
+
+@overload
+def _text(value: object, *, label: str, optional: Literal[True]) -> str | None: ...
 
 
 def _text(value: object, *, label: str, optional: bool = False) -> str | None:

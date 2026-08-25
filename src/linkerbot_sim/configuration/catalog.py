@@ -12,7 +12,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, cast
 
 from .common import (
     ConfigurationError,
@@ -31,7 +31,11 @@ from .modes.kaleidoscope import (
     kaleidoscope_mode_from_mapping,
     validate_kaleidoscope_closure,
 )
-from .modes.mirror import MirrorConfig, mirror_mode_from_mapping
+from .modes.mirror import (
+    MirrorConfig,
+    MirrorPhysicsSettings,
+    mirror_mode_from_mapping,
+)
 from .objects import ObjectProfileConfig, object_profile_from_mapping
 from .outputs import MirrorOutputsSettings
 from .physics import (
@@ -59,6 +63,7 @@ def load_yaml_mapping(path: str | Path) -> dict[str, object]:
     """安全读取一个非空、字符串键的 YAML mapping。"""
 
     candidate = Path(path).expanduser()
+    resolved = candidate
     try:
         resolved = candidate.resolve()
         data = load_yaml(resolved)
@@ -537,7 +542,13 @@ def load_mirror_config(
             "scene.id must match the scene profile stem: "
             f"{scene.scene_id!r} != {Path(references.scene).name!r}"
         )
-    physics = physics_settings_from_mapping(physics_raw)
+    # The shared parser returns all four supported physics variants. MirrorConfig
+    # rejects PhysX CUDA at runtime; narrow the already-validated support matrix at
+    # this constructor boundary for the static checker.
+    physics = cast(
+        MirrorPhysicsSettings,
+        physics_settings_from_mapping(physics_raw),
+    )
     control = MirrorControlSettings.from_mapping(control_raw)
     controller_bundles = reader.controller_bundles(
         _effective_controller_bundle_names(

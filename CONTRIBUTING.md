@@ -72,6 +72,11 @@ the same architecture review as other module-map changes. The separate `just tes
 recipe uses the simulation environment and retains the all-source coverage floor in
 `tool.coverage.report`.
 
+The quality gate also runs `just type-check`. Its required zero-diagnostic scope is
+defined by `pyrightconfig.ci.json`; keep that baseline free of global suppressions and
+expand it only after a path passes in the CPU development environment. See
+[Static Type Checking](docs/en/development/type-checking.md).
+
 If source modules move, refresh and verify the architecture inventory:
 
 ```bash
@@ -106,6 +111,8 @@ GPU matrix even when the dependency audit is clean. See
 - The change has one clear scope and explains its product boundary.
 - Public API/configuration/wire changes include tests and bilingual documentation.
 - `just quality` passes.
+- The required Pyright scope remains at zero diagnostics; new line-local exceptions
+  are narrowly documented and independently tested.
 - Dependency changes contain `pyproject.toml` and `uv.lock` together, introduce no new
   audit finding, and preserve the documented compatibility groups.
 - Relevant simulation smokes pass, or the pull request states why they could not run.
