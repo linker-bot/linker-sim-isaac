@@ -262,3 +262,16 @@ def test_mirror_newton_profiles_project_execution_without_duplicate_device(
     assert spec.physics_device == physics_device
     assert spec.compute_device == "cuda:0"
     assert spec.physics_execution == config.physics.execution
+    assert spec.app.fast_shutdown is True
+
+
+@pytest.mark.parametrize(
+    "profile",
+    ("physx_cpu", "physx_cpu_hybrid", "newton_cpu", "newton_cuda"),
+)
+def test_all_mirror_profiles_force_fast_shutdown_after_owned_resource_drain(
+    profile: str,
+) -> None:
+    spec = mirror_assembly._mirror_session_spec(load_mirror_config(profile))
+
+    assert spec.app.fast_shutdown is True

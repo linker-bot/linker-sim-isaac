@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 import math
 from threading import get_ident
@@ -265,8 +265,17 @@ class MirrorRuntime:
             result["scene"] = dict(status())
         return result
 
-    def close(self) -> MirrorCloseReport:
-        """按 ingress→outputs/camera/planner→controllers/views→session 重试关闭。"""
+    def close(
+        self,
+        *,
+        before_session_close: Callable[[MirrorCloseReport], None] | None = None,
+    ) -> MirrorCloseReport:
+        """按 ingress→outputs/camera/planner→controllers/views→session 重试关闭。
+
+        ``before_session_close`` 只会在所有产品资源已确认停止、且 native App 尚存活时
+        调用。独立进程可在此 flush 关闭证据；回调失败会保留 session，后续可重试，绝不
+        为了进入 fast shutdown 而越过仍存活的输出 worker。
+        """
 
         self._require_owner_thread("close")
         if self._closed:
@@ -291,6 +300,21 @@ class MirrorRuntime:
             self._completed_phases.append(phase)
 
         if "session" not in self._completed_phases:
+            if before_session_close is not None:
+                ready_report = MirrorCloseReport(
+                    stopped=False,
+                    completed_phases=tuple(self._completed_phases),
+                    live_resources=("IsaacSession",),
+                )
+                try:
+                    before_session_close(ready_report)
+                except BaseException as exc:
+                    return MirrorCloseReport(
+                        stopped=False,
+                        completed_phases=tuple(self._completed_phases),
+                        live_resources=("IsaacSession",),
+                        errors=(f"before_session_close: {type(exc).__name__}: {exc}",),
+                    )
             try:
                 # 只有这里能关闭 App/stage/physics runtime。
                 self.session.close()

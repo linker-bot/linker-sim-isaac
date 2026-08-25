@@ -121,6 +121,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             endpoints=endpoints,
             poll_timeout_s=poll_timeout_s,
             on_ready=lambda: print("MIRROR_INTERACTIVE_READY", flush=True),
+            # GUI Mirror 使用 fast shutdown，native close 可能不把控制流交还给 Python；
+            # 因此在全部产品资源停止、session 仍存活的边界输出退出 marker。
+            before_session_close=lambda _report: print(
+                "MIRROR_INTERACTIVE_EXIT", flush=True
+            ),
         )
     except BaseException:
         # endpoint 构造失败发生在 run_mirror 的 finally 之前；这里仍由 owner thread 尝试
@@ -139,7 +144,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             "Mirror shutdown did not complete: "
             f"{result.close_report.live_resources} {result.close_report.errors}"
         )
-    print("MIRROR_INTERACTIVE_EXIT", flush=True)
     return 0
 
 

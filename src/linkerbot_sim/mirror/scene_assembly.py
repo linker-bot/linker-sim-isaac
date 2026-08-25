@@ -1241,7 +1241,12 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
         gravity_z=config.scene.gravity_z,
         add_ground=config.scene.add_ground,
         ground_height=config.scene.ground_height,
-        app=IsaacAppSpec(gui=render.gui),
+        # Mirror 在 session 关闭前已同步停止 ingress、排空 camera/telemetry sink、销毁
+        # render product，并释放 planner/controller/view。此后逐 extension 卸载没有产品
+        # 资源可保存，却会让 Isaac 6 的 GUI render closure 进入已知不稳定的 native
+        # teardown。显式 fast shutdown 使 GUI/headless 使用同一退出合同；Notebook 中
+        # SimulationApp 会按 Isaac 的规则强制回 graceful shutdown。
+        app=IsaacAppSpec(gui=render.gui, fast_shutdown=True),
         render=IsaacRenderSpec(
             enabled=render_resources,
             width=render.width,

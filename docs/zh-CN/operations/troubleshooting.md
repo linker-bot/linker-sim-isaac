@@ -88,6 +88,23 @@ usd-material/extracted/Industrial_NVD_10012/Assets/ArchVis/Industrial/Buildings/
 读取 close report 的 `live_resources`/`errors`。不要提前关闭仍被 worker 使用的 sink/session；先停止
 ingress，再重试产品资源 close，最后释放 SimulationApp。
 
+Mirror 只会在依赖逆序关闭已经停止 ingress、排空 camera/telemetry 输出、销毁 render product，
+并释放 planner、controller 与 view 后，才进入 Isaac fast process shutdown。smoke 的 runtime marker
+在这个边界 flush，早于 native session shutdown；marker 能证明产品资源已排空，但不能覆盖非零
+worker 退出码。
+
+间歇性 native teardown 故障必须用全新进程重复验证。在有 CUDA/Isaac 的主机执行：
+
+```bash
+just stress-mirror-teardown newton_cuda 20 8
+```
+
+supervisor 会在首次失败轮次停止，`LINKERBOT_ISAAC_RUNTIME_SUPERVISOR_FAILED` JSON 包含
+`repetition`、`worker_exit_code` 和 `worker_signal`。原生段错误会明确报告
+`worker_signal: "SIGSEGV"`，supervisor 退出状态为 139。关闭某个后端的故障前，还应分别对
+`physx_cpu`、`physx_cpu_hybrid` 与 `newton_cpu` 运行同一门禁。该压力命令有意独立于普通 CPU
+quality 和单轮 simulation suite。
+
 ## 架构或文档门禁失败
 
 源码移动后运行：

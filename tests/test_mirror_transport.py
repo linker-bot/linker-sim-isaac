@@ -255,6 +255,7 @@ def test_mirror_cli_has_only_new_profile_spelling() -> None:
 
 def test_cli_projects_strict_interface_settings_to_every_transport(
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     config = load_mirror_config()
     calls: dict[str, object] = {}
@@ -288,6 +289,9 @@ def test_cli_projects_strict_interface_settings_to_every_transport(
 
     def run(_runtime: object, **kwargs: object) -> object:
         calls["run"] = kwargs
+        kwargs["before_session_close"](
+            SimpleNamespace(completed_phases=("outputs_camera_planner",))
+        )
         return SimpleNamespace(close_report=SimpleNamespace(stopped=True))
 
     monkeypatch.setattr(mirror_cli, "run_mirror", run)
@@ -313,6 +317,7 @@ def test_cli_projects_strict_interface_settings_to_every_transport(
         assert values["shutdown_timeout_s"] == interface.shutdown_timeout_s  # type: ignore[index]
     assert calls["tcp"]["max_connections"] == interface.max_connections  # type: ignore[index]
     assert calls["websocket"]["startup_timeout_s"] == interface.startup_timeout_s  # type: ignore[index]
+    assert capsys.readouterr().out.splitlines() == ["MIRROR_INTERACTIVE_EXIT"]
 
 
 def test_importing_mirror_facade_does_not_load_heavy_runtime_modules() -> None:

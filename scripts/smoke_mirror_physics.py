@@ -79,6 +79,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--steps", type=_positive_int, default=DEFAULT_STEPS)
     parser.add_argument(
+        "--teardown-repetitions",
+        type=_positive_int,
+        default=1,
+        help=(
+            "launch this smoke in fresh supervised processes N times; use this to "
+            "detect intermittent native shutdown failures"
+        ),
+    )
+    parser.add_argument(
         "--control-modes-only",
         action="store_true",
         help="only verify position/velocity/effort switching within the same runtime",
@@ -1946,10 +1955,22 @@ def execute_smoke(
                 f"runtime close raised {type(close_exc).__name__}: {close_exc}"
             )
         raise
-    report["shutdown"] = {"application_close_requested": True}
-    if before_close is not None:
-        before_close(report)
-    report["shutdown"] = _close_report_payload(runtime.close())
+
+    def mark_ready_for_native_shutdown(close_report: object) -> None:
+        completed_phases = [
+            str(phase) for phase in getattr(close_report, "completed_phases", ())
+        ]
+        report["shutdown"] = {
+            "application_close_requested": True,
+            "completed_phases": completed_phases,
+            "outputs_drained": "outputs_camera_planner" in completed_phases,
+        }
+        if before_close is not None:
+            before_close(report)
+
+    report["shutdown"] = _close_report_payload(
+        runtime.close(before_session_close=mark_ready_for_native_shutdown)
+    )
     return report
 
 
@@ -1966,6 +1987,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             argv=arguments,
             required_markers=(RUNTIME_SUCCESS_MARKER,),
             success_marker=SUCCESS_MARKER,
+            repetitions=parsed.teardown_repetitions,
         )
 
     def print_before_fast_shutdown(report: dict[str, object]) -> None:
