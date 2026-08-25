@@ -297,7 +297,17 @@ class _FakeRuntime:
             )
         self.robots_by_id = robots
 
-    def close(self):
+    def close(self, *, before_session_close=None):
+        if before_session_close is not None:
+            before_session_close(
+                SimpleNamespace(
+                    completed_phases=(
+                        "ingress",
+                        "outputs_camera_planner",
+                        "controllers_views",
+                    )
+                )
+            )
         self.close_calls += 1
         return SimpleNamespace(stopped=True, live_resources=())
 
@@ -1190,7 +1200,15 @@ def test_execute_smoke_reports_before_runtime_close(monkeypatch) -> None:
         (
             {
                 "event": "mirror_physics_smoke",
-                "shutdown": {"application_close_requested": True},
+                "shutdown": {
+                    "application_close_requested": True,
+                    "completed_phases": [
+                        "ingress",
+                        "outputs_camera_planner",
+                        "controllers_views",
+                    ],
+                    "outputs_drained": True,
+                },
             },
             0,
         )
@@ -1239,7 +1257,7 @@ def test_main_outputs_pre_shutdown_runtime_json_marker(monkeypatch, capsys) -> N
     runtime_marker, runtime_payload = lines[0].split(" ", maxsplit=1)
     assert runtime_marker == smoke.RUNTIME_SUCCESS_MARKER
     assert json.loads(runtime_payload)["shutdown"] == {
-        "application_close_requested": True
+        "application_close_requested": True,
     }
     assert json.loads(runtime_payload)["physics_backend"] == "newton"
 
@@ -1259,3 +1277,16 @@ def test_main_help_exits_before_starting_runtime_worker(monkeypatch, capsys) -> 
     assert raised.value.code == 0
     assert "--profile" in capsys.readouterr().out
     assert supervised == []
+
+
+def test_main_forwards_teardown_repetitions_to_supervisor(monkeypatch) -> None:
+    supervised: list[dict[str, object]] = []
+    monkeypatch.delenv("LINKERBOT_ISAAC_RUNTIME_WORKER", raising=False)
+    monkeypatch.setattr(
+        smoke,
+        "run_supervised_worker",
+        lambda **kwargs: supervised.append(kwargs) or 0,
+    )
+
+    assert smoke.main(["--teardown-repetitions", "7"]) == 0
+    assert supervised[0]["repetitions"] == 7

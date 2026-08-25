@@ -30,6 +30,7 @@ def run_mirror(
     poll_timeout_s: float | None = None,
     should_stop: Callable[[], bool] | None = None,
     on_ready: Callable[[], None] | None = None,
+    before_session_close: Callable[[MirrorCloseReport], None] | None = None,
     max_iterations: int | None = None,
     close_on_exit: bool = True,
 ) -> MirrorRunResult:
@@ -89,7 +90,7 @@ def run_mirror(
             iterations += 1
     finally:
         if close_on_exit:
-            close_report = runtime.close()
+            close_report = runtime.close(before_session_close=before_session_close)
     return MirrorRunResult(
         iterations=iterations,
         physics_steps=physics_steps,

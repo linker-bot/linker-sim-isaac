@@ -198,6 +198,56 @@ def test_runtime_owns_session_and_closes_in_strict_phase_order() -> None:
     assert runtime.session.close_calls == 1
 
 
+def test_runtime_exposes_drained_boundary_before_session_close() -> None:
+    events: list[str] = []
+    config = load_mirror_config()
+    runtime = create_mirror_runtime(
+        config,
+        assembly_factory=lambda cfg: _assembly(cfg, events=events),
+    )
+    ready_reports: list[object] = []
+
+    def ready(report: object) -> None:
+        events.append("ready_for_session_close")
+        ready_reports.append(report)
+
+    result = runtime.close(before_session_close=ready)
+
+    assert result.stopped is True
+    assert events.index("output") < events.index("ready_for_session_close")
+    assert events.index("view") < events.index("ready_for_session_close")
+    assert events.index("ready_for_session_close") < events.index("session:0")
+    assert ready_reports[0].completed_phases == (
+        "ingress",
+        "outputs_camera_planner",
+        "controllers_views",
+    )
+    assert ready_reports[0].live_resources == ("IsaacSession",)
+
+
+def test_runtime_does_not_close_session_when_shutdown_evidence_callback_fails() -> None:
+    events: list[str] = []
+    config = load_mirror_config()
+    runtime = create_mirror_runtime(
+        config,
+        assembly_factory=lambda cfg: _assembly(cfg, events=events),
+    )
+
+    def fail_marker(_report: object) -> None:
+        raise RuntimeError("marker flush failed")
+
+    first = runtime.close(before_session_close=fail_marker)
+
+    assert first.stopped is False
+    assert first.live_resources == ("IsaacSession",)
+    assert first.errors == ("before_session_close: RuntimeError: marker flush failed",)
+    assert runtime.session.close_calls == 0
+
+    second = runtime.close()
+    assert second.stopped is True
+    assert runtime.session.close_calls == 1
+
+
 def test_runtime_binds_its_single_render_coordinator_to_motion_backend() -> None:
     events: list[str] = []
     config = load_mirror_config()

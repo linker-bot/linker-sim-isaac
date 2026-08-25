@@ -48,7 +48,7 @@ Import from `linkerbot_sim.mirror`:
 | `MirrorRuntime` | Owner-thread runtime and lifecycle root. |
 | `MirrorController` | Typed request dispatch and admission coordination. |
 | `create_mirror_runtime(config, *, assembly_factory=None)` | Construct the product resource graph; queue capacities come only from the strict control profile. |
-| `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, max_iterations=None, close_on_exit=True)` | Run the owner-thread event loop; an omitted poll timeout comes from the strict control profile. |
+| `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, before_session_close=None, max_iterations=None, close_on_exit=True)` | Run the owner-thread event loop; an omitted poll timeout comes from the strict control profile, and the optional close hook uses the same drained pre-session boundary as `MirrorRuntime.close`. |
 
 ### `MirrorRuntime`
 
@@ -67,7 +67,7 @@ Key methods and properties:
 | `get_control_mode()` | Read immutable initial/active mode, generation, supported modes, and all-robot scope. |
 | `set_control_mode(mode, expected_generation=None)` | Transactionally switch all robots between complete motions without rebuilding the runtime. |
 | `status()` | Product, physics, collision, scene, and shutdown status. |
-| `close()` | Idempotent dependency-ordered close returning `MirrorCloseReport`. |
+| `close(*, before_session_close=None)` | Idempotent dependency-ordered close returning `MirrorCloseReport`; the optional supervisor hook runs only after ingress, outputs/cameras, planners, controllers, and views have stopped, while the native session is still alive. |
 
 All members that touch runtime state require the thread that created the runtime.
 There is deliberately no generic `world` property because Newton is not an

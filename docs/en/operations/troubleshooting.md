@@ -89,3 +89,24 @@ The explicit viewer selects the matching `physx_cuda_viewport` or
 If close reports live resources, preserve the process logs and resource names. Retry
 the idempotent close after the worker finishes. Do not destroy the session manually or
 force-close the stage underneath camera, planner, tensor-view, or output owners.
+
+Mirror explicitly uses Isaac's fast process shutdown only after its dependency-ordered
+close has stopped ingress, drained camera and telemetry outputs, destroyed render
+products, and released planners, controllers, and views. The smoke runtime marker is
+flushed at that boundary, before native session shutdown. A marker therefore proves
+the product resources were drained; it does not override a nonzero worker exit.
+
+Intermittent native teardown failures require fresh processes. Repeat one production
+profile on a CUDA/Isaac host:
+
+```bash
+just stress-mirror-teardown newton_cuda 20 8
+```
+
+The supervisor stops at the first failed repetition. Its
+`LINKERBOT_ISAAC_RUNTIME_SUPERVISOR_FAILED` JSON includes `repetition`,
+`worker_exit_code`, and `worker_signal`; a native segmentation fault is reported as
+`worker_signal: "SIGSEGV"` and exits the supervisor with status 139. Run the same gate
+for `physx_cpu`, `physx_cpu_hybrid`, and `newton_cpu` before closing a backend-specific
+incident. This stress recipe is intentionally separate from the ordinary CPU quality
+gate and the single-pass simulation suite.

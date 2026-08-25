@@ -45,7 +45,7 @@ Catalog 只在显式调用时执行 YAML I/O；配置对象不创建 runtime res
 | `MirrorRuntime` | 一个 session 与全部 Mirror resource 的 owner |
 | `MirrorController` | owner-thread typed request dispatcher |
 | `create_mirror_runtime(config, *, assembly_factory=None)` | 唯一 composition factory；队列容量只来自 strict control profile |
-| `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, max_iterations=None, close_on_exit=True)` | 主线程 admission/physics/render loop；省略 poll timeout 时读取 strict control profile |
+| `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, before_session_close=None, max_iterations=None, close_on_exit=True)` | 主线程 admission/physics/render loop；省略 poll timeout 时读取 strict control profile，可选 close hook 与 `MirrorRuntime.close` 使用同一已排空的 pre-session 边界 |
 
 Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现细节；外部进程按
 [Mirror JSON](mirror-json.md)集成，不依赖内部 module path。
@@ -64,7 +64,7 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 | `get_control_mode()` | 查询 immutable initial/active mode、generation、支持集与全机器人 scope |
 | `set_control_mode(mode, expected_generation=None)` | 在两次完整运动之间事务式切换全部机器人，不重建 runtime |
 | `status()` | 返回产品、物理、场景、碰撞与关闭状态 |
-| `close()` | 按依赖逆序幂等关闭，失败资源保留供重试 |
+| `close(*, before_session_close=None)` | 按依赖逆序幂等关闭；可选 supervisor hook 只在 ingress、输出/相机、planner、controller 与 view 全部停止且 native session 仍存活时调用 |
 
 ## `linkerbot_sim.kaleidoscope`
 
