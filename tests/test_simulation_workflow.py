@@ -42,23 +42,11 @@ def _steps_by_name() -> dict[str, Mapping[str, object]]:
     return result
 
 
-def test_simulation_workflow_runs_only_trusted_pushes_or_manual_dispatches() -> None:
+def test_simulation_workflow_is_manual_only() -> None:
     workflow = _workflow()
     triggers = _mapping(workflow.get("on"), label="on")
 
-    assert set(triggers) == {"push", "workflow_dispatch"}
-    push = _mapping(triggers.get("push"), label="on.push")
-    assert push.get("branches") == ["master"]
-    paths = push.get("paths")
-    assert isinstance(paths, list)
-    assert {
-        ".github/workflows/simulation.yml",
-        "apps/**",
-        "configs/**",
-        "src/**",
-        "tests/**",
-        "uv.lock",
-    } <= set(paths)
+    assert set(triggers) == {"workflow_dispatch"}
 
 
 def test_simulation_job_has_a_read_only_bounded_runner_contract() -> None:
