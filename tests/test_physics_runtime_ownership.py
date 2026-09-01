@@ -255,6 +255,20 @@ def test_physx_runtime_owns_and_delegates_to_world() -> None:
         runtime.step()
 
 
+def test_physx_cuda_forward_updates_articulation_kinematics_without_step() -> None:
+    calls: list[str] = []
+    world = SimpleNamespace(
+        scene=object(),
+        physics_sim_view=SimpleNamespace(
+            update_articulations_kinematic=lambda: calls.append("kinematics")
+        ),
+    )
+
+    PhysxRuntime(world, kind="physx_cuda").forward()
+
+    assert calls == ["kinematics"]
+
+
 def test_newton_runtime_has_no_world_and_exposes_mirror_single_world_gate() -> None:
     # 构造函数需要真实 Isaac USD schema；窄 fixture 显式提供实例级 execution 合同。
     runtime = NewtonRuntime.__new__(NewtonRuntime)

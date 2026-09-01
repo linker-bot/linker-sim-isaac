@@ -23,6 +23,12 @@ their Git commit.
 - The declared default-branch ruleset policy file is present for its tests and
   scheduled drift audit.
 
+### Fixed
+
+- Kaleidoscope PhysX CUDA seeded resets now restore native mimic-follower joint
+  positions and velocities, then refresh derived articulation link poses. Repeating
+  a seed is independent of the preceding episode's joint history.
+
 ## [0.3.0] - 2026-08-26
 
 ### Added

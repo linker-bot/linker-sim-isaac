@@ -488,8 +488,9 @@ class KaleidoscopeTensorViews:
         masked_ports: list[object] = []
         try:
             if command.device_reset_mask is not None:
-                # Newton 通过该可选窄接口把 SAME_STEP bool mask 一路带到 manager；
-                # PhysX port 无此方法，仍消费 task 已经 where-blend 的固定 N 行值。
+                # Newton 把 SAME_STEP bool mask 一路带到 manager；PhysX 用它保护
+                # full-DOF reset projection 中未 reset 的行。物体仍消费 task 已经
+                # where-blend 的固定 N 行值。
                 for port in (*self.robot_ports, self.object_port):
                     setter = getattr(port, "set_device_reset_mask", None)
                     if callable(setter):

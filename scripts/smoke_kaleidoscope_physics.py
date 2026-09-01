@@ -40,6 +40,13 @@ ZERO_ACTION_JOINT_LIMIT_MARGIN_RAD = 0.05
 # qacc_warmstart 舍入差。该字段是下一拍求解提示而非 generalized state；只在 clone 后继
 # 比较中允许 1e-4 绝对误差。TIME/ACT、立即 clone 以及全部物理/任务字段不使用此容差。
 SOLVER_WARMSTART_SUCCESSOR_ATOL = 1.0e-4
+PHYSX_MIMIC_ACTIVITY_SCHEDULE = (
+    (16, 0.75),
+    (32, -0.75),
+    (16, 0.75),
+)
+PHYSX_MIMIC_SETTLE_STEPS = 64
+PHYSX_MIMIC_MIN_MOTION_RAD = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -440,6 +447,33 @@ def _assert_matching_state(
         )
 
 
+def _assert_exact_matching_state(
+    expected: Mapping[str, object],
+    actual: Mapping[str, object],
+    *,
+    label: str,
+) -> None:
+    """逐元素比较确定性 reset 的完整 GPU state。"""
+
+    import torch
+
+    _require_cuda_mapping(expected, label=f"{label}.expected")
+    _require_cuda_mapping(actual, label=f"{label}.actual")
+    if set(expected) != set(actual):
+        raise RuntimeError(
+            f"{label} state fields differ: "
+            f"expected={sorted(expected)!r}, actual={sorted(actual)!r}"
+        )
+    for name in expected:
+        torch.testing.assert_close(
+            actual[name],
+            expected[name],
+            rtol=0.0,
+            atol=0.0,
+            msg=lambda message, field=name: f"{label}.{field}: {message}",
+        )
+
+
 def _assert_solver_persistent_successor(
     expected: object,
     actual: object,
@@ -604,6 +638,175 @@ def _require_cross_mode_restore_rejected(env: object, snapshot: object) -> None:
         env.get_state(),
         label="cross_mode_restore_preflight",
     )
+
+
+def _exercise_physx_repeated_seed_reset(
+    env: object,
+    contract: ProfileContract,
+    *,
+    seed: int,
+) -> dict[str, object]:
+    """真实驱动 native mimic joints 后验证同 seed reset 与历史 episode 无关。"""
+
+    if contract.runtime_kind != "physx_cuda":
+        return {"verified": False, "reason": "not_physx_cuda"}
+
+    import torch
+
+    baseline_observations, baseline_info = env.reset(seed=seed)
+    _require_cuda_tensor(
+        baseline_observations,
+        label="repeated_seed_reset.baseline_observations",
+    )
+    _require_cuda_mapping(baseline_info, label="repeated_seed_reset.baseline_info")
+    baseline_state = env.get_state()
+    _require_cuda_mapping(baseline_state, label="repeated_seed_reset.baseline_state")
+
+    ports = tuple(getattr(env.runtime.views, "robot_ports", ()))
+    drive_columns: list[int] = []
+    follower_columns_by_port: list[tuple[object, torch.Tensor]] = []
+    command_offset = 0
+    follower_count = 0
+    for port in ports:
+        controls = tuple(getattr(port, "mimic_follower_controls", ()))
+        names = tuple(getattr(port, "command_joint_names", ()) or ())
+        name_to_column = {name: index for index, name in enumerate(names)}
+        for control in controls:
+            master_joint = str(getattr(control, "master_joint", ""))
+            try:
+                local_column = name_to_column[master_joint]
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"mimic master {master_joint!r} is absent from "
+                    f"{getattr(port, 'label', 'robot')!r} command joints"
+                ) from exc
+            drive_columns.append(command_offset + local_column)
+        if controls:
+            follower_columns_by_port.append(
+                (
+                    port,
+                    torch.tensor(
+                        [int(control.dependent_index) for control in controls],
+                        device=env.device,
+                        dtype=torch.int64,
+                    ),
+                )
+            )
+            follower_count += len(controls)
+        command_offset += int(getattr(port, "command_dim", 0))
+
+    if not drive_columns or not follower_count:
+        raise RuntimeError("PhysX mimic reset smoke found no follower relations")
+    if len(set(drive_columns)) != len(drive_columns):
+        raise RuntimeError("PhysX mimic reset smoke found duplicate master columns")
+
+    follower_minima: list[torch.Tensor] = []
+    follower_maxima: list[torch.Tensor] = []
+    all_env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int64)
+    for port, follower_columns in follower_columns_by_port:
+        values = port.read_all_joint_positions(all_env_ids).index_select(
+            1, follower_columns
+        )
+        follower_minima.append(values.amin(dim=0))
+        follower_maxima.append(values.amax(dim=0))
+
+    actions = torch.zeros(
+        (env.num_envs, env.action_dim),
+        device=env.device,
+        dtype=torch.float32,
+    )
+    activity_steps = 0
+    episode_done = False
+    for count, value in PHYSX_MIMIC_ACTIVITY_SCHEDULE:
+        actions.zero_()
+        actions[:, drive_columns] = value
+        for _ in range(count):
+            step_result = env.step(actions)
+            _require_step_tensors(
+                step_result,
+                label="repeated_seed_reset.activity_step",
+            )
+            activity_steps += 1
+            for index, (port, follower_columns) in enumerate(follower_columns_by_port):
+                values = port.read_all_joint_positions(all_env_ids).index_select(
+                    1, follower_columns
+                )
+                follower_minima[index] = torch.minimum(
+                    follower_minima[index], values.amin(dim=0)
+                )
+                follower_maxima[index] = torch.maximum(
+                    follower_maxima[index], values.amax(dim=0)
+                )
+            terminated, truncated = step_result[2:4]
+            assert isinstance(terminated, torch.Tensor)
+            assert isinstance(truncated, torch.Tensor)
+            episode_done = bool(torch.any(terminated | truncated).item())
+            if episode_done:
+                break
+        if episode_done:
+            break
+
+    actions.zero_()
+    settle_steps = 0
+    while not episode_done and settle_steps < PHYSX_MIMIC_SETTLE_STEPS:
+        step_result = env.step(actions)
+        _require_step_tensors(step_result, label="repeated_seed_reset.settle_step")
+        settle_steps += 1
+        terminated, truncated = step_result[2:4]
+        assert isinstance(terminated, torch.Tensor)
+        assert isinstance(truncated, torch.Tensor)
+        episode_done = bool(torch.any(terminated | truncated).item())
+
+    follower_motion = torch.cat(
+        [
+            maximum - minimum
+            for minimum, maximum in zip(
+                follower_minima,
+                follower_maxima,
+                strict=True,
+            )
+        ]
+    )
+    minimum_motion = float(follower_motion.min().item())
+    if minimum_motion <= PHYSX_MIMIC_MIN_MOTION_RAD:
+        raise RuntimeError(
+            "PhysX mimic reset smoke did not move every follower: "
+            f"minimum span={minimum_motion} rad"
+        )
+
+    reset_observations, reset_info = env.reset(seed=seed)
+    _require_cuda_tensor(
+        reset_observations,
+        label="repeated_seed_reset.observations",
+    )
+    _require_cuda_mapping(reset_info, label="repeated_seed_reset.info")
+    torch.testing.assert_close(
+        reset_observations,
+        baseline_observations,
+        rtol=0.0,
+        atol=0.0,
+        msg=lambda message: f"repeated_seed_reset.observations: {message}",
+    )
+    _assert_exact_matching_state(
+        baseline_info,
+        reset_info,
+        label="repeated_seed_reset.info",
+    )
+    _assert_exact_matching_state(
+        baseline_state,
+        env.get_state(),
+        label="repeated_seed_reset.state",
+    )
+    return {
+        "verified": True,
+        "seed": seed,
+        "driven_master_count": len(drive_columns),
+        "follower_count": follower_count,
+        "minimum_follower_motion_rad": minimum_motion,
+        "activity_steps": activity_steps,
+        "settle_steps": settle_steps,
+        "episode_done_before_reset": episode_done,
+    }
 
 
 def _exercise_runtime_control_modes(
@@ -1087,6 +1290,11 @@ def run_smoke(
         observations, reset_info = env.reset(seed=123)
         _require_cuda_tensor(observations, label="reset.observations")
         _require_cuda_mapping(reset_info, label="reset.info")
+        repeated_seed_reset = _exercise_physx_repeated_seed_reset(
+            env,
+            contract,
+            seed=117,
+        )
         actions = torch.zeros(
             (env.num_envs, env.action_dim),
             device=env.device,
@@ -1307,6 +1515,7 @@ def run_smoke(
             "state_fields": sorted(reset_state),
             "snapshot_fields": sorted(snapshot.fields),
             "snapshot_round_trip_verified": True,
+            "repeated_seed_reset": repeated_seed_reset,
             "control_mode_switching": control_mode_switching,
             "zero_action_finite_verified": zero_action_finite_verified,
             "zero_action_physical_bounds_verified": True,

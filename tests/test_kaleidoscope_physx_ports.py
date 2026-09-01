@@ -13,6 +13,7 @@ from linkerbot_sim.kaleidoscope.physx_ports import (
     IsaacRigidObjectTensorPort,
     as_torch_cuda,
 )
+from linkerbot_sim.robots.mimic.runtime import MimicFollowerControl
 
 
 pytestmark = pytest.mark.skipif(
@@ -190,6 +191,114 @@ def test_articulation_port_uses_gpu_indices_and_command_columns() -> None:
     torch.testing.assert_close(articulation.target, original_position_targets)
     torch.testing.assert_close(articulation.velocity_target, original_velocity_targets)
     torch.testing.assert_close(articulation.effort_target, original_effort_targets)
+
+
+def _mimic_reset_port() -> tuple[IsaacArticulationTensorPort, _ArticulationView]:
+    articulation = _ArticulationView()
+    port = IsaacArticulationTensorPort(
+        label="arm",
+        view=articulation,
+        tcp_view=_RigidView(),
+        command_joint_indices=torch.tensor([1, 3], device="cuda"),
+        command_joint_names=("j1", "j3"),
+        command_joint_indices_host=(1, 3),
+        device=torch.device("cuda:0"),
+        orientation_order="xyzw",
+        mimic_follower_controls=(
+            MimicFollowerControl(
+                dependent_joint="j0",
+                master_joint="j1",
+                dependent_index=0,
+                master_index=1,
+                polycoef=(0.1, 2.0, 0.5),
+            ),
+            MimicFollowerControl(
+                dependent_joint="j2",
+                master_joint="j3",
+                dependent_index=2,
+                master_index=3,
+                polycoef=(-0.2, 1.5),
+            ),
+        ),
+    )
+    port.prepare_full_dof_reset(torch.tensor([0.0, 0.2, 0.0, -0.3], device="cuda"))
+    return port, articulation
+
+
+def test_physx_reset_projects_command_state_to_full_mimic_dofs() -> None:
+    port, articulation = _mimic_reset_port()
+    ids = torch.tensor([0, 2], device="cuda")
+    articulation.q.add_(20.0)
+    articulation.qd.copy_(articulation.q * 0.1)
+    position_targets = articulation.target.clone()
+    velocity_targets = articulation.velocity_target.clone()
+    effort_targets = articulation.effort_target.clone()
+
+    port.write_joint_positions(
+        ids,
+        torch.tensor([[0.4, -0.2], [-0.5, 0.6]], device="cuda"),
+    )
+    port.write_joint_velocities(
+        ids,
+        torch.tensor([[0.3, -0.4], [-0.2, 0.5]], device="cuda"),
+    )
+
+    torch.testing.assert_close(
+        articulation.q.index_select(0, ids),
+        torch.tensor(
+            [[0.98, 0.4, -0.5, -0.2], [-0.775, -0.5, 0.7, 0.6]],
+            device="cuda",
+        ),
+    )
+    torch.testing.assert_close(
+        articulation.qd.index_select(0, ids),
+        torch.tensor(
+            [[0.72, 0.3, -0.6, -0.4], [-0.3, -0.2, 0.75, 0.5]],
+            device="cuda",
+        ),
+    )
+    torch.testing.assert_close(articulation.target, position_targets)
+    torch.testing.assert_close(articulation.velocity_target, velocity_targets)
+    torch.testing.assert_close(articulation.effort_target, effort_targets)
+
+
+def test_physx_reset_projection_preserves_unmasked_rows_bitwise() -> None:
+    port, articulation = _mimic_reset_port()
+    ids = torch.arange(3, device="cuda", dtype=torch.int64)
+    original_q = articulation.q.clone()
+    articulation.qd.copy_(articulation.q + 30.0)
+    original_qd = articulation.qd.clone()
+    mask = torch.tensor([False, True, False], device="cuda")
+
+    port.set_device_reset_mask(mask)
+    try:
+        port.write_joint_positions(
+            ids,
+            torch.tensor(
+                [[0.1, 0.2], [0.4, -0.2], [0.7, 0.8]],
+                device="cuda",
+            ),
+        )
+        port.write_joint_velocities(
+            ids,
+            torch.tensor(
+                [[0.3, 0.4], [0.5, -0.6], [0.7, 0.8]],
+                device="cuda",
+            ),
+        )
+    finally:
+        port.set_device_reset_mask(None)
+
+    assert torch.equal(articulation.q[[0, 2]], original_q[[0, 2]])
+    assert torch.equal(articulation.qd[[0, 2]], original_qd[[0, 2]])
+    torch.testing.assert_close(
+        articulation.q[1],
+        torch.tensor([0.98, 0.4, -0.5, -0.2], device="cuda"),
+    )
+    torch.testing.assert_close(
+        articulation.qd[1],
+        torch.tensor([1.2, 0.5, -0.9, -0.6], device="cuda"),
+    )
 
 
 def _projection(

@@ -18,6 +18,12 @@ Git commit 标识。
 - 公开协作入口新增 Pull Request 模板和支持问题分流指南。
 - 补齐默认分支 ruleset 策略文件，供对应测试和定时 drift 审计读取。
 
+### 修复
+
+- Kaleidoscope PhysX CUDA 的 seed reset 现在会恢复 native mimic follower 的关节位置与
+  速度，并刷新 articulation 派生出的 link pose；重复使用同一 seed 时不再继承上一 episode
+  的关节历史。
+
 ## [0.3.0] - 2026-08-26
 
 ### 新增
