@@ -16,6 +16,7 @@ from linkerbot_sim.kaleidoscope.geometry import (
     quaternion_rotate_wxyz,
 )
 from linkerbot_sim.kaleidoscope.tensors import assert_finite_async, require_cuda_tensor
+from linkerbot_sim.robots.mimic.runtime import MimicFollowerControl
 from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
@@ -42,6 +43,7 @@ class IsaacArticulationTensorPort:
     orientation_order: str = "wxyz"
     tcp_offset_xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)
     tcp_offset_rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    mimic_follower_controls: tuple[MimicFollowerControl, ...] = ()
     command_dim: int = field(init=False)
     state_dim: int = field(init=False)
     num_envs: int = field(init=False)
@@ -51,6 +53,19 @@ class IsaacArticulationTensorPort:
     _tcp_offset_orientation: torch.Tensor = field(init=False, repr=False)
     _all_env_ids: torch.Tensor = field(init=False, repr=False)
     _position_feedforward: torch.Tensor = field(init=False, repr=False)
+    _mimic_dependent_indices: torch.Tensor = field(init=False, repr=False)
+    _mimic_master_indices: torch.Tensor = field(init=False, repr=False)
+    _mimic_polycoef: torch.Tensor = field(init=False, repr=False)
+    _reset_nominal_joint_positions: torch.Tensor | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _device_reset_mask: torch.Tensor | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
     _active_control_runtime: PreparedPhysxControlRuntime | None = field(
         init=False,
         default=None,
@@ -105,6 +120,7 @@ class IsaacArticulationTensorPort:
                 raise ValueError("command joint names and host indices disagree")
         self.command_joint_names = names
         self.command_joint_indices_host = host_indices
+        self._prepare_mimic_metadata(dof_names, host_indices)
         count = getattr(self.view, "count", None)
         if count is None:
             probe = getattr(self.view, "q", None)
@@ -142,6 +158,66 @@ class IsaacArticulationTensorPort:
             device=self.device,
             dtype=torch.float32,
         )
+
+    def _prepare_mimic_metadata(
+        self,
+        dof_names: tuple[str, ...],
+        command_indices_host: tuple[int, ...] | None,
+    ) -> None:
+        controls = tuple(self.mimic_follower_controls)
+        self.mimic_follower_controls = controls
+        command_indices = set(command_indices_host or ())
+        dependent_indices: set[int] = set()
+        for control in controls:
+            if (
+                control.dependent_index < 0
+                or control.dependent_index >= self.state_dim
+                or dof_names[control.dependent_index] != control.dependent_joint
+            ):
+                raise ValueError(
+                    "mimic follower metadata does not match articulation DOFs"
+                )
+            if (
+                control.master_index < 0
+                or control.master_index >= self.state_dim
+                or dof_names[control.master_index] != control.master_joint
+            ):
+                raise ValueError(
+                    "mimic master metadata does not match articulation DOFs"
+                )
+            if control.dependent_index in dependent_indices:
+                raise ValueError("mimic follower indices must be unique")
+            if control.dependent_index in command_indices:
+                raise ValueError("mimic followers cannot remain in command joints")
+            if not control.polycoef:
+                raise ValueError("mimic follower polycoef cannot be empty")
+            dependent_indices.add(control.dependent_index)
+
+        self._mimic_dependent_indices = torch.tensor(
+            [control.dependent_index for control in controls],
+            device=self.device,
+            dtype=torch.int64,
+        )
+        self._mimic_master_indices = torch.tensor(
+            [control.master_index for control in controls],
+            device=self.device,
+            dtype=torch.int64,
+        )
+        coefficient_width = max(
+            (len(control.polycoef) for control in controls), default=0
+        )
+        coefficients = [
+            (
+                *control.polycoef,
+                *(0.0 for _ in range(coefficient_width - len(control.polycoef))),
+            )
+            for control in controls
+        ]
+        self._mimic_polycoef = torch.tensor(
+            coefficients,
+            device=self.device,
+            dtype=torch.float32,
+        ).reshape(len(controls), coefficient_width)
 
     def read_joint_positions(self, env_ids: torch.Tensor) -> torch.Tensor:
         return self._read_joint("get_joint_positions", env_ids)
@@ -188,12 +264,145 @@ class IsaacArticulationTensorPort:
     def write_joint_positions(
         self, env_ids: torch.Tensor, values: torch.Tensor
     ) -> None:
-        self._write_joint_state("set_joint_positions", env_ids, values)
+        nominal = self._reset_nominal_joint_positions
+        if nominal is None:
+            self._write_joint_state("set_joint_positions", env_ids, values)
+            return
+        command = self._validated_command_values(
+            env_ids,
+            values,
+            name="reset joint positions",
+        )
+        full = nominal[None, :].expand(env_ids.numel(), -1).clone()
+        full.index_copy_(1, self.command_joint_indices, command)
+        self._project_mimic_positions(full)
+        self.write_all_joint_positions(
+            env_ids,
+            self._preserve_unmasked_joint_state(
+                env_ids,
+                fresh=full,
+                velocity=False,
+            ),
+        )
 
     def write_joint_velocities(
         self, env_ids: torch.Tensor, values: torch.Tensor
     ) -> None:
-        self._write_joint_state("set_joint_velocities", env_ids, values)
+        if self._reset_nominal_joint_positions is None:
+            self._write_joint_state("set_joint_velocities", env_ids, values)
+            return
+        command = self._validated_command_values(
+            env_ids,
+            values,
+            name="reset joint velocities",
+        )
+        full = torch.zeros(
+            (env_ids.numel(), self.state_dim),
+            device=self.device,
+            dtype=torch.float32,
+        )
+        full.index_copy_(1, self.command_joint_indices, command)
+        self._project_mimic_velocities(
+            self.read_all_joint_positions(env_ids),
+            full,
+        )
+        self.write_all_joint_velocities(
+            env_ids,
+            self._preserve_unmasked_joint_state(
+                env_ids,
+                fresh=full,
+                velocity=True,
+            ),
+        )
+
+    def prepare_full_dof_reset(self, nominal_joint_positions: torch.Tensor) -> None:
+        """Freeze the complete articulation reset pose after backend startup."""
+
+        if self._reset_nominal_joint_positions is not None:
+            raise RuntimeError("full-DOF reset state is already prepared")
+        nominal = require_cuda_tensor(
+            nominal_joint_positions,
+            name=f"{self.label} nominal full joint positions",
+            ndim=1,
+            dtype=torch.float32,
+        )
+        if nominal.device != self.device or nominal.shape != (self.state_dim,):
+            raise ValueError(
+                f"{self.label} nominal full joint positions must have shape "
+                f"({self.state_dim},) on {self.device}"
+            )
+        assert_finite_async(
+            nominal,
+            name=f"{self.label} nominal full joint positions",
+        )
+        self._reset_nominal_joint_positions = nominal.clone()
+
+    def set_device_reset_mask(self, reset_mask: torch.Tensor | None) -> None:
+        """Select SAME_STEP rows while keeping reset projection CUDA-resident."""
+
+        if reset_mask is None:
+            self._device_reset_mask = None
+            return
+        mask = require_cuda_tensor(
+            reset_mask,
+            name=f"{self.label} device reset mask",
+            ndim=1,
+            leading_dim=self.num_envs,
+            dtype=torch.bool,
+        )
+        if mask.device != self.device:
+            raise ValueError(
+                f"{self.label} device reset mask must live on {self.device}"
+            )
+        self._device_reset_mask = mask
+
+    def _project_mimic_positions(self, full_positions: torch.Tensor) -> None:
+        if not self.mimic_follower_controls:
+            return
+        master = full_positions.index_select(1, self._mimic_master_indices)
+        projected = torch.zeros_like(master)
+        for coefficient in reversed(self._mimic_polycoef.unbind(dim=1)):
+            projected.mul_(master).add_(coefficient)
+        full_positions.index_copy_(1, self._mimic_dependent_indices, projected)
+
+    def _project_mimic_velocities(
+        self,
+        full_positions: torch.Tensor,
+        full_velocities: torch.Tensor,
+    ) -> None:
+        if not self.mimic_follower_controls:
+            return
+        master_position = full_positions.index_select(1, self._mimic_master_indices)
+        derivative = torch.zeros_like(master_position)
+        for degree in range(self._mimic_polycoef.shape[1] - 1, 0, -1):
+            derivative.mul_(master_position).add_(
+                self._mimic_polycoef[:, degree],
+                alpha=degree,
+            )
+        master_velocity = full_velocities.index_select(1, self._mimic_master_indices)
+        full_velocities.index_copy_(
+            1,
+            self._mimic_dependent_indices,
+            derivative * master_velocity,
+        )
+
+    def _preserve_unmasked_joint_state(
+        self,
+        env_ids: torch.Tensor,
+        *,
+        fresh: torch.Tensor,
+        velocity: bool,
+    ) -> torch.Tensor:
+        mask = self._device_reset_mask
+        if mask is None:
+            return fresh
+        selected_mask = mask.index_select(0, env_ids)[:, None]
+        current = (
+            self.read_all_joint_velocities(env_ids)
+            if velocity
+            else self.read_all_joint_positions(env_ids)
+        )
+        return torch.where(selected_mask, fresh, current)
 
     def write_joint_position_targets(
         self, env_ids: torch.Tensor, values: torch.Tensor
