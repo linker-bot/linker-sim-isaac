@@ -32,14 +32,14 @@ def test_write_tcp_urdf(tmp_path) -> None:
     output = tmp_path / "with_tcp.urdf"
     tcp = CuroboTcpFrame(
         frame_name="unit_test_tcp",
-        parent_frame="AR5V2_L_arm_flan_link",
+        parent_frame="arm_AR5_5_08L_W4C4A6_tcp",
         xyz=(0.0, 0.0, 0.13),
         rpy=(0.0, 0.0, 0.0),
     )
     write_curobo_tcp_urdf_with_frames(urdf_path, output, (tcp,))
     text = output.read_text(encoding="utf-8")
     assert 'name="unit_test_tcp"' in text
-    assert 'link="AR5V2_L_arm_flan_link"' in text
+    assert 'link="arm_AR5_5_08L_W4C4A6_tcp"' in text
 
 
 def _stage_with_parent(*, duplicate: bool = False):
@@ -48,7 +48,7 @@ def _stage_with_parent(*, duplicate: bool = False):
     stage = Usd.Stage.CreateInMemory()
     root = "/World/Robots/left"
     UsdGeom.Xform.Define(stage, root)
-    parent_name = "AR5V2_L_arm_flan_link"
+    parent_name = "arm_AR5_5_08L_W4C4A6_tcp"
     parent = UsdGeom.Xform.Define(stage, f"{root}/{parent_name}").GetPrim()
     UsdPhysics.RigidBodyAPI.Apply(parent)
     if duplicate:
@@ -83,8 +83,8 @@ def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
 
     assert binding == PhysicalTcpBinding(
         tcp_frame_name="AR5V2_L_pinch_tcp",
-        parent_frame_name="AR5V2_L_arm_flan_link",
-        parent_body_path=f"{root}/AR5V2_L_arm_flan_link",
+        parent_frame_name="arm_AR5_5_08L_W4C4A6_tcp",
+        parent_body_path=f"{root}/arm_AR5_5_08L_W4C4A6_tcp",
         offset_xyz=(0.01, -0.02, 0.13),
         offset_rpy=(0.2, -0.1, 0.3),
     )

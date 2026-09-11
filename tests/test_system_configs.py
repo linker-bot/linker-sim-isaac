@@ -221,7 +221,7 @@ def test_curobo_typed_profiles_compose_without_mapping_round_trip() -> None:
     )
 
     assert config.device.device == "cuda:4"
-    assert config.robot.flange_frame == "AR5V2_L_arm_flan_link"
+    assert config.robot.flange_frame == "arm_AR5_5_08L_W4C4A6_tcp"
     assert config.ik.position_tolerance == 0.002
     assert config.ik.num_seeds == 8
     assert config.motion_planner.num_ik_seeds == 8

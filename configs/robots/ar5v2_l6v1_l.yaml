@@ -27,8 +27,9 @@ robot:
   asset_type: mjcf
 
   # 组合机器人资产路径，相对仓库根目录。
-  # 文件中同时包含 AR5V2_L 机械臂和 LinkerHand L6V1 左手的 MJCF 描述。
-  asset_path: assets/combined_system/AR5V2_L6V1_L/AR5V2_L6V1_L.xml
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l6_l 生成，同时包含
+  # AR5V2_L 机械臂（== ar5_08 左臂）与 LinkerHand L6 左手，手部 mimic/equality 均保留。
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_l6_l/workstation.xml
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -103,11 +104,14 @@ curobo:
     # profiles.planning 提供，二者都不放在机器人资产 profile。
 
     # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
-    urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+    # 组合资产含手部，但规划模型仍使用共享的单独机械臂 URDF（ar5_08_single_l），
+    # 与组合 MJCF 中的机械臂子链运动学一致。
+    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.urdf
 
     # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
     # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
-    flange_frame: AR5V2_L_arm_flan_link
+    # 共享单元中该法兰即 link7 末端的 tcp link（与旧 AR5V2_L_arm_flan_link 位姿一致）。
+    flange_frame: arm_AR5_5_08L_W4C4A6_tcp
 
     # 默认 TCP frame；未声明 tool_frames 时必须提供。JSON 省略 tcp_frame_name 时使用此值，
     # 显式值只能选择已存在于 cuRobo context 的 frame。
@@ -131,17 +135,17 @@ joint_groups:
   # hand 仅列出可直接接收命令的六个 master 关节。MJCF equality 中的 DIP 等 follower
   # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
   arm:
-    - AR5V2_L_arm_joint_1
-    - AR5V2_L_arm_joint_2
-    - AR5V2_L_arm_joint_3
-    - AR5V2_L_arm_joint_4
-    - AR5V2_L_arm_joint_5
-    - AR5V2_L_arm_joint_6
-    - AR5V2_L_arm_joint_7
+    - arm_AR5_5_08L_W4C4A6_joint_1
+    - arm_AR5_5_08L_W4C4A6_joint_2
+    - arm_AR5_5_08L_W4C4A6_joint_3
+    - arm_AR5_5_08L_W4C4A6_joint_4
+    - arm_AR5_5_08L_W4C4A6_joint_5
+    - arm_AR5_5_08L_W4C4A6_joint_6
+    - arm_AR5_5_08L_W4C4A6_joint_7
   hand:
-    - L6V1_L_hand_index_mcp_pitch
-    - L6V1_L_hand_middle_mcp_pitch
-    - L6V1_L_hand_ring_mcp_pitch
-    - L6V1_L_hand_pinky_mcp_pitch
-    - L6V1_L_hand_thumb_cmc_roll
-    - L6V1_L_hand_thumb_cmc_pitch
+    - hand_lh_index_mcp_pitch
+    - hand_lh_middle_mcp_pitch
+    - hand_lh_ring_mcp_pitch
+    - hand_lh_pinky_mcp_pitch
+    - hand_lh_thumb_cmc_roll
+    - hand_lh_thumb_cmc_pitch

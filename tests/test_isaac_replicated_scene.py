@@ -470,7 +470,7 @@ def test_physical_tcp_binding_consumes_catalog_typed_robot_profile() -> None:
     stage = Usd.Stage.CreateInMemory()
     root_path = "/World/envs/env_0/Robots/left"
     UsdGeom.Xform.Define(stage, root_path)
-    parent_name = "AR5V2_L_arm_flan_link"
+    parent_name = "arm_AR5_5_08L_W4C4A6_tcp"
     parent = UsdGeom.Xform.Define(stage, f"{root_path}/{parent_name}").GetPrim()
     UsdPhysics.RigidBodyAPI.Apply(parent)
 

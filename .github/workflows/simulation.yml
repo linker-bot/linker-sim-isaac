@@ -27,6 +27,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The GPU/Isaac acceptance matrix loads composed models with meshes,
+          # which live in the linker-robot-assets submodule (meshes via Git LFS).
+          submodules: recursive
+          lfs: true
+
+      - name: Fetch submodule LFS meshes
+        # actions/checkout pulls top-level LFS but not submodule LFS; mirror the
+        # documented bootstrap so the composed workstations resolve their meshes.
+        run: git -C packages/linker-robot-assets lfs pull
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1

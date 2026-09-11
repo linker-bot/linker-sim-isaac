@@ -28,6 +28,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # linker-robot-assets is a submodule; validate-config parses the
+          # composed workstation.urdf and test-pure reads workstation.xml from
+          # it. No LFS meshes are needed for the CPU gate (XML/text only).
+          submodules: recursive
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1

@@ -21,10 +21,23 @@ and cuRobo 0.8.0. Treat `pyproject.toml` and `uv.lock` as the source of truth.
 
 ## 2. Clone The Workspace
 
+Robot geometry (AR5 arm, LinkerHand L6) is consumed from the shared
+[`linker-sim-assets`](https://github.com/linker-bot/linker-sim-assets) repository,
+mounted as a Git submodule at `packages/linker-robot-assets` and pinned to a tag.
+Its meshes are stored with Git LFS, so clone with submodules and pull LFS content:
+
 ```bash
-git clone https://github.com/linker-bot/linker-sim-isaac.git
+git clone --recurse-submodules https://github.com/linker-bot/linker-sim-isaac.git
 cd linker-sim-isaac
+git -C packages/linker-robot-assets lfs pull
 uv python install 3.12
+```
+
+For an existing checkout that predates the submodule, initialize it once:
+
+```bash
+git submodule update --init packages/linker-robot-assets
+git -C packages/linker-robot-assets lfs pull
 ```
 
 Run every maintained command below from this checkout root.

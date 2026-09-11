@@ -156,7 +156,7 @@ def test_typed_curobo_composition_preserves_robot_resources() -> None:
     )
 
     assert config.robot.urdf_path is not None
-    assert config.robot.urdf_path.name == "AR5V2_L.urdf"
+    assert config.robot.urdf_path.name == "workstation.urdf"
     assert config.ik.max_batch_size == 8
     assert config.ik.collision_cache == {}
     assert config.motion_planner.collision_cache == {"cuboid": 48, "mesh": 4}
@@ -600,25 +600,25 @@ def test_typed_robot_profile_projects_curobo_collision_model() -> None:
     assert config.robot.robot_config_path is not None
     assert config.robot.robot_config_path.name == "AR5V2_L_curobo.yml"
     assert config.robot.urdf_path is not None
-    assert config.robot.urdf_path.name == "AR5V2_L.urdf"
+    assert config.robot.urdf_path.name == "workstation.urdf"
     assert config.robot.base_link == "world"
-    assert config.robot.flange_frame == "AR5V2_L_arm_flan_link"
+    assert config.robot.flange_frame == "arm_AR5_5_08L_W4C4A6_tcp"
     assert config.robot.default_tcp_frame == "AR5V2_L_pinch_tcp"
     assert config.robot.resolved_tool_frames == ("AR5V2_L_pinch_tcp",)
-    assert config.robot.custom_tcp_frames[0].parent_frame == "AR5V2_L_arm_flan_link"
+    assert config.robot.custom_tcp_frames[0].parent_frame == "arm_AR5_5_08L_W4C4A6_tcp"
     assert config.robot.load_collision_spheres is True
 
 
 @pytest.mark.parametrize("side", ("L", "R"))
 def test_curobo_collision_model_ignores_concentric_wrist_links(side: str) -> None:
     config = load_yaml(f"assets/single_system/arm/AR5V2_{side}/AR5V2_{side}_curobo.yml")
-    prefix = f"AR5V2_{side}_arm"
+    prefix = f"arm_AR5_5_08{side}_W4C4A6"
     ignored = config["robot_cfg"]["kinematics"]["self_collision_ignore"][
         f"{prefix}_link4"
     ]
 
     assert f"{prefix}_link7" in ignored
-    assert f"{prefix}_flan_link" in ignored
+    assert f"{prefix}_tcp" in ignored
 
 
 @pytest.mark.parametrize("profile_name", ("ar5v2_l6v1_l", "ar5v2_l6v1_r"))
