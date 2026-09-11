@@ -19,7 +19,7 @@ robot:
   kind: arm
   # profile 内的资产逻辑名称。正式 scene 装配会使用 robots[].label 作为 articulation 实例名；
   # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
-  name: ar5v2_l
+  name: ar5_08_l
 
   # 资产类型。
   # 当前项目支持 mjcf 和 urdf；这里使用机械臂 MJCF 资产。

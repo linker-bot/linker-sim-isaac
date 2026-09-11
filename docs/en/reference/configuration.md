@@ -275,7 +275,7 @@ Common instance shape:
 ```yaml
 robots:
   - label: left_arm
-    robot_profile: ar5v2_l6v1_l
+    robot_profile: ar5_08_l6_l
     root_pose:
       xyz: [0.0, 0.09, 0.0]
       rpy: [-1.5707, 0.0, 0.0]

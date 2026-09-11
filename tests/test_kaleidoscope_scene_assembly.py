@@ -153,7 +153,7 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
             profile={},
             tcp_frame_name="tcp",
         )
-        for label, view in (("ar5v2_l6v1_0", left), ("ar5v2_l6v1_1", right))
+        for label, view in (("ar5_08_l6_0", left), ("ar5_08_l6_1", right))
     )
     replicated = SimpleNamespace(robots=robots, env_origins=origins)
     tcp_views = {
@@ -342,7 +342,7 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
             profile={},
             tcp_frame_name="tcp",
         )
-        for label, view in (("ar5v2_l6v1_0", left), ("ar5v2_l6v1_1", right))
+        for label, view in (("ar5_08_l6_0", left), ("ar5_08_l6_1", right))
     )
     replicated = SimpleNamespace(robots=robots, env_origins=origins)
     tcp_views = {

@@ -24,7 +24,7 @@ def load_robot_profile_by_name(name: str) -> RobotProfileSettings:
 
 
 def test_strict_profile_builds_collision_free_kinematics_config() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     settings = CuroboProfileSettings.from_mapping(
         {
             "kinematics": {
@@ -55,7 +55,7 @@ def test_strict_profile_builds_collision_free_kinematics_config() -> None:
 
 
 def test_kinematics_factories_reject_raw_robot_profile_mapping() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     settings = object()
 
     with pytest.raises(TypeError, match="robot_profile must be RobotProfileSettings"):

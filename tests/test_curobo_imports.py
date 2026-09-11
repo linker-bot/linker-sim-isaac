@@ -290,7 +290,7 @@ def _fake_context_config(calls: list[object]) -> CuroboConfig:
     return CuroboConfig(
         robot=CuroboRobotConfig.from_mapping(
             {
-                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "robot_config_path": "configs/robots/ar5_08_l.yaml",
                 "default_tcp_frame": "tool",
             }
         ),

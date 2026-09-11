@@ -2387,30 +2387,30 @@ generated_inventory:
   test_python:
     count: 123
     path_sha256: f23d62ced1f4c2926574ae9735ea116ffc1aa88a8f24de744a8a943e10051f11
-    path_content_sha256: 25c6cd43e73f69ca4e074122b5200369f1798b349cb2d5f4f1d6e9c2e93c9a51
+    path_content_sha256: d8c24c71f5975c13bcbf7f6e3470a5283ca198c842413b4d6808726c15fff1e8
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
     - path: tests/test_check_isaac_runtime.py
       sha256: f1dbce508026d81c3a389f2940ce0f4fe7c384821d7aa39191f14e4c604764a2
     - path: tests/test_configuration_modes.py
-      sha256: 65c85b01b74111491d92e8081813bdd5f4332d1b3d3cbc055708c599d364132e
+      sha256: a9522a5c4f2dfbc89ffb86078cac1039aa957db8014175c79bd0998a7db727a0
     - path: tests/test_controller_configs.py
       sha256: 9be245e6877cb0af4f0c64d3f5818dbd545f11d3cacc36f9151809496c7b52f2
     - path: tests/test_core_api.py
       sha256: 1965e3f42889de8ed9aea605b235dfff42ccefa2ebe9ca322a6842069598891a
     - path: tests/test_curobo_collision_world.py
-      sha256: 3b73c742c0a8a1d94ab77c3ca56744f2b6ce704a2657cab519ad5192c042fae4
+      sha256: b541a591987771e5abf4b67e7dd3f07be14b8f1bd7b65abbf5459c7053fd3f92
     - path: tests/test_curobo_config.py
-      sha256: 7703b669ade019cf791ece61f45c970722685bf6b6c3be4a664b608022c83e02
+      sha256: faf4999f534c1c8b77ba4cce718b127b8219e4094218a71213cbf7081d7b06a3
     - path: tests/test_curobo_device_batch_ik.py
       sha256: c0d0ddb6aaba0976199cf3b4ec7f863cc160e5e74cfd0fef928ac0dd46b33d95
     - path: tests/test_curobo_imports.py
-      sha256: 46eab1c2f58f930cb74e86d52f450d899b9deecda38c16656f912c58c1076c94
+      sha256: 59033dd0af503cd0b5e4dc607967b9919a2f5e2237fcdd6c0d149a8dcaf3bec6
     - path: tests/test_curobo_kinematics.py
       sha256: 033671686abf373158d8b4a11dd3af9864f888be3f22ee26b537b07af74c6ef9
     - path: tests/test_curobo_kinematics_context.py
-      sha256: df758c32209f9723e1b8069d1faebf16d4dc875a1835bf0fec02845bd798adc3
+      sha256: 4191a5d88e1fc9ce1573fb41e241962c63e83167f67809ac9a0a7c4c4e7fcff4
     - path: tests/test_curobo_motion_planner.py
       sha256: 603b383bb8f7f2b81d0bbe6c2e57a6c28c61bbb882f808b88268a8094173f369
     - path: tests/test_curobo_trajectory_adapter.py
@@ -2458,7 +2458,7 @@ generated_inventory:
     - path: tests/test_kaleidoscope_adapters.py
       sha256: 8c5b7d0d956eaaafaa872c082e7aa68fa01729c3817a9c9bdd98e1d383325e8e
     - path: tests/test_kaleidoscope_composition.py
-      sha256: a66ba290991582d4d2d686b6d0c5f0012b38609f6a2d02aa917d54f979215f76
+      sha256: 38b54a93ea0977ab4fd93dae9b07fd199f4606b35a5cadf8ff89fcc9b03b80d5
     - path: tests/test_kaleidoscope_control_mode.py
       sha256: 31da0e1a160a523ac2dfff64f0cec2375272cf34c940c755360b0aa14050ce42
     - path: tests/test_kaleidoscope_gpu_contracts.py
@@ -2476,7 +2476,7 @@ generated_inventory:
     - path: tests/test_kaleidoscope_physx_ports.py
       sha256: d65422988ac75f447a31a45e2deae3cbff44a33f451e1ee0f42d3d97996e799c
     - path: tests/test_kaleidoscope_scene_assembly.py
-      sha256: 5c1ef928afe8ee1ab568d1b4614f007db80d3b6e7662628d5e6a25e5e13fd439
+      sha256: 8c1c1d95d814f671c47f8f8e972da60e67f1e28cfeaeb5356adeeca33105cc2e
     - path: tests/test_kaleidoscope_viewer.py
       sha256: 191ea4965ead0d688580dcbdf83ba080169603b57709ab0e7ba9e154e7af1e0d
     - path: tests/test_kaleidoscope_viewport_config.py
@@ -2488,7 +2488,7 @@ generated_inventory:
     - path: tests/test_markdown_links.py
       sha256: 3d7fc51f9dcbf091d466d0686f7c66734ddc975a519b55e4da8a0056b778e8d9
     - path: tests/test_mimic.py
-      sha256: 7feda5e5d9c043744b3a4a79ec977b2ea29b749dc2c0da05bacaa4a359586ec5
+      sha256: b0f46c87c06fc6abed66da39def3d3b2af1770bf80ddfb62101e3b15a5ef8a61
     - path: tests/test_mirror_camera_intrinsics.py
       sha256: d09024232554bf5171d29ed870a101854f44d3625ef615fe1a84958441283922
     - path: tests/test_mirror_control_mode.py
@@ -2572,9 +2572,9 @@ generated_inventory:
     - path: tests/test_repository_ruleset.py
       sha256: 0594d94c19f9cdceb273234e9f166178c4e49b8d422d54a2c66351ef41a7e895
     - path: tests/test_robot_capabilities.py
-      sha256: 46ff5562840acde468dd7ab54cd25c04a330e983a5b8f99a7c257eecab7e1413
+      sha256: eac7fefacaea78e45da040dc9d2266971adaf2103966ade9b7611a23571e7a39
     - path: tests/test_robot_instances.py
-      sha256: 981da8ca86cdb1ca88eed925e123c32167f001d1ffa88be27b10b1ade3804ae6
+      sha256: 2b35b9a7955916f70023ac6308133e5b0c20dcfd536b381a8b4f8af9dad37fec
     - path: tests/test_robot_loader_import_config.py
       sha256: 1ce406903e3f05edcbdc2793ea7307ffd3ef7237298b45addcdf3fda80e1df9b
     - path: tests/test_robot_profile_schema.py
@@ -2618,11 +2618,11 @@ generated_inventory:
     - path: tests/test_strict_yaml_config.py
       sha256: df5284c46f0997df9bf5b1946ba2ebe96519afb21e1d01355febd30abcb17cd4
     - path: tests/test_system_configs.py
-      sha256: 6e92a4d55c55bee28ac1ce8e9e41e275e2c8ba035b3f429b4895fa52ef3eea30
+      sha256: d2a3ce1a27e3a25b35788ee684592804b6885f0daca1054716bfb420ba6b6b75
     - path: tests/test_target_architecture.py
       sha256: 42d5b541cf70c976804125b9bc46208d5582137813b80040562184018e8ab453
     - path: tests/test_tcp_frames.py
-      sha256: 34a1e33bfc75df11a6e24082c237ec24864c2f012992b33a46c911945e00e469
+      sha256: bdefffb0444cdb0ececea9e8008bde9af1b13ef579c066ca7f0cf3c37923d0e6
     - path: tests/test_training_configuration.py
       sha256: 367527f3615641debba69b351ed5ed0b00f815407854bff3e01d8fc38386cf63
     - path: tests/test_trajectory_retiming.py
@@ -2636,9 +2636,9 @@ generated_inventory:
     - path: tests/test_workspace_build.py
       sha256: d291d6d1c9cfbd483b053ec1ddaafe4481d0b74932473717812e00d1b19f6d3f
   configuration_yaml:
-    count: 36
-    path_sha256: 5623fb868d8936b9db03aa9cb054a64682d9f8e4578aa17a44e55939a62b3a0a
-    path_content_sha256: f4b9d79eb6e2f392b983b01c1fbc8ac2a1d669355858ff334eb67a6adf98354f
+    count: 42
+    path_sha256: 7cdb2edd526b89ac3d17db6099fab5a750f10985f519aa30310d1ad24a2b451b
+    path_content_sha256: 810a75c730b2fa4c3071c5ec817786fdcf1fb2210771c4e6e741bc2627e5686b
     files:
     - path: configs/control/hybrid_force_position.yaml
       sha256: 406b89af3c647515742853b2fc61c3d7d49ced99c11244da6a25c5321f894b60
@@ -2690,22 +2690,34 @@ generated_inventory:
       sha256: 5765733f319f96f41c46032c4cf7926bd340788204d18ef1e391700a93ed6a2a
     - path: configs/planning/mirror.yaml
       sha256: 542adf76ef944d71a30c49b220539b28cedabc583d609f8baba53cc3b27ea5b8
-    - path: configs/robots/ar5v2_l.yaml
-      sha256: 8a44b7ef0ed1dca50a28571f6ae6e6421a9c2677fe5afc5b58bfce65d3a5d059
-    - path: configs/robots/ar5v2_l6v1_l.yaml
-      sha256: 15b71b44b9166a1adcf37f4f72f2e012435e8b697251ca0bf7e2297def7aad15
-    - path: configs/robots/ar5v2_l6v1_r.yaml
-      sha256: e422c72d18fca9588b9be295a3e97781e37de20ebf39def036644488c95e5a06
-    - path: configs/robots/l6v1_l.yaml
-      sha256: c797fb9617f91deee409f71bb58b0d5c8b790277d4d64f6e93a8064dc42fc124
-    - path: configs/robots/l6v1_r.yaml
-      sha256: c772459926b78624938e7cff0209f78619b7bbbd942d68df1d616e1646bf3b20
+    - path: configs/robots/ar5_08_l.yaml
+      sha256: 64db989fac0406e320e35235092c1b4109e75f538d1a268c31735dc6d5c410b8
+    - path: configs/robots/ar5_08_l20lite_l.yaml
+      sha256: 6ff54957aefa30711d6eff7d11df753a505f06205266ea0ad8068a5e290669ed
+    - path: configs/robots/ar5_08_l20lite_r.yaml
+      sha256: 66c31f159f34b1bee6e51a65e69ea4b64594e2b6b411a18875857340ca564e77
+    - path: configs/robots/ar5_08_l25_l.yaml
+      sha256: ab23d34633a5579d5c722ea440db557d0549bd05c28168740a6e5b33aa6e686b
+    - path: configs/robots/ar5_08_l25_r.yaml
+      sha256: 913c140bc049796c1d5e9be50e82c2c14826800547e5602739fc931b5e46f42d
+    - path: configs/robots/ar5_08_l6_l.yaml
+      sha256: 935c434440c3ad8b8d8cec0f5d653a9e2cf6d6e31b053740b53ef09690689044
+    - path: configs/robots/ar5_08_l6_r.yaml
+      sha256: 9d11f9f24a5679cffd9963f467188cc732e91e988548e45a5f83c322c86e014b
+    - path: configs/robots/ar5_08_o6_l.yaml
+      sha256: ee3590f0c082f0df2bb83d65fdb0e8bfeade86a68cd80c86321fc0b78159f388
+    - path: configs/robots/ar5_08_o6_r.yaml
+      sha256: e20f822986c0c3aa1ab1add7a406613cf2b64c60ac73a61d8f21619f8946768d
+    - path: configs/robots/l6_l.yaml
+      sha256: 3d042d4d7f3d833653ad77f0f144923e4d026a5aeab80cf8934321cf6b240ae8
+    - path: configs/robots/l6_r.yaml
+      sha256: 0f22781f38b0a1a97b6b4d9a06f24688ff693ddfd38194d5cf708ed583f3a42b
     - path: configs/scenes/kaleidoscope/tblock_push.yaml
-      sha256: 2b4445bc8ccfa39f6de5ffda480b0a48c0c6dfaf896b8b99b5296ec905d142e6
+      sha256: 237fe96900b4325a55c66b7556df8952b699e46fd4e7d31a99e409db70cdc1de
     - path: configs/scenes/mirror/scene3.yaml
-      sha256: a3c5fd5642f06347199df6d51cbde0816d5fa6a8b0c28ddc21cea0eb45d5c3fd
+      sha256: 7ea59e410cdc33b83fb944b6029e95626632e41dc919e1c9716a56e17e99b998
     - path: configs/scenes/mirror/scene3_hybrid.yaml
-      sha256: b63c8677baa625dc54853d9a2c61f05fb6402ecbafad281ece076d7bba44315f
+      sha256: 43a03edbcbdc8664de29feb7a9f4bb2949e98819d4b6ed1bd57f84ebd6fe9904
     - path: configs/tasks/kaleidoscope/tblock_push_v1.yaml
       sha256: 159f661c9a180eb878a0afe95be1adfe8f5bb4fcee8c1f3bbb70f0d676ac9bd3
     - path: configs/training/skrl/tblock_push_v1_ppo.yaml
@@ -2778,7 +2790,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: df50f4c39f94f8f79b0a2c7c3f93708999def7169e13a60c9c7de69df4335ad6
+    path_content_sha256: 12e95df0edd746a55b3898e86e9415d92308d31a7f370ecace36adc879ba9fe0
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2839,13 +2851,13 @@ generated_inventory:
     - path: docs/en/operations/troubleshooting.md
       sha256: c6873ee57f92fa33cdfb810c92fa652ef0b3c753a3817f09963339818459071a
     - path: docs/en/reference/configuration.md
-      sha256: a9910ab1526a6da3a3fddebd58570025cf11857ed5ada2a9a6ae62f1390fa42d
+      sha256: 4b0461f35abc4b42a8ef83e7e07da286385d94f2ec3cfed9f244789ca9b731ca
     - path: docs/en/reference/kaleidoscope-api.md
       sha256: 02e65bf094c8b08a775702a89b2c5096a08ae93b7fb3480af024d787620718a3
     - path: docs/en/reference/mirror-cli.md
       sha256: 2f6481612a6e4e09873c767c3ed1f89ec11eaaddb60af293c2f459f5c6811015
     - path: docs/en/reference/mirror-json.md
-      sha256: 38b2f856d2cee7d9ad05d8d59e6b9fb917472f3c70f211e785e369b77bac4d2b
+      sha256: cebe3cf2833c06a2793e1e415c6822614905b189b0c3980f048134ed9c666243
     - path: docs/en/reference/outputs.md
       sha256: 527ffb32b82f379b77e02b39708f5add86acc82150b10ffa3cdbcdd253b2b3f0
     - path: docs/en/reference/python-api.md
@@ -2859,7 +2871,7 @@ generated_inventory:
     - path: docs/zh-CN/development/module-map.md
       sha256: bd885d295bef42c0cb13a01e3bc08993c7caa7c77cc15c989a1d5d2a8cecf5c1
     - path: docs/zh-CN/development/naming.md
-      sha256: 15e1bcd3a09682252a23083f0d0d90df25a2c1fa8d40e1cddca1795169f2c6ec
+      sha256: 7a1eef92622b200a2c565dbdc8de3524e3d467702319c7a09713a7f72b4de46a
     - path: docs/zh-CN/development/object-assets.md
       sha256: db6fcc87d9522926123c9ece6704cd766a1daac18f1d21193ae96c05932d795b
     - path: docs/zh-CN/development/type-checking.md
@@ -2915,7 +2927,7 @@ generated_inventory:
     - path: docs/zh-CN/reference/mirror-cli.md
       sha256: 764ba6e7b195cec05a35d467d67a3da8b209b551aa53a4d5ce2db867181b5505
     - path: docs/zh-CN/reference/mirror-json.md
-      sha256: b58e7f2024e8a1c06b6e403184163436b8bdc67e7b96b9c0b7e7648d9139baf2
+      sha256: 78147f5f3f51867fda296eaece06f60633c62caeff3b9d9e5468e04cb3f1afa9
     - path: docs/zh-CN/reference/outputs.md
       sha256: fd4e043acf2966562e6bb2a49bf45975796822ebc7fbd8e569dd129f2c200106
     - path: docs/zh-CN/reference/python-api.md

@@ -13,7 +13,7 @@ inventory:
       - yaml_or_request_owned
       - allowlisted_retained
   project_yaml_glob: configs/**/*.yaml
-  project_yaml_count: 36
+  project_yaml_count: 42
   third_party_task_glob: src/linkerbot_sim/backends/curobo/resources/task/**/*.yml
   third_party_task_count: 7
 

@@ -54,8 +54,8 @@ def test_curobo_complete_typed_config_validates_backend_sections() -> None:
     config = CuroboConfig(
         robot=CuroboRobotConfig.from_mapping(
             {
-                "robot_config_path": "configs/robots/ar5v2_l.yaml",
-                "urdf_path": "assets/robots/ar5v2_l/urdf/ar5v2_l.urdf",
+                "robot_config_path": "configs/robots/ar5_08_l.yaml",
+                "urdf_path": "assets/robots/ar5_08_l/urdf/ar5_08_l.urdf",
                 "base_link": "base",
                 "default_tcp_frame": "tool",
                 "custom_tcps": [
@@ -124,7 +124,7 @@ def test_curobo_complete_typed_config_validates_backend_sections() -> None:
 
 def test_mirror_curobo_profile_contains_valid_algorithm_defaults() -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=_mirror_curobo_settings(),
         cuda_device=0,
     )
@@ -146,7 +146,7 @@ def test_mirror_curobo_profile_contains_valid_algorithm_defaults() -> None:
 
 
 def test_typed_curobo_composition_preserves_robot_resources() -> None:
-    robot_profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    robot_profile = load_robot_profile_by_name("ar5_08_l6_l")
     curobo_settings = _mirror_curobo_settings()
 
     config = curobo_config_from_profiles(
@@ -165,7 +165,7 @@ def test_typed_curobo_composition_preserves_robot_resources() -> None:
 
 def test_curobo_config_from_profiles_applies_profile_defaults() -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=_mirror_curobo_settings(),
         cuda_device=0,
     )
@@ -183,7 +183,7 @@ def test_curobo_profile_root_device_is_projected_into_backend_config() -> None:
     settings = _mirror_curobo_settings()
 
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=settings,
         cuda_device=3,
     )
@@ -233,7 +233,7 @@ def test_kinematics_collision_disabled_may_retain_collision_cache() -> None:
 
     settings = CuroboProfileSettings.from_mapping(curobo)
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=settings,
         cuda_device=0,
     )
@@ -274,7 +274,7 @@ def test_motion_planner_collision_disabled_may_omit_or_retain_collision_cache(
 
     settings = CuroboProfileSettings.from_mapping(curobo)
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=settings,
         cuda_device=0,
     )
@@ -327,7 +327,7 @@ def test_curobo_task_resources_are_owned_exactly_by_versioned_bundle() -> None:
 def test_curobo_profile_requires_strict_root_cuda_device(value: object) -> None:
     with pytest.raises(ValueError, match="cuda_device"):
         curobo_config_from_profiles(
-            load_robot_profile_by_name("ar5v2_l6v1_l"),
+            load_robot_profile_by_name("ar5_08_l6_l"),
             curobo_settings=_mirror_curobo_settings(),
             cuda_device=value,  # type: ignore[arg-type]
         )
@@ -348,7 +348,7 @@ def test_curobo_composition_rejects_robot_device_ownership(
     robot_override: dict[str, object],
     path: str,
 ) -> None:
-    robot = load_robot_profile_mapping("ar5v2_l6v1_l")
+    robot = load_robot_profile_mapping("ar5_08_l6_l")
     for key, value in robot_override.items():
         if key == "curobo":
             robot["curobo"] = {**robot["curobo"], **value}
@@ -387,7 +387,7 @@ def test_backend_algorithm_and_device_configs_have_no_mapping_parser() -> None:
 
 def test_curobo_context_validates_typed_config_before_runtime_imports() -> None:
     valid = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
     invalid = replace(
@@ -421,7 +421,7 @@ def test_curobo_robot_boolean_field_rejects_truthy_string() -> None:
     with pytest.raises(ValueError, match="load_collision_spheres"):
         CuroboRobotConfig.from_mapping(
             {
-                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "robot_config_path": "configs/robots/ar5_08_l.yaml",
                 "default_tcp_frame": "tool",
                 "load_collision_spheres": "false",
             }
@@ -432,7 +432,7 @@ def test_curobo_context_passes_exposed_ik_and_planner_parameters() -> None:
     config = CuroboConfig(
         robot=CuroboRobotConfig.from_mapping(
             {
-                "robot_config_path": "configs/robots/ar5v2_l.yaml",
+                "robot_config_path": "configs/robots/ar5_08_l.yaml",
                 "default_tcp_frame": "tool",
             }
         ),
@@ -567,7 +567,7 @@ def test_curobo_config_rejects_scene_cache_types_ignored_by_v080() -> None:
 def test_curobo_tcp_frame_uses_default_parent_when_omitted() -> None:
     robot = CuroboRobotConfig.from_mapping(
         {
-            "robot_config_path": "configs/robots/ar5v2_l.yaml",
+            "robot_config_path": "configs/robots/ar5_08_l.yaml",
             "default_tcp_frame": "flange",
             "custom_tcps": [
                 {
@@ -584,7 +584,7 @@ def test_curobo_tcp_frame_uses_default_parent_when_omitted() -> None:
 def test_curobo_robot_config_accepts_tool_frames() -> None:
     robot = CuroboRobotConfig.from_mapping(
         {
-            "robot_config_path": "configs/robots/ar5v2_l.yaml",
+            "robot_config_path": "configs/robots/ar5_08_l.yaml",
             "tool_frames": ["tool"],
         }
     )
@@ -593,7 +593,7 @@ def test_curobo_robot_config_accepts_tool_frames() -> None:
 
 def test_typed_robot_profile_projects_curobo_collision_model() -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
 
@@ -621,7 +621,7 @@ def test_curobo_collision_model_ignores_concentric_wrist_links(side: str) -> Non
     assert f"{prefix}_tcp" in ignored
 
 
-@pytest.mark.parametrize("profile_name", ("ar5v2_l6v1_l", "ar5v2_l6v1_r"))
+@pytest.mark.parametrize("profile_name", ("ar5_08_l6_l", "ar5_08_l6_r"))
 def test_curobo_solver_input_materializes_profile_paths_and_tcp(
     profile_name: str,
     tmp_path: Path,
@@ -662,7 +662,7 @@ def test_curobo_materialization_uses_environment_cache_root(
     cache_root = tmp_path / "external-cache"
     monkeypatch.setenv("LINKERBOT_SIM_CACHE_ROOT", str(cache_root))
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
 
@@ -676,7 +676,7 @@ def test_curobo_materialization_uses_environment_cache_root(
 
 def test_curobo_materialization_rebuilds_corrupted_cache(tmp_path: Path) -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
     expected_frame = config.robot.custom_tcp_frames[0].frame_name
@@ -699,7 +699,7 @@ def test_curobo_materialization_rebuilds_valid_xml_with_tampered_robot_body(
     element_tag: str,
 ) -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
     materialized = materialize_curobo_config(config, cache_root=tmp_path)
@@ -738,7 +738,7 @@ def test_curobo_materialization_is_atomic_under_concurrency(
     from linkerbot_sim.backends.curobo import robot_model
 
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         cuda_device=0,
     )
     expected_frame = config.robot.custom_tcp_frames[0].frame_name

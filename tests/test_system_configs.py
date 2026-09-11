@@ -215,7 +215,7 @@ def test_curobo_typed_profiles_compose_without_mapping_round_trip() -> None:
         }
     )
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         curobo_settings=profile,
         cuda_device=4,
     )
@@ -361,13 +361,13 @@ def test_robot_solver_iterations_parse_grouped_mapping() -> None:
 
 def test_right_side_urdf_assets_exist() -> None:
     arm_urdf = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l6v1_r"),
+        load_robot_profile_by_name("ar5_08_l6_r"),
         cuda_device=0,
     ).robot.urdf_path
     assert arm_urdf is not None and arm_urdf.is_file()
 
     hand_mjcf = RobotAssetConfig.from_profile(
-        load_robot_profile_by_name("l6v1_r"),
+        load_robot_profile_by_name("l6_r"),
         prim_path="/World/Robots/test_hand",
     ).asset_path
     assert hand_mjcf.with_suffix(".urdf").is_file()

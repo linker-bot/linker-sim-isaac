@@ -39,8 +39,8 @@ def _instance(
 def test_typed_robot_instances_preserve_scene_order_and_generate_dense_ids() -> None:
     instances = robot_scene_instances_from_settings(
         (
-            _instance("ar5v2_l6v1_l", label="left_arm"),
-            _instance("ar5v2_l6v1_r", label="right_arm"),
+            _instance("ar5_08_l6_l", label="left_arm"),
+            _instance("ar5_08_l6_r", label="right_arm"),
         )
     )
 
@@ -138,9 +138,9 @@ def test_same_domain_instance_paths_cannot_nest_prim_trees(
 
 
 def test_robot_execution_applies_instance_label_and_prim_path() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     instance = robot_scene_instances_from_settings(
-        (_instance("ar5v2_l6v1_l", label="robot_a"),)
+        (_instance("ar5_08_l6_l", label="robot_a"),)
     )[0]
 
     execution = RobotExecutionConfig.from_profile(profile, scene_instance=instance)
@@ -151,7 +151,7 @@ def test_robot_execution_applies_instance_label_and_prim_path() -> None:
 
 
 def test_robot_execution_requires_scene_instance() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
 
     with pytest.raises(TypeError, match="scene_instance"):
         RobotExecutionConfig.from_profile(profile)  # type: ignore[call-arg]
@@ -159,13 +159,13 @@ def test_robot_execution_requires_scene_instance() -> None:
 
 def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -> None:
     profile = replace(
-        load_robot_profile_by_name("ar5v2_l6v1_l"),
+        load_robot_profile_by_name("ar5_08_l6_l"),
         controller_profile="robot_bundle",
     )
     instance_override = robot_scene_instances_from_settings(
         (
             _instance(
-                "ar5v2_l6v1_l",
+                "ar5_08_l6_l",
                 label="instance_override",
                 controller_profile="instance_bundle",
             ),
@@ -181,7 +181,7 @@ def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -
     )
 
     robot_override = robot_scene_instances_from_settings(
-        (_instance("ar5v2_l6v1_l", label="robot_override"),)
+        (_instance("ar5_08_l6_l", label="robot_override"),)
     )[0]
     execution = RobotExecutionConfig.from_profile(
         profile, scene_instance=robot_override
@@ -191,7 +191,7 @@ def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -
         == "robot_bundle"
     )
 
-    default_profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    default_profile = load_robot_profile_by_name("ar5_08_l6_l")
     execution = RobotExecutionConfig.from_profile(
         default_profile,
         scene_instance=robot_override,
@@ -206,7 +206,7 @@ def test_controller_profile_resolution_uses_instance_then_robot_then_runtime() -
 def test_robot_instance_rejects_unsafe_controller_profile(value: str) -> None:
     with pytest.raises(ValueError, match="controller_profile"):
         RobotSceneInstanceConfig(
-            robot_profile="ar5v2_l6v1_l",
+            robot_profile="ar5_08_l6_l",
             root_pose=RootPoseConfig(),
             label="robot_a",
             controller_profile=value,

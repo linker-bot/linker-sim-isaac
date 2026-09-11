@@ -1,4 +1,4 @@
-# AR5 机械臂 + LinkerHand L6 右手组合配置。
+# AR5 机械臂 + LinkerHand L25 右手组合配置。
 #
 # 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
 # - scene 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
@@ -11,7 +11,7 @@
 # - 这里不写机器人在场景中的 root_pose；root_pose 属于所属产品的
 #   configs/scenes/<mode>/<scene>.yaml。
 # - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
-# - 该组合资产包含 AR5V2_R 机械臂和 L6V1 右手，但 cuRobo 只加载机械臂 URDF；
+# - 该组合资产包含 AR5V2_R 机械臂和 L25 右手，但 cuRobo 只加载机械臂 URDF；
 #   因此手部可参与 Isaac 接触与控制，却不属于 cuRobo 的运动学链或 collision spheres。
 
 robot:
@@ -19,7 +19,7 @@ robot:
   kind: arm_hand
   # profile 内的资产逻辑名称。正式 scene 装配会使用 robots[].label 作为 articulation 实例名；
   # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
-  name: ar5v2_l6v1_r
+  name: ar5_08_l25_r
 
   # 资产类型。
   # 当前项目支持 mjcf 和 urdf；这里使用 mjcf，因为机械臂+灵巧手组合资产由 MJCF merge 得到，
@@ -27,9 +27,9 @@ robot:
   asset_type: mjcf
 
   # 组合机器人资产路径，相对仓库根目录。
-  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l6_r 生成，同时包含
-  # AR5V2_R 机械臂（== ar5_08 右臂）与 LinkerHand L6 右手，手部 mimic/equality 均保留。
-  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l6_r/workstation.xml
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l25_r 生成，同时包含
+  # AR5V2_R 机械臂（== ar5_08 右臂）与 LinkerHand L25 右手，手部 mimic/equality 均保留。
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l25_r/workstation.xml
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -132,7 +132,7 @@ curobo:
 joint_groups:
   # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
   # 默认 controlled_joints=[all] 时，命令/轨迹向量顺序来自 articulation.dof_names。
-  # hand 仅列出可直接接收命令的六个 master 关节。MJCF equality 中的 DIP 等 follower
+  # hand 仅列出可直接接收命令的 master 关节。MJCF equality 中的 DIP 等 follower
   # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
   arm:
     - arm_AR5_5_08R_W4C4A6_joint_1
@@ -143,9 +143,19 @@ joint_groups:
     - arm_AR5_5_08R_W4C4A6_joint_6
     - arm_AR5_5_08R_W4C4A6_joint_7
   hand:
-    - hand_rh_index_mcp_pitch
-    - hand_rh_middle_mcp_pitch
-    - hand_rh_ring_mcp_pitch
-    - hand_rh_pinky_mcp_pitch
     - hand_rh_thumb_cmc_roll
+    - hand_rh_thumb_cmc_yaw
     - hand_rh_thumb_cmc_pitch
+    - hand_rh_thumb_mcp
+    - hand_rh_index_mcp_roll
+    - hand_rh_index_mcp_pitch
+    - hand_rh_index_pip
+    - hand_rh_middle_mcp_roll
+    - hand_rh_middle_mcp_pitch
+    - hand_rh_middle_pip
+    - hand_rh_ring_mcp_roll
+    - hand_rh_ring_mcp_pitch
+    - hand_rh_ring_pip
+    - hand_rh_pinky_mcp_roll
+    - hand_rh_pinky_mcp_pitch
+    - hand_rh_pinky_pip

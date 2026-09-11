@@ -13,11 +13,11 @@ from linkerbot_sim.utils.config import load_yaml
 
 def test_builtin_profiles_declare_kind_binding_and_disjoint_groups() -> None:
     for name, expected_kind in (
-        ("ar5v2_l", RobotKind.ARM),
-        ("ar5v2_l6v1_l", RobotKind.ARM_HAND),
-        ("ar5v2_l6v1_r", RobotKind.ARM_HAND),
-        ("l6v1_l", RobotKind.HAND),
-        ("l6v1_r", RobotKind.HAND),
+        ("ar5_08_l", RobotKind.ARM),
+        ("ar5_08_l6_l", RobotKind.ARM_HAND),
+        ("ar5_08_l6_r", RobotKind.ARM_HAND),
+        ("l6_l", RobotKind.HAND),
+        ("l6_r", RobotKind.HAND),
     ):
         profile = load_yaml(f"configs/robots/{name}.yaml")
         kind = robot_kind_from_profile(profile)

@@ -1,4 +1,4 @@
-# LinkerHand L6V1 左手独立 articulation 配置。
+# LinkerHand L6V1 右手独立 articulation 配置。
 #
 # 本 profile 只描述可复用机器人资产、运行能力和物理属性；由 scene 的
 # robots[].robot_profile 引用。场景中的 label、prim_path 与 root_pose 属于 robots[] 实例，
@@ -8,15 +8,15 @@
 robot:
   # profile 内的资产逻辑名称；正式 scene 实例的 articulation、日志和 registry 使用
   # robots[].label/robot_id，profile 按文件名选择。
-  name: l6v1_l
+  name: l6_r
   # hand 要求 joint_groups.hand 非空，并禁止启用 cuRobo arm planning。
   kind: hand
   # Isaac 使用 MJCF，以保留手指 equality/mimic 关系。
   asset_type: mjcf
-  # 仓库相对的左手 MJCF 资产路径。
-  # 由共享仓库 linker-sim-assets 的单元 l6_l 生成（== L6V1_L），
+  # 仓库相对的右手 MJCF 资产路径。
+  # 由共享仓库 linker-sim-assets 的单元 l6_r 生成（== L6V1_R），
   # 保留手指 equality/mimic 关系。
-  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/l6_l/workstation.xml
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/l6_r/workstation.xml
 
   import:
     # 非凸 mesh 分解成多个凸碰撞体，保留更准确的指尖接触形状。
@@ -85,9 +85,9 @@ joint_groups:
   # 实际位置通过 follower position drive 执行，因此不要把 follower 重复写入此列表。
   arm: []
   hand:
-    - hand_lh_index_mcp_pitch
-    - hand_lh_middle_mcp_pitch
-    - hand_lh_ring_mcp_pitch
-    - hand_lh_pinky_mcp_pitch
-    - hand_lh_thumb_cmc_roll
-    - hand_lh_thumb_cmc_pitch
+    - hand_rh_index_mcp_pitch
+    - hand_rh_middle_mcp_pitch
+    - hand_rh_ring_mcp_pitch
+    - hand_rh_pinky_mcp_pitch
+    - hand_rh_thumb_cmc_roll
+    - hand_rh_thumb_cmc_pitch
