@@ -26,8 +26,9 @@ robot:
   asset_type: mjcf
 
   # 机器人资产路径，相对仓库根目录。
-  # 该文件只包含 AR5V2_L 机械臂，不包含手部模型。
-  asset_path: assets/single_system/arm/AR5V2_L/AR5V2_L.xml
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_single_l 生成
+  # （AR5V2_L 在运动学上等同 ar5_08 左臂），只含机械臂本体，不含手部模型。
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.xml
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -94,11 +95,13 @@ curobo:
     # profiles.planning 提供，二者都不放在机器人资产 profile。
 
     # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
-    urdf_path: assets/single_system/arm/AR5V2_L/AR5V2_L.urdf
+    # 与 asset_path 使用同一共享单元的 URDF，保证规划模型与仿真 articulation 运动学一致。
+    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.urdf
 
     # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
     # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
-    flange_frame: AR5V2_L_arm_flan_link
+    # 共享单元中该法兰即 link7 末端的 tcp link（与旧 AR5V2_L_arm_flan_link 位姿一致）。
+    flange_frame: arm_AR5_5_08L_W4C4A6_tcp
 
     # 默认 TCP frame；未声明 tool_frames 时必须提供。运行时 JSON 中的 tcp_frame_name 只负责
     # 在已加载 frame 中选择，省略时使用此值。
@@ -122,12 +125,12 @@ joint_groups:
   # 列表定义 arm 成员；默认 controlled_joints=[all] 时命令顺序来自 articulation.dof_names。
   # 启用 cuRobo 时，arm 名称集合必须与其 active joints 一致。
   arm:
-    - AR5V2_L_arm_joint_1
-    - AR5V2_L_arm_joint_2
-    - AR5V2_L_arm_joint_3
-    - AR5V2_L_arm_joint_4
-    - AR5V2_L_arm_joint_5
-    - AR5V2_L_arm_joint_6
-    - AR5V2_L_arm_joint_7
+    - arm_AR5_5_08L_W4C4A6_joint_1
+    - arm_AR5_5_08L_W4C4A6_joint_2
+    - arm_AR5_5_08L_W4C4A6_joint_3
+    - arm_AR5_5_08L_W4C4A6_joint_4
+    - arm_AR5_5_08L_W4C4A6_joint_5
+    - arm_AR5_5_08L_W4C4A6_joint_6
+    - arm_AR5_5_08L_W4C4A6_joint_7
   # 纯机械臂 profile 没有 hand 命令关节；显式空列表同时声明该能力边界。
   hand: []

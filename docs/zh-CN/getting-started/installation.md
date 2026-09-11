@@ -20,10 +20,23 @@ cuRobo 0.8.0。准确版本以 `pyproject.toml` 与 `uv.lock` 为准。
 
 ## 2. 获取工作区
 
+机器人几何资产（AR5 机械臂、LinkerHand L6）来自共享仓库
+[`linker-sim-assets`](https://github.com/linker-bot/linker-sim-assets)，以 Git
+submodule 形式挂载在 `packages/linker-robot-assets`，并固定到某个 tag。其网格用
+Git LFS 存储，因此克隆时需带上 submodule 并拉取 LFS 内容：
+
 ```bash
-git clone https://github.com/linker-bot/linker-sim-isaac.git
+git clone --recurse-submodules https://github.com/linker-bot/linker-sim-isaac.git
 cd linker-sim-isaac
+git -C packages/linker-robot-assets lfs pull
 uv python install 3.12
+```
+
+对于早于该 submodule 的已有 checkout，初始化一次即可：
+
+```bash
+git submodule update --init packages/linker-robot-assets
+git -C packages/linker-robot-assets lfs pull
 ```
 
 后续维护命令都应从该 checkout 根目录执行。

@@ -52,14 +52,15 @@ def test_bundled_left_and_right_mjcf_keep_all_ten_mimic_equalities() -> None:
     }
     assert sum(len(items) for items in relations_by_side.values()) == 10
     for side, equalities in relations_by_side.items():
+        hand = "lh" if side == "L" else "rh"
         by_name = {equality.name: equality for equality in equalities}
         expected = {
-            f"L6V1_{side}_hand_couple_{finger}": (
-                f"L6V1_{side}_hand_{finger}_dip",
+            f"hand_{hand}_couple_{finger}": (
+                f"hand_{hand}_{finger}_dip",
                 (
-                    f"L6V1_{side}_hand_thumb_cmc_pitch"
+                    f"hand_{hand}_thumb_cmc_pitch"
                     if finger == "thumb"
-                    else f"L6V1_{side}_hand_{finger}_mcp_pitch"
+                    else f"hand_{hand}_{finger}_mcp_pitch"
                 ),
                 1.226495 if finger == "thumb" else 1.125676,
             )
@@ -77,30 +78,30 @@ def test_bundled_left_and_right_mjcf_keep_all_ten_mimic_equalities() -> None:
 def test_parse_ar5_l6_mjcf_equalities() -> None:
     equalities = parse_mjcf_joint_equalities(AR5_L6_MJCF)
     names = {equality.dependent_joint for equality in equalities}
-    assert "L6V1_L_hand_index_dip" in names
-    assert "L6V1_L_hand_thumb_dip" in names
+    assert "hand_lh_index_dip" in names
+    assert "hand_lh_thumb_dip" in names
     assert len(equalities) == 5
 
 
 def test_expand_hand_targets_with_followers() -> None:
     expanded = expand_targets_with_mjcf_equalities(
-        {"L6V1_L_hand_index_mcp_pitch": 0.4, "L6V1_L_hand_thumb_cmc_pitch": 0.5},
+        {"hand_lh_index_mcp_pitch": 0.4, "hand_lh_thumb_cmc_pitch": 0.5},
         AR5_L6_MJCF,
     )
-    assert np.isclose(expanded["L6V1_L_hand_index_dip"], 0.4 * 1.125676)
-    assert np.isclose(expanded["L6V1_L_hand_thumb_dip"], 0.5 * 1.226495)
+    assert np.isclose(expanded["hand_lh_index_dip"], 0.4 * 1.125676)
+    assert np.isclose(expanded["hand_lh_thumb_dip"], 0.5 * 1.226495)
 
 
 def test_resolve_follower_controls() -> None:
     dof_names = [
-        "L6V1_L_hand_index_mcp_pitch",
-        "L6V1_L_hand_index_dip",
-        "L6V1_L_hand_thumb_cmc_pitch",
-        "L6V1_L_hand_thumb_dip",
+        "hand_lh_index_mcp_pitch",
+        "hand_lh_index_dip",
+        "hand_lh_thumb_cmc_pitch",
+        "hand_lh_thumb_dip",
     ]
     controls = resolve_mimic_follower_controls(dof_names, AR5_L6_MJCF)
     follower_names = {control.dependent_joint for control in controls}
-    assert follower_names == {"L6V1_L_hand_index_dip", "L6V1_L_hand_thumb_dip"}
+    assert follower_names == {"hand_lh_index_dip", "hand_lh_thumb_dip"}
     assert {control.master_index for control in controls} == {0, 2}
 
 
@@ -153,11 +154,11 @@ def test_follower_mapper_uses_actual_master_state() -> None:
 def test_follower_joint_name_set() -> None:
     names = mjcf_equality_follower_joint_names(AR5_L6_MJCF)
     assert {
-        "L6V1_L_hand_index_dip",
-        "L6V1_L_hand_middle_dip",
-        "L6V1_L_hand_ring_dip",
-        "L6V1_L_hand_pinky_dip",
-        "L6V1_L_hand_thumb_dip",
+        "hand_lh_index_dip",
+        "hand_lh_middle_dip",
+        "hand_lh_ring_dip",
+        "hand_lh_pinky_dip",
+        "hand_lh_thumb_dip",
     } <= names
 
 
@@ -327,8 +328,14 @@ def test_parse_urdf_mimic_preserves_multiplier_and_offset(tmp_path: Path) -> Non
 @pytest.mark.parametrize(
     "urdf_path",
     (
-        Path("assets/single_system/hand/L6V1_L/L6V1_L.urdf"),
-        Path("assets/single_system/hand/L6V1_R/L6V1_R.urdf"),
+        Path(
+            "packages/linker-robot-assets/src/linker_robot_assets/assets/"
+            "workstations/linkerhand_l6_single_l/workstation.urdf"
+        ),
+        Path(
+            "packages/linker-robot-assets/src/linker_robot_assets/assets/"
+            "workstations/linkerhand_l6_single_r/workstation.urdf"
+        ),
     ),
 )
 def test_parse_bundled_hand_urdf_ignores_transmission_joint_references(
