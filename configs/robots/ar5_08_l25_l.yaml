@@ -1,0 +1,161 @@
+# AR5 机械臂 + LinkerHand L25 左手组合配置。
+#
+# 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
+# - scene 的 robots[].robot_profile 选择本文件；robots[].label、prim_path、root_pose 决定
+#   场景实例身份、USD 挂载位置和世界位姿。
+# - robot 段负责组合资产导入、碰撞近似以及导入后的 PhysX 覆盖。
+# - curobo 段只声明机械臂规划能力；joint_groups 定义 Isaac 命令关节成员，并校验 cuRobo
+#   active joints 名称集合。规划向量顺序不由 joint_groups 决定，结果会按名称映射。
+#
+# 注意：
+# - 这里不写机器人在场景中的 root_pose；root_pose 属于所属产品的
+#   configs/scenes/<mode>/<scene>.yaml。
+# - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
+# - 该组合资产包含 AR5V2_L 机械臂和 L25 左手，但 cuRobo 只加载机械臂 URDF；
+#   因此手部可参与 Isaac 接触与控制，却不属于 cuRobo 的运动学链或 collision spheres。
+
+robot:
+  # 能力类别：arm_hand 要求 arm/hand 两个 joint group 都非空，规划能力只绑定 arm。
+  kind: arm_hand
+  # profile 内的资产逻辑名称。正式 scene 装配会使用 robots[].label 作为 articulation 实例名；
+  # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
+  name: ar5_08_l25_l
+
+  # 资产类型。
+  # 当前项目支持 mjcf 和 urdf；这里使用 mjcf，因为机械臂+灵巧手组合资产由 MJCF merge 得到，
+  # 更适合保留手部 mimic/equality 等 MJCF 语义。
+  asset_type: mjcf
+
+  # 组合机器人资产路径，相对仓库根目录。
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l25_l 生成，同时包含
+  # AR5V2_L 机械臂（== ar5_08 左臂）与 LinkerHand L25 左手，手部 mimic/equality 均保留。
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l25_l/workstation.xml
+
+  import:
+    # Isaac importer 生成碰撞几何时使用的近似方式。
+    # convex_decomposition：把非凸 mesh 分解成多个凸碰撞体，接触形状更贴近原模型，计算成本更高。
+    # convex_hull：每个 mesh 生成一个凸包，速度更快，但会填平凹陷，指尖/夹持接触可能不够精细。
+    collision_approximation: convex_decomposition
+    # 是否开启 Isaac/PhysX articulation 内部 link 之间的自碰撞接触。
+    # 灵巧手打开后可以产生手指之间/手指与本体之间的真实接触，但会增加求解成本。
+    self_collision: false
+
+  physics:
+    # 机器人刚体重力策略。
+    # false 表示给对应刚体写入 disableGravity=True，即关闭重力；true 表示保留重力。
+    # 分类基于资产命名约定：arm 作用于机械臂刚体，hand 作用于灵巧手刚体。
+    # default 用于未能按名称识别到 arm/hand 的刚体。
+    gravity:
+      default: false
+      arm: false
+      hand: false
+
+    # 两个后端共享的标准 USD 接触材质；Newton/PhysX 都会创建并绑定到 collision prim。
+    material:
+      # 静摩擦系数：影响接触面开始滑动前可承受的切向摩擦。
+      contact_static_friction: 0.8
+      # 动摩擦系数：影响物体已经发生相对滑动后的摩擦。
+      contact_dynamic_friction: 0.6
+      # 恢复系数：0 表示接触基本不反弹，适合夹持和稳定接触。
+      contact_restitution: 0.0
+
+    physx:
+      # 本 leaf 只包含 PhysX schema 属性；Newton composition 不会读取或告警跳过。
+      material:
+        friction_combine_mode: average
+
+      rigid_body:
+        # 线速度阻尼：0 表示不额外衰减线速度，由原资产和仿真默认值决定。
+        linear_damping: 0.0
+        # 角速度阻尼：适度抑制旋转抖动，尤其对手部接触稳定性有帮助。
+        angular_damping: 0.1
+
+      # 关节摩擦属于 PhysX 资产属性，不随 position/velocity/effort 控制模式重复配置。
+      joint:
+        friction: 0.5
+        follower_friction: 0.5
+
+      solver:
+        # 机器人刚体的 PhysX solver iteration 覆盖。
+        # position_iterations 主要影响位置约束、接触穿透修正和关节约束收敛。
+        # velocity_iterations 主要影响速度约束、摩擦和碰撞后的速度收敛。
+        # 数值越大通常越稳定但越慢；这里对机械臂和灵巧手分别设置。
+        arm:
+          # 机械臂刚体的位置约束求解迭代次数。
+          position_iterations: 32
+          # 机械臂刚体的速度约束求解迭代次数。
+          velocity_iterations: 4
+        hand:
+          # 灵巧手刚体的位置约束求解迭代次数；指尖接触和夹持通常需要较高稳定性。
+          position_iterations: 32
+          # 灵巧手刚体的速度约束求解迭代次数。
+          velocity_iterations: 4
+
+curobo:
+  # true 表示此组合机器人可以创建机械臂 cuRobo context；手部仍由 Isaac 控制器执行。
+  enabled: true
+  # 规划组引用 joint_groups.arm，并在 context 建立时校验 cuRobo active joints 名称集合完全一致。
+  planning_joint_group: arm
+  robot:
+    # cuRobo 规划后端使用的模型资源。
+    # 虽然 Isaac stage 中导入的是“机械臂+左手”的 MJCF 组合资产，
+    # 但这里的规划模型仍使用单独的 AR5V2_L 机械臂 URDF。
+    # IK/MotionPlanner 数值参数由 mode 的 profiles.curobo 提供；Mirror 请求默认策略则由
+    # profiles.planning 提供，二者都不放在机器人资产 profile。
+
+    # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
+    # 组合资产含手部，但规划模型仍使用共享的单独机械臂 URDF（ar5_08_l），
+    # 与组合 MJCF 中的机械臂子链运动学一致。
+    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l/workstation.urdf
+
+    # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
+    # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
+    # 共享单元中该法兰即 link7 末端的 tcp link（与旧 AR5V2_L_arm_flan_link 位姿一致）。
+    flange_frame: arm_AR5_5_08L_W4C4A6_tcp
+
+    # 默认 TCP frame；未声明 tool_frames 时必须提供。JSON 省略 tcp_frame_name 时使用此值，
+    # 显式值只能选择已存在于 cuRobo context 的 frame。
+    default_tcp_frame: AR5V2_L_pinch_tcp
+
+    # 自定义 TCP fixed frames；未写 parent_frame 时相对 flange_frame。
+    # xyz 单位为 m，rpy 单位为 rad；创建 context 前写入缓存派生 URDF，不修改源 URDF。
+    custom_tcps:
+      AR5V2_L_pinch_tcp:
+        xyz: [0.0, 0.0, 0.0]
+        rpy: [0.0, 0.0, 0.0]
+
+    # cuRobo robot YAML，提供机械臂 collision spheres、C-space 和模型侧关节信息。
+    robot_config_path: assets/single_system/arm/AR5V2_L/AR5V2_L_curobo.yml
+    # true 表示把上述机械臂 collision spheres 加载到规划 context；不包含组合资产中的手部。
+    load_collision_spheres: true
+
+joint_groups:
+  # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
+  # 默认 controlled_joints=[all] 时，命令/轨迹向量顺序来自 articulation.dof_names。
+  # hand 仅列出可直接接收命令的 master 关节。MJCF equality 中的 DIP 等 follower
+  # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
+  arm:
+    - arm_AR5_5_08L_W4C4A6_joint_1
+    - arm_AR5_5_08L_W4C4A6_joint_2
+    - arm_AR5_5_08L_W4C4A6_joint_3
+    - arm_AR5_5_08L_W4C4A6_joint_4
+    - arm_AR5_5_08L_W4C4A6_joint_5
+    - arm_AR5_5_08L_W4C4A6_joint_6
+    - arm_AR5_5_08L_W4C4A6_joint_7
+  hand:
+    - hand_lh_thumb_cmc_roll
+    - hand_lh_thumb_cmc_yaw
+    - hand_lh_thumb_cmc_pitch
+    - hand_lh_thumb_mcp
+    - hand_lh_index_mcp_roll
+    - hand_lh_index_mcp_pitch
+    - hand_lh_index_pip
+    - hand_lh_middle_mcp_roll
+    - hand_lh_middle_mcp_pitch
+    - hand_lh_middle_pip
+    - hand_lh_ring_mcp_roll
+    - hand_lh_ring_mcp_pitch
+    - hand_lh_ring_pip
+    - hand_lh_pinky_mcp_roll
+    - hand_lh_pinky_mcp_pitch
+    - hand_lh_pinky_pip

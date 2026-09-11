@@ -31,11 +31,11 @@ def _robot_profile(name: str) -> RobotProfileSettings:
 
 
 AR5_L6_MJCF = RobotAssetConfig.from_profile(
-    _robot_profile("ar5v2_l6v1_l"),
+    _robot_profile("ar5_08_l6_l"),
     prim_path="/World/Robots/test_robot",
 ).asset_path
 AR5_L6_RIGHT_MJCF = RobotAssetConfig.from_profile(
-    _robot_profile("ar5v2_l6v1_r"),
+    _robot_profile("ar5_08_l6_r"),
     prim_path="/World/Robots/test_robot_right",
 ).asset_path
 

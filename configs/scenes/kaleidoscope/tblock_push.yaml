@@ -19,16 +19,16 @@ scene:
   # 单环境内机器人模板；列表顺序和 label 在所有复制环境中保持一致。
   robots:
     # 左臂实例。robot_profile 绑定组合机器人资产和 joint group；root_pose 为 env-local 位姿。
-    - label: ar5v2_l6v1_0
-      robot_profile: ar5v2_l6v1_l
+    - label: ar5_08_l6_0
+      robot_profile: ar5_08_l6_l
       root_pose:
         # env-local 平移 xyz，单位 m。
         xyz: [0.0, 0.09, 0.0]
         # env-local XYZ Euler 旋转，单位 rad。
         rpy: [-1.5707, 0.0, 0.0]
     # 右臂实例，与左臂使用相反 Y 偏移/roll 形成相向工作空间。
-    - label: ar5v2_l6v1_1
-      robot_profile: ar5v2_l6v1_r
+    - label: ar5_08_l6_1
+      robot_profile: ar5_08_l6_r
       root_pose:
         xyz: [0.0, -0.09, 0.0]
         rpy: [1.5707, 0.0, 0.0]

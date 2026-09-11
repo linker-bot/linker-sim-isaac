@@ -2,7 +2,9 @@
 
 语言：[中文](naming.md) | [English](../../en/development/naming.md)
 
-资产、profile、scene instance、session selector 和持久化 identity 是不同层，不能互相推导。
+Profile 现采用共享资产仓库 (linker-sim-assets) 的 unit 名称（如 `ar5_08_l6_l`），使
+profile↔资产命名一致；scene instance label、session robot ID、object instance 等其余
+identity 仍是各自独立的层，不从 profile／资产名派生。
 
 ## 产品名
 
@@ -17,7 +19,7 @@
 
 | Identity | Owner | 示例 | 生命周期 |
 | --- | --- | --- | --- |
-| 资产 | `assets/` 主文件与内部 joint/link 名 | `AR5V2_L6V1_L` | 物理模型稳定身份 |
+| 资产 | 共享 `linker-sim-assets` 的 unit 名与内部 joint/link 名 | `ar5_08_l6_l` | 物理模型稳定身份 |
 | Profile selector | mode root 的 `profiles.<slot>` | `mirror/scene3` | catalog 查找键 |
 | Profile 文件 | `configs/` 根下的受约束路径 | `configs/scenes/mirror/scene3.yaml` | 磁盘来源/provenance |
 | Scene identity | `scene.id` | `scene3` | 加载后的稳定场景身份 |
@@ -37,7 +39,7 @@ configs/modes/kaleidoscope/newton_cuda.yaml    -> kaleidoscope/newton_cuda
 configs/scenes/mirror/scene3.yaml              -> mirror/scene3
 configs/scenes/kaleidoscope/tblock_push.yaml   -> kaleidoscope/tblock_push
 configs/tasks/kaleidoscope/tblock_push_v1.yaml -> kaleidoscope/tblock_push_v1
-configs/robots/ar5v2_l6v1_l.yaml               -> ar5v2_l6v1_l
+configs/robots/ar5_08_l6_l.yaml               -> ar5_08_l6_l
 ```
 
 Scene selector 的首段必须与 mode 产品一致；Mirror 不能引用 `kaleidoscope/...`，反之亦然。selector

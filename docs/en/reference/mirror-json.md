@@ -317,8 +317,8 @@ targets from calibration and current state.
 
 | `robot_id` | `robot_label` | Robot profile |
 | --- | --- | --- |
-| `0` | `left_arm` | `ar5v2_l6v1_l` |
-| `1` | `right_arm` | `ar5v2_l6v1_r` |
+| `0` | `left_arm` | `ar5_08_l6_l` |
+| `1` | `right_arm` | `ar5_08_l6_r` |
 
 `robot_label` is an optional identity assertion, not an alternative selector.
 `group` defaults to `arm`; the built-in arm-hand profiles also accept `hand`.

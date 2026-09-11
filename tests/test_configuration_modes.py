@@ -120,8 +120,8 @@ def test_canonical_mirror_profiles_build_strict_backend_union() -> None:
     assert physx.control.sync_simulation_to_wall_clock is True
     assert all(item.resolved_profile is not None for item in physx.scene.robots)
     assert tuple(physx.controller_bundles) == ("physx",)
-    assert physx.sources["robot.left_arm"].name == "ar5v2_l6v1_l.yaml"
-    assert physx.sources["robot.right_arm"].name == "ar5v2_l6v1_r.yaml"
+    assert physx.sources["robot.left_arm"].name == "ar5_08_l6_l.yaml"
+    assert physx.sources["robot.right_arm"].name == "ar5_08_l6_r.yaml"
     assert physx.sources["controller.physx.arm"].name == "arm_controller.yaml"
     assert physx.sources["controller.physx.hand"].name == "hand_controller.yaml"
 
@@ -384,8 +384,8 @@ def test_mirror_scene3_and_kaleidoscope_tblock_push_are_distinct_facts() -> None
     assert kaleidoscope.scene.physics_frequency_hz == 240.0
     assert {item.label for item in mirror.scene.robots} == {"left_arm", "right_arm"}
     assert {item.label for item in kaleidoscope.scene.robots} == {
-        "ar5v2_l6v1_0",
-        "ar5v2_l6v1_1",
+        "ar5_08_l6_0",
+        "ar5_08_l6_1",
     }
     assert "warehouse" not in {item.name for item in kaleidoscope.scene.objects}
     # KaleidoscopeSceneSettings 从类型上就没有相机或渲染频率，不是解析后丢弃字段。
@@ -1207,9 +1207,9 @@ def test_custom_configs_root_closes_robot_and_controller_resources(
     tmp_path: Path,
 ) -> None:
     root = _isolated_configs(tmp_path)
-    robot_path = root / "robots" / "ar5v2_l6v1_l.yaml"
+    robot_path = root / "robots" / "ar5_08_l6_l.yaml"
     controller_path = root / "controllers" / "physx" / "arm_controller.yaml"
-    _replace(robot_path, "  name: ar5v2_l6v1_l", "  name: custom_left_robot")
+    _replace(robot_path, "  name: ar5_08_l6_l", "  name: custom_left_robot")
     _replace(controller_path, "    stiffness: 1000.0", "    stiffness: 321.0")
 
     config = load_mirror_config("physx_cpu", configs_root=root)
@@ -1271,8 +1271,8 @@ def test_instance_controller_override_is_resolved_from_custom_root(
     scene_path = root / "scenes" / "mirror" / "scene3.yaml"
     _replace(
         scene_path,
-        "      robot_profile: ar5v2_l6v1_l",
-        "      robot_profile: ar5v2_l6v1_l\n      controller_profile: lab",
+        "      robot_profile: ar5_08_l6_l",
+        "      robot_profile: ar5_08_l6_l\n      controller_profile: lab",
     )
 
     config = load_mirror_config("physx_cpu", configs_root=root)

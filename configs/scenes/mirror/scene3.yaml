@@ -25,7 +25,7 @@ scene:
   robots:
     # 左侧机械臂+左手实例；未写 controller_profile 时按 physics.engine 选择默认 bundle。
     - label: left_arm
-      robot_profile: ar5v2_l6v1_l
+      robot_profile: ar5_08_l6_l
       root_pose:
         # 机器人 root 的世界平移 xyz，单位 m。
         xyz: [0.0, 0.09, 0.0]
@@ -33,7 +33,7 @@ scene:
         rpy: [-1.5707, 0.0, 0.0]
     # 右侧机械臂+右手实例；相反的 Y 偏移和 roll 使两臂相向布置。
     - label: right_arm
-      robot_profile: ar5v2_l6v1_r
+      robot_profile: ar5_08_l6_r
       root_pose:
         xyz: [0.0, -0.09, 0.0]
         rpy: [1.5707, 0.0, 0.0]

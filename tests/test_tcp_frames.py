@@ -25,7 +25,7 @@ def load_robot_profile_by_name(name: str) -> RobotProfileSettings:
 
 def test_write_tcp_urdf(tmp_path) -> None:
     urdf_path = curobo_config_from_profiles(
-        load_robot_profile_by_name("ar5v2_l"),
+        load_robot_profile_by_name("ar5_08_l"),
         cuda_device=0,
     ).robot.urdf_path
     assert urdf_path is not None
@@ -58,7 +58,7 @@ def _stage_with_parent(*, duplicate: bool = False):
 
 
 def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     robot = profile.curobo.robot
     assert robot is not None
     frame = replace(
@@ -94,7 +94,7 @@ def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
 def test_physical_tcp_binding_rejects_missing_or_duplicate_parent(
     duplicate: bool,
 ) -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     if duplicate:
         stage, root = _stage_with_parent(duplicate=True)
     else:
@@ -113,7 +113,7 @@ def test_physical_tcp_binding_rejects_missing_or_duplicate_parent(
 
 
 def test_physical_tcp_binding_rejects_disabled_model() -> None:
-    profile = load_robot_profile_by_name("ar5v2_l6v1_l")
+    profile = load_robot_profile_by_name("ar5_08_l6_l")
     profile = replace(
         profile,
         curobo=replace(

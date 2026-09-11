@@ -254,8 +254,8 @@ motion 和新的 `state.set`。
 
 | `robot_id` | `robot_label` | 机器人 profile |
 | --- | --- | --- |
-| `0` | `left_arm` | `ar5v2_l6v1_l` |
-| `1` | `right_arm` | `ar5v2_l6v1_r` |
+| `0` | `left_arm` | `ar5_08_l6_l` |
+| `1` | `right_arm` | `ar5_08_l6_r` |
 
 `robot_label` 是可选的一致性断言，不是 `robot_id` 的替代 selector。`group` 省略时为 `arm`；内置
 arm-hand profile 还接受 `hand`。

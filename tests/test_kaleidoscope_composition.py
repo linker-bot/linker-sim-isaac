@@ -150,8 +150,8 @@ def test_composition_consumes_strict_config_and_constructs_gpu_runtime(
         assert viewport is not None
         origins = torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], device="cuda")
         robots = (
-            _Robot("ar5v2_l6v1_0", origins, 0.03),
-            _Robot("ar5v2_l6v1_1", origins, -0.03),
+            _Robot("ar5_08_l6_0", origins, 0.03),
+            _Robot("ar5_08_l6_1", origins, -0.03),
         )
         return KaleidoscopeSceneAssembly(
             session=session,
@@ -202,8 +202,8 @@ def test_state_api_compatibility_fingerprint_ignores_viewport_launch_settings() 
         sessions.append(session)
         origins = torch.tensor([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], device="cuda")
         robots = (
-            _Robot("ar5v2_l6v1_0", origins, 0.03),
-            _Robot("ar5v2_l6v1_1", origins, -0.03),
+            _Robot("ar5_08_l6_0", origins, 0.03),
+            _Robot("ar5_08_l6_1", origins, -0.03),
         )
         return KaleidoscopeSceneAssembly(
             session=session,
