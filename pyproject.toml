@@ -116,6 +116,10 @@ pure_fail_under = 84
 
 [tool.ruff]
 target-version = "py312"
+# linker-robot-assets is a pinned Git submodule with its own formatting/lint CI.
+# Do not apply this repo's Ruff contract to vendored external source (applies to
+# both `ruff format` and `ruff check`).
+extend-exclude = ["packages/linker-robot-assets"]
 
 [tool.ruff.lint]
 # Keep the accepted lint contract independent from Ruff release defaults. Rule-set
