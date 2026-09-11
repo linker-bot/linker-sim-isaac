@@ -1,6 +1,6 @@
 robot_cfg:
   kinematics:
-    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.urdf
+    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l/workstation.urdf
     base_link: world
     tool_frames:
       - arm_AR5_5_08L_W4C4A6_tcp

@@ -26,9 +26,9 @@ robot:
   asset_type: mjcf
 
   # 机器人资产路径，相对仓库根目录。
-  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_single_l 生成
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l 生成
   # （AR5V2_L 在运动学上等同 ar5_08 左臂），只含机械臂本体，不含手部模型。
-  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.xml
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l/workstation.xml
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -96,7 +96,7 @@ curobo:
 
     # URDF 描述机械臂运动学树；robot_config_path 补充 cuRobo collision spheres 与 C-space 参数。
     # 与 asset_path 使用同一共享单元的 URDF，保证规划模型与仿真 articulation 运动学一致。
-    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/ar5_08_single_l/workstation.urdf
+    urdf_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l/workstation.urdf
 
     # 机械臂法兰 frame，必须存在于 cuRobo 模型中；custom TCP 未写 parent_frame 时以它为父
     # frame。它不会自动成为默认末端，默认末端由 default_tcp_frame/tool_frames 明确指定。
