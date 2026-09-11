@@ -330,11 +330,11 @@ def test_parse_urdf_mimic_preserves_multiplier_and_offset(tmp_path: Path) -> Non
     (
         Path(
             "packages/linker-robot-assets/src/linker_robot_assets/assets/"
-            "workstations/linkerhand_l6_single_l/workstation.urdf"
+            "units/l6_l/workstation.urdf"
         ),
         Path(
             "packages/linker-robot-assets/src/linker_robot_assets/assets/"
-            "workstations/linkerhand_l6_single_r/workstation.urdf"
+            "units/l6_r/workstation.urdf"
         ),
     ),
 )

@@ -14,9 +14,9 @@ robot:
   # Isaac 使用 MJCF，以保留手指 equality/mimic 关系。
   asset_type: mjcf
   # 仓库相对的右手 MJCF 资产路径。
-  # 由共享仓库 linker-sim-assets 的单元 linkerhand_l6_single_r 生成（== L6V1_R），
+  # 由共享仓库 linker-sim-assets 的单元 l6_r 生成（== L6V1_R），
   # 保留手指 equality/mimic 关系。
-  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/workstations/linkerhand_l6_single_r/workstation.xml
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/l6_r/workstation.xml
 
   import:
     # 非凸 mesh 分解成多个凸碰撞体，保留更准确的指尖接触形状。
