@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated tag to publish (for example, v0.3.0)
+        required: true
+        type: string
+      simulation_run_id:
+        description: Successful Simulation run ID for the same commit
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish source workspace
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: "1"
+      RELEASE_TAG: ${{ inputs.tag }}
+      SIMULATION_RUN_ID: ${{ inputs.simulation_run_id }}
+      UV_NO_PROGRESS: "1"
+      UV_PROJECT_ENVIRONMENT: .venv-dev
+    steps:
+      - name: Validate dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.a-zA-Z0-9-]+)?$ ]]
+          [[ "$SIMULATION_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+
+      - name: Check out annotated tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: refs/tags/${{ inputs.tag }}
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.58.0"
+
+      - name: Read Simulation acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run view "$SIMULATION_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json conclusion,databaseId,headSha,url,workflowName \
+            > simulation-run.json
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Sync CPU development environment
+        run: uv sync --frozen --extra dev
+
+      - name: Run CPU quality gate
+        run: just quality
+
+      - name: Validate release and create source archive
+        run: >-
+          .venv-dev/bin/python scripts/prepare_release.py
+          --tag "$RELEASE_TAG"
+          --simulation-run-id "$SIMULATION_RUN_ID"
+          --simulation-run-json simulation-run.json
+          --repository "$GITHUB_REPOSITORY"
+          --output-dir dist
+
+      - name: Publish GitHub release
+        env:
+          PRERELEASE: ${{ inputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          ARCHIVE="dist/linker-sim-isaac-${VERSION}.tar.gz"
+          args=(
+            "$RELEASE_TAG"
+            "$ARCHIVE#Source workspace (tar.gz)"
+            "dist/SHA256SUMS#SHA-256 checksums"
+            --title "linker-sim-isaac ${RELEASE_TAG}"
+            --notes-file dist/RELEASE_NOTES.md
+            --target "$(git rev-parse HEAD)"
+            --verify-tag
+          )
+          if [[ "$PRERELEASE" == true ]]; then
+            args+=(--prerelease)
+          fi
+          gh release create "${args[@]}"

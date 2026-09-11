@@ -148,6 +148,8 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
             command_joint_names=("j0", "j1"),
             tcp_offset_xyz=(0.0, 0.0, 0.0),
             tcp_offset_rpy=(0.0, 0.0, 0.0),
+            asset_path=None,
+            asset_type="usd",
             profile={},
             tcp_frame_name="tcp",
         )
@@ -335,6 +337,8 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
             command_joint_names=("j0", "j1"),
             tcp_offset_xyz=(0.0, 0.0, 0.0),
             tcp_offset_rpy=(0.0, 0.0, 0.0),
+            asset_path=None,
+            asset_type="usd",
             profile={},
             tcp_frame_name="tcp",
         )

@@ -24,3 +24,6 @@ install distribution metadata. The CPU quality gate requires both values to matc
 Update both values in one focused release change. Do not derive the version by reading
 the checkout during import: importing the top-level facade must remain free of file I/O,
 Kit startup, CUDA initialization, and optional runtime dependencies.
+
+The complete tag, GPU acceptance, archive, checksum, and GitHub Release procedure is
+documented in [Releases](../operations/releases.md).

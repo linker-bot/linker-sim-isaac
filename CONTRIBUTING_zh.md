@@ -9,6 +9,7 @@
 ## 提交变更前
 
 - 先检索现有 Issue 和 Pull Request。
+- 按 [SUPPORT_zh.md](SUPPORT_zh.md) 的分流和诊断信息要求提交问题。
 - 如果变更涉及公开 facade、配置 schema、wire protocol、Kit closure、physics owner 或第三方
   素材策略，建议先用一个聚焦的 Issue 明确边界。
 - 保持 Mirror 与 Kaleidoscope 能力分离。没有明确架构决策时，不要为 Kaleidoscope 增加
@@ -94,6 +95,7 @@ just test-simulation
 维护者也可以通过受信任的 [Simulation CI 工作流](docs/zh-CN/operations/simulation-ci.md)
 运行同一套矩阵。该工作流刻意不响应 Pull Request 事件；手动运行时只能选择已经审查的仓库内
 分支，并在 Pull Request 中附上对应的 Actions 链接。
+在 runner 稳定性问题解决前，该工作流暂时只允许手动触发。
 
 依赖变更还会运行锁图增量门禁。应按兼容性边界审查 Dependabot 分组，不要手改 `uv.lock`，
 也不要仅为通过 CI 而增加 advisory 忽略项。即使依赖审计干净，仿真运行时依赖更新仍须执行
@@ -117,3 +119,5 @@ just test-simulation
 - 移动模块后架构清单已更新。
 - 未提交生成输出、本地环境、凭据、内部路径或被排除的第三方素材。
 - 许可与归属变化已同步到 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+- 用户可见变更已同步到 [CHANGELOG.md](CHANGELOG.md) 和
+  [CHANGELOG_zh.md](CHANGELOG_zh.md)，或说明无需记录的原因。

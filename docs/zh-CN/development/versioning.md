@@ -21,3 +21,6 @@ Python 集成可以读取 `linkerbot_sim.__version__`。开发 checkout 还必�
 
 版本发布应在同一个聚焦变更中更新这两个位置。不要在 import 时读取 checkout 来推导版本；
 顶层 facade 必须继续保持无文件 I/O、无 Kit 启动、无 CUDA 初始化、无可选运行时依赖。
+
+完整的 tag、GPU 验收、归档、checksum 和 GitHub Release 流程见
+[发布](../operations/releases.md)。

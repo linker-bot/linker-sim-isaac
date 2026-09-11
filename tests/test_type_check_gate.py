@@ -13,6 +13,7 @@ CI_INCLUDE = {
     "scripts/check_markdown_links.py",
     "scripts/check_pure_coverage.py",
     "scripts/check_repository_ruleset.py",
+    "scripts/prepare_release.py",
     "scripts/update_architecture_inventory.py",
     "scripts/validate_mode_config.py",
     "workspace_build.py",

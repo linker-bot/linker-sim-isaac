@@ -7,12 +7,14 @@
 
 ## 触发与信任边界
 
-相关路径推送到 `master` 后工作流自动运行，维护者也可以显式手动触发。它没有
-`pull_request` 或 `pull_request_target` 触发器。本仓库公开，未经审查的 Pull Request 代码
-不得进入可能保留机器状态的 self-hosted runner。
+工作流只在维护者显式手动触发时运行。在 self-hosted runner 的稳定性问题解决前，`master`
+push 自动执行已经暂时关闭。它没有 `push`、`pull_request` 或 `pull_request_target` 触发器。
+本仓库公开，未经审查的 Pull Request 代码不得进入可能保留机器状态的 self-hosted runner。
 
 需要合并前证据时，进入 **Actions → Simulation → Run workflow**，选择本仓库内已经审查的分支，
 并把运行链接记录到 Pull Request。来自 fork 的代码必须先完成审查，再复制到受信任的仓库内分支。
+发布验收必须选择 annotated tag 或同一 commit 上的仓库内分支；
+[发布工作流](releases.md)会校验这个精确修订。
 
 ## Runner 合同
 

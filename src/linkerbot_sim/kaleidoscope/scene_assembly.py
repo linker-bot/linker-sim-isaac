@@ -31,6 +31,7 @@ from linkerbot_sim.kaleidoscope.physx_ports import (
     IsaacArticulationTensorPort,
     IsaacRigidObjectTensorPort,
 )
+from linkerbot_sim.robots.mimic.runtime import resolve_mimic_follower_controls
 from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
 
@@ -180,6 +181,14 @@ def build_kaleidoscope_scene_assembly(
                     orientation_order="wxyz",
                     tcp_offset_xyz=robot.tcp_offset_xyz,
                     tcp_offset_rpy=robot.tcp_offset_rpy,
+                    mimic_follower_controls=tuple(
+                        resolve_mimic_follower_controls(
+                            list(robot.articulation_view.dof_names),
+                            robot.asset_path
+                            if robot.asset_type in {"mjcf", "urdf"}
+                            else None,
+                        )
+                    ),
                 )
                 raw_limits, host_indices = command_joint_limits(robot)
                 limits = _copy_startup_metadata_to_cuda(
@@ -265,6 +274,11 @@ def build_kaleidoscope_scene_assembly(
             )
         physics_runtime.forward()
         first_env = torch.zeros(1, device=device, dtype=torch.int64)
+        if physics_engine == "physx":
+            for port in robot_ports:
+                port.prepare_full_dof_reset(
+                    port.read_all_joint_positions(first_env).reshape(-1)
+                )
         nominal_joint_positions = torch.cat(
             [port.read_joint_positions(first_env).reshape(-1) for port in robot_ports]
         ).clone()

@@ -187,8 +187,11 @@ viewer 单独读取 `configs/visualization/kaleidoscope.yaml`，与 task/physics
 - [配置参考](docs/zh-CN/reference/configuration.md)
 - [Python API](docs/zh-CN/reference/python-api.md)
 - [故障排查](docs/zh-CN/operations/troubleshooting.md)
+- [发布](docs/zh-CN/operations/releases.md)
 - [源码模块地图](docs/zh-CN/development/module-map.md)
 - [贡献指南](CONTRIBUTING_zh.md)
+- [支持](SUPPORT_zh.md)
+- [变更记录](CHANGELOG_zh.md)
 
 ## 质量门禁
 
@@ -207,6 +210,7 @@ profile 的 `smoke-mirror`、Kaleidoscope 两个后端及其动作变体、Newto
 PhysX 进程显存预算。
 受信任 NVIDIA runner 的自动化方式、触发边界和配置要求见
 [Simulation CI](docs/zh-CN/operations/simulation-ci.md)。
+在 runner 稳定性问题解决前，该工作流暂时只允许手动触发。
 
 ## 许可
 

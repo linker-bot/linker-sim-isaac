@@ -39,6 +39,19 @@ class PhysxRuntime:
         callback = getattr(self.world, "forward", None)
         if callable(callback):
             callback()
+        if self.execution == "cuda":
+            simulation_view = getattr(self.world, "physics_sim_view", None)
+            update_kinematics = getattr(
+                simulation_view,
+                "update_articulations_kinematic",
+                None,
+            )
+            if callable(update_kinematics):
+                # CUDA articulation state setters update q/qd immediately, but derived
+                # rigid-link poses stay stale until the SimulationView recomputes
+                # articulation kinematics. This is the same non-stepping update used by
+                # Isaac's render path and keeps reset from advancing physical time.
+                update_kinematics()
 
     def step(self, *, render: bool = False) -> None:
         self._require_open()

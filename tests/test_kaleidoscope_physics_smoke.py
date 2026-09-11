@@ -456,6 +456,17 @@ def test_smoke_uses_public_env_and_checks_clone(
         "_newton_contact_probe",
         lambda _env, _contract, **_kwargs: {"performed": True},
     )
+    repeated_seed_reset = {
+        "verified": contract.runtime_kind == "physx_cuda",
+        "reason": "not_physx_cuda"
+        if contract.runtime_kind != "physx_cuda"
+        else "test_double",
+    }
+    monkeypatch.setattr(
+        smoke,
+        "_exercise_physx_repeated_seed_reset",
+        lambda _env, _contract, **_kwargs: repeated_seed_reset,
+    )
     monkeypatch.setattr(smoke, "make_torch_env", make_env)
 
     result = smoke.run_smoke(profile=profile, num_envs=2, steps=2)
@@ -467,6 +478,7 @@ def test_smoke_uses_public_env_and_checks_clone(
     assert result["runtime_kind"] == contract.runtime_kind
     assert result["kit"] == contract.kit_filename
     assert result["snapshot_round_trip_verified"] is True
+    assert result["repeated_seed_reset"] == repeated_seed_reset
     assert result["control_mode_switching"] == {
         "verified": True,
         "sequence": ["position", "velocity", "effort", "position"],
