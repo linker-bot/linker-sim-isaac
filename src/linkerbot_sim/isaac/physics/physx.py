@@ -58,6 +58,12 @@ class PhysxRuntime:
         self.world.step(render=bool(render))
 
     def render(self) -> None:
+        self.pre_render()
+        self.render_update()
+
+    def render_update(self) -> None:
+        """Pump renderer work without stepping the physics owner."""
+
         self._require_open()
         callback = getattr(self.world, "render", None)
         if callable(callback):
@@ -74,9 +80,25 @@ class PhysxRuntime:
             ) from exc
 
     def pre_render(self) -> None:
-        # PhysX/Fabric 在 World.render/step 内完成 physics-to-USD 同步；保留显式钩子只为
-        # 统一生命周期，不额外执行 stage update。
         self._require_open()
+        if self.execution == "cpu":
+            # CPU set_state writes PhysX poses without a simulation tick. With
+            # Fabric transform output disabled, World.render alone does not
+            # publish them to USD. Publish once per frozen render transaction;
+            # camera warmup/readback must not advance physics to obtain new pixels.
+            import omni.physx
+
+            omni.physx.get_physx_interface().update_transformations(False, True, False)
+
+    @property
+    def simulation_time(self) -> float:
+        self._require_open()
+        return float(self.world.current_time)
+
+    @property
+    def current_time_step_index(self) -> int:
+        self._require_open()
+        return int(self.world.current_time_step_index)
 
     def close(self) -> None:
         """幂等关闭 Python 入口；native World 最终由 SimulationApp 销毁。"""

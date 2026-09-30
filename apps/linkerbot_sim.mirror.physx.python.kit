@@ -16,8 +16,10 @@ physics.fabricUpdateVelocities = false
 physics.fabricUpdateForceSensors = false
 physics.fabricUpdateJointStates = false
 physics.fabricUpdatePoints = false
-rtx.hydra.supportMultiTickRate = true
-rtx.rendering.perSensorTickTlas = true
+# Mirror owns sampling cadence. Independent sensor clocks retain old TLAS/state
+# when rendering a paused set/reset; render every requested frozen snapshot.
+rtx.hydra.supportMultiTickRate = false
+rtx.rendering.perSensorTickTlas = false
 rtx.post.dlss.execMode = 3
 
 [settings.app]

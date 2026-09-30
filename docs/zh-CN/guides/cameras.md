@@ -42,10 +42,27 @@ post-step observer 按频率与背压策略执行唯一一次 capture/publish，
 loop 显式调用 `MirrorRuntime.render()`，由 `render_frame(capture=True)` 立即返回当前帧。应用代码显式调用
 `runtime.render()` 也使用相同的立即 capture 语义。
 
-PhysX 每个 transaction 调用一次具体 runtime 的 `render()`；Newton 每帧只调用一次
-`pre_render()`，在 owner stream 可见性边界发布一份不可变物理快照，然后按每个隐藏 camera product 的
-预算调用多次纯 `render_update()`。多相机按 viewport 逐个激活，异常后也恢复全部激活状态；这些
-renderer-only update 复用同一快照，不重复 D2H/USD 发布，也不推进物理时间。
+CPU PhysX 与 Newton 每帧只调用一次 `pre_render()` 发布当前物理位姿，然后调用
+`render_update()`，期间物理时间保持不变。原生相机等待所属 render product 的完成事件，且其
+Kit SWH 帧号必须不小于状态发布后的第一个 update。Newton 没有 SWH stage-update owner，
+改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 50 次 renderer update；超时抛错，
+不返回旧画面。Newton 保留至少四次 update 的 history 预算，多相机按 viewport 逐个激活，异常后
+也恢复激活状态。配置频率控制输出采样；显式 `render()` 在暂停时也请求当前状态的新帧。
+
+PhysX 启用渲染的 headless 模式保留活跃的 startup Hydra viewport，不要求可见窗口或相机机械
+模型。Mirror PhysX Kit 关闭独立的 sensor/TLAS 时钟，使暂停位姿更新进入本次采集。关闭渲染时
+仍禁止创建默认 viewport。
+
+记录新增 `capture` 元数据：`native_frame_id`（`native_frame_source` 在 PhysX 为 `kit_swh`，
+Newton 为 `kit_render_product_frame`）、
+`render_product_path`、`render_snapshot_index` 和 `physics_time_s`。`frame_index` 仍是输出序号，
+不是原生曝光身份；没有匹配渲染的物理步不能把旧像素标成新观测。原生帧号只在 Kit 进程内有效，
+快照序号只在当前 coordinator 内有效。相机 handle 的 `get_capture_metadata()` 返回相同身份信息。
+
+定向回归为 `scripts/smoke_mirror_camera.py`：不额外推进物理预热首帧、暂停 set/restore 物块、reset，
+以及 120 Hz 物理下连续六个 60 Hz 仿真时刻的采样。可选择 `--gui`、
+`--resolution 1920x1080`、`--cameras 3`、`--record-root <空目录>` 验证对应路径。
+这些检查不代表墙钟吞吐达到 60 FPS。
 
 ## 数据与背压
 

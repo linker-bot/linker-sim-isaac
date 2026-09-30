@@ -25,6 +25,7 @@ class CameraFrame:
     intrinsics: np.ndarray | None = None
     camera_position_world: tuple[float, float, float] | None = None
     camera_orientation_world: tuple[float, float, float, float] | None = None
+    capture_metadata: dict[str, object] | None = None
 
     def metadata(self, *, relative_path: str | None = None) -> dict[str, object]:
         """返回不含图像 payload 的 JSON metadata。"""
@@ -46,6 +47,8 @@ class CameraFrame:
             result["camera_position_world"] = list(self.camera_position_world)
         if self.camera_orientation_world is not None:
             result["camera_orientation_world"] = list(self.camera_orientation_world)
+        if self.capture_metadata:
+            result["capture"] = dict(self.capture_metadata)
         return result
 
 
@@ -58,6 +61,12 @@ def sample_camera_frames(
 ) -> tuple[CameraFrame, ...]:
     """从一个 sensor camera runtime 采样当前配置的 modalities。"""
 
+    metadata_getter = getattr(camera_runtime, "get_capture_metadata", None)
+    capture_metadata = metadata_getter() if callable(metadata_getter) else {}
+    matches_time = getattr(camera_runtime, "capture_matches_time", None)
+    if callable(matches_time) and not matches_time(time_s):
+        # Never label a previous render with a newer or edited physics snapshot.
+        return ()
     intrinsics = _optional_array(camera_runtime.get_intrinsics_matrix)
     position, orientation = _optional_world_pose(camera_runtime)
     frames: list[CameraFrame] = []
@@ -80,6 +89,7 @@ def sample_camera_frames(
                 intrinsics=intrinsics,
                 camera_position_world=position,
                 camera_orientation_world=orientation,
+                capture_metadata=capture_metadata or None,
             )
         )
     return tuple(frames)

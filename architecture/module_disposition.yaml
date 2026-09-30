@@ -86,6 +86,7 @@ required_targets:
       - scripts/kaleidoscope_viewer.py
       - scripts/mirror.py
       - scripts/smoke_kaleidoscope_physics.py
+      - scripts/smoke_mirror_camera.py
       - scripts/smoke_mirror_physics.py
       - scripts/smoke_physx_gpu_memory_budget.py
       - scripts/validate_mode_config.py
@@ -406,7 +407,7 @@ generated_inventory:
   production_python:
     count: 247
     path_sha256: fa145cceb481034c7aa8f3a6276c659c1ac112b83988ac6906a6cb4f083cc180
-    path_content_sha256: 5af29d98bf6aaddb0ddd8248873a16b24213a9fbba0b67003cf7cc6fb1f72eb8
+    path_content_sha256: b785d0aacc11ad7979cf682338041134c3140a37528b673ecc8615537c092d07
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
@@ -945,7 +946,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/isaac/app.py
-      sha256: a4286dded2e5dfa303cd4e2affeca03b355dde177e5f83ea953c942c3902a6bc
+      sha256: 6c228720fd4aa289cc3a12277243e07e4929b3aa2bc8519e7c64e25bef0b4963
       module: linkerbot_sim.isaac.app
       group: isaac
       layer: isaac_infrastructure
@@ -1081,7 +1082,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/isaac/physics/physx.py
-      sha256: 6e10dce48584341bf2987e23eb9fc594b26855bc17ff85f1ba201e492c289ea5
+      sha256: c1eda6d874663a7cf6490289ac91cc587392a9f4c333a1a2eaf7dc304e67fcc3
       module: linkerbot_sim.isaac.physics.physx
       group: isaac
       layer: isaac_infrastructure
@@ -1761,7 +1762,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/mirror/rendering.py
-      sha256: d1bb933856dce36ee9c1952451f72aa67020149f8a1a51b08327913a826d27dd
+      sha256: 8479fbc01d60e44001afee63d09fc6cd5191b206651aa2f3f04ea6ecd41c5207
       module: linkerbot_sim.mirror.rendering
       group: mirror
       layer: product
@@ -1793,7 +1794,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/mirror/runtime.py
-      sha256: 8f6720dbdff8f6ee23f713599b465e48e6cd1e0b4304262576a8abc3aac8ba53
+      sha256: 74d654ba96168b64c57526d4286b371774dabfc76ea9091084eef5ef603c8a9d
       module: linkerbot_sim.mirror.runtime
       group: mirror
       layer: product
@@ -1801,7 +1802,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: owner path
     - path: src/linkerbot_sim/mirror/scene_assembly.py
-      sha256: 7354b5812b67b4c9ddd9f90a9763f2a3ce4b1d0a219100e8b488e7c2cd13cddd
+      sha256: 9a7c8eb1bc9c68642538e3a3c2308ec94ace89e37cf61547caa16b6e89a2b228
       module: linkerbot_sim.mirror.scene_assembly
       group: mirror
       layer: product
@@ -2081,7 +2082,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/sensors/camera/frame.py
-      sha256: a1b4bb1df71acf953e2dc713c01a84d8fc1bf0749faeafdfbdd81b6234a380aa
+      sha256: 9dd83005db8ce2d15a6f19b6fbe2765f43d4b0730ce55304cad8fe5807765de8
       module: linkerbot_sim.sensors.camera.frame
       group: sensors
       layer: isaac_infrastructure
@@ -2097,7 +2098,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/sensors/camera/observer.py
-      sha256: 4f0281a1b26af64f438cbeda9736b854139c5aceb088eba298b7dbb995a9fd42
+      sha256: be6e5c00f89e84a8dbe9899a7f59daa4328cb7b6d280b401015d3ac565ab1deb
       module: linkerbot_sim.sensors.camera.observer
       group: sensors
       layer: isaac_infrastructure
@@ -2113,7 +2114,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/sensors/camera/runtime.py
-      sha256: b2c4195b92edbf9de85e428555e470318e2a5cfef4e879b79ad41ea2b1430414
+      sha256: f5d2692e0b807cde312c47b6655cf3671e11a0322e53a013dc0ce7c0e418a6ea
       module: linkerbot_sim.sensors.camera.runtime
       group: sensors
       layer: isaac_infrastructure
@@ -2387,7 +2388,7 @@ generated_inventory:
   test_python:
     count: 123
     path_sha256: f23d62ced1f4c2926574ae9735ea116ffc1aa88a8f24de744a8a943e10051f11
-    path_content_sha256: d8c24c71f5975c13bcbf7f6e3470a5283ca198c842413b4d6808726c15fff1e8
+    path_content_sha256: 4e2e922b00b8b44cb27ba1544c2ef82ddba52d4e768f595d92420fff51bce217
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2440,7 +2441,7 @@ generated_inventory:
     - path: tests/test_hybrid_force_position_controller.py
       sha256: d242778d2404b522677e9761ba09040d9a4543bb9a8c1225aba763d274dfa2ff
     - path: tests/test_isaac_app.py
-      sha256: e97f3729401ec7d095704d8ec92fe7bb2d35f0dd0ffccc0bc1f548cb3475d3af
+      sha256: 2f08384b3767de0dcc205e4b1285ac216cf077760e542eb282debe24468c8130
     - path: tests/test_isaac_extensions.py
       sha256: ffa91710619595e4e5d434ca856c7c0b55cabc4db456d30bda45393cfddfe758
     - path: tests/test_isaac_replicated_newton_scene.py
@@ -2506,7 +2507,7 @@ generated_inventory:
     - path: tests/test_mirror_newton.py
       sha256: 23caf0f361893d237126e18d15687c5e8f4362444d38c64c60d17eb05cb946d4
     - path: tests/test_mirror_physics_smoke.py
-      sha256: d7a7ce70a0e59bc534bd7bcc88f265998e5819a2964a089191af47f794a199c1
+      sha256: 8c4cfe3ac3813b57f707186dbf69f42e6e26d841111416dda0dfe5e2d9e6adb9
     - path: tests/test_mirror_planning_startup.py
       sha256: cd04c28cd396b5f7889414b146496390eb19bfde357c4f330304238794476adf
     - path: tests/test_mirror_protocol.py
@@ -2514,7 +2515,7 @@ generated_inventory:
     - path: tests/test_mirror_reset_runtime.py
       sha256: 93aee29217ebccdbebc23e355c62ae3a1fd4f6a99db9c79d39c7f4c546e44993
     - path: tests/test_mirror_runtime.py
-      sha256: bcf60796f748725ff876858748038c4dc3d4e3c15be95f1c26cf29b9ad65cddc
+      sha256: 47f9cd5a5a24d179d9488cc4d8bdc19dc1b6a0c0647d868a1ba9d32751b1ed78
     - path: tests/test_mirror_timing.py
       sha256: b00b970c78d02d2f133b97ab8e33a27df47470b2f90483662ccd349a9330ff9c
     - path: tests/test_mirror_transport.py
@@ -2550,7 +2551,7 @@ generated_inventory:
     - path: tests/test_physics_backend.py
       sha256: 859a953d044a78feebda958828e38095ab51e07e5bd450cbc325f212a958efd1
     - path: tests/test_physics_runtime_ownership.py
-      sha256: 1bb0931ec07cc9660e11ed8c24a55068f24ffe5c48d0f5d074c406cb5008b48d
+      sha256: c15ca0ed034cdcffc8c159881f215b5e28a7f608b3a5f1cc68c3e27ea1abb244
     - path: tests/test_physx_configuration.py
       sha256: 1986faf203f29e1e34bc909e7201cf4ee442b29574652d3be5eee2e565082d8d
     - path: tests/test_physx_gpu_memory_budget_smoke.py
@@ -2596,9 +2597,9 @@ generated_inventory:
     - path: tests/test_sensor_camera_foxglove.py
       sha256: 7ad884e2786daf632fea868ffca8714009636ca1c9dae614e68450037177a120
     - path: tests/test_sensor_camera_output.py
-      sha256: a2f3aa6b1092161c73afd35533e3079297e8516e50185e705348d58ec6ffbeef
+      sha256: 4c186252a496abe834dfc2991f14b6af9b0090c9388fff2291a5ee970c52645f
     - path: tests/test_sensor_camera_runtime.py
-      sha256: a18bba4e952943532b450a86347bb5da8ff3c6270b7afe858b14a7ecd752fd28
+      sha256: bbdf0cfd4b22fab2f2269fe8e20aab41dc0752ef94432da1c37023f4f8e30d97
     - path: tests/test_simulation_app_lifecycle.py
       sha256: 88e08e4c842807f7241e5194177b9e589f9368655aef148b960c6092510e93a4
     - path: tests/test_simulation_workflow.py
@@ -2727,7 +2728,7 @@ generated_inventory:
   kit_experiences:
     count: 7
     path_sha256: 46efca16c88d2da9c811ea4f58ef1afa5a17cf3e7eadfeed8e7d3334fe2e34f8
-    path_content_sha256: a950db19bacceb235a686fbcc31a0309f72252eaee75ada1197c81abadc4c009
+    path_content_sha256: e9fa35b937b27a3588dee65b63a232d8ca957f60dbdc47e3ac05eea900dfeb75
     files:
     - path: apps/linkerbot_sim.kaleidoscope.newton.python.kit
       sha256: b6c05795827193075136e29dec71ea56a020979e220b154367f84b307e9d1a04
@@ -2742,11 +2743,11 @@ generated_inventory:
     - path: apps/linkerbot_sim.mirror.newton_render.python.kit
       sha256: aef579d47238e4d12ed0d1365951084047b10ddbac9accddec39d359d5bb8748
     - path: apps/linkerbot_sim.mirror.physx.python.kit
-      sha256: cb681f4b33ad9f6185cc8ad3977d737e0fca0d87111a70c29f17c2c0d4df0e4e
+      sha256: 9b605ca99606a70408e99339d200a6a43354adc736519f9f18c2b162c57ae415
   entry_scripts:
-    count: 15
-    path_sha256: 8c49f89582a1aa430750326ec8aae2f775158084691ca77c21b9c97b9412f8a9
-    path_content_sha256: e4381d74b3151070647a1c0bf7f9c200fa0cf56fd0ccea7efe33c80ef943db87
+    count: 16
+    path_sha256: 7c1f84b05b834f16ed46d5a071e8ad70021de91ee719fb46d41ec2f1b81c1c2c
+    path_content_sha256: 9de76011012b30a336f13b03a4ae2768c63ff6c6d3b5d4e7328b855efcb7b987
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -2770,8 +2771,10 @@ generated_inventory:
       sha256: f6231e2798d14a1c1d1d751c84a2c5f385b3d101bf62c04fb584b688d057edd1
     - path: scripts/smoke_kaleidoscope_physics.py
       sha256: 04f7044969e0247ee4d19f8129719ac121f1d6550f5f093aea3ab1e3868ecd6e
+    - path: scripts/smoke_mirror_camera.py
+      sha256: 8a81db583c745f8272375b78d2ff1dde9cde5e763a7c9dbe456c2c02ae86a6d4
     - path: scripts/smoke_mirror_physics.py
-      sha256: af1ca09d7309c6691502fbbaebd67ce3747b0f047cac2f536a0a9ebca225a2c4
+      sha256: 387a220855d4245373a401570cde95ed90f34eda237b1f9ccbf3c26baa8f2a0f
     - path: scripts/smoke_physx_gpu_memory_budget.py
       sha256: 9c6e84f31aa41f9feb3e48195d1fb7d7892a90f6a7e9ea7881255718bbf8a3bf
     - path: scripts/update_architecture_inventory.py
@@ -2790,7 +2793,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: 12e95df0edd746a55b3898e86e9415d92308d31a7f370ecace36adc879ba9fe0
+    path_content_sha256: 1d01d2b78dd7cfb15b824d133b29501d6561b4eba232e3481b36a18975ab1fcf
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2821,7 +2824,7 @@ generated_inventory:
     - path: docs/en/getting-started/project-overview.md
       sha256: 340552411c8287105397c41ee42b7e16945142091777e21a082d274681490339
     - path: docs/en/guides/cameras.md
-      sha256: a15e7a6ad2d1d00805b2599e7c63137a4a2f47999a78ae8818621fb528882452
+      sha256: 583922832ee26e10dc3b84bf270ba079bf67e26ac8b47b0f7bb5da96317048ea
     - path: docs/en/guides/collision-models.md
       sha256: 6fcfc85386165c4615e6535a2e5ebb9c08ec96df544918c203d1edc808a7a6ec
     - path: docs/en/guides/configuration.md
@@ -2891,7 +2894,7 @@ generated_inventory:
     - path: docs/zh-CN/getting-started/project-overview.md
       sha256: ba8d6efd37dcbf7cca42a8743deec3e0999341277c544deed154734c43b4e482
     - path: docs/zh-CN/guides/cameras.md
-      sha256: a31f890cdea223930d81346de5e960f2831aa722cc6a6b5f0cb09992e108fe74
+      sha256: b54b92b78151f9eab2ef0578d65d89e64820e46e8145e2e31ebcb5e8883a2d81
     - path: docs/zh-CN/guides/collision-models.md
       sha256: f8c7ccb6eab3a7cf3b0b2461d0d13604cc31f89e1d05240835c7f308c9ac9818
     - path: docs/zh-CN/guides/configuration.md

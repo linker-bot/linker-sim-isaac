@@ -20,6 +20,8 @@ Git commit 标识。
 
 ### 修复
 
+- Mirror 相机通过原生帧完成事件刷新暂停位姿与 headless 图像，不推进物理；记录保留渲染身份，避免将旧帧标记为新的物理时刻。
+
 - Kaleidoscope PhysX CUDA 的 seed reset 现在会恢复 native mimic follower 的关节位置与
   速度，并刷新 articulation 派生出的 link pose；重复使用同一 seed 时不再继承上一 episode
   的关节历史。

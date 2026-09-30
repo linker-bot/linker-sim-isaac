@@ -548,3 +548,33 @@ def test_newton_launch_does_not_release_backend_when_registration_failed(
         app_module.launch_simulation_app(_mirror_newton(execution="cpu"))
 
     assert clears == []
+
+
+def test_physx_headless_render_keeps_hydra_viewport_active() -> None:
+    spec = _mirror_physx()
+    disable = "--/exts/omni.kit.viewport.window/startup/disableWindowOnLoad=true"
+    spec = replace(
+        spec,
+        app=replace(spec.app, gui=False),
+        render=replace(spec.render, enabled=True),
+    )
+    config = app_module._kit_config(spec)
+    assert config["headless"] is True
+    assert config["disable_viewport_updates"] is False
+    assert disable not in config["extra_args"]
+    config = app_module._kit_config(
+        replace(spec, render=replace(spec.render, enabled=False))
+    )
+    assert config["disable_viewport_updates"] is True
+    assert disable in config["extra_args"]
+
+
+def test_physx_headless_rejects_explicitly_disabled_viewport_updates() -> None:
+    spec = _mirror_physx()
+    spec = replace(
+        spec,
+        app=replace(spec.app, gui=False, disable_viewport_updates=True),
+        render=replace(spec.render, enabled=True),
+    )
+    with pytest.raises(ValueError, match="requires viewport updates"):
+        app_module._kit_config(spec)

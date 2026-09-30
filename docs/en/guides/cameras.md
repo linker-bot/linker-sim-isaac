@@ -81,12 +81,34 @@ wall-clock render cadence expires, the owner loop explicitly calls
 frame immediately. Application code calling `runtime.render()` has the same explicit
 capture semantics.
 
-For PhysX a transaction is one concrete-runtime `render()` call. For Newton the
-coordinator calls `pre_render()` exactly once to synchronize the owner stream and
-publish one immutable physics snapshot, then calls the pure `render_update()` operation
-as many times as each hidden camera product requires. Multiple cameras are activated
-one viewport at a time and all activation states are restored even if an update fails.
-These renderer-only updates reuse the same snapshot and never advance physics time.
+For CPU PhysX and Newton the coordinator calls `pre_render()` once to publish the
+current physics poses, then pumps `render_update()` without advancing physics time.
+Native cameras wait for a matching render-product completion whose Kit SWH frame
+number is at least the first update after publication. Newton has no SWH stage-update
+owner: it uses the native product frame number and a SyntheticData rational render-clock
+barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 50 renderer
+updates; a timeout raises instead of returning old data. Newton keeps its minimum
+four-update history budget and selects multiple viewports one at a time, restoring
+activation even on failure. Configured frequency controls output sampling; explicit
+`render()` requests a fresh frozen snapshot even when paused.
+
+Headless PhysX with rendering enabled retains an active startup Hydra viewport; it
+does not require a visible window or mechanical camera mesh. Mirror's PhysX Kit
+disables independent sensor/TLAS clocks so paused pose changes reach the next capture.
+With rendering disabled it still suppresses the startup viewport.
+
+Recorded frame metadata adds `capture`: `native_frame_id` (`native_frame_source` is
+`kit_swh` for PhysX or `kit_render_product_frame` for Newton), `render_product_path`, `render_snapshot_index`, and `physics_time_s`.
+`frame_index` remains an output sequence number, not a native exposure ID. A physics
+step without a matching render cannot relabel old pixels as a new observation.
+Native IDs are local to the Kit process; snapshot indices are local to the coordinator.
+Camera handles expose the same identity through `get_capture_metadata()`.
+
+The focused regression is `scripts/smoke_mirror_camera.py`: paused object set/restore,
+first frame without physics warmup, reset, and six consecutive 60 Hz simulation-time
+samples at 120 Hz physics. Select `--gui`, `--resolution 1920x1080`, `--cameras 3`, or
+`--record-root <empty-directory>` to exercise the corresponding paths. This does not
+claim 60 FPS wall-clock throughput.
 
 The physics runtime does not own cameras. `CameraBundle` owns camera handles and their
 output sink; Mirror closes the bundle before the Isaac session.

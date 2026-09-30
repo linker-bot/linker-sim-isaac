@@ -25,6 +25,8 @@ their Git commit.
 
 ### Fixed
 
+- Mirror cameras now refresh paused poses and headless captures using native frame completion, without stepping physics; records retain native render identity and stale frames are not retimestamped.
+
 - Kaleidoscope PhysX CUDA seeded resets now restore native mimic-follower joint
   positions and velocities, then refresh derived articulation link poses. Repeating
   a seed is independent of the preceding episode's joint history.

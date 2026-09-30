@@ -289,3 +289,23 @@ def test_newton_runtime_has_no_world_and_exposes_mirror_single_world_gate() -> N
     runtime._num_worlds = 2
     with pytest.raises(RuntimeError, match="Mirror.*exactly one world.*actual=2"):
         runtime.assert_single_world(consumer="Mirror")
+
+
+def test_physx_cpu_publishes_paused_poses_and_exposes_real_clock(monkeypatch) -> None:
+    import sys
+
+    calls = []
+    iface = SimpleNamespace(update_transformations=lambda *args: calls.append(args))
+    physx = SimpleNamespace(get_physx_interface=lambda: iface)
+    monkeypatch.setitem(sys.modules, "omni", SimpleNamespace(physx=physx))
+    monkeypatch.setitem(sys.modules, "omni.physx", physx)
+    world = SimpleNamespace(
+        current_time=0.5,
+        current_time_step_index=60,
+        render=lambda: calls.append("render"),
+    )
+    runtime = PhysxRuntime(world, kind="physx_cpu")
+    runtime.render()
+    assert calls == [(False, True, False), "render"]
+    assert runtime.simulation_time == 0.5
+    assert runtime.current_time_step_index == 60

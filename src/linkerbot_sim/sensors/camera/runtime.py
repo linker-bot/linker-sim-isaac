@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from linkerbot_sim.isaac.physics.backend import normalize_physics_backend
@@ -37,12 +37,87 @@ _WORLD_CAMERA_TO_USD_QUAT_WXYZ = (0.5, 0.5, -0.5, -0.5)
 _USD_TO_WORLD_CAMERA_QUAT_WXYZ = (0.5, -0.5, 0.5, 0.5)
 
 
-@dataclass(frozen=True)
+@dataclass
 class SensorCameraRuntime:
     """已创建的 RTX CameraSensor 及项目稳定访问接口。"""
 
     settings: SensorCameraSettings
     camera: object
+    _frame_tracker: _NativeFrameTracker | None = field(
+        default=None, init=False, repr=False
+    )
+    _capture_metadata: dict[str, object] = field(
+        default_factory=dict, init=False, repr=False
+    )
+
+    def begin_render_capture(self) -> None:
+        """Invalidate the last capture before publishing another frozen snapshot."""
+
+        self._capture_metadata.clear()
+        if self._frame_tracker is not None:
+            self._frame_tracker.begin()
+
+    def invalidate_render_capture(self) -> None:
+        """A paused state edit invalidates pixels even if physical time is unchanged."""
+
+        self._capture_metadata.clear()
+
+    def capture_matches_time(self, time_s: float) -> bool:
+        if self._frame_tracker is None:
+            return True
+        captured_time = self._capture_metadata.get("physics_time_s")
+        return (
+            captured_time is not None and abs(float(captured_time) - time_s) <= 1.0e-9
+        )
+
+    def render_capture_ready(self) -> bool:
+        if self._frame_tracker is None:
+            return True
+        if not self._frame_tracker.ready:
+            return False
+        for modality in self.settings.modalities:
+            data = self.get_modality_data(modality, device=None)
+            shape = getattr(data, "shape", ())
+            if len(shape) < 2 or not all(shape):
+                return False
+        return True
+
+    def render_capture_status(self) -> dict[str, object]:
+        tracker = self._frame_tracker
+        if tracker is None:
+            return {"native_tracking": False}
+        return {
+            "render_product_path": tracker.product_path,
+            "native_frame_id": tracker.frame_id,
+            "minimum_frame_id": tracker._minimum_frame,
+            "native_frame_source": tracker.frame_source,
+            "render_time": tracker._render_time,
+            "minimum_render_time": tracker._minimum_render_time,
+            "native_ready": tracker.ready,
+            "modality_shapes": {
+                modality: tuple(
+                    getattr(self.get_modality_data(modality, device=None), "shape", ())
+                )
+                for modality in self.settings.modalities
+            },
+        }
+
+    def finish_render_capture(
+        self, *, snapshot_index: int, physics_time_s: float | None
+    ) -> None:
+        if self._frame_tracker is not None:
+            self._capture_metadata.update(
+                native_frame_id=self._frame_tracker.frame_id,
+                native_frame_source=self._frame_tracker.frame_source,
+                render_product_path=self._frame_tracker.product_path,
+                render_snapshot_index=snapshot_index,
+                physics_time_s=physics_time_s,
+            )
+
+    def get_capture_metadata(self) -> dict[str, object]:
+        """Native render identity; empty until a complete owner render transaction."""
+
+        return dict(self._capture_metadata)
 
     @property
     def name(self) -> str:
@@ -144,9 +219,20 @@ class SensorCameraRuntime:
     def close(self) -> None:
         """Release renderer resources owned by this camera, if any."""
 
+        if self._frame_tracker is not None:
+            self._frame_tracker.close()
+            self._frame_tracker = None
+        self._capture_metadata.clear()
         close = getattr(self.camera, "close", None)
         if callable(close):
             close()
+        else:
+            # Isaac 6 CameraSensor has no public close; release its annotators and
+            # Hydra product using the same idempotent hook as its destructor,
+            # while Kit is still alive. Keep this version-specific fallback here.
+            invalidate = getattr(self.camera, "_invalidate_sensor", None)
+            if callable(invalidate):
+                invalidate()
 
     def _require_modality(self, modality: str) -> None:
         """确认 camera 配置中启用了指定 modality。"""
@@ -262,7 +348,7 @@ def create_sensor_camera_runtime(
 def initialize_sensor_camera_runtimes(
     cameras: tuple[SensorCameraRuntime, ...],
 ) -> None:
-    """Finalize camera resources; legacy cameras are initialized at construction."""
+    """Finalize camera resources and subscribe to their native frame completions."""
 
     newton_cameras = tuple(
         camera.camera
@@ -271,6 +357,128 @@ def initialize_sensor_camera_runtimes(
     )
     for camera in newton_cameras:
         camera.initialize()
+    for runtime in cameras:
+        if runtime._frame_tracker is not None:
+            continue
+        camera = runtime.camera
+        if isinstance(camera, _NewtonSyntheticDataCamera):
+            path = camera.render_product_path
+        else:
+            product = getattr(camera, "render_product", None)
+            if product is None:  # injected non-native test/consumer adapter
+                continue
+            path = str(product.GetPath())
+        runtime._frame_tracker = _NativeFrameTracker(
+            path,
+            frame_source="kit_render_product_frame"
+            if isinstance(camera, _NewtonSyntheticDataCamera)
+            else "kit_swh",
+        )
+
+
+class _NativeFrameTracker:
+    """Match native completion to a product and the first post-publish Kit frame.
+
+    A render call counter or simulation timestamp cannot identify a fresh paused
+    image. SWH frame numbers also work when physical time stays frozen. The event
+    contract is shared by Isaac's SyntheticData next_sensor_data_async helper.
+    """
+
+    def __init__(self, product_path: str, *, frame_source: str = "kit_swh") -> None:
+        import carb.eventdispatcher
+        import omni.kit.app
+        import omni.usd
+        from omni.syntheticdata.scripts import helpers
+
+        self.product_path = product_path
+        self.frame_source = frame_source
+        self.frame_id: int | None = None
+        self._minimum_frame: int | None = None
+        self._minimum_render_time: float | None = None
+        self._render_time: float | None = None
+        self._previous_frame: int | None = None
+        self._armed = False
+        native = helpers._get_syntheticdata_iface()
+        self._parse_event = native.parse_rendered_simulation_event
+        stage_id = omni.usd.get_context().get_stage_id()
+        self._simulation_render_time = lambda: native.get_rational_time_of_simulation(
+            stage_id, 0
+        )
+        dispatcher = carb.eventdispatcher.get_eventdispatcher()
+        self._subscriptions = []
+        try:
+            self._subscriptions.append(
+                dispatcher.observe_event(
+                    event_name=omni.kit.app.GLOBAL_EVENT_PRE_UPDATE,
+                    on_event=self._on_pre_update,
+                    observer_name=f"MirrorCamera.pre:{product_path}",
+                )
+            )
+            self._subscriptions.append(
+                dispatcher.observe_event(
+                    event_name=omni.usd.get_context().stage_rendering_event_name(
+                        omni.usd.StageRenderingEventType.NEW_FRAME
+                    ),
+                    on_event=self._on_render,
+                    observer_name=f"MirrorCamera.frame:{product_path}",
+                )
+            )
+        except BaseException:
+            self.close()
+            raise
+
+    def begin(self) -> None:
+        self._minimum_frame = None
+        self._minimum_render_time = None
+        self._previous_frame = self.frame_id
+        self._armed = True
+
+    def _on_pre_update(self, event: Any) -> None:
+        if not self._armed:
+            return
+        if self.frame_source == "kit_swh" and self._minimum_frame is None:
+            self._minimum_frame = int(event["SWHFrameNumber"] or event["frameNumber"])
+        elif (
+            self.frame_source == "kit_render_product_frame"
+            and self._minimum_render_time is None
+        ):
+            numerator, denominator = self._simulation_render_time()
+            if denominator > 0:
+                self._minimum_render_time = numerator / denominator
+
+    def _on_render(self, event: Any) -> None:
+        parsed = self._parse_event(event["product_path_handle"], event["results"])
+        if str(parsed[0]) != self.product_path:
+            return
+        # Newton's exclusive closure has no SWH stage-update owner (SWH == -1).
+        # Use the native product frame number and SyntheticData's rational render
+        # clock barrier instead, as next_render_simulation_async does. This clock
+        # is a renderer clock, never a replacement for Newton simulation_time.
+        field = "swh_frame_number" if self.frame_source == "kit_swh" else "frame_number"
+        self.frame_id = int(event[field])
+        self._render_time = parsed[1] / parsed[2] if parsed[2] > 0 else None
+
+    @property
+    def ready(self) -> bool:
+        if not self._armed or self.frame_id is None or self.frame_id < 0:
+            return False
+        if self._previous_frame is not None and self.frame_id <= self._previous_frame:
+            return False
+        if self.frame_source == "kit_swh":
+            return (
+                self._minimum_frame is not None and self.frame_id >= self._minimum_frame
+            )
+        return (
+            self._minimum_render_time is not None
+            and self._render_time is not None
+            and self._render_time >= self._minimum_render_time
+        )
+
+    def close(self) -> None:
+        for subscription in self._subscriptions:
+            subscription.reset()
+        self._subscriptions.clear()
+        self._armed = False
 
 
 class _NewtonSyntheticDataCamera:
@@ -288,6 +496,10 @@ class _NewtonSyntheticDataCamera:
     # 多相机由 Mirror RenderCoordinator 按 product 逐个执行这四次 update，期间 physics state
     # 与 clock 均冻结；物理 manager 不感知 camera 或 viewport。
     render_update_count = 4
+
+    @property
+    def render_product_path(self) -> str:
+        return str(self._viewport.render_product_path)
 
     def __init__(self, *, stage: object, settings: SensorCameraSettings) -> None:
         unsupported = sorted(set(settings.modalities) - {"rgb", "depth"})

@@ -745,3 +745,44 @@ def test_disabled_effort_output_ignores_retained_source() -> None:
     assert telemetry is not None
     assert telemetry.include_efforts is False
     assert telemetry.foxglove_joint_effort_field == "none"
+
+
+def test_render_coordinator_waits_for_native_completion_without_stepping() -> None:
+    events = []
+    ticks = []
+    camera = SimpleNamespace(
+        name="native",
+        begin_render_capture=lambda: events.append("begin"),
+        render_capture_ready=lambda: len(ticks) >= 3,
+        finish_render_capture=lambda **kw: events.append(kw),
+    )
+    physics = SimpleNamespace(
+        simulation_time=0.125,
+        render=lambda: ticks.append(1),
+        step=lambda: pytest.fail("render must not step"),
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
+    )
+    coordinator.render_only()
+    assert len(ticks) == 3
+    assert events == ["begin", {"snapshot_index": 1, "physics_time_s": 0.125}]
+
+
+def test_render_coordinator_fails_bounded_stale_frame_wait() -> None:
+    ticks = []
+    camera = SimpleNamespace(name="stale", render_capture_ready=lambda: False)
+    physics = SimpleNamespace(render=lambda: ticks.append(1))
+    coordinator = RenderCoordinator(
+        physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
+    )
+    with pytest.raises(RuntimeError, match="fresh-frame timeout.*stale"):
+        coordinator.render_frame()
+    assert len(ticks) == 50
+
+
+def test_render_coordinator_rejects_physics_advance_during_capture() -> None:
+    physics = SimpleNamespace(simulation_time=0.0)
+    physics.render = lambda: setattr(physics, "simulation_time", 0.1)
+    with pytest.raises(RuntimeError, match="advanced physics"):
+        RenderCoordinator(physics_runtime=physics).render_frame()
