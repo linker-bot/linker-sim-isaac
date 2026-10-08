@@ -1,0 +1,190 @@
+# Optional camera example. Remove matching streams when selecting a flange-only arm.
+scene:
+  id: camera_workstation
+  description: Flanged L6 arms with optional wrist and top camera modules
+  gravity_z: -9.81
+  add_ground: false
+  ground_height: 0.0
+  physics_frequency_hz: 120.0
+  render_frequency_hz: 60.0
+  planning_startup: lazy
+  robots:
+  - label: left_arm
+    robot_profile: ar5_08_l6_gemini335l_l
+    root_pose:
+      xyz:
+      - 0.0
+      - 0.09
+      - 0.0
+      rpy:
+      - -1.5707
+      - 0.0
+      - 0.0
+  - label: right_arm
+    robot_profile: ar5_08_l6_gemini335l_r
+    root_pose:
+      xyz:
+      - 0.0
+      - -0.09
+      - 0.0
+      rpy:
+      - 1.5707
+      - 0.0
+      - 0.0
+  objects:
+  - name: warehouse
+    object_profile: industrial_warehouse
+    prim_path: /World/IndustrialWarehouse
+    root_pose:
+      xyz:
+      - 0.0
+      - 0.0
+      - -1.266845
+      rpy:
+      - 0.0
+      - 0.0
+      - 0.0
+  - name: workstation
+    object_profile: workstation_armbase
+    prim_path: /World/WorkstationArmBase
+    root_pose:
+      xyz:
+      - 0.0
+      - 0.0
+      - 0.0
+      rpy:
+      - 0.0
+      - 0.0
+      - 0.0
+  - name: Tblock
+    object_profile: TblockV1_default
+    prim_path: /World/TBlock
+    root_pose:
+      xyz:
+      - 0.15
+      - 0.0
+      - -0.4
+      rpy:
+      - 0.0
+      - 1.5707
+      - 0.0
+  - name: top_camera
+    object_profile: workstation_zed2i
+    prim_path: /World/TopCamera
+    root_pose:
+      xyz:
+      - -0.0302850177
+      - 0.0447000213
+      - 0.0301550226
+      rpy:
+      - -1.5707963267948966
+      - 0
+      - -1.5707963267948966
+  cameras:
+  - id: left_rgb
+    camera_profile: gemini335l_rgb_60
+    parent_prim_path: /World/Robots/left_arm
+    parent_link: camera_rgb_optical
+    prim_path: /World/Robots/left_arm/left_rgb
+    pose:
+      xyz:
+      - 0
+      - 0
+      - 0
+      rpy:
+      - 0
+      - 0
+      - 0
+    pose_axes: opencv
+  - id: left_depth
+    camera_profile: gemini335l_depth_30
+    parent_prim_path: /World/Robots/left_arm
+    parent_link: camera_depth_optical
+    prim_path: /World/Robots/left_arm/left_depth
+    pose:
+      xyz:
+      - 0
+      - 0
+      - 0
+      rpy:
+      - 0
+      - 0
+      - 0
+    pose_axes: opencv
+  - id: right_rgb
+    camera_profile: gemini335l_rgb_60
+    parent_prim_path: /World/Robots/right_arm
+    parent_link: camera_rgb_optical
+    prim_path: /World/Robots/right_arm/right_rgb
+    pose:
+      xyz:
+      - 0
+      - 0
+      - 0
+      rpy:
+      - 0
+      - 0
+      - 0
+    pose_axes: opencv
+  - id: right_depth
+    camera_profile: gemini335l_depth_30
+    parent_prim_path: /World/Robots/right_arm
+    parent_link: camera_depth_optical
+    prim_path: /World/Robots/right_arm/right_depth
+    pose:
+      xyz:
+      - 0
+      - 0
+      - 0
+      rpy:
+      - 0
+      - 0
+      - 0
+    pose_axes: opencv
+  - id: top
+    camera_profile: zed2i_720p_60
+    parent_prim_path: /World/TopCamera
+    parent_link: sensor_left_optical
+    prim_path: /World/TopCamera/TopSensor
+    pose:
+      xyz:
+      - 0
+      - 0
+      - 0
+      rpy:
+      - 0
+      - 0
+      - 0
+    pose_axes: opencv
+  - id: side
+    camera_profile: development_1080p_60
+    parent_prim_path: /World
+    prim_path: /World/SideCamera
+    pose:
+      xyz:
+      - 0.85
+      - -0.9
+      - 0.3
+      rpy:
+      - 0
+      - 0.55
+      - 2.32
+  viewport:
+    enabled: true
+    eye:
+    - 1.35
+    - -1.65
+    - 1.05
+    target:
+    - 0.0
+    - -0.1
+    - 0.42
+    prim_path: /OmniverseKit_Persp
+  lights:
+  - id: key
+    path: /World/KeyLight
+    intensity: 1200.0
+    angle: 0.5
+  - id: fill
+    path: /World/FillLight
+    intensity: 250.0

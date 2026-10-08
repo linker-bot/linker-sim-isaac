@@ -60,11 +60,12 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | --- | --- | --- | --- | --- | --- | --- |
 | root | `linkerbot_sim` | foundation | lightweight repository metadata facade | pure | documented facade | [Architecture reference](../reference/python-api.md) |
 
-### configuration (23)
+### configuration (24)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | configuration | `linkerbot_sim.configuration` | configuration | stable lazy configuration public facade | pure | documented facade | [Architecture reference](../reference/configuration.md) |
+| configuration | `linkerbot_sim.configuration.cameras` | configuration | configuration implementation owner for cameras | pure | internal | [Architecture reference](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.catalog` | configuration | sole project profile YAML I/O and composition owner | pure | owner path | [Architecture reference](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.common` | configuration | shared immutable configuration primitives | pure | internal | [Architecture reference](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.control` | configuration | configuration implementation owner for control | pure | internal | [Architecture reference](../reference/configuration.md) |

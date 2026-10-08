@@ -1,0 +1,19 @@
+# Adjustable nominal preset; retain separate RGB/depth optical mounts.
+camera:
+  resolution:
+  - 848
+  - 480
+  frequency_hz: 60
+  modalities:
+  - depth
+  clipping_range_m:
+  - 0.01
+  - 10.0
+  intrinsics:
+    fx: 424.00000000000006
+    fy: 376.72453850819767
+    cx: 424.0
+    cy: 240.0
+  sensor_model: Orbbec Gemini 335L
+  calibration_source: nominal FOV pinhole; not device calibration; ideal depth, no
+    stereo matching or MinZ model

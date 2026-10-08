@@ -1,0 +1,19 @@
+# Adjustable nominal preset; retain separate RGB/depth optical mounts.
+camera:
+  resolution:
+  - 1920
+  - 1080
+  frequency_hz: 60
+  modalities:
+  - rgb
+  - depth
+  clipping_range_m:
+  - 0.01
+  - 10.0
+  intrinsics:
+    fx: 960.0000000000001
+    fy: 960.0001389189919
+    cx: 960.0
+    cy: 540.0
+  sensor_model: Virtual development camera
+  calibration_source: virtual observation and recording; not a physical sensor specification

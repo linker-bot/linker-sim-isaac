@@ -49,6 +49,7 @@ NEW_CONFIG_GROUPS = (
     "objects",
     "robots",
     "controllers",
+    "cameras",
 )
 
 
@@ -450,6 +451,7 @@ def test_mode_files_only_contain_composition_facts() -> None:
         "mirror": (
             "physx_cpu",
             "physx_cpu_hybrid",
+            "camera_workstation",
             "newton_cpu",
             "newton_cuda",
         ),
@@ -457,6 +459,7 @@ def test_mode_files_only_contain_composition_facts() -> None:
     }
     expected_scene_profiles = {
         ("mirror", "physx_cpu"): "mirror/scene3",
+        ("mirror", "camera_workstation"): "mirror/camera_workstation",
         ("mirror", "physx_cpu_hybrid"): "mirror/scene3_hybrid",
         ("mirror", "newton_cpu"): "mirror/scene3",
         ("mirror", "newton_cuda"): "mirror/scene3",

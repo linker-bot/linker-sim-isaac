@@ -464,6 +464,38 @@ def _validate_replication_contract(
             )
 
 
+def _apply_body_collision_filters(builder, stage, stage_info) -> int:
+    """Bridge explicit USD body filters to Newton's shape-only import contract.
+
+    body_shapes contains only shapes owned by that rigid body, not shapes under
+    descendant rigid links. This must not recreate ancestor/descendant exclusions.
+    Apply before add_builder so replicated worlds inherit the same seam pairs.
+    """
+    bodies = stage_info.get("path_body_map", {})
+    shapes = stage_info.get("path_shape_map", {})
+    pairs = set()
+    for path, body_index in bodies.items():
+        prim = stage.GetPrimAtPath(path)
+        relationship = prim.GetRelationship("physics:filteredPairs")
+        if not relationship.IsValid():
+            continue
+        for target in relationship.GetTargets():
+            target = str(target)
+            if target in bodies:
+                target_shapes = builder.body_shapes[bodies[target]]
+            elif target in shapes:
+                target_shapes = (shapes[target],)
+            else:
+                continue  # target belongs to another independently parsed root
+            for first in builder.body_shapes[body_index]:
+                for second in target_shapes:
+                    if first != second:
+                        pairs.add(tuple(sorted((first, second))))
+    for first, second in sorted(pairs):
+        builder.add_shape_collision_filter_pair(first, second)
+    return len(pairs)
+
+
 def build_replicated_newton_builder(
     stage: object,
     *,
@@ -582,6 +614,7 @@ def build_replicated_newton_builder(
             schema_resolvers=_new_schema_resolvers(dependencies),
             **common_parse_kwargs,
         )
+    _apply_body_collision_filters(builder, stage, global_stage_info)
     global_counts = _BuilderCounts.from_builder(builder)
 
     # 这是唯一一次 prototype parse。逐 destination 重复 add_usd 不仅有 CPU 开销，还可能
@@ -594,6 +627,7 @@ def build_replicated_newton_builder(
             schema_resolvers=_new_schema_resolvers(dependencies),
             **common_parse_kwargs,
         )
+    _apply_body_collision_filters(prototype_builder, stage, prototype_stage_info)
     prototype_counts = _BuilderCounts.from_builder(prototype_builder)
 
     inverse_source_transform = wp.transform_inverse(source_transform)

@@ -34,6 +34,7 @@ EXPECTED_MODE_PROFILES = {
     "mirror": {
         "configs/modes/mirror/physx_cpu.yaml",
         "configs/modes/mirror/physx_cpu_hybrid.yaml",
+        "configs/modes/mirror/camera_workstation.yaml",
         "configs/modes/mirror/newton_cpu.yaml",
         "configs/modes/mirror/newton_cuda.yaml",
     },
@@ -47,6 +48,7 @@ EXPECTED_CANONICAL_CONFIGURATION_PROFILES = {
     "configs/scenes/mirror": {
         "configs/scenes/mirror/scene3.yaml",
         "configs/scenes/mirror/scene3_hybrid.yaml",
+        "configs/scenes/mirror/camera_workstation.yaml",
     },
     "configs/scenes/kaleidoscope": {"configs/scenes/kaleidoscope/tblock_push.yaml"},
     "configs/physics/physx": {

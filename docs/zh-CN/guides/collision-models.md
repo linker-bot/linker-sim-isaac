@@ -24,6 +24,13 @@ cache 容量由 `curobo.motion_planner` 独立声明。Kaleidoscope 的可选 cu
 局部高度声明不可见解析 Plane 负责物理接触。场景因此保持 `add_ground: false`，避免再叠加一层
 默认地面；PhysX 与 Newton CPU/CUDA 都消费同一个解析碰撞体。
 
+### Newton 的明确刚体接缝过滤
+
+当前固定版本的 Newton USD importer 读取 collider 过滤，但不展开 MJCF importer 写出的
+body 过滤。Simulator 在 prototype 复制前，将每个明确的 body 对只展开到这两个刚体实际
+拥有的 shape；后代刚体仍可碰撞。PhysX 保留原 USD 关系。这样保留 AR5 link5–link7 等
+必要接缝，不会关闭整手或相机碰撞，Mirror 与 Kaleidoscope 均使用这一处理。
+
 ## 当前 USD 解析器的临时处理
 
 Kit 携带的 OpenUSD 25.11 在一个刚体有多个 mesh 时，`_FinalizeCollisionDescs` 会并行写同一 vector，

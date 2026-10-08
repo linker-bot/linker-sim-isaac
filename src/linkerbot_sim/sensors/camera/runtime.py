@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from linkerbot_sim.isaac.physics.backend import normalize_physics_backend
@@ -117,7 +117,16 @@ class SensorCameraRuntime:
     def get_capture_metadata(self) -> dict[str, object]:
         """Native render identity; empty until a complete owner render transaction."""
 
-        return dict(self._capture_metadata)
+        if not self._capture_metadata:
+            return {}
+        return {
+            **self._capture_metadata,
+            "camera_profile": self.settings.camera_profile,
+            "sensor_model": self.settings.sensor_model,
+            "calibration_source": self.settings.calibration_source,
+            "parent_prim_path": self.settings.parent_prim_path,
+            "pose_axes": self.settings.pose_axes,
+        }
 
     @property
     def name(self) -> str:
@@ -300,6 +309,7 @@ def create_sensor_camera_runtime(
         and backend == "newton"
     ):
         return _create_newton_camera_runtime(stage=stage, settings=settings)
+    settings = _resolve_parent_link(stage, settings)
     _validate_parent_prim(stage=stage, settings=settings)
     if (
         rtx_camera_type is None
@@ -320,7 +330,7 @@ def create_sensor_camera_runtime(
 
     orientation = _quat_multiply(
         quat_from_rpy(settings.pose_rpy),
-        _WORLD_CAMERA_TO_USD_QUAT_WXYZ,
+        _camera_to_usd_quaternion(settings),
     )
     schemas, attributes = _opencv_pinhole_schema_settings(settings)
     authoring_camera = rtx_camera_type(
@@ -357,6 +367,9 @@ def initialize_sensor_camera_runtimes(
     )
     for camera in newton_cameras:
         camera.initialize()
+    for runtime in cameras:
+        if isinstance(runtime.camera, _NewtonSyntheticDataCamera):
+            runtime.settings = runtime.camera._settings
     for runtime in cameras:
         if runtime._frame_tracker is not None:
             continue
@@ -536,6 +549,7 @@ class _NewtonSyntheticDataCamera:
             return
         # 资产、Newton model 和 reset 已全部完成，此时 robot link 等挂载父 prim 才稳定。
         # 提前 Define 会制造不完整机器人 namespace，并阻塞 importer 的 canonical target。
+        self._settings = _resolve_parent_link(self._stage, self._settings)
         _validate_parent_prim(stage=self._stage, settings=self._settings)
         self._define_camera_prim()
         import omni.syntheticdata as syn
@@ -688,7 +702,7 @@ class _NewtonSyntheticDataCamera:
                 attr.Set(value)
         orientation = _quat_multiply(
             _quat_from_extrinsic_xyz_rpy(self._settings.pose_rpy),
-            _WORLD_CAMERA_TO_USD_QUAT_WXYZ,
+            _camera_to_usd_quaternion(self._settings),
         )
         xform = UsdGeom.Xformable(camera.GetPrim())
         xform.ClearXformOpOrder()
@@ -912,6 +926,45 @@ def _float_sequence(value: object, *, size: int) -> tuple[float, ...]:
     if len(result) != size:
         raise ValueError(f"expected {size} values, got {len(result)}")
     return result
+
+
+def _camera_to_usd_quaternion(settings: SensorCameraSettings) -> tuple[float, ...]:
+    # USD looks along -Z with +Y up. OpenCV uses +Z forward and +Y down.
+    return (
+        (0.0, 1.0, 0.0, 0.0)
+        if settings.pose_axes == "opencv"
+        else _WORLD_CAMERA_TO_USD_QUAT_WXYZ
+    )
+
+
+def _resolve_parent_link(
+    stage: object, settings: SensorCameraSettings
+) -> SensorCameraSettings:
+    if settings.parent_link is None:
+        return settings
+    from pxr import Usd, UsdGeom
+
+    root = stage.GetPrimAtPath(settings.parent_prim_path)
+    matches = (
+        [
+            prim
+            for prim in Usd.PrimRange(root)
+            if prim.GetName() == settings.parent_link and prim.IsA(UsdGeom.Xform)
+        ]
+        if root.IsValid()
+        else []
+    )
+    if len(matches) != 1:
+        raise ValueError(
+            f"camera {settings.name}: expected one parent_link {settings.parent_link!r} under {settings.parent_prim_path}; found {len(matches)}"
+        )
+    parent = str(matches[0].GetPath())
+    return replace(
+        settings,
+        parent_prim_path=parent,
+        prim_path=parent + "/" + settings.prim_path.rsplit("/", 1)[-1],
+        parent_link=None,
+    )
 
 
 def _validate_parent_prim(*, stage: object, settings: SensorCameraSettings) -> None:

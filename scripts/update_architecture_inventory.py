@@ -58,6 +58,7 @@ MODE_PROFILE_PATHS = {
         {
             "configs/modes/mirror/physx_cpu.yaml",
             "configs/modes/mirror/physx_cpu_hybrid.yaml",
+            "configs/modes/mirror/camera_workstation.yaml",
             "configs/modes/mirror/newton_cpu.yaml",
             "configs/modes/mirror/newton_cuda.yaml",
         }
@@ -80,6 +81,7 @@ CANONICAL_CONFIGURATION_FILE_SETS = {
         {
             "configs/scenes/mirror/scene3.yaml",
             "configs/scenes/mirror/scene3_hybrid.yaml",
+            "configs/scenes/mirror/camera_workstation.yaml",
         }
     ),
     "configs/scenes/kaleidoscope": frozenset(

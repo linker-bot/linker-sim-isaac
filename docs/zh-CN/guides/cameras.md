@@ -71,3 +71,62 @@ message bytes、目录 bytes 和 shutdown timeout 都必须有上限。Overflow 
 队列。已有目录按 output policy 处理，不静默覆盖。
 
 相机 live listener 只绑定 loopback，无认证/TLS。精确输出约定见[输出参考](../reference/outputs.md)。
+
+## 法兰、灵巧手与实体相机模块
+
+`camera_workstation` 是可选 Mirror mode/scene 示例，物理频率 120 Hz。已有 L6/O6
+左右 profile 默认加入共用法兰并启用自碰撞。选择 `ar5_08_{l6,o6}_gemini335l_{l,r}`
+安装法兰、支架和 Gemini 335L；左右独立选配，改用仅法兰 profile 时移除对应相机条目。
+关闭渲染不会移除实体硬件，没有只带支架的 profile。重力、增益和 armature 保持原值；
+附件继承 default 关闭重力，但惯性仍生效。
+
+静态对象 `workstation_zed2i` 加入顶部相机和支架。示例放在立柱居中安装基准；其他场景
+需填写自己的实测根变换。光学 frame 和惯性采用标明来源的 CAD 标称配准/估计，并非设备标定。
+旧的零偏移 `pinch_tcp` 仍是臂末端参考，本次装配修改不会自动把它修正成抓取点。
+
+`parent_prim_path` 填机器人/对象实例根，`parent_link` 填导入后唯一的精确 link 名。
+资产导入后解析层级，缺失/重名直接失败。`prim_path` 的末段作为新相机名，实际放到解析出的
+link 下。`pose_axes: opencv` 表示局部 X 向右、Y 向下、Z 向前；默认 `world` 为 X 向前、
+Y 向左、Z 向上。光学 frame 下的零 pose 无需额外旋转。采集元数据记录实际 parent、profile、
+型号与标定来源；返回的 camera world pose 仍使用既有 world-camera 轴约定。
+
+```yaml
+- id: left_rgb
+  camera_profile: gemini335l_rgb_60
+  parent_prim_path: /World/Robots/left_arm
+  parent_link: camera_rgb_optical
+  prim_path: /World/Robots/left_arm/LeftRGB
+  pose: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+  pose_axes: opencv
+```
+
+相机 leaf 在 `configs/cameras` 单独维护。每个参数只有一个写入方，scene 不能静默覆盖
+所选 leaf 的同名参数；需调整时复制/修改 leaf，或提供完整内联配置。catalog 记录所选来源。
+
+| Profile | 原生分辨率 | Hz | 输出 |
+| --- | --- | --- | --- |
+| `gemini335l_rgb_60` | 1280×800 | 60 | RGB |
+| `gemini335l_depth_30` | 1280×800 | 30 | depth |
+| `gemini335l_depth_60` | 848×480 | 60 | depth |
+| `zed2i_1080p_30` | 1920×1080 | 30 | RGB + 理想深度 |
+| `zed2i_720p_60` | 1280×720 | 60 | RGB + 理想深度 |
+| `development_1080p_60` | 1920×1080 | 60 | RGB + 理想深度 |
+
+标称 pinhole FOV：Gemini RGB 94×68°、depth 90×65°，ZED 2i 2.1 mm 为 110×70°。
+这些预设不模拟双目匹配、畸变、硬件曝光、MinZ 无效域或噪声；真实 MinZ 不是渲染 near plane。
+Gemini RGB/depth 使用独立光学 frame，同尺寸不代表已对齐，真机需读取对应 profile 的 SDK 标定。
+开发录制采用虚拟相机规格，不是传感器图放大。Hz 指不同仿真时刻的采样数，不保证墙钟 FPS。
+
+当前 O6 + Gemini 装配的拇指伸直侧摆部分路径会碰到相机，符合实物。保留碰撞，并协调弯曲
+与侧摆；弯曲不代表所有角度都安全，左手尤其如此。任务需验证完整路径，L6 的手部形状另行判断。
+
+装配回归脚本为 `scripts/smoke_mirror_assemblies.py`，提供 `--hand`、
+`--wrists none|left|right|both`、`--profile`、`--gui` 和空目录 `--record-root`。
+检查原生图像尺寸、实体腕部随动、暂停恢复、reset 和未改变的重力开关。资产装配与碰撞依据
+见资产仓库 `docs/camera-assemblies.zh-CN.md`。
+
+回归还提供 `--depth-hz 30|60`、`--top-hz 30|60` 和 `--development-cameras`
+（双腕配置下四台原生 1080p 相机），选择同一套 catalog leaf，不放大采集后的图像。
+
+使用 `--record-root` 时，supervisor 在原生进程关闭后解码已经排空的图像/深度文件，检查
+尺寸、配置采样周期、严格递增的原生帧 ID，以及采集时间与物理时间的一致性。
