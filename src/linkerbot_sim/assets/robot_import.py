@@ -12,6 +12,7 @@ from linkerbot_sim.assets.root_pose import (
     apply_root_pose_transform,
 )
 from linkerbot_sim.configuration.robots import AssetImportConfig
+from linkerbot_sim.isaac.usd_physics_parse import serialized_usd_physics_parse
 from linkerbot_sim.isaac.physics.backend import (
     active_physics_backend,
     normalize_physics_backend,
@@ -88,7 +89,8 @@ def configure_mjcf_import(
             run_asset_transformer=True,
             run_multi_physics_conversion=True,
         )
-        destination = Path(MJCFImporter(import_config).import_mjcf())
+        with serialized_usd_physics_parse():
+            destination = Path(MJCFImporter(import_config).import_mjcf())
         source_prim_path = _discover_imported_root_path(destination)
         reference_asset = (
             _prepare_newton_render_reference_asset(
@@ -200,7 +202,8 @@ def configure_urdf_import(
             run_asset_transformer=True,
             run_multi_physics_conversion=True,
         )
-        destination = Path(URDFImporter(import_config).import_urdf())
+        with serialized_usd_physics_parse():
+            destination = Path(URDFImporter(import_config).import_urdf())
         imported_root = _discover_imported_root_path(destination)
         target_root = prim_path or imported_root
         reference_asset = (

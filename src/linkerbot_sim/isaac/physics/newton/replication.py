@@ -23,6 +23,8 @@ from dataclasses import dataclass
 import math
 from typing import Any
 
+from linkerbot_sim.isaac.usd_physics_parse import serialized_usd_physics_parse
+
 
 # 项目在 USD 中按 SI/弧度语义写入 revolute drive 的 stiffness 和 damping。Newton
 # ``add_usd`` 内部会先除以 ``DegreesToRadian / joint_drive_gains_scaling``；传入一度对应
@@ -573,23 +575,25 @@ def build_replicated_newton_builder(
             ),
         ]
     )
-    global_stage_info = builder.add_usd(
-        stage,
-        ignore_paths=ignored_paths,
-        schema_resolvers=_new_schema_resolvers(dependencies),
-        **common_parse_kwargs,
-    )
+    with serialized_usd_physics_parse():
+        global_stage_info = builder.add_usd(
+            stage,
+            ignore_paths=ignored_paths,
+            schema_resolvers=_new_schema_resolvers(dependencies),
+            **common_parse_kwargs,
+        )
     global_counts = _BuilderCounts.from_builder(builder)
 
     # 这是唯一一次 prototype parse。逐 destination 重复 add_usd 不仅有 CPU 开销，还可能
     # 让 importer 每次生成不同的匿名 label/index。parse 与 add_builder 之间也不得编辑任一
     # native coupling table，确保 prototype 中解析出的全部 equality 逐 world 原样复制。
-    prototype_stage_info = prototype_builder.add_usd(
-        stage,
-        root_path=source_root,
-        schema_resolvers=_new_schema_resolvers(dependencies),
-        **common_parse_kwargs,
-    )
+    with serialized_usd_physics_parse():
+        prototype_stage_info = prototype_builder.add_usd(
+            stage,
+            root_path=source_root,
+            schema_resolvers=_new_schema_resolvers(dependencies),
+            **common_parse_kwargs,
+        )
     prototype_counts = _BuilderCounts.from_builder(prototype_builder)
 
     inverse_source_transform = wp.transform_inverse(source_transform)

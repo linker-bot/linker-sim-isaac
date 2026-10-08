@@ -20,6 +20,8 @@ Git commit 标识。
 
 ### 修复
 
+- 资产导入期间临时串行化携带的 USD 25.11 物理解析器，规避多 collider 的分配器竞争；之后恢复正常并发。
+
 - Mirror 相机通过原生帧完成事件刷新暂停位姿与 headless 图像，不推进物理；记录保留渲染身份，避免将旧帧标记为新的物理时刻。
 
 - Kaleidoscope PhysX CUDA 的 seed reset 现在会恢复 native mimic follower 的关节位置与
