@@ -121,6 +121,12 @@ smoke-mirror:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_physics.py --profile newton_cpu --steps 8
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_physics.py --profile newton_cuda --steps 8
 
+# Focused native-frame/paused-refresh regression; no physics warmup or wall-clock FPS claim.
+smoke-mirror-camera:
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_camera.py --profile physx_cpu --cameras 3
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_camera.py --profile newton_cpu --cameras 3
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_camera.py --profile newton_cuda --cameras 3
+
 # 在全新的受监督进程中重复 Mirror 完整启动/渲染/关闭。默认聚焦最重的 Newton CUDA
 # render closure；发布前可分别传其余三个 profile。失败 JSON 会保留第几轮以及 SIGSEGV
 # 等 POSIX signal 名称，不能用单次成功替代这条间歇性 teardown 验收。
@@ -128,7 +134,7 @@ stress-mirror-teardown profile="newton_cuda" repetitions="20" steps="8":
     {{python}} -c 'import torch; assert torch.cuda.is_available(), "CUDA is required for the Mirror teardown stress gate"'
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_physics.py --profile {{profile}} --steps {{steps}} --teardown-repetitions {{repetitions}}
 
-test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

@@ -1173,3 +1173,50 @@ def test_start_camera_output_rejects_shared_offline_directory(tmp_path: Path) ->
         )
 
     assert not (tmp_path / "shared" / "metadata.jsonl").exists()
+
+
+def test_native_capture_cannot_be_retimestamped_without_new_render() -> None:
+    runtime = _camera_runtime()
+    runtime._frame_tracker = object()
+    runtime._capture_metadata = {
+        "native_frame_id": 15,
+        "native_frame_source": "kit_swh",
+        "physics_time_s": 0.8,
+        "render_product_path": "/Render/Camera",
+        "render_snapshot_index": 2,
+    }
+    indices = {}
+    assert (
+        sample_camera_frames(
+            runtime, frame_indices=indices, simulation_step=8, time_s=0.9
+        )
+        == ()
+    )
+    assert indices == {}
+    frames = sample_camera_frames(
+        runtime, frame_indices=indices, simulation_step=7, time_s=0.8
+    )
+    assert frames[0].metadata()["capture"] == runtime.get_capture_metadata()
+    assert frames[0].frame_index == 0
+
+
+def test_camera_observer_uses_actual_time_and_does_not_resample_native_frame() -> None:
+    from types import SimpleNamespace
+
+    runtime = _camera_runtime()
+    runtime._frame_tracker = object()
+    publisher = _CollectingPublisher()
+    observer = CameraFrameObserver(cameras=(runtime,), publisher=publisher)
+    world = SimpleNamespace(simulation_time=0.25, get_physics_dt=lambda: 0.1)
+    runtime._capture_metadata = {"native_frame_id": 15, "physics_time_s": 0.25}
+    observer.observe(world, step=0)
+    assert [frame.time_s for frame in publisher.frames] == [0.25, 0.25]
+    world.simulation_time = 0.45
+    observer.observe(world, step=1)
+    assert len(publisher.frames) == 2
+    runtime.invalidate_render_capture()
+    observer.observe(world, step=2)
+    assert len(publisher.frames) == 2
+    runtime._capture_metadata = {"native_frame_id": 16, "physics_time_s": 0.45}
+    observer.observe(world, step=3)
+    assert [frame.time_s for frame in publisher.frames] == [0.25, 0.25, 0.45, 0.45]

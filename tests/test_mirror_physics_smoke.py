@@ -1290,3 +1290,10 @@ def test_main_forwards_teardown_repetitions_to_supervisor(monkeypatch) -> None:
 
     assert smoke.main(["--teardown-repetitions", "7"]) == 0
     assert supervised[0]["repetitions"] == 7
+
+
+def test_camera_clock_cannot_default_missing_fields_to_zero() -> None:
+    with pytest.raises(RuntimeError, match="actual physics step/time"):
+        smoke._camera_physics_clock(
+            SimpleNamespace(physics=SimpleNamespace(get_physics_dt=lambda: 0.01))
+        )

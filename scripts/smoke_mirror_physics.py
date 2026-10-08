@@ -1070,14 +1070,11 @@ def _camera_physics_clock(runtime: object) -> tuple[int, float]:
         time_s = float(manager_time)
         dt = float(physics.get_physics_dt())
         return int(round(time_s / dt)), time_s
-    step = int(getattr(physics, "current_time_step_index", 0))
+    step_value = getattr(physics, "current_time_step_index", None)
     world_time = getattr(physics, "current_time", None)
-    time_s = (
-        step * float(physics.get_physics_dt())
-        if world_time is None
-        else float(world_time)
-    )
-    return step, time_s
+    if step_value is None or world_time is None:
+        raise RuntimeError("Mirror camera probe requires the actual physics step/time")
+    return int(step_value), float(world_time)
 
 
 def _camera_frame_report_item(

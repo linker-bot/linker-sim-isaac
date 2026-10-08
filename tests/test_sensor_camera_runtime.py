@@ -635,3 +635,88 @@ def test_direct_camera_is_owned_and_closed_by_returned_runtime(
     assert events == []
     runtime.close()
     assert events == ["close"]
+
+
+def test_native_frame_tracker_rejects_old_or_other_product_frames() -> None:
+    tracker = camera_runtime._NativeFrameTracker.__new__(
+        camera_runtime._NativeFrameTracker
+    )
+    tracker.product_path = "/Render/CameraA"
+    tracker.frame_source = "kit_swh"
+    tracker.frame_id = 12
+    tracker._parse_event = lambda path, _results: (path, 0, 1)
+    tracker.begin()
+    tracker._on_pre_update({"SWHFrameNumber": 15})
+    tracker._on_render(
+        {
+            "product_path_handle": "/Render/CameraB",
+            "results": [],
+            "swh_frame_number": 20,
+        }
+    )
+    assert tracker.frame_id == 12
+    assert not tracker.ready
+    tracker._on_render(
+        {
+            "product_path_handle": "/Render/CameraA",
+            "results": [],
+            "swh_frame_number": 14,
+        }
+    )
+    assert not tracker.ready
+    tracker._on_render(
+        {
+            "product_path_handle": "/Render/CameraA",
+            "results": [],
+            "swh_frame_number": 15,
+        }
+    )
+    assert tracker.ready
+    tracker.begin()
+    assert not tracker.ready
+    tracker._on_pre_update({"SWHFrameNumber": 0, "frameNumber": 16})
+    assert not tracker.ready
+
+
+def test_close_invalidates_native_sensor_before_kit_teardown() -> None:
+    calls = []
+    runtime = SensorCameraRuntime(
+        settings=_settings(),
+        camera=SimpleNamespace(_invalidate_sensor=lambda: calls.append("sensor")),
+    )
+    runtime._frame_tracker = SimpleNamespace(close=lambda: calls.append("tracker"))
+    runtime.close()
+    assert calls == ["tracker", "sensor"]
+    assert runtime.get_capture_metadata() == {}
+
+
+def test_newton_tracker_uses_native_product_frame_and_renderer_clock() -> None:
+    tracker = camera_runtime._NativeFrameTracker.__new__(
+        camera_runtime._NativeFrameTracker
+    )
+    tracker.product_path = "/Render/Newton"
+    tracker.frame_source = "kit_render_product_frame"
+    tracker.frame_id = 3
+    tracker._simulation_render_time = lambda: (6, 10)
+    tracker._parse_event = lambda path, results: (path, *results)
+    tracker.begin()
+    tracker._on_pre_update({"SWHFrameNumber": 20})
+    tracker._on_render(
+        {
+            "product_path_handle": tracker.product_path,
+            "results": (5, 10),
+            "frame_number": 4,
+            "swh_frame_number": -1,
+        }
+    )
+    assert not tracker.ready
+    tracker._on_render(
+        {
+            "product_path_handle": tracker.product_path,
+            "results": (6, 10),
+            "frame_number": 5,
+            "swh_frame_number": -1,
+        }
+    )
+    assert tracker.ready
+    assert tracker.frame_id == 5

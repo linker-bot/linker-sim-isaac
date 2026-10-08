@@ -75,26 +75,48 @@ class CameraFrameObserver:
         self.publisher = publisher
         self._next_sample_time: dict[str, float] = {}
         self._frame_indices: dict[tuple[str, str], int] = {}
+        self._native_frames: dict[str, int] = {}
 
     def observe(self, world, *, step: int, phase: str | None = None) -> None:
         """在 physics step 后采样当前到期的相机并把 frame 提交给 publisher。
 
-        ``step`` 是从零开始的已完成 step 索引，所以物理时间为 ``(step + 1) * dt``。
+        Mirror 使用 owner 的实际 simulation_time，避免初始化/reset 步数造成时间错标。
+        独立 adapter 未提供时钟时，才从零起点的 ``step`` 推导 ``(step + 1) * dt``。
         ``phase`` 当前仅满足通用 execution observer 接口，不参与采样或 metadata。
         """
 
         del phase
-        time_s = (step + 1) * float(world.get_physics_dt())
+        physics_time = getattr(world, "simulation_time", None)
+        time_s = (
+            (step + 1) * float(world.get_physics_dt())
+            if physics_time is None
+            else float(physics_time)
+        )
         for camera in self.cameras:
+            get_metadata = getattr(camera, "get_capture_metadata", None)
+            metadata = get_metadata() if callable(get_metadata) else {}
+            native_id = metadata.get("native_frame_id")
+            if (
+                native_id is not None
+                and self._native_frames.get(camera.name) == native_id
+            ):
+                continue
             if not self._should_sample(camera, time_s):
                 continue
-            for frame in sample_camera_frames(
+            frames = sample_camera_frames(
                 camera,
                 frame_indices=self._frame_indices,
                 simulation_step=step,
                 time_s=time_s,
-            ):
+            )
+            for frame in frames:
                 self.publisher.publish(frame)
+            if frames:
+                self._next_sample_time[camera.name] = (
+                    time_s + 1.0 / camera.settings.frequency
+                )
+            if frames and native_id is not None:
+                self._native_frames[camera.name] = int(native_id)
 
     def _should_sample(self, camera: SensorCameraRuntime, time_s: float) -> bool:
         """按仿真时间判断当前相机是否到达下一采样点。
@@ -106,7 +128,6 @@ class CameraFrameObserver:
         next_time = self._next_sample_time.get(camera.name)
         if next_time is not None and time_s + 1.0e-9 < next_time:
             return False
-        self._next_sample_time[camera.name] = time_s + 1.0 / camera.settings.frequency
         return True
 
     def reset(self) -> None:
@@ -114,6 +135,7 @@ class CameraFrameObserver:
 
         self._next_sample_time.clear()
         self._frame_indices.clear()
+        self._native_frames.clear()
 
 
 @dataclass

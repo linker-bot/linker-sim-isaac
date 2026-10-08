@@ -177,6 +177,10 @@ class MirrorPhysicsAdapter:
     def get_rendering_dt(self) -> float:
         return float(self.runtime.get_rendering_dt())
 
+    @property
+    def simulation_time(self) -> float:
+        return float(self.runtime.simulation_time)
+
 
 @dataclass
 class MirrorSceneResources:
@@ -632,8 +636,8 @@ def create_mirror_scene_resources(
             stage=session.stage,
             immutable_static=newton_runtime,
         )
-        # Newton 此时才激活早先预留 viewport 的 SyntheticData sensor；PhysX camera
-        # 仍由其构造器完成 legacy 初始化。
+        # Robot parents and reset are now stable: initialize Newton products and
+        # subscribe both backends to native frame completions.
         initialize_sensor_camera_runtimes(sensor_cameras)
 
         prepared_entries: list[tuple[Any, ...]] = []

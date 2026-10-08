@@ -106,8 +106,15 @@ def _kit_config(spec: IsaacSessionSpec) -> dict[str, object]:
     if hide_ui is None:
         hide_ui = False if gui else None
     disable_viewport_updates = app.disable_viewport_updates
+    physx_render = (
+        spec.experience_family == "mirror"
+        and isinstance(spec.physics, IsaacPhysxCpuSpec)
+        and render.enabled
+    )
     if disable_viewport_updates is None:
-        disable_viewport_updates = not gui
+        disable_viewport_updates = not (gui or physx_render)
+    elif physx_render and not gui and disable_viewport_updates:
+        raise ValueError("Mirror PhysX headless rendering requires viewport updates")
     fast_shutdown = app.fast_shutdown
     if fast_shutdown is None:
         fast_shutdown = not gui
@@ -116,7 +123,7 @@ def _kit_config(spec: IsaacSessionSpec) -> dict[str, object]:
         f"--/rtx/materialDb/syncLoads={str(app.material_sync_loads).lower()}",
         f"--/rtx/hydra/materialSyncLoads={str(app.hydra_material_sync_loads).lower()}",
     ]
-    if not gui:
+    if not gui and not physx_render:
         # viewport.window 即使在 --no-window 下也会默认创建一个无主交互 viewport；它会与
         # Newton SyntheticData camera 各自持有一份 Hydra product。headless session 不需要
         # 交互视角，只保留相机显式拥有并负责销毁的 window；GUI session 继续使用扩展默认
@@ -126,6 +133,10 @@ def _kit_config(spec: IsaacSessionSpec) -> dict[str, object]:
             0,
             "--/exts/omni.kit.viewport.window/startup/disableWindowOnLoad=true",
         )
+    # Isaac 6 CameraSensor render products need an active Hydra viewport even
+    # with --no-window. Mirror PhysX retains the session-owned startup viewport;
+    # Newton keeps its existing per-camera viewport lifecycle. No visible OS
+    # window is created in headless mode.
     if not gui and app.hide_ui is None:
         extra_args.insert(0, "--/app/window/hideUi=1")
 

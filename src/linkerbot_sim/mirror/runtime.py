@@ -166,6 +166,8 @@ class MirrorRuntime:
     def set_state(self, state: Mapping[str, object], *, strict: bool = True) -> object:
         self._require_open("set_state")
         self._require_owner_thread("set_state")
+        if self.rendering is not None:
+            self.rendering.invalidate_captures()
         result = self.state_service.set_state(state, strict=strict)
         self.collision.mark_dirty()
         return result
@@ -184,6 +186,8 @@ class MirrorRuntime:
     ) -> object:
         self._require_open("restore_snapshot")
         self._require_owner_thread("restore_snapshot")
+        if self.rendering is not None:
+            self.rendering.invalidate_captures()
         result = self.snapshot_service.restore_snapshot(
             snapshot,
             label_map=label_map,
@@ -195,6 +199,8 @@ class MirrorRuntime:
     def reset(self, *, hold_after_reset: bool = True) -> object:
         self._require_open("reset")
         self._require_owner_thread("reset")
+        if self.rendering is not None:
+            self.rendering.invalidate_captures()
         self.step_synchronizer.rebase()
         result = self.reset_service.reset(hold_after_reset=hold_after_reset)
         self.collision.mark_dirty()

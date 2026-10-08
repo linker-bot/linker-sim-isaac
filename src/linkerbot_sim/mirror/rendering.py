@@ -65,6 +65,7 @@ class RenderCoordinator:
     physics_runtime: object
     cameras: CameraBundle | None = None
     _closed: bool = field(default=False, init=False, repr=False)
+    _snapshot_index: int = field(default=0, init=False, repr=False)
 
     def render_frame(self, *, capture: bool = True) -> object:
         """执行一次 render transaction，并可在显式调用边界返回当前帧。
@@ -94,23 +95,17 @@ class RenderCoordinator:
                 "an independent per-camera render budget requires each camera to implement set_render_active"
             )
 
-        # Newton 暴露纯 renderer tick，因此每个 Mirror frame 只发布一次物理快照，
-        # 后续 camera budget/轮转不再重复 CUDA synchronize 和 USD transform 写入。PhysX
-        # 没有这个拆分合同，继续使用其 World.render() 完成一次完整 transaction。
+        # Publish once; subsequent native-frame waits only pump the renderer.
+        # Both CPU PhysX and Newton must publish paused set/reset poses explicitly.
         render_tick = render
         render_update = getattr(self.physics_runtime, "render_update", None)
         pre_render = getattr(self.physics_runtime, "pre_render", None)
         if callable(render_update) and callable(pre_render):
             pre_render()
             render_tick = render_update
+        self._snapshot_index += 1
         if not selected_render:
-            # camera 只声明“同一快照需要多少次 renderer update”，不取得 App 或 physics 的
-            # 所有权。Newton 的隐藏 SyntheticData product 需要连续四次完整 transaction
-            # 才能越过 Kit 的三帧 history；PhysX CameraSensor 没有该声明，默认只渲染一次。
-            # 重复调用期间 concrete runtime 不推进 physics time，因而每次看到的是同一快照。
-            count = max((count for _target, count in targets), default=1)
-            for _ in range(count):
-                render_tick()
+            self._render_group(render_tick, targets)
         else:
             self._render_selected_targets(render_tick, targets)
         return {} if not capture or self.cameras is None else self.cameras.capture()
@@ -119,6 +114,13 @@ class RenderCoordinator:
         """推进 renderer 但不读取 camera；供 completed physics-step 边界调用。"""
 
         self.render_frame(capture=False)
+
+    def invalidate_captures(self) -> None:
+        if self.cameras is not None:
+            for camera in self.cameras.cameras:
+                invalidate = getattr(camera, "invalidate_render_capture", None)
+                if callable(invalidate):
+                    invalidate()
 
     def _render_targets(self) -> tuple[tuple[object, int], ...]:
         if self.cameras is None:
@@ -134,8 +136,64 @@ class RenderCoordinator:
             targets.append((target, count))
         return tuple(targets)
 
-    @staticmethod
+    def _render_group(
+        self,
+        render: Callable[[], object],
+        targets: tuple[tuple[object, int], ...],
+    ) -> None:
+        cameras = (
+            ()
+            if self.cameras is None
+            else tuple(
+                camera
+                for camera in self.cameras.cameras
+                if any(
+                    getattr(camera, "camera", camera) is target for target, _ in targets
+                )
+            )
+        )
+        for camera in cameras:
+            begin = getattr(camera, "begin_render_capture", None)
+            if callable(begin):
+                begin()
+        count = max((count for _target, count in targets), default=1)
+        physics_time = getattr(self.physics_runtime, "simulation_time", None)
+        pending = []
+        # Native completion may lag several renderer updates. Bound warmup instead
+        # of advancing physics or returning old annotator data under a new index.
+        for update in range(max(count, 50)):
+            render()
+            if getattr(self.physics_runtime, "simulation_time", None) != physics_time:
+                raise RuntimeError("camera rendering advanced physics time")
+            if update + 1 < count:
+                continue
+            pending = [
+                camera
+                for camera in cameras
+                if callable(ready := getattr(camera, "render_capture_ready", None))
+                and not ready()
+            ]
+            if not pending:
+                for camera in cameras:
+                    finish = getattr(camera, "finish_render_capture", None)
+                    if callable(finish):
+                        finish(
+                            snapshot_index=self._snapshot_index,
+                            physics_time_s=physics_time,
+                        )
+                return
+        names = [str(getattr(camera, "name", "unknown")) for camera in pending]
+        details = {
+            name: status()
+            for name, camera in zip(names, pending)
+            if callable(status := getattr(camera, "render_capture_status", None))
+        }
+        raise RuntimeError(
+            f"camera fresh-frame timeout after 50 renderer updates: {names}; {details}"
+        )
+
     def _render_selected_targets(
+        self,
         render: Callable[[], object],
         targets: tuple[tuple[object, int], ...],
     ) -> None:
@@ -150,11 +208,10 @@ class RenderCoordinator:
 
         primary_error: BaseException | None = None
         try:
-            for selected_index, (_target, count) in enumerate(targets):
+            for selected_index, target in enumerate(targets):
                 for index, selector in enumerate(selectors):
                     selector(index == selected_index)
-                for _ in range(count):
-                    render()
+                self._render_group(render, (target,))
         except BaseException as exc:
             primary_error = exc
 
