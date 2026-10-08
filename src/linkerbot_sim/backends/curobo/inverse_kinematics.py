@@ -27,9 +27,13 @@ class CuroboInverseKinematics:
         """保存 context 和默认 TCP frame。"""
 
         self.context = context
-        self.ik_solver = context.ik_solver
+        context.ik_solver
         self.tcp_frame_name = str(tcp_frame_name or context.default_tcp_frame)
         self.expected_cspace_width = len(context.joint_names())
+
+    @property
+    def ik_solver(self):
+        return self.context.ik_solver
 
     def joint_names(self) -> list[str]:
         """返回 IK 输入 seed 和输出解使用的 C-space 关节名顺序。"""

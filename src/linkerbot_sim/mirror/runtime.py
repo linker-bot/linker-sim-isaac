@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import math
 from threading import get_ident
@@ -18,6 +19,7 @@ from linkerbot_sim.mirror.reset import MirrorResetService
 from linkerbot_sim.mirror.snapshot import MirrorSnapshotService
 from linkerbot_sim.mirror.state import MirrorStateService
 from linkerbot_sim.mirror.timing import WallClockStepSynchronizer
+from linkerbot_sim.planning.collision_validation import AllowedPlanningContact
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,47 @@ class MirrorRuntime:
         if any(item is resource for item in self.ingress):
             raise ValueError("ingress resource is already registered")
         self.ingress.append(resource)
+
+    def attach_planning_object(
+        self, object_name: str, robot_id: int, *, touch_links: tuple[str, ...] = ()
+    ) -> None:
+        """Declare a carried object for planning; physical grasp remains Task-owned."""
+        self._require_open("attach_planning_object")
+        self._require_owner_thread("attach_planning_object")
+        self.collision.registry.attach_object(
+            object_name, robot_id, touch_links=touch_links
+        )
+
+    def detach_planning_object(self, object_name: str) -> None:
+        self._require_open("detach_planning_object")
+        self._require_owner_thread("detach_planning_object")
+        self.collision.registry.detach_object(object_name)
+
+    @contextmanager
+    def planning_contact_scope(
+        self, robot_id: int, contacts: Sequence[tuple[str, str]]
+    ):
+        """Allow exact (link, geometry) pairs during a task phase, then restore policy.
+
+        Plan and execute inside the scope. It never changes physical filtering;
+        snapshot restore/reset do not grant or extend these lexical allowances.
+        """
+        self._require_open("planning_contact_scope")
+        self._require_owner_thread("planning_contact_scope")
+        robot = self.scene_resources.robot_registry.resolve(robot_id)
+        declarations = []
+        for pair in contacts:
+            if (
+                not isinstance(pair, (tuple, list))
+                or len(pair) != 2
+                or not all(isinstance(name, str) and name.strip() for name in pair)
+            ):
+                raise ValueError(
+                    "planning contact must be a (link_name, geometry_name) pair"
+                )
+            declarations.append(AllowedPlanningContact(robot.robot_id, *pair))
+        with self.collision.registry.contact_scope(declarations):
+            yield
 
     def step(self, *, render: bool = False) -> None:
         self._require_open("step")

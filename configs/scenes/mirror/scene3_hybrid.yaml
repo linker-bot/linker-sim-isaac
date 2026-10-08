@@ -11,6 +11,13 @@ scene:
   render_frequency_hz: 60.0
   planning_startup: prewarm
 
+  planning_contacts:
+    - robot_label: left_arm
+      link_name: arm_AR5_5_08L_W4C4A6_base
+      geometry_name: workstation/Geometry/workstationV1_armbase_frame/armbase_top_flange
+    - robot_label: right_arm
+      link_name: arm_AR5_5_08R_W4C4A6_base
+      geometry_name: workstation/Geometry/workstationV1_armbase_frame/armbase_top_flange
   robots:
     - label: left_arm
       robot_profile: ar5_08_l6_l

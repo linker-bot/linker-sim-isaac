@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 from dataclasses import asdict, replace
 import json
 from pathlib import Path
 import sys
+from tempfile import TemporaryDirectory
 import traceback
 
 import numpy as np
@@ -43,6 +45,7 @@ def parse_args():
     parser.add_argument("--depth-hz", type=int, choices=(30, 60), default=30)
     parser.add_argument("--top-hz", type=int, choices=(30, 60), default=60)
     parser.add_argument("--development-cameras", action="store_true")
+    parser.add_argument("--task-flow", action="store_true")
     return parser.parse_args()
 
 
@@ -111,11 +114,87 @@ def assembly_config(args):
     )
 
 
+def exercise_task_flow(runtime):
+    """Use public state, image, FK/IK and collision-aware motion boundaries."""
+    from linkerbot_sim.planning.requests import IKRequest
+
+    baseline = runtime.get_state()
+    first = runtime.render()
+    moved = deepcopy(baseline)
+    block = moved["objects"]["Tblock"]
+    block["positions_local"][1] += 0.08
+    for key in ("generalized_signature", "generalized_q_names", "generalized_qd_names"):
+        block[key] = []
+    for key in ("generalized_q", "generalized_qd", "generalized_world_origin"):
+        block[key] = None
+    moved["metadata"]["info"].pop(
+        "linkerbot.snapshot.newton_solver_integration_state", None
+    )
+    runtime.set_state(moved)
+    second = runtime.render()
+    changed = int(np.count_nonzero(first["side"]["depth"] != second["side"]["depth"]))
+    assert changed > 10, changed
+    runtime.restore_snapshot(baseline)
+    resources = runtime.scene_resources
+    robot = resources.robots_by_id[0]
+    planning = resources.planning_registry
+    with planning.lease(0) as context:
+        planning.sync_before_plan(0, resources.collision_registry.snapshot())
+        names = context.joint_names()
+        q = np.asarray(robot.articulation.get_joint_positions())[
+            [list(robot.articulation.dof_names).index(name) for name in names]
+        ]
+        pose = context.make_forward_kinematics().compute_pose(
+            q, context.default_tcp_frame
+        )
+        ik = context.make_inverse_kinematics().solve(
+            IKRequest(
+                target_position=pose.position,
+                target_orientation=pose.orientation,
+                warm_start_ik_cspace_seed=q,
+                avoid_collisions=False,
+            )
+        )
+        assert ik.success, ik
+        assert ik.position_error < 0.005
+    goal = q.copy()
+    goal[-1] += 0.03
+    before = runtime.physics_runtime.simulation_time
+    previous_contacts = resources.collision_registry.snapshot().allowed_contacts
+    # Exercise a phase-scoped public declaration without disabling other links.
+    with runtime.planning_contact_scope(0, (("hand_lh_index_distal", "Tblock"),)):
+        runtime.motion.execute(
+            "motion.plan_cspace_goal",
+            {
+                "robot_id": 0,
+                "joint_positions": goal.tolist(),
+                "duration_s": 0.25,
+                "avoid_collisions": True,
+            },
+            request_id="assembly-task-flow",
+            should_cancel=lambda: False,
+            protocol="linkerbot.mirror.v2",
+        )
+    assert resources.collision_registry.snapshot().allowed_contacts == previous_contacts
+    actual = np.asarray(robot.articulation.get_joint_positions())[
+        [list(robot.articulation.dof_names).index(name) for name in names]
+    ]
+    assert np.max(np.abs(actual - goal)) < 0.02, (actual, goal)
+    assert runtime.physics_runtime.simulation_time > before
+    return {
+        "set_block_changed_depth_pixels": changed,
+        "ik_position_error_m": ik.position_error,
+        "execution_max_joint_error_rad": float(np.max(np.abs(actual - goal))),
+        "phase_contacts_restored": True,
+    }
+
+
 def run(args):
     runtime = create_mirror_runtime(assembly_config(args))
     try:
         resources = runtime.scene_resources
         cameras = resources.sensor_cameras
+        flow = exercise_task_flow(runtime) if args.task_flow else None
 
         def capture():
             before = runtime.physics_runtime.simulation_time
@@ -141,6 +220,7 @@ def run(args):
             "hand": args.hand,
             "wrists": args.wrists,
             "gui": args.gui,
+            "task_flow": flow,
             "initial_poses": initial_poses,
             "mounts": {c.name: c.get_capture_metadata() for c in cameras},
         }
@@ -197,7 +277,9 @@ def run(args):
             for r in resources.robots_by_id.values()
         }
         for decision in range(12):
-            runtime.step(render=decision % 2 == 1)
+            # A preceding timeline can end on either sampling parity. Render
+            # every tick here; the observer keeps each camera's configured rate.
+            runtime.step(render=args.task_flow or decision % 2 == 1)
         report["joint_max_delta_after_12_steps"] = {
             r.label: float(
                 np.max(
@@ -284,6 +366,10 @@ def run(args):
 def main():
     args = parse_args()
     if not in_runtime_worker():
+        if args.task_flow and args.record_root is None:
+            with TemporaryDirectory(prefix="linkerbot-assembly-record-") as directory:
+                args.record_root = Path(directory)
+                return supervise(args, [*sys.argv[1:], "--record-root", directory])
         return supervise(args, sys.argv[1:])
     run(args)
     return 0

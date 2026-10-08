@@ -22,6 +22,13 @@ scene:
 
   # 机器人实例按列表顺序获得稳定 robot_id；label 在本场景内必须唯一。
   # robot_profile 选择 configs/robots/<name>.yaml，root_pose 定义 articulation 初始世界位姿。
+  planning_contacts:
+    - robot_label: left_arm
+      link_name: arm_AR5_5_08L_W4C4A6_base
+      geometry_name: workstation/Geometry/workstationV1_armbase_frame/armbase_top_flange
+    - robot_label: right_arm
+      link_name: arm_AR5_5_08R_W4C4A6_base
+      geometry_name: workstation/Geometry/workstationV1_armbase_frame/armbase_top_flange
   robots:
     # 左侧机械臂+左手实例；未写 controller_profile 时按 physics.engine 选择默认 bundle。
     - label: left_arm

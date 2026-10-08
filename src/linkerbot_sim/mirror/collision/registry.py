@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from threading import RLock
@@ -16,6 +17,11 @@ from linkerbot_sim.mirror.collision.object_provider import (
     collision_objects_from_runtime_objects,
 )
 from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.mounted_geometry import (
+    MountedCollisionModel,
+    cover_box_with_spheres,
+)
+from linkerbot_sim.planning.collision_validation import AllowedPlanningContact
 
 
 class CollisionGeometryProvider(Protocol):
@@ -44,6 +50,8 @@ class PlanningSceneSnapshot:
     geometries: tuple[SceneCollisionGeometry, ...]
     fingerprint: str
     sampled_at_s: float
+    mounted_models: tuple[MountedCollisionModel, ...] = ()
+    allowed_contacts: tuple[AllowedPlanningContact, ...] = ()
 
     def collision_objects_for(
         self,
@@ -79,6 +87,15 @@ class PlanningSceneSnapshot:
             "include_other_robots": bool(include_other_robots),
             "shape_policy": str(shape_policy),
             "model_fingerprint": str(model_fingerprint),
+            "allowed_contacts": [
+                (item.robot_id, item.link_name, item.geometry_name)
+                for item in self.allowed_contacts
+            ],
+            "mounted_models": [
+                model.fingerprint
+                for model in self.mounted_models
+                if model.robot_id == target_robot_id
+            ],
         }
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -98,13 +115,148 @@ class _ProviderEntry:
 class SceneCollisionRegistry:
     """一个 scene runtime 的权威 CPU 碰撞描述。"""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, allowed_contacts: tuple[AllowedPlanningContact, ...] = ()
+    ) -> None:
         self._providers: dict[str, _ProviderEntry] = {}
         self._lock = RLock()
         self._version = 0
         self._dirty = True
         self._snapshot: PlanningSceneSnapshot | None = None
         self._last_snapshot_duration_s = 0.0
+        self._allowed_contacts = allowed_contacts
+        self._attachments: tuple[tuple[str, int, tuple[str, ...]], ...] = ()
+
+    @contextmanager
+    def contact_scope(self, contacts: Sequence[AllowedPlanningContact]):
+        """Add exact planning allowances for one owner-thread task phase only."""
+        additions = tuple(contacts)
+        if any(
+            not isinstance(item, AllowedPlanningContact)
+            or not item.link_name
+            or not item.geometry_name
+            for item in additions
+        ):
+            raise ValueError(
+                "planning contacts require explicit link and geometry names"
+            )
+        with self._lock:
+            previous = self._allowed_contacts
+            self._allowed_contacts = tuple(dict.fromkeys((*previous, *additions)))
+            self._mark_dirty_locked()
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._allowed_contacts = previous
+                self._mark_dirty_locked()
+
+    def attach_object(
+        self, object_name: str, robot_id: int, *, touch_links: Sequence[str] = ()
+    ) -> None:
+        """Declare a carried planning object; this does not create a physical weld."""
+        with self._lock:
+            if any(name == object_name for name, _, _ in self._attachments):
+                raise ValueError(f"object is already attached: {object_name!r}")
+            provider = self._mounted_provider(robot_id)
+            model = provider.mounted_collision_model()
+            links = tuple(str(link) for link in touch_links)
+            if not set(links).issubset(model.source_links):
+                raise ValueError("touch_links must name links in the mounted assembly")
+            snapshot = self.snapshot(force=True)
+            if not any(
+                item.source == "object"
+                and _belongs_to_object(item.collision.name, object_name)
+                for item in snapshot.geometries
+            ):
+                raise ValueError(
+                    f"object has no registered planning geometry: {object_name!r}"
+                )
+            self._attachments += ((str(object_name), int(robot_id), links),)
+            self._mark_dirty_locked()
+
+    def detach_object(self, object_name: str) -> None:
+        """Return the object to the live world view on the next snapshot."""
+        with self._lock:
+            if not any(name == object_name for name, _, _ in self._attachments):
+                raise ValueError(f"object is not attached: {object_name!r}")
+            self._attachments = tuple(
+                item for item in self._attachments if item[0] != object_name
+            )
+            self._mark_dirty_locked()
+
+    def _mounted_provider(self, robot_id: int):
+        providers = [
+            entry.provider
+            for entry in self._providers.values()
+            if entry.owner_robot_id == robot_id
+            and callable(getattr(entry.provider, "flange_world_pose", None))
+        ]
+        if len(providers) != 1:
+            raise ValueError(f"robot {robot_id} requires one mounted geometry provider")
+        return providers[0]
+
+    def capture_attachments(self) -> list[dict[str, object]]:
+        with self._lock:
+            return [
+                {
+                    "object_name": name,
+                    "robot_label": self._mounted_provider(robot_id).label,
+                    "touch_links": list(links),
+                }
+                for name, robot_id, links in self._attachments
+            ]
+
+    def prepare_attachments(
+        self, payload, *, label_map: Mapping[str, str] | None = None
+    ):
+        """Validate restore metadata before any physics mutation; keep labels stable."""
+        if not isinstance(payload, (list, tuple)):
+            raise ValueError("planning attachments must be a sequence")
+        labels = {
+            entry.provider.label: entry.owner_robot_id
+            for entry in self._providers.values()
+            if callable(getattr(entry.provider, "flange_world_pose", None))
+        }
+        objects = {
+            item.collision.name.split("/", 1)[0]
+            for item in self.snapshot(force=True).geometries
+            if item.source in {"object", "payload"}
+        }
+        result = []
+        for value in payload:
+            if not isinstance(value, Mapping) or set(value) != {
+                "object_name",
+                "robot_label",
+                "touch_links",
+            }:
+                raise ValueError("invalid planning attachment metadata")
+            label = str(value["robot_label"])
+            label = label if label_map is None else label_map.get(label, label)
+            if label not in labels or value["object_name"] not in objects:
+                raise ValueError(
+                    "planning attachment references an unknown robot or object"
+                )
+            links = value["touch_links"]
+            if not isinstance(links, (list, tuple)) or not all(
+                isinstance(link, str) for link in links
+            ):
+                raise ValueError(
+                    "planning attachment touch_links must be a sequence of names"
+                )
+            robot_id = labels[label]
+            model = self._mounted_provider(robot_id).mounted_collision_model()
+            if not set(links).issubset(model.source_links):
+                raise ValueError("planning attachment references an unknown touch link")
+            result.append((str(value["object_name"]), robot_id, tuple(links)))
+        if len({item[0] for item in result}) != len(result):
+            raise ValueError("an object cannot be attached more than once")
+        return tuple(result)
+
+    def restore_attachments(self, prepared) -> None:
+        with self._lock:
+            self._attachments = tuple(prepared)
+            self._mark_dirty_locked()
 
     @property
     def version(self) -> int:
@@ -196,8 +348,13 @@ class SceneCollisionRegistry:
                 return self._snapshot
             started = perf_counter()
             geometries: list[SceneCollisionGeometry] = []
+            models: list[MountedCollisionModel] = []
             for entry in self._providers.values():
                 provider = entry.provider
+                mounted = getattr(provider, "mounted_collision_model", None)
+                model = mounted() if callable(mounted) else None
+                if model is not None:
+                    models.append(model)
                 values = (
                     provider.collision_objects()
                     if hasattr(provider, "collision_objects")
@@ -211,12 +368,59 @@ class SceneCollisionRegistry:
                             owner_robot_id=entry.owner_robot_id,
                         )
                     )
+            for object_name, robot_id, touch_links in self._attachments:
+                provider = self._mounted_provider(robot_id)
+                inverse = np.linalg.inv(provider.flange_world_pose())
+                index = next(
+                    i for i, model in enumerate(models) if model.robot_id == robot_id
+                )
+                model = models[index]
+                payload_link = f"payload:{object_name}"
+                spheres = list(model.spheres)
+                sphere_links = list(model.sphere_links)
+                for i, geometry in enumerate(geometries):
+                    if geometry.source != "object" or not _belongs_to_object(
+                        geometry.collision.name, object_name
+                    ):
+                        continue
+                    obj = geometry.collision
+                    size = obj.padded_size()
+                    if obj.shape == "sphere":
+                        cells = np.array([[0, 0, 0, size[0]]])
+                    else:
+                        dimensions = (
+                            size
+                            if obj.shape == "cuboid"
+                            else (2 * size[0], 2 * size[0], size[1] + 2 * size[0])
+                        )
+                        cells = cover_box_with_spheres(dimensions)
+                    relative = inverse @ obj.pose
+                    cells[:, :3] = cells[:, :3] @ relative[:3, :3].T + relative[:3, 3]
+                    spheres.extend(
+                        tuple(float(v) for v in row) for row in cells.round(9)
+                    )
+                    sphere_links.extend([payload_link] * len(cells))
+                    geometries[i] = replace(
+                        geometry, source="payload", owner_robot_id=robot_id
+                    )
+                models[index] = replace(
+                    model,
+                    spheres=tuple(spheres),
+                    sphere_links=tuple(sphere_links),
+                    source_links=(*model.source_links, payload_link),
+                    payload_contacts=(
+                        *model.payload_contacts,
+                        *((payload_link, link) for link in touch_links),
+                    ),
+                )
             frozen = tuple(geometries)
             snapshot = PlanningSceneSnapshot(
                 version=self._version,
                 geometries=frozen,
                 fingerprint=_geometry_fingerprint(frozen),
                 sampled_at_s=perf_counter(),
+                mounted_models=tuple(models),
+                allowed_contacts=self._allowed_contacts,
             )
             self._snapshot = snapshot
             self._dirty = False
@@ -231,6 +435,7 @@ class SceneCollisionRegistry:
                 "scene_version": self._version,
                 "dirty": self._dirty,
                 "provider_count": len(self._providers),
+                "attachments": self.capture_attachments(),
                 "obstacle_count": (
                     0 if self._snapshot is None else len(self._snapshot.geometries)
                 ),
@@ -282,3 +487,7 @@ __all__ = [
     "SceneCollisionGeometry",
     "SceneCollisionRegistry",
 ]
+
+
+def _belongs_to_object(geometry_name: str, object_name: str) -> bool:
+    return geometry_name == object_name or geometry_name.startswith(object_name + "/")

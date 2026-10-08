@@ -553,6 +553,26 @@ class LightSettings:
 
 
 @dataclass(frozen=True)
+class PlanningContactSettings:
+    robot_label: str
+    link_name: str
+    geometry_name: str
+
+    @classmethod
+    def from_mapping(cls, value: object, *, label: str):
+        mapping = strict_mapping(value, label=label)
+        require_keys(
+            mapping, required={"robot_label", "link_name", "geometry_name"}, label=label
+        )
+        return cls(
+            **{
+                key: as_string(mapping[key], label=f"{label}.{key}")
+                for key in ("robot_label", "link_name", "geometry_name")
+            }
+        )
+
+
+@dataclass(frozen=True)
 class MirrorSceneSettings:
     """现实映像场景：允许相机与视觉事实，但不包含物理后端选择。"""
 
@@ -569,6 +589,7 @@ class MirrorSceneSettings:
     viewport: ViewportSettings
     lights: tuple[LightSettings, ...]
     planning_startup: Literal["lazy", "prewarm"] = "lazy"
+    planning_contacts: tuple[PlanningContactSettings, ...] = ()
 
     @classmethod
     def from_mapping(
@@ -590,7 +611,9 @@ class MirrorSceneSettings:
             "lights",
             "planning_startup",
         }
-        require_keys(mapping, required=required, label=label)
+        require_keys(
+            mapping, required=required, optional={"planning_contacts"}, label=label
+        )
         robots, objects = _instances(mapping, label=label)
         camera_values = _sequence(mapping["cameras"], label=f"{label}.cameras")
         cameras = tuple(
@@ -631,6 +654,17 @@ class MirrorSceneSettings:
                 mapping["viewport"], label=f"{label}.viewport"
             ),
             lights=lights,
+            planning_contacts=tuple(
+                PlanningContactSettings.from_mapping(
+                    item, label=f"{label}.planning_contacts[{index}]"
+                )
+                for index, item in enumerate(
+                    _sequence(
+                        mapping.get("planning_contacts", ()),
+                        label=f"{label}.planning_contacts",
+                    )
+                )
+            ),
             planning_startup=as_string(
                 mapping["planning_startup"],
                 label=f"{label}.planning_startup",

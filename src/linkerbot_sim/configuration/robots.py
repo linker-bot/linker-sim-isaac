@@ -103,9 +103,10 @@ class RobotPlanningCollisionSphereSettings:
 
 @dataclass(frozen=True)
 class RobotPlanningCollisionSettings:
-    """缺少 link collision spheres 时使用的机器人 root 包络。"""
+    """Root envelope or imported mounted geometry, with an explicit full URDF."""
 
-    spheres: tuple[RobotPlanningCollisionSphereSettings, ...]
+    spheres: tuple[RobotPlanningCollisionSphereSettings, ...] = ()
+    mounted_urdf: str | None = None
 
     @classmethod
     def from_mapping(
@@ -116,7 +117,19 @@ class RobotPlanningCollisionSettings:
 
         if data is None:
             return None
-        _reject_unsupported_keys(data, {"spheres"}, "robot.planning_collision")
+        _reject_unsupported_keys(
+            data, {"spheres", "mounted_urdf"}, "robot.planning_collision"
+        )
+        if "mounted_urdf" in data:
+            if "spheres" in data:
+                raise ValueError(
+                    "robot.planning_collision selects spheres or mounted_urdf, not both"
+                )
+            return cls(
+                mounted_urdf=_non_empty_string(
+                    data["mounted_urdf"], "robot.planning_collision.mounted_urdf"
+                )
+            )
         values = data.get("spheres")
         if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
             raise ValueError("robot.planning_collision.spheres must be a sequence")

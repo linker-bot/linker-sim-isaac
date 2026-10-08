@@ -57,6 +57,7 @@ from linkerbot_sim.mirror.robots import (
     RobotRuntime,
 )
 from linkerbot_sim.mirror.collision.registry import SceneCollisionRegistry
+from linkerbot_sim.planning.collision_validation import AllowedPlanningContact
 from linkerbot_sim.mirror.collision.robot_provider import RobotObstacleProvider
 from linkerbot_sim.mirror.scene_settings import MirrorSceneRuntimeSettings
 from linkerbot_sim.isaac.world import configure_visuals, set_physics_gravity
@@ -836,7 +837,16 @@ def create_mirror_scene_resources(
             )
 
         registry = RobotRegistry(tuple(robots))
-        collision_registry = SceneCollisionRegistry()
+        collision_registry = SceneCollisionRegistry(
+            allowed_contacts=tuple(
+                AllowedPlanningContact(
+                    registry.robot_by_label(item.robot_label).robot_id,
+                    item.link_name,
+                    item.geometry_name,
+                )
+                for item in scene.planning_contacts
+            )
+        )
         collision_registry.register_runtime_objects(
             object_handles,
             stage=session.stage,
@@ -849,6 +859,8 @@ def create_mirror_scene_resources(
                 articulation=robot.articulation,
                 root_pose=robot.scene_instance.root_pose,
                 profile=robot.profile_config,
+                stage=session.stage,
+                root_path=robot.scene_instance.effective_prim_path,
             )
             if provider is not None:
                 collision_registry.register_provider(
@@ -1389,6 +1401,7 @@ def build_mirror_assembly(config: MirrorConfig) -> object:
                 options=MirrorResetOptions(hold_after_reset=hold_after_reset),
             )
         )
+        resources.collision_registry.restore_attachments(())
         step = motion.after_scene_reset(
             hold_duration_s=(
                 config.control.idle_step_duration_s if hold_after_reset else None

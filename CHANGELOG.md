@@ -27,6 +27,8 @@ their Git commit.
 
 ### Fixed
 
+- Planning now uses the measured fixed hand shape and mounted hardware, imported fixture bounds and carried-object geometry. Corrected world-to-base obstacle conversion, added scoped contact allowances and sampled path coverage diagnostics.
+
 - Temporarily serialize the bundled USD 25.11 physics parser during asset import to avoid its multi-collider allocator race; restore normal concurrency afterwards.
 
 - Mirror cameras now refresh paused poses and headless captures using native frame completion, without stepping physics; records retain native render identity and stale frames are not retimestamped.

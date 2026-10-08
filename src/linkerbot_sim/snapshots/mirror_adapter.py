@@ -46,6 +46,7 @@ from linkerbot_sim.controllers.control_mode import (
 
 
 NEWTON_SOLVER_STATE_INFO_KEY = "linkerbot.snapshot.newton_solver_integration_state"
+PLANNING_ATTACHMENTS_INFO_KEY = "linkerbot.snapshot.planning_attachments"
 CONTROL_MODE_INFO_KEY = "linkerbot.snapshot.control_mode"
 CONTROLLER_PROFILE_FINGERPRINTS_INFO_KEY = (
     "linkerbot.snapshot.controller_profile_fingerprints"
@@ -97,6 +98,10 @@ def get_mirror_snapshot(runtime: object) -> SceneSnapshot:
         COMMAND_TARGET_MODES_INFO_KEY: command_target_modes,
     }
     control_state = _runtime_control_mode_state(runtime)
+    collision = getattr(runtime, "collision_registry", None)
+    capture_attachments = getattr(collision, "capture_attachments", None)
+    if callable(capture_attachments):
+        metadata_info[PLANNING_ATTACHMENTS_INFO_KEY] = capture_attachments()
     if control_state is not None:
         metadata_info[CONTROL_MODE_INFO_KEY] = control_state
     controller_fingerprints = {
@@ -173,6 +178,16 @@ def set_mirror_snapshot(
         compatibility=compatibility,
     )
     solver_restore = _preflight_newton_solver_state(runtime, parsed)
+    collision = getattr(runtime, "collision_registry", None)
+    prepare_attachments = getattr(collision, "prepare_attachments", None)
+    attachments = None
+    original_attachments = None
+    if callable(prepare_attachments):
+        attachments = prepare_attachments(
+            parsed.metadata.info.get(PLANNING_ATTACHMENTS_INFO_KEY, ()),
+            label_map=label_map,
+        )
+        original_attachments = prepare_attachments(collision.capture_attachments())
     # 原始快照与控制器 cache 必须在首个 articulation/physics setter 前全部捕获。
     # 否则后续机器人的“旧值”可能已经混入本次恢复写入，失去事务基准。
     original = get_mirror_snapshot(runtime)
@@ -259,6 +274,12 @@ def set_mirror_snapshot(
             )
             solver_restore.apply()
         # observer/cache reset 与碰撞缓存失效无法仅靠快照重建，因此先标记不可逆。
+        if attachments is not None:
+            transaction.add_rollback(
+                "planning attachments",
+                lambda: collision.restore_attachments(original_attachments),
+            )
+            collision.restore_attachments(attachments)
         transaction.mark_irreversible("execution observer cache reset")
         for robot in runtime.robots_by_id.values():
             _reset_execution_observers(robot.execution)

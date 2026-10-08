@@ -14,6 +14,10 @@ from linkerbot_sim.mirror.collision.urdf_kinematics import _UrdfKinematics
 from linkerbot_sim.assets.root_pose import RootPoseConfig
 from linkerbot_sim.configuration.robots import RobotProfileSettings
 from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.mounted_geometry import (
+    MountedCollisionModel,
+    cover_box_with_spheres,
+)
 from linkerbot_sim.utils.config import load_yaml
 from linkerbot_sim.utils.math_utils import make_rpy_transform
 from linkerbot_sim.utils.paths import repo_path
@@ -40,6 +44,8 @@ class RobotObstacleProvider:
         self.urdf_path = repo_path(urdf_path)
         self._kinematics = _UrdfKinematics(self.urdf_path)
         self._spheres = _parse_collision_spheres(collision_spheres)
+        self._mounted_boxes = ()
+        self._flange_frame = None
 
     @classmethod
     def from_robot_profile(
@@ -50,6 +56,8 @@ class RobotObstacleProvider:
         articulation: object,
         root_pose: RootPoseConfig,
         profile: RobotProfileSettings,
+        stage: object | None = None,
+        root_path: str | None = None,
     ) -> "RobotObstacleProvider | RobotEnvelopeProvider | None":
         """优先创建 link-sphere provider，缺少 cuRobo model 时回退到 root envelope。"""
 
@@ -71,7 +79,7 @@ class RobotObstacleProvider:
         spheres = _nested_kinematics(config).get("collision_spheres")
         if not isinstance(spheres, Mapping) or not spheres:
             return None
-        return cls(
+        provider = cls(
             robot_id=robot_id,
             label=label,
             articulation=articulation,
@@ -79,18 +87,87 @@ class RobotObstacleProvider:
             urdf_path=urdf_path,
             collision_spheres=spheres,
         )
+        mounted = profile.planning_collision
+        if mounted is not None and mounted.mounted_urdf is not None:
+            if stage is None or root_path is None or robot.flange_frame is None:
+                raise ValueError(
+                    "mounted planning geometry requires stage, robot root and flange_frame"
+                )
+            from linkerbot_sim.mirror.collision.collider_bounds import (
+                read_link_collider_boxes,
+            )
 
-    def collision_objects(self) -> tuple[CollisionObject, ...]:
-        """按 articulation 当前 joint state 计算所有 link sphere 的 world pose。"""
+            provider._kinematics = _UrdfKinematics(repo_path(mounted.mounted_urdf))
+            links = provider._kinematics.link_transforms({})
+            if robot.flange_frame not in links:
+                raise ValueError(
+                    f"mounted URDF is missing flange frame {robot.flange_frame!r}"
+                )
+            descendants = {robot.flange_frame}
+            for _ in provider._kinematics.joints:
+                descendants.update(
+                    j.child
+                    for j in provider._kinematics.joints
+                    if j.parent in descendants
+                )
+            boxes = read_link_collider_boxes(stage, root_path, set(links))
+            provider._mounted_boxes = tuple(
+                box for box in boxes if box.link_name in descendants
+            )
+            if not provider._mounted_boxes:
+                raise ValueError(
+                    "mounted planning geometry has no colliders below the flange"
+                )
+            provider._flange_frame = robot.flange_frame
+            # Replace the legacy generic gripper sphere, not the arm's link spheres.
+            provider._spheres.pop(robot.flange_frame, None)
+        return provider
 
+    def _link_transforms(self):
         names = tuple(str(name) for name in getattr(self.articulation, "dof_names", ()))
         values = tensor_like_to_numpy(
             self.articulation.get_joint_positions(), dtype=float
         ).reshape(-1)
-        if len(names) != values.size:
-            raise ValueError(f"robot {self.label!r} DOF names/positions size mismatch")
-        joint_values = dict(zip(names, values, strict=True))
-        links = self._kinematics.link_transforms(joint_values)
+        if len(names) != values.size or not np.all(np.isfinite(values)):
+            raise ValueError(f"robot {self.label!r} DOF names/positions are invalid")
+        return self._kinematics.link_transforms(dict(zip(names, values, strict=True)))
+
+    def mounted_collision_model(self) -> MountedCollisionModel | None:
+        """Freeze hand shape in flange coordinates; candidate arm FK moves this model."""
+        if self._flange_frame is None:
+            return None
+        links = self._link_transforms()
+        inverse = np.linalg.inv(links[self._flange_frame])
+        spheres = []
+        sphere_links = []
+        for box in self._mounted_boxes:
+            pose = inverse @ links[box.link_name]
+            cells = cover_box_with_spheres(box.size)
+            cells[:, :3] = (cells[:, :3] + box.center) @ pose[:3, :3].T + pose[:3, 3]
+            # Suppress harmless FK float noise; changes below a nanometre do not
+            # rebuild CUDA models as the arm moves with unchanged hand shape.
+            spheres.extend(tuple(float(v) for v in row) for row in cells.round(9))
+            sphere_links.extend([box.link_name] * len(cells))
+        return MountedCollisionModel(
+            self.robot_id,
+            self._flange_frame,
+            tuple(spheres),
+            tuple(sorted({box.link_name for box in self._mounted_boxes})),
+            sphere_links=tuple(sphere_links),
+        )
+
+    def flange_world_pose(self) -> np.ndarray:
+        if self._flange_frame is None:
+            raise ValueError("robot has no configured mounted collision geometry")
+        return (
+            make_rpy_transform(self.root_pose.xyz, self.root_pose.rpy)
+            @ self._link_transforms()[self._flange_frame]
+        )
+
+    def collision_objects(self) -> tuple[CollisionObject, ...]:
+        """按 articulation 当前 joint state 计算所有 link sphere 的 world pose。"""
+
+        links = self._link_transforms()
         root = make_rpy_transform(self.root_pose.xyz, self.root_pose.rpy)
         result = []
         for link_name, spheres in self._spheres.items():
@@ -110,6 +187,17 @@ class RobotObstacleProvider:
                         size=(radius,),
                     )
                 )
+        for box in self._mounted_boxes:
+            pose = root @ links[box.link_name]
+            pose[:3, 3] += pose[:3, :3] @ np.asarray(box.center)
+            result.append(
+                CollisionObject(
+                    name=f"robot_{self.robot_id}_{box.name}",
+                    shape="cuboid",
+                    pose=pose,
+                    size=box.size,
+                )
+            )
         return tuple(result)
 
 

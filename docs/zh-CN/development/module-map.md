@@ -152,15 +152,17 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | trajectories | `linkerbot_sim.trajectories.retiming` | domain | trajectories 层 retiming 实现 owner | pure | internal | [架构参考](../guides/control-and-trajectories.md) |
 | trajectories | `linkerbot_sim.trajectories.types` | domain | trajectories 层 types 实现 owner | pure | internal | [架构参考](../guides/control-and-trajectories.md) |
 
-### planning (7)
+### planning (9)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | planning | `linkerbot_sim.planning` | domain | planning 实现命名空间 | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.backend` | domain | planning 层 backend 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.collision_objects` | domain | planning 层 collision objects 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
+| planning | `linkerbot_sim.planning.collision_validation` | domain | planning 层 collision validation 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.frames` | domain | planning 层 frames 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.linear_backend` | domain | planning 层 linear backend 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
+| planning | `linkerbot_sim.planning.mounted_geometry` | domain | planning 层 mounted geometry 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.requests` | domain | planning 层 requests 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.results` | domain | planning 层 results 实现 owner | pure | internal | [架构参考](../guides/motion-planning.md) |
 
@@ -295,7 +297,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | visualization | `linkerbot_sim.visualization` | isaac_infrastructure | visualization 实现命名空间 | pure | internal | [架构参考](../development/usd-preview.md) |
 | visualization | `linkerbot_sim.visualization.viewport` | isaac_infrastructure | visualization 层 viewport 实现 owner | pure | internal | [架构参考](../development/usd-preview.md) |
 
-### mirror (41)
+### mirror (42)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -304,6 +306,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.bootstrap` | product | 组合根与资源所有权移交 | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.cli` | product | 命令行解析与进程启动 | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision` | product | mirror 层 collision 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
+| mirror | `linkerbot_sim.mirror.collision.collider_bounds` | product | mirror 层 collider bounds 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.envelope_provider` | product | mirror 层 envelope provider 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.object_provider` | product | mirror 层 object provider 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.owner` | product | mirror 层 owner 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |

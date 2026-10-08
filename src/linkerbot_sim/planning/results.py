@@ -32,6 +32,7 @@ class PlanningDiagnostics:
     status: str = ""
     message: str = ""
     metrics: dict[str, float] = field(default_factory=dict)
+    coverage: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

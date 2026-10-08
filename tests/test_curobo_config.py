@@ -142,7 +142,7 @@ def test_mirror_curobo_profile_contains_valid_algorithm_defaults() -> None:
     assert planner.use_cuda_graph is False
     assert planner.random_seed == 123
     assert planner.optimizer_collision_activation_distance == 0.01
-    assert planner.collision_cache["cuboid"] == 48
+    assert planner.collision_cache["cuboid"] == 128
 
 
 def test_typed_curobo_composition_preserves_robot_resources() -> None:
@@ -159,7 +159,7 @@ def test_typed_curobo_composition_preserves_robot_resources() -> None:
     assert config.robot.urdf_path.name == "workstation.urdf"
     assert config.ik.max_batch_size == 8
     assert config.ik.collision_cache == {}
-    assert config.motion_planner.collision_cache == {"cuboid": 48, "mesh": 4}
+    assert config.motion_planner.collision_cache == {"cuboid": 128, "mesh": 4}
     assert config.device.device == "cuda:0"
 
 

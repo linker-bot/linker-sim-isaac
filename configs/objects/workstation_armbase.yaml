@@ -2,7 +2,7 @@
 #
 # scene objects[].object_profile 通过文件名 workstation_armbase 选择本 profile；实例 name、
 # prim_path 与 root_pose 由 scene 管理。本文件负责可复用的资产导入与运行时物理覆盖。
-# 本 profile 没有 planning_collision，因此工装会参与物理接触，但不会自动成为规划障碍物。
+# Planning bounds use each imported collider, including the column and mount.
 
 
 object:
@@ -42,3 +42,6 @@ object:
       material:
         # 摩擦合成模式；average 表示与接触另一方材质取平均。
         friction_combine_mode: average
+
+  planning_collision:
+    source: colliders

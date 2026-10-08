@@ -15,3 +15,6 @@ object:
     physx:
       material:
         friction_combine_mode: average
+
+  planning_collision:
+    source: colliders

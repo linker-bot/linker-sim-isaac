@@ -30,6 +30,7 @@ from linkerbot_sim.backends.curobo.robot_model import (
 from linkerbot_sim.backends.curobo.resources import curobo_task_resource_path
 from linkerbot_sim.backends.curobo.tool_pose import goal_tool_pose_from_arrays
 from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.mounted_geometry import MountedCollisionModel
 from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
@@ -131,6 +132,7 @@ class CuroboContext:
             or self.config.robot.resolved_tool_frames[0]
         )
         self.tool_frames = tuple(self.config.robot.resolved_tool_frames)
+        self._mounted_collision_model: MountedCollisionModel | None = None
         self.kinematics = self._make_kinematics()
         # cuRobo planner warmup 会创建求解缓存，因此 solver/planner 不能在 context 构造时
         # 全部创建；按实际调用入口 lazy 创建，让 IK-only/FK-only 调用不承担 planner 显存。
@@ -140,6 +142,101 @@ class CuroboContext:
         self._synced_scene_version = None
         self._materialized_view_fingerprint = None
         self._local_scene_version = 0
+        self._validation_objects: tuple[CollisionObject, ...] = ()
+        self._allowed_contact_pairs: frozenset[tuple[str, str]] = frozenset()
+
+    def sync_planning_collision_view(self, objects, allowed_contacts):
+        """Scope allowed contact to exact link/geometry pairs in the returned path.
+
+        cuRobo 0.8 has no per-link/world-object exclusion. Only the named geometry
+        is omitted from optimization, then checked against *every other link* on
+        the sampled path. An unsafe result is rejected, never reported as safe.
+        """
+        pairs = frozenset(
+            (item.link_name, item.geometry_name) for item in allowed_contacts
+        )
+        names = {obj.name for obj in objects}
+        links = set(self._sphere_link_names())
+        for link, name in pairs:
+            if name not in names or link not in links:
+                raise ValueError(
+                    f"planning contact references unknown link/geometry: {link!r}, {name!r}"
+                )
+        excluded = {name for _, name in pairs}
+        world = self.sync_collision_world(
+            tuple(obj for obj in objects if obj.name not in excluded)
+        )
+        self._validation_objects = tuple(objects)
+        self._allowed_contact_pairs = pairs
+        return world
+
+    def _sphere_link_names(self) -> tuple[str, ...]:
+        params = self.kinematics.config.kinematics_config
+        names = {index: name for name, index in params.link_name_to_idx_map.items()}
+        indices = tensor_like_to_numpy(params.link_sphere_idx_map, dtype=int).reshape(
+            -1
+        )
+        result = [names[int(index)] for index in indices]
+        model = self._mounted_collision_model
+        if model is not None and model.sphere_links:
+            positions = [
+                i for i, name in enumerate(result) if name == model.flange_frame
+            ]
+            if len(positions) != len(model.sphere_links):
+                raise RuntimeError(
+                    "cuRobo mounted sphere ordering/size differs from the synchronized model"
+                )
+            for index, name in zip(positions, model.sphere_links, strict=True):
+                result[index] = name
+        return tuple(result)
+
+    def validate_motion_collision(self, result):
+        from dataclasses import replace
+        from linkerbot_sim.planning.collision_validation import validate_sampled_path
+
+        if not result.success or result.path is None:
+            return result
+
+        def spheres(q):
+            state = self.kinematics.compute_kinematics(
+                self.joint_state_from_positions(q)
+            )
+            values = tensor_like_to_numpy(state.robot_spheres, dtype=float)
+            return values.reshape(len(q), -1, 4)
+
+        report = validate_sampled_path(
+            result.path,
+            sample_spheres=spheres,
+            sphere_links=self._sphere_link_names(),
+            obstacles=self._validation_objects,
+            allowed_pairs=self._allowed_contact_pairs,
+        )
+        coverage = {
+            "path": report,
+            "mounted_geometry": self.mounted_geometry_diagnostics(),
+            "allowed_contacts": sorted(self._allowed_contact_pairs),
+        }
+        model = self._mounted_collision_model
+        payload_collision = None if model is None else model.payload_collision()
+        coverage["payload_collision"] = payload_collision
+        self.last_planning_coverage = coverage
+        valid = bool(report["valid"]) and payload_collision is None
+        status = result.status if valid else "COLLISION_VALIDATION_FAILED"
+        return replace(
+            result,
+            success=valid,
+            status=status,
+            path=result.path if valid else None,
+            trajectory=result.trajectory if valid else None,
+            diagnostics=replace(
+                result.diagnostics,
+                status=status,
+                coverage=coverage,
+                message=result.diagnostics.message
+                if valid
+                else f"sampled collision validation failed: {payload_collision or report}",
+            ),
+        )
 
     @property
     def ik_solver(self):
@@ -214,6 +311,8 @@ class CuroboContext:
         )
 
         objects = tuple(collision_objects)
+        self._validation_objects = objects
+        self._allowed_contact_pairs = frozenset()
         if self._collision_world is None:
             self._collision_world = CuroboCollisionWorld(self, objects)
         else:
@@ -230,6 +329,53 @@ class CuroboContext:
 
         names = getattr(self.kinematics, "joint_names")
         return list(names() if callable(names) else names)
+
+    def sync_mounted_geometry(self, model: MountedCollisionModel) -> None:
+        """Replace fixed-hand geometry in every solver, including lazy consumers.
+
+        cuRobo owns multiple rollout/graph models. Rebuilding lazy solvers when the
+        hand shape changes avoids updating just one buffer while the others remain
+        stale. Ordinary arm motion with unchanged hand shape reuses all resources.
+        """
+        previous = self._mounted_collision_model
+        if previous is not None and previous.fingerprint == model.fingerprint:
+            return
+        spheres = np.asarray(model.spheres, dtype=float)
+        if (
+            spheres.ndim != 2
+            or spheres.shape[1] != 4
+            or not np.all(np.isfinite(spheres))
+            or np.any(spheres[:, 3] <= 0)
+        ):
+            raise ValueError("mounted model requires finite, positive-radius spheres")
+        kinematics = self._make_kinematics(mounted_model=model)
+        self.close()
+        self.kinematics = kinematics
+        self._mounted_collision_model = model
+        self._synced_scene_version = None
+        self._materialized_view_fingerprint = None
+
+    def mounted_geometry_diagnostics(self) -> dict[str, object] | None:
+        model = self._mounted_collision_model
+        if model is None:
+            return None
+        report = model.diagnostics()
+        kin = self._robot_mapping(model)
+        ignored = kin.get("robot_cfg", kin)["kinematics"].get(
+            "self_collision_ignore", {}
+        )
+        # The mounted assembly shares one flange frame in cuRobo. Existing
+        # flange exclusions therefore apply to every mounted link and payload.
+        report["ignored_own_arm_links"] = sorted(
+            {
+                other if link == model.flange_frame else link
+                for link, others in ignored.items()
+                for other in others
+                if model.flange_frame in (link, other)
+            }
+        )
+        report["internal_mounted_self_collision_checked"] = False
+        return report
 
     def frame_names(self) -> list[str]:
         """返回当前 context 注册的 tool frames。"""
@@ -465,11 +611,17 @@ class CuroboContext:
             ),
         )
 
-    def _make_kinematics(self):
+    def _make_kinematics(self, *, mounted_model: MountedCollisionModel | None = None):
         """创建 cuRobo ``Kinematics``。"""
 
         robot = self.config.robot
-        if robot.robot_config_path is not None:
+        if mounted_model is not None:
+            kin_cfg = self.kinematics_module.KinematicsCfg.from_data_dict(
+                self._robot_mapping(mounted_model),
+                tool_frames=list(self.tool_frames),
+                device_cfg=self.device_cfg,
+            )
+        elif robot.robot_config_path is not None:
             kin_cfg = self.kinematics_module.KinematicsCfg.from_robot_yaml_file(
                 str(robot.robot_config_path),
                 tool_frames=list(self.tool_frames),
@@ -661,11 +813,7 @@ class CuroboContext:
 
         robot = self.config.robot
         if robot.robot_config_path is not None:
-            return materialized_robot_mapping(
-                robot,
-                tool_frames=self.tool_frames,
-                asset_root_path=getattr(self, "_robot_asset_root_path", None),
-            )
+            return self._robot_mapping(getattr(self, "_mounted_collision_model", None))
         if robot.urdf_path is not None and robot.base_link:
             return self.robot_module.RobotCfg.from_basic(
                 urdf_path=str(robot.urdf_path),
@@ -674,6 +822,24 @@ class CuroboContext:
                 device_cfg=self.device_cfg,
             )
         raise ValueError("cuRobo IK/planner requires robot_config_path or urdf_path")
+
+    def _robot_mapping(self, model: MountedCollisionModel | None):
+        mapping = materialized_robot_mapping(
+            self.config.robot,
+            tool_frames=self.tool_frames,
+            asset_root_path=getattr(self, "_robot_asset_root_path", None),
+        )
+        if model is not None:
+            kin = mapping.get("robot_cfg", mapping)["kinematics"]
+            if model.flange_frame not in kin["collision_link_names"]:
+                raise ValueError(
+                    f"mounted flange {model.flange_frame!r} is not in the robot collision model"
+                )
+            kin["collision_spheres"][model.flange_frame] = [
+                {"center": list(sphere[:3]), "radius": sphere[3]}
+                for sphere in model.spheres
+            ]
+        return mapping
 
     def _resolve_tcp_frame_name(self, tcp_frame_name: str | None) -> str:
         """解析并校验 TCP frame 名。"""

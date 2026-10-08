@@ -32,6 +32,29 @@ def collision_objects_from_runtime_objects(
             stage=stage,
             state_view=state_view,
         )
+        if collision.source == "colliders":
+            if stage is None:
+                raise ValueError("planning collider bounds require an imported stage")
+            from linkerbot_sim.mirror.collision.collider_bounds import (
+                read_link_collider_boxes,
+            )
+
+            path = runtime_object_prim_path(handle)
+            root = stage.GetPrimAtPath(path)
+            for box in read_link_collider_boxes(stage, path, {root.GetName()}):
+                pose = root_pose.copy()
+                pose[:3, 3] += pose[:3, :3] @ np.asarray(box.center)
+                result.append(
+                    CollisionObject(
+                        name=f"{handle.name}/{box.name.removeprefix(path.rstrip('/') + '/')}",
+                        shape="cuboid",
+                        pose=pose,
+                        size=box.size,
+                        enabled=collision.enabled,
+                        padding=collision.padding,
+                    )
+                )
+            continue
         local_pose = _local_collision_pose_matrix(collision)
         result.append(
             CollisionObject(
@@ -139,7 +162,7 @@ def _read_stage_world_matrix(stage: object, prim_path: str) -> np.ndarray:
     result[:3, :3] = np.asarray(
         [[float(rotation[row][col]) for col in range(3)] for row in range(3)],
         dtype=float,
-    )
+    ).T
     translation = matrix.ExtractTranslation()
     result[:3, 3] = np.asarray(
         [translation[0], translation[1], translation[2]], dtype=float

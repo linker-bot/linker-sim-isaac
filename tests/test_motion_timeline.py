@@ -42,6 +42,7 @@ from linkerbot_sim.assets.root_pose import RootPoseConfig
 from linkerbot_sim.controllers.types import ControlTargets
 from linkerbot_sim.robots.capabilities import PlanningCapability, RobotKind
 from linkerbot_sim.robots.joint_groups import JointGroupLayout
+from linkerbot_sim.trajectories.types import JointTrajectory
 
 
 _MIRROR_CONFIG = load_mirror_config()
@@ -842,6 +843,81 @@ def test_multiple_planning_segments_share_one_collision_snapshot() -> None:
     assert "scene_fingerprint" in timeline.metadata
 
 
+@pytest.mark.parametrize(
+    "hand_segments, reject",
+    [
+        ([{"kind": "joint_goal", "joint_positions": [0.3], "duration_s": 0.2}], True),
+        ([{"kind": "joint_goal", "joint_positions": [0.0], "duration_s": 0.2}], False),
+        ([{"kind": "joint_effort", "joint_efforts": [0.0], "duration_s": 0.2}], True),
+        (
+            [
+                {"kind": "hold", "duration_s": 0.2},
+                {"kind": "joint_goal", "joint_positions": [0.3], "duration_s": 0.2},
+            ],
+            False,
+        ),
+    ],
+)
+def test_collision_plan_requires_frozen_mounted_hand(
+    monkeypatch, hand_segments, reject
+):
+    runtime = _runtime(1)
+    snapshot = replace(
+        runtime.collision_registry.snapshot(),
+        mounted_models=(SimpleNamespace(robot_id=0),),
+    )
+    monkeypatch.setattr(runtime.collision_registry, "snapshot", lambda: snapshot)
+    # Isolate the timeline guard from GPU optimization; return a valid arm path.
+    monkeypatch.setattr(
+        TimelinePlanningSession,
+        "_plan_segment_with_backend",
+        lambda self, **kw: JointTrajectory(
+            joint_names=kw["group_names"],
+            times=np.array([0.0, 0.2]),
+            positions=np.array([[0.0], [0.1]]),
+        ),
+    )
+    request = _parse_motion(
+        {
+            "type": "plan_timeline",
+            "tracks": [
+                {
+                    "robot_id": 0,
+                    "units": [
+                        {
+                            "group_tracks": [
+                                {
+                                    "group": "arm",
+                                    "segments": [
+                                        {
+                                            "kind": "plan_cspace_goal",
+                                            "joint_positions": [0.1],
+                                            "duration_s": 0.2,
+                                            "avoid_collisions": True,
+                                        }
+                                    ],
+                                },
+                                {"group": "hand", "segments": hand_segments},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+        allow_effort=True,
+    )
+    session = TimelinePlanningSession(runtime)
+    if reject:
+        with pytest.raises(
+            TimelinePlanningError, match="mounted hand geometry is frozen"
+        ):
+            session.compile(request)
+    else:
+        session.compile(request)
+    assert runtime.physics.step_calls == 0
+    assert runtime.robots_by_id[0].execution.joint_controller.apply_log == []
+
+
 def test_scene_linear_backend_compiles_cspace_request_without_curobo() -> None:
     runtime = _runtime(1)
     command = _parse_motion(
@@ -912,3 +988,58 @@ def test_scene_joint_interpolation_default_changes_compiled_samples() -> None:
 
     assert segment.metadata["interpolation"] == "linear"
     np.testing.assert_allclose(segment.positions[:, 0], [1.0 / 3.0, 2.0 / 3.0, 1.0])
+
+
+@pytest.mark.parametrize(
+    "coordination,reject", [("static_others", True), ("independent", False)]
+)
+def test_collision_plan_does_not_treat_commanded_other_robot_as_static(
+    monkeypatch, coordination, reject
+):
+    runtime = _runtime(2)
+    monkeypatch.setattr(
+        TimelinePlanningSession,
+        "_plan_segment_with_backend",
+        lambda self, **kw: JointTrajectory(
+            joint_names=kw["group_names"],
+            times=np.array([0.0, 0.2]),
+            positions=np.array([[0.0], [0.1]]),
+        ),
+    )
+    request = _parse_motion(
+        {
+            "type": "plan_timeline",
+            "coordination": coordination,
+            "tracks": [
+                {
+                    "robot_id": 0,
+                    "segments": [
+                        {"kind": "hold", "duration_s": 0.1},
+                        {
+                            "kind": "plan_cspace_goal",
+                            "joint_positions": [0.1],
+                            "duration_s": 0.2,
+                            "avoid_collisions": True,
+                        },
+                    ],
+                },
+                {
+                    "robot_id": 1,
+                    "segments": [
+                        {
+                            "kind": "joint_goal",
+                            "joint_positions": [0.1, 0.0],
+                            "duration_s": 0.1,
+                        }
+                    ],
+                },
+            ],
+        }
+    )
+    session = TimelinePlanningSession(runtime)
+    if reject:
+        with pytest.raises(TimelinePlanningError, match="static_others freezes"):
+            session.compile(request)
+    else:
+        session.compile(request)
+    assert runtime.physics.step_calls == 0

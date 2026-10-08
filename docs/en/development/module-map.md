@@ -152,15 +152,17 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | trajectories | `linkerbot_sim.trajectories.retiming` | domain | trajectories implementation owner for retiming | pure | internal | [Architecture reference](../guides/control-and-trajectories.md) |
 | trajectories | `linkerbot_sim.trajectories.types` | domain | trajectories implementation owner for types | pure | internal | [Architecture reference](../guides/control-and-trajectories.md) |
 
-### planning (7)
+### planning (9)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | planning | `linkerbot_sim.planning` | domain | planning implementation namespace | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.backend` | domain | planning implementation owner for backend | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.collision_objects` | domain | planning implementation owner for collision objects | pure | internal | [Architecture reference](../guides/motion-planning.md) |
+| planning | `linkerbot_sim.planning.collision_validation` | domain | planning implementation owner for collision validation | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.frames` | domain | planning implementation owner for frames | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.linear_backend` | domain | planning implementation owner for linear backend | pure | internal | [Architecture reference](../guides/motion-planning.md) |
+| planning | `linkerbot_sim.planning.mounted_geometry` | domain | planning implementation owner for mounted geometry | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.requests` | domain | planning implementation owner for requests | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 | planning | `linkerbot_sim.planning.results` | domain | planning implementation owner for results | pure | internal | [Architecture reference](../guides/motion-planning.md) |
 
@@ -295,7 +297,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | visualization | `linkerbot_sim.visualization` | isaac_infrastructure | visualization implementation namespace | pure | internal | [Architecture reference](../development/usd-preview.md) |
 | visualization | `linkerbot_sim.visualization.viewport` | isaac_infrastructure | visualization implementation owner for viewport | pure | internal | [Architecture reference](../development/usd-preview.md) |
 
-### mirror (41)
+### mirror (42)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -304,6 +306,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.bootstrap` | product | composition root and resource ownership transfer | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.cli` | product | command-line parsing and process startup | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision` | product | mirror implementation owner for collision | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
+| mirror | `linkerbot_sim.mirror.collision.collider_bounds` | product | mirror implementation owner for collider bounds | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.envelope_provider` | product | mirror implementation owner for envelope provider | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.object_provider` | product | mirror implementation owner for object provider | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.collision.owner` | product | mirror implementation owner for owner | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
