@@ -25,6 +25,8 @@ their Git commit.
 
 ### Fixed
 
+- Temporarily serialize the bundled USD 25.11 physics parser during asset import to avoid its multi-collider allocator race; restore normal concurrency afterwards.
+
 - Mirror cameras now refresh paused poses and headless captures using native frame completion, without stepping physics; records retain native render identity and stale frames are not retimestamped.
 
 - Kaleidoscope PhysX CUDA seeded resets now restore native mimic-follower joint
