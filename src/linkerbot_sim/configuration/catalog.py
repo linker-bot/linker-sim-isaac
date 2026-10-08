@@ -14,6 +14,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, cast
 
+from .cameras import camera_profile_from_mapping
 from .common import (
     ConfigurationError,
     require_keys,
@@ -406,6 +407,36 @@ class _ConfigurationGraphReader:
         return MappingProxyType(dict(sorted(resolved.items())))
 
 
+def _resolve_camera_profiles(
+    scene: dict[str, object], reader: _ConfigurationGraphReader
+) -> dict[str, object]:
+    """Expand optional camera leaves; each setting has exactly one writer."""
+    cameras = scene.get("cameras", ())
+    if isinstance(cameras, (str, bytes)) or not isinstance(cameras, Sequence):
+        raise ConfigurationError("scene.cameras must be a sequence")
+    expanded = []
+    for index, raw in enumerate(cameras):
+        camera = strict_mapping(raw, label=f"scene.cameras[{index}]")
+        if "camera_profile" in camera:
+            reference = camera["camera_profile"]
+            leaf = reader.profile(
+                group="cameras",
+                reference=str(reference),
+                root_key="camera",
+                provenance_key=f"camera.{index}",
+            )
+            leaf = camera_profile_from_mapping(
+                leaf, label=f"camera profile {reference}"
+            )
+            if set(camera) & set(leaf):
+                raise ConfigurationError(
+                    "camera settings must have one writer: scene or camera_profile"
+                )
+            camera = {**camera, **leaf}
+        expanded.append(camera)
+    return {**scene, "cameras": expanded}
+
+
 def _resolve_scene_asset_profiles(
     scene: MirrorSceneSettings | KaleidoscopeSceneSettings,
     *,
@@ -533,7 +564,7 @@ def load_mirror_config(
     )
 
     scene = _resolve_scene_asset_profiles(
-        MirrorSceneSettings.from_mapping(scene_raw),
+        MirrorSceneSettings.from_mapping(_resolve_camera_profiles(scene_raw, reader)),
         reader=reader,
     )
     assert isinstance(scene, MirrorSceneSettings)

@@ -180,8 +180,19 @@ class CameraSettings:
     modalities: tuple[str, ...]
     clipping_range_m: tuple[float, float]
     intrinsics: CameraIntrinsicsSettings | None = None
+    parent_link: str | None = None
+    pose_axes: str = "world"
+    camera_profile: str | None = None
+    calibration_source: str | None = None
+    sensor_model: str | None = None
 
     def __post_init__(self) -> None:
+        if self.pose_axes not in {"world", "opencv"}:
+            raise ConfigurationError("camera pose_axes must be world or opencv")
+        if self.parent_link is not None and (
+            not self.parent_link or "/" in self.parent_link
+        ):
+            raise ConfigurationError("camera parent_link must be a single link name")
         if not self.parent_prim_path.startswith("/") or not self.prim_path.startswith(
             "/"
         ):
@@ -213,12 +224,35 @@ class CameraSettings:
             "modalities",
             "clipping_range_m",
         }
-        require_keys(mapping, required=required, optional={"intrinsics"}, label=label)
+        require_keys(
+            mapping,
+            required=required,
+            optional={
+                "intrinsics",
+                "parent_link",
+                "pose_axes",
+                "camera_profile",
+                "calibration_source",
+                "sensor_model",
+            },
+            label=label,
+        )
         resolution_raw = _sequence(mapping["resolution"], label=f"{label}.resolution")
         if len(resolution_raw) != 2:
             raise ConfigurationError(f"{label}.resolution must be [width, height]")
         return cls(
             camera_id=as_string(mapping["id"], label=f"{label}.id"),
+            **{
+                key: as_string(mapping[key], label=f"{label}.{key}")
+                for key in (
+                    "parent_link",
+                    "pose_axes",
+                    "camera_profile",
+                    "calibration_source",
+                    "sensor_model",
+                )
+                if key in mapping
+            },
             parent_prim_path=as_string(
                 mapping["parent_prim_path"], label=f"{label}.parent_prim_path"
             ),

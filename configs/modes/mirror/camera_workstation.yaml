@@ -1,0 +1,10 @@
+mode: mirror
+compute:
+  cuda_device: 0
+profiles:
+  scene: mirror/camera_workstation
+  physics: physx/cpu
+  control: mirror
+  curobo: mirror
+  planning: mirror
+  outputs: mirror_default

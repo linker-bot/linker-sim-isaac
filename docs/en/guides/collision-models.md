@@ -88,6 +88,15 @@ plane at the same local height for physical contact. The scene therefore keeps
 `add_ground: false`, avoiding a second overlapping ground surface, and PhysX plus
 Newton CPU/CUDA consume the same analytic collider.
 
+### Explicit body seams in Newton
+
+Newton's pinned USD importer reads collider-level filtered pairs but does not expand
+body-level pairs emitted by the MJCF importer. The Simulator now projects each explicit
+body pair to only the shapes owned by those two bodies before prototype replication.
+Descendant rigid links remain collidable. PhysX keeps the original USD relationships.
+This preserves named assembly seams such as AR5 link5–link7 without disabling the hand
+or camera, and applies equally to Mirror and Kaleidoscope.
+
 ## Pinned USD Parser Workaround
 
 Kit's OpenUSD 25.11 collider parser can race when several meshes belong to one rigid

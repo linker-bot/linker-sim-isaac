@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Added common L6/O6 flanges, optional Gemini 335L wrist assemblies and a top ZED module with named optical mounts and separate camera presets. Corrected USD pose readback and preserved live root rotation topology during snapshot restoration.
+
 ### Changed
 
 - The GPU/Isaac `Simulation` workflow is temporarily manual-only while the

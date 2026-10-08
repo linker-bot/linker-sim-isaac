@@ -116,6 +116,11 @@ class SensorCameraSettings:
     modalities: tuple[str, ...] = ("rgb",)
     clipping_range: Vec2 = (0.01, 5.0)
     intrinsics: SensorCameraIntrinsicsSettings | None = None
+    parent_link: str | None = None
+    pose_axes: str = "world"
+    camera_profile: str | None = None
+    calibration_source: str | None = None
+    sensor_model: str | None = None
     output: SensorCameraOutputSettings = field(
         default_factory=SensorCameraOutputSettings
     )
@@ -123,6 +128,12 @@ class SensorCameraSettings:
     def __post_init__(self) -> None:
         """校验 runtime typed camera 的字段与跨字段约束。"""
 
+        if self.pose_axes not in {"world", "opencv"}:
+            raise ValueError("camera pose_axes must be world or opencv")
+        if self.parent_link is not None:
+            _require_camera_name(self.parent_link)
+            if self.parent_prim_path is None:
+                raise ValueError("camera parent_link requires parent_prim_path")
         _require_camera_name(self.name)
         _require_path(self.prim_path, label=f"camera {self.name} prim_path")
         if not isinstance(self.enabled, bool):

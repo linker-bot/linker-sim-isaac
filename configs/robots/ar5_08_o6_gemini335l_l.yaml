@@ -1,3 +1,4 @@
+# Flange + bracket + Gemini335L; no extra active DOF.
 # AR5 机械臂 + LinkerHand O6 左手组合配置。
 #
 # 本文件描述一个可复用的“单个 Isaac articulation”机器人 profile：
@@ -19,7 +20,7 @@ robot:
   kind: arm_hand
   # profile 内的资产逻辑名称。正式 scene 装配会使用 robots[].label 作为 articulation 实例名；
   # 日志、registry 和外部寻址也使用实例 label/robot_id，profile 则按文件名选择。
-  name: ar5_08_o6_l
+  name: ar5_08_o6_gemini335l_l
 
   # 资产类型。
   # 当前项目支持 mjcf 和 urdf；这里使用 mjcf，因为机械臂+灵巧手组合资产由 MJCF merge 得到，
@@ -27,9 +28,9 @@ robot:
   asset_type: mjcf
 
   # 组合机器人资产路径，相对仓库根目录。
-  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_o6_l 生成，同时包含
+  # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_o6_gemini335l_l 生成，同时包含
   # AR5V2_L 机械臂（== ar5_08 左臂）与 LinkerHand O6 左手，手部 mimic/equality 均保留。
-  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_o6_l/workstation.xml
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_o6_gemini335l_l/workstation.xml
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。

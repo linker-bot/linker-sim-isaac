@@ -60,11 +60,12 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | --- | --- | --- | --- | --- | --- | --- |
 | root | `linkerbot_sim` | foundation | 轻量仓库 metadata facade | pure | documented facade | [架构参考](../reference/python-api.md) |
 
-### configuration (23)
+### configuration (24)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | configuration | `linkerbot_sim.configuration` | configuration | 稳定 lazy configuration public facade | pure | documented facade | [架构参考](../reference/configuration.md) |
+| configuration | `linkerbot_sim.configuration.cameras` | configuration | configuration 层 cameras 实现 owner | pure | internal | [架构参考](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.catalog` | configuration | 项目 profile YAML I/O 与组合的唯一 owner | pure | owner path | [架构参考](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.common` | configuration | 共享不可变配置原语 | pure | internal | [架构参考](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.control` | configuration | configuration 层 control 实现 owner | pure | internal | [架构参考](../reference/configuration.md) |

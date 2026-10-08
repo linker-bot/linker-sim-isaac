@@ -1,0 +1,20 @@
+# Adjustable nominal preset; retain separate RGB/depth optical mounts.
+camera:
+  resolution:
+  - 1920
+  - 1080
+  frequency_hz: 30
+  modalities:
+  - rgb
+  - depth
+  clipping_range_m:
+  - 0.01
+  - 10.0
+  intrinsics:
+    fx: 672.1992366813214
+    fy: 771.1999236407419
+    cx: 960.0
+    cy: 540.0
+  sensor_model: ZED 2i 2.1 mm
+  calibration_source: nominal FOV pinhole; not device calibration; ideal depth, no
+    stereo matching or MinZ model

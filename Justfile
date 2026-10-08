@@ -134,7 +134,12 @@ stress-mirror-teardown profile="newton_cuda" repetitions="20" steps="8":
     {{python}} -c 'import torch; assert torch.cuda.is_available(), "CUDA is required for the Mirror teardown stress gate"'
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_physics.py --profile {{profile}} --steps {{steps}} --teardown-repetitions {{repetitions}}
 
-test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+# Physical named mounts and flanged hands, using formal sensor presets.
+smoke-mirror-assemblies:
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --profile physx_cpu --hand o6 --wrists both
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --profile newton_cpu --hand l6 --wrists both
+
+test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-assemblies smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

@@ -24,8 +24,10 @@ def read_prim_world_pose(
         [translation[0], translation[1], translation[2]],
         dtype=float,
     )
+    # Gf stores row-vector transforms; SciPy consumes column-vector rotations.
+    # Without the transpose, snapshots and camera extrinsics use the inverse pose.
     return position, matrix_to_quat_wxyz(
-        _matrix3_to_numpy(matrix.ExtractRotationMatrix())
+        _matrix3_to_numpy(matrix.ExtractRotationMatrix()).T
     )
 
 
@@ -50,6 +52,34 @@ def apply_prim_local_pose_and_zero_velocity(
     xyz = np.asarray(position, dtype=float).reshape(3)
     xform = UsdGeom.Xformable(prim)
     translate_op = _get_or_add_translate_op(xform)
+    rotate_op = next(
+        (
+            op
+            for op in xform.GetOrderedXformOps()
+            if op.GetOpName() == "xformOp:rotateXYZ"
+        ),
+        None,
+    )
+    if rotate_op is not None and all(
+        op.GetOpName() in {"xformOp:translate", "xformOp:rotateXYZ", "xformOp:scale"}
+        for op in xform.GetOrderedXformOps()
+    ):
+        # Preserve the imported root's op topology while PhysX is live. Replacing
+        # rotateXYZ with a newly added orient op can rebase fixed child bodies on
+        # the next physics-to-USD publication, even for an identical pose.
+        from pxr import Gf
+        from scipy.spatial.transform import Rotation
+
+        angles = Rotation.from_quat(quat[[1, 2, 3, 0]]).as_euler("xyz", degrees=True)
+        vector = (
+            Gf.Vec3f
+            if rotate_op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat
+            else Gf.Vec3d
+        )
+        _set_translate_op(translate_op, xyz)
+        rotate_op.Set(vector(*angles))
+        _zero_rigid_body_velocities(prim)
+        return True
     orient_op = _get_or_add_orient_op(xform)
     _set_translate_op(translate_op, xyz)
     _set_orient_op(orient_op, quat)

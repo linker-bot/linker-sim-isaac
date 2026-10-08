@@ -142,3 +142,78 @@ bundle and session alive for retry. This prevents workers from dereferencing a s
 that has already been destroyed.
 
 See [Outputs](../reference/outputs.md) and [Foxglove](foxglove.md).
+
+## Flanged hands and physical camera modules
+
+`camera_workstation` is an optional Mirror mode/scene example at 120 Hz physics.
+The existing L6/O6 left/right profiles now include the common flange and enable
+self-collision. Select `ar5_08_{l6,o6}_gemini335l_{l,r}` for the flange, bracket and
+Gemini 335L together. Select each side independently; remove its sensor entries when
+using the flange-only profile. Rendering off does not remove installed hardware.
+There is no bracket-only profile. Gravity, gains and armature retain their previous
+settings; attachments inherit disabled default gravity, but their inertia is present.
+
+The static `workstation_zed2i` object adds the top camera and stand. The example
+places it on the centered pedestal mount; other scenes must provide their own
+measured root transform. These asset optical frames and inertias are nominal CAD
+registrations/estimates, not device calibration. The old zero-offset `pinch_tcp`
+remains an arm-end reference and is not corrected into a grasp point by this change.
+
+Use `parent_prim_path` for the robot/object instance root and `parent_link` for an
+exact, unique imported link name. The importer hierarchy is resolved after assets
+exist; missing/ambiguous links fail clearly. `prim_path` supplies the camera leaf
+name, moved under that resolved link. `pose_axes: opencv` interprets the local pose
+as X right, Y down, Z forward; the default `world` convention is X forward, Y left,
+Z up. A zero optical-frame pose needs no extra rotation. Recorded capture metadata
+includes the resolved parent, profile, model and calibration provenance. Returned
+camera world poses retain the existing world-camera convention.
+
+```yaml
+- id: left_rgb
+  camera_profile: gemini335l_rgb_60
+  parent_prim_path: /World/Robots/left_arm
+  parent_link: camera_rgb_optical
+  prim_path: /World/Robots/left_arm/LeftRGB
+  pose: {xyz: [0, 0, 0], rpy: [0, 0, 0]}
+  pose_axes: opencv
+```
+
+Camera leaves live in `configs/cameras`. A setting has one writer: a selected leaf
+cannot be silently overridden by an inline scene value. Copy/edit a leaf to change
+specifications, or supply the complete inline configuration. The catalog records
+all selected camera sources.
+
+| Profile | Native resolution | Hz | Stream |
+| --- | --- | --- | --- |
+| `gemini335l_rgb_60` | 1280×800 | 60 | RGB |
+| `gemini335l_depth_30` | 1280×800 | 30 | depth |
+| `gemini335l_depth_60` | 848×480 | 60 | depth |
+| `zed2i_1080p_30` | 1920×1080 | 30 | RGB + ideal depth |
+| `zed2i_720p_60` | 1280×720 | 60 | RGB + ideal depth |
+| `development_1080p_60` | 1920×1080 | 60 | RGB + ideal depth |
+
+The nominal pinhole FOVs are Gemini RGB 94×68°, depth 90×65°, and ZED 2i 2.1 mm
+110×70°. They do not simulate stereo matching, lens distortion, hardware exposure,
+MinZ invalidity or sensor noise. Physical MinZ is not the renderer near plane.
+Gemini RGB/depth use distinct asset optical frames, so matching dimensions do not
+mean depth-to-color alignment. Real devices require profile-specific SDK calibration.
+Development recording is a virtual camera specification and is not upscaled sensor
+output. Hz denotes distinct simulation-time samples, not guaranteed wall-clock FPS.
+
+With the current O6 + Gemini mounting, some straight-thumb sideways sweeps hit the
+camera. This matches the hardware: retain the collision and coordinate bending with
+sideways motion. Bending does not make every angle safe, especially on the left.
+Validate the task's complete trajectory; the L6 assembly has a different hand shape.
+
+The assembly regression is `scripts/smoke_mirror_assemblies.py`; select `--hand`,
+`--wrists none|left|right|both`, `--profile`, `--gui`, and an empty `--record-root`.
+It checks native image sizes, physical wrist following, paused restoration, reset,
+and the unchanged gravity flags. The source asset mounting and collision rationale
+is in the asset repository's `docs/camera-assemblies.md`.
+
+The smoke also supports `--depth-hz 30|60`, `--top-hz 30|60` and
+`--development-cameras` (four native 1080p cameras with both wrists). These select
+the same catalog leaves; they do not upscale captured images. With `--record-root`,
+the supervisor decodes the drained image/depth files after native shutdown and
+checks dimensions, configured sample cadence, increasing native frame IDs and
+matching capture/physics times.

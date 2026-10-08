@@ -1,0 +1,17 @@
+# Static top camera module; placement belongs to the scene.
+object:
+  name: workstation_zed2i
+  kind: rigid
+  source: urdf
+  asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/workstation_zed2i/workstation.urdf
+  import:
+    collision_approximation: convex_hull
+  physics:
+    static: true
+    material:
+      static_friction: 0.8
+      dynamic_friction: 0.6
+      restitution: 0.0
+    physx:
+      material:
+        friction_combine_mode: average
