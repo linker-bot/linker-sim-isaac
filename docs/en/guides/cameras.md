@@ -156,8 +156,9 @@ settings; attachments inherit disabled default gravity, but their inertia is pre
 The static `workstation_zed2i` object adds the top camera and stand. The example
 places it on the centered pedestal mount; other scenes must provide their own
 measured root transform. These asset optical frames and inertias are nominal CAD
-registrations/estimates, not device calibration. The old zero-offset `pinch_tcp`
-remains an arm-end reference and is not corrected into a grasp point by this change.
+registrations/estimates, not device calibration. The default
+`AR5V2_L_flange_tcp` / `AR5V2_R_flange_tcp` coincides with the arm flange;
+installing a hand or camera does not make it a grasp/contact point.
 
 Use `parent_prim_path` for the robot/object instance root and `parent_link` for an
 exact, unique imported link name. The importer hierarchy is resolved after assets

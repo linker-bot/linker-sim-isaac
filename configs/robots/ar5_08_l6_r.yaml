@@ -118,12 +118,13 @@ curobo:
 
     # 默认 TCP frame；未声明 tool_frames 时必须提供。JSON 省略 tcp_frame_name 时使用此值，
     # 显式值只能选择已存在于 cuRobo context 的 frame。
-    default_tcp_frame: AR5V2_R_pinch_tcp
+    # 零偏移机械臂法兰参考；不是手指捏取点。实际工具/接触点应使用独立的 custom TCP。
+    default_tcp_frame: AR5V2_R_flange_tcp
 
     # 自定义 TCP fixed frames；未写 parent_frame 时相对 flange_frame。
     # xyz 单位为 m，rpy 单位为 rad；创建 context 前写入缓存派生 URDF，不修改源 URDF。
     custom_tcps:
-      AR5V2_R_pinch_tcp:
+      AR5V2_R_flange_tcp:
         xyz: [0.0, 0.0, 0.0]
         rpy: [0.0, 0.0, 0.0]
 

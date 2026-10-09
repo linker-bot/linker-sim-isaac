@@ -9,6 +9,28 @@ ticks. Only Mirror owns a control profile; Kaleidoscope action semantics come fr
 task, and its physics engine derives the controller bundle used to prepare all supported
 runtime joint-control modes.
 
+## Flange And Task TCP Frames
+
+The AR5 arm-hand profiles use `AR5V2_L_flange_tcp` and `AR5V2_R_flange_tcp` as
+their default TCP names in both products. Each is a zero-translation,
+zero-rotation frame relative to the configured arm `flange_frame`. It does not
+identify a fingertip, pinch point, or calibrated contact point, including when a
+physical flange or wrist camera is installed.
+
+Requests that previously selected `AR5V2_L_pinch_tcp` or `AR5V2_R_pinch_tcp`
+must select the corresponding `flange_tcp` name; the old names are not retained
+as aliases. Omitting `tcp_frame_name` selects the configured default as before.
+Numerical poses, physical binding, IK targets, and wrench reference points are
+unchanged by this rename. The standalone arm profile keeps its existing
+`AR5V2_L_tool_tcp` name.
+
+For an actual tool/contact point, define a separately named frame in
+`curobo.robot.custom_tcps` with its measured `xyz` (m) and `rpy` (rad) relative to
+the specified `parent_frame`. Select it through `default_tcp_frame` or the
+operation's supported TCP selector. A fixed offset only describes the hand shape
+for which it was defined; changing finger joints may change the contact point.
+Hybrid force/position control and tare must use the configured physical TCP.
+
 ## Mirror Timeline Model
 
 Mirror represents motion as:
