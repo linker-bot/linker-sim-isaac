@@ -92,6 +92,10 @@ class RenderCoordinator:
             render_tick = render_update
         self._snapshot_index += 1
         try:
+            for camera in cameras:
+                invalidate = getattr(camera, "invalidate_render_capture", None)
+                if callable(invalidate):
+                    invalidate()
             # Newton requires an independent continuous budget per product. PhysX
             # can complete the selected products together in one renderer group.
             groups = (
@@ -102,6 +106,17 @@ class RenderCoordinator:
             for group in groups:
                 self._activate(tuple(camera for camera, _count in group))
                 self._render_group(render_tick, group)
+            # All groups belong to the same frozen physical state. Expose their
+            # identities together, never while a later group is still pending.
+            for camera in cameras:
+                finish = getattr(camera, "finish_render_capture", None)
+                if callable(finish):
+                    finish(
+                        snapshot_index=self._snapshot_index,
+                        physics_time_s=getattr(
+                            self.physics_runtime, "simulation_time", None
+                        ),
+                    )
             result = (
                 {}
                 if not capture or self.cameras is None
@@ -245,13 +260,6 @@ class RenderCoordinator:
                 and not ready()
             ]
             if not pending:
-                for camera in cameras:
-                    finish = getattr(camera, "finish_render_capture", None)
-                    if callable(finish):
-                        finish(
-                            snapshot_index=self._snapshot_index,
-                            physics_time_s=physics_time,
-                        )
                 return
         names = [str(getattr(camera, "name", "unknown")) for camera in pending]
         details = {

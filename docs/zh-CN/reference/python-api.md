@@ -57,8 +57,8 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 
 | 方法 | 合同 |
 | --- | --- |
-| `step(render=False)` | 只推进一次物理；需要时随后走统一 render/post-step observer |
-| `render()` | 显式 render 并立即 capture 当前帧；未启用 rendering 时失败 |
+| `step(render=False)` | 只推进一次物理；`render=True` 随后允许到期输出采集与 GUI 服务，不再每步强制全部传感器 |
+| `render(camera_ids=None)` | 显式采集全部或选中相机的新帧；不推进物理或自动录制，未启用 rendering 时失败 |
 | `get_state()` / `set_state(state, strict=True)` | 读取 owned 状态或事务式写入并使碰撞缓存失效 |
 | `capture_snapshot()` / `restore_snapshot(...)` | 捕获或恢复版本化单场景快照 |
 | `reset(hold_after_reset=True)` | 恢复初态并把 timeline 归零；默认按 `idle_step_duration_s` 为全部 arm/hand group 编译同步 hold，复用正常 executor/render 路径 |

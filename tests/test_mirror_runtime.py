@@ -866,3 +866,29 @@ def test_partial_camera_failure_invalidates_entire_selected_transaction() -> Non
         coordinator.render_frame()
     assert metadata == {}
     assert not any(active.values())
+
+
+def test_serial_capture_does_not_expose_metadata_until_all_products_complete() -> None:
+    published = {}
+    cameras = tuple(
+        SimpleNamespace(
+            name=name,
+            render_update_count=4,
+            set_render_active=lambda _: None,
+            finish_render_capture=lambda name=name, **kw: published.__setitem__(
+                name, kw
+            ),
+        )
+        for name in ("a", "b")
+    )
+
+    def render():
+        assert published == {}
+
+    coordinator = RenderCoordinator(
+        physics_runtime=SimpleNamespace(render=render),
+        cameras=CameraBundle(cameras=cameras),
+    )
+    coordinator.render_frame()
+    assert set(published) == {"a", "b"}
+    assert published["a"]["snapshot_index"] == published["b"]["snapshot_index"]

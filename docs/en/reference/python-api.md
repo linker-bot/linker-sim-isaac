@@ -58,8 +58,8 @@ Key methods and properties:
 | Member | Contract |
 | --- | --- |
 | `physics_runtime` | Borrowed concrete runtime from the unique session. |
-| `step(render=False)` | Advance physics exactly once; optional render occurs afterward. |
-| `render()` | Run one explicit render transaction; fails when rendering is disabled. |
+| `step(render=False)` | Advance physics exactly once. `render=True` permits due output acquisition and GUI service afterward; it does not force all sensors each step. |
+| `render(camera_ids=None)` | Capture new frames for all or selected camera names without stepping or automatic recording; fails when rendering is disabled. |
 | `get_state()` | Return an owned state mapping. |
 | `set_state(state, strict=True)` | Transactional state mutation and collision-dirty mark. |
 | `capture_snapshot()` | Return an owned versioned snapshot mapping. |

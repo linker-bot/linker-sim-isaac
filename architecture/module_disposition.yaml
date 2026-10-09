@@ -409,7 +409,7 @@ generated_inventory:
   production_python:
     count: 252
     path_sha256: 1ea4bbfb4a67164b70a260d66c27c2f731d6d7dacba0755cd23b640da69ff6a7
-    path_content_sha256: cb650a41b86d4bfc0935a7e93570dfa875c6ca3765e8f74028201971cd9de7eb
+    path_content_sha256: 1dcf7ccc6774e05d2de11caae138279041e63625b62bf529a0bd5678732583d1
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
@@ -1788,7 +1788,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/mirror/rendering.py
-      sha256: 3e3d784a366ee140a0bd1b7d7f851441d2d265257d7c328cac9e766f0fedc91e
+      sha256: 30d746c9c71d33f6e45f963ab79a2c4ddeaadd4b46677f9254d2c45bb08e905a
       module: linkerbot_sim.mirror.rendering
       group: mirror
       layer: product
@@ -2430,7 +2430,7 @@ generated_inventory:
   test_python:
     count: 130
     path_sha256: 92d366e8e30bca9179720a2e2f879439770d3c5916dac20aa2c9801b03956f52
-    path_content_sha256: e403b690ed9db495890aa060ee43609ef5f2c7483cadaf1d4be00a4a82223a1e
+    path_content_sha256: 0f9528f31709d0423ca91886a3cc96b1e1e7481c7b3979b5ac6425895b233237
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2561,7 +2561,7 @@ generated_inventory:
     - path: tests/test_mirror_reset_runtime.py
       sha256: 93aee29217ebccdbebc23e355c62ae3a1fd4f6a99db9c79d39c7f4c546e44993
     - path: tests/test_mirror_runtime.py
-      sha256: a868a5043f31eae5b7b3d2e9241e3fded88111215ae75c7c430365ce56a4aa9e
+      sha256: 8dae80ef2ce434beb13795c1d04358d9e0dc95a8144c3e80609e0f1f3a209c60
     - path: tests/test_mirror_timing.py
       sha256: b00b970c78d02d2f133b97ab8e33a27df47470b2f90483662ccd349a9330ff9c
     - path: tests/test_mirror_transport.py
@@ -2829,7 +2829,7 @@ generated_inventory:
   entry_scripts:
     count: 20
     path_sha256: 11240ff39fff06995aae86e9ec75e99ed6dc5a3302b2ce123c3e78149bac9b0c
-    path_content_sha256: 0ad7369c25713bc786aeb9c615d6e1291bbe833626a7b72658550c4735faba77
+    path_content_sha256: 56c428153b33d3f9730ccc9a68d4ee9aafd12f8312c6144d4f1effb1e4929a9f
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -2856,7 +2856,7 @@ generated_inventory:
     - path: scripts/smoke_mirror_assemblies.py
       sha256: 546a14d5e4627dde546939c632e2017d418bdd8bd963a10ee496be7447a56bc3
     - path: scripts/smoke_mirror_camera.py
-      sha256: 8a81db583c745f8272375b78d2ff1dde9cde5e763a7c9dbe456c2c02ae86a6d4
+      sha256: 8d10ee1369dcf098668a935bedc82b895cee18c35c5312f8823b4a01e0b164b2
     - path: scripts/smoke_mirror_contacts.py
       sha256: ee6673b9b1beaecc836ad8343c80f3d7739087755797e3eed113753cc393d0ea
     - path: scripts/smoke_mirror_efforts.py
@@ -2883,7 +2883,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: c13ea88b05c2cfa2e7ec861793450328b8e38322134f26273272ee9e517db60c
+    path_content_sha256: f9b8cd3c4a9b13dc2482460d0a46c0ec3c79e4613ae05bfd7ca5c7bc6e4fccf2
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2914,7 +2914,7 @@ generated_inventory:
     - path: docs/en/getting-started/project-overview.md
       sha256: 340552411c8287105397c41ee42b7e16945142091777e21a082d274681490339
     - path: docs/en/guides/cameras.md
-      sha256: 7e0027ff4b48e731d3b1c3ef59bd08cbbf87cb2027787d7fab15f4754814609b
+      sha256: 7780f8e89911ed81b4f4dfa56490d1d3a4d6f8da0025929c9fb2585a75f5f35a
     - path: docs/en/guides/collision-models.md
       sha256: 7c05e62fd8ce0a03799c19fb8be1cf6f37665eccb0fc1dd4483bc3e6c8bdc80a
     - path: docs/en/guides/configuration.md
@@ -2954,7 +2954,7 @@ generated_inventory:
     - path: docs/en/reference/outputs.md
       sha256: 527ffb32b82f379b77e02b39708f5add86acc82150b10ffa3cdbcdd253b2b3f0
     - path: docs/en/reference/python-api.md
-      sha256: d545c6423aab25089a0c7685b04aa655b113287690aac2e928dd79a46562ce1c
+      sha256: 584b1c10568f8ba2ea37f8b1ad9e01db0d0be7d802f037c1cc7eb82ef8296316
     - path: docs/en/reference/snapshots.md
       sha256: 58b7dc42321eec11cefa00c1a13251b44b76ef228c8609c88159a0c6956d25c4
     - path: docs/zh-CN/development/collision-approximation.md
@@ -2984,7 +2984,7 @@ generated_inventory:
     - path: docs/zh-CN/getting-started/project-overview.md
       sha256: ba8d6efd37dcbf7cca42a8743deec3e0999341277c544deed154734c43b4e482
     - path: docs/zh-CN/guides/cameras.md
-      sha256: 6def08e395736563a480ae2e4e63611b91084193ee50f2fa8af99f4b0765c085
+      sha256: 59da1f746d9a632d7d97a95a81ca1d1cec40dbd666ca6bf3575cfc82639a440f
     - path: docs/zh-CN/guides/collision-models.md
       sha256: 0e62995bc33c672ec0d4df425fd51dbc06e45ae812b3897f37df309bf5fe188f
     - path: docs/zh-CN/guides/configuration.md
@@ -3024,7 +3024,7 @@ generated_inventory:
     - path: docs/zh-CN/reference/outputs.md
       sha256: fd4e043acf2966562e6bb2a49bf45975796822ebc7fbd8e569dd129f2c200106
     - path: docs/zh-CN/reference/python-api.md
-      sha256: 3cfe065a6b989ba3fdb4c7b346dae476f59ac8cc3e12b0337d6e0e8b10305544
+      sha256: 2d39e57ab2c1dbe6a431524c0aaf4f3c0bb7f5572c687dd108a1f6642cc5e10e
     - path: docs/zh-CN/reference/snapshots.md
       sha256: 61a00ad154df5d0e574de632e3cbdc98ad84c2f542394a76661fe7f5b7d20b06
 # generated-inventory:end
