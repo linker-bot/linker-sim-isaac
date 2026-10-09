@@ -409,7 +409,7 @@ generated_inventory:
   production_python:
     count: 252
     path_sha256: 1ea4bbfb4a67164b70a260d66c27c2f731d6d7dacba0755cd23b640da69ff6a7
-    path_content_sha256: 04dd1d1164abec3b7328b79fed2e5d15ca3d9f070d62c265ff156cd411659703
+    path_content_sha256: e435ccee96bb231a7234aeef814383a0e9e6e051b09feee87481d3e16458ce4f
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
@@ -884,7 +884,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/controllers/joint_controller.py
-      sha256: 94eefbcd48d6652804c69a30a796370d62d7db2e313d3f231b04f78e5c8184d8
+      sha256: 6b2d8c0766b2a13d6c3292c96f0b234c154e532d7f7efb6555a6e0d85a8728f9
       module: linkerbot_sim.controllers.joint_controller
       group: controllers
       layer: isaac_infrastructure
@@ -1004,7 +1004,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/isaac/physics/core_api.py
-      sha256: 93e872ba55968726e0a27c05810061be22b8c51bd7577e58873833bee26338ce
+      sha256: a20bee91adc104a0100e21373b806fd5ed0d5cb8b5a8927b76a61b6015533207
       module: linkerbot_sim.isaac.physics.core_api
       group: isaac
       layer: isaac_infrastructure
@@ -1508,7 +1508,7 @@ generated_inventory:
       runtime: pure
       classification: internal
     - path: src/linkerbot_sim/logging/effort_logger.py
-      sha256: 1cbbb10fb9c2899a620dd9adf25a3841577abd35daa62408b5aaa1a2139e67ce
+      sha256: be35da78d5a3dc1fce2f21a4ea18d1a28e1cdafca7b0fbf00997bc42babfdb1b
       module: linkerbot_sim.logging.effort_logger
       group: logging
       layer: outputs
@@ -2252,7 +2252,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/telemetry/state_snapshot.py
-      sha256: fdef96143973ed98d5d45c215ea17d54288e72fa92f063187c25040b406190d1
+      sha256: 52c9d7840b3a9ddc5a4666b8fa300947527f5cefbeb2869257a1a83d1ce8763b
       module: linkerbot_sim.telemetry.state_snapshot
       group: telemetry
       layer: outputs
@@ -2430,7 +2430,7 @@ generated_inventory:
   test_python:
     count: 128
     path_sha256: c000500dcb48bf9d449fde99aeefc3665403d2382ac8f25863a45f2d6af5f54f
-    path_content_sha256: b3b6a8074b5988c493befb17b9b28f1e1e9c741e306fcdc6b6b5785494a3bc33
+    path_content_sha256: 4c0e619022cf10302ce1059f7d07869729d8ab7fad0ad6a184c619c3376c6fe0
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2467,7 +2467,7 @@ generated_inventory:
     - path: tests/test_documented_module_map.py
       sha256: 8268cb2fabd03990a5841ce5d8f79107f2a8159771c9cae69ccc5a3109e776f6
     - path: tests/test_effort_logger.py
-      sha256: d5aa6ec288dfe04fcbb065c51da03445a0263725520cfe3d49d07199cafe9c4a
+      sha256: 606dfd3c255f8ba4d467e2d934414dfc0319ca0e7c4785447c7b6b8f95986482
     - path: tests/test_execution_setup.py
       sha256: a260dc852ac0555444c21573acab9297d61770b1f93489b9de3a309cd5bd7d0d
     - path: tests/test_execution_steps.py
@@ -2663,7 +2663,7 @@ generated_inventory:
     - path: tests/test_snapshots_schema.py
       sha256: 317fe327d93341ec58b17e20ea0baf3e5306dbf2cc94f252dd34d88edba33b2e
     - path: tests/test_state_snapshot.py
-      sha256: c076c38bd1d78abe4bc635bf3e5ff47e779e9bc0f5118c4c58e047859449711c
+      sha256: 0aec532408fcc058c5099ec099ccd4b1058c2cd51d477bf071c5f1a5b830185c
     - path: tests/test_strict_yaml_config.py
       sha256: df5284c46f0997df9bf5b1946ba2ebe96519afb21e1d01355febd30abcb17cd4
     - path: tests/test_system_configs.py
@@ -2823,9 +2823,9 @@ generated_inventory:
     - path: apps/linkerbot_sim.mirror.physx.python.kit
       sha256: 9b605ca99606a70408e99339d200a6a43354adc736519f9f18c2b162c57ae415
   entry_scripts:
-    count: 19
-    path_sha256: 2cd59b008f6c8de00c45cdab25b1b589214b2d7d2ecf8492145880d1ea40afa5
-    path_content_sha256: c15bce3b44e6c4b3c63148365f7c7e5a705e095b2a2eb6a6b99f071073829566
+    count: 20
+    path_sha256: 11240ff39fff06995aae86e9ec75e99ed6dc5a3302b2ce123c3e78149bac9b0c
+    path_content_sha256: 0ad7369c25713bc786aeb9c615d6e1291bbe833626a7b72658550c4735faba77
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -2855,6 +2855,8 @@ generated_inventory:
       sha256: 8a81db583c745f8272375b78d2ff1dde9cde5e763a7c9dbe456c2c02ae86a6d4
     - path: scripts/smoke_mirror_contacts.py
       sha256: ee6673b9b1beaecc836ad8343c80f3d7739087755797e3eed113753cc393d0ea
+    - path: scripts/smoke_mirror_efforts.py
+      sha256: 20ade401c7b8b7c18c28d7efdea2458f1994a4b3263639e884d86892851e4840
     - path: scripts/smoke_mirror_physics.py
       sha256: 387a220855d4245373a401570cde95ed90f34eda237b1f9ccbf3c26baa8f2a0f
     - path: scripts/smoke_mirror_planning_geometry.py
@@ -2877,7 +2879,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: fdcf1d3ce5bafd4a0310a289f980d13248453187ff91cf06b8d6e0e3079fae3f
+    path_content_sha256: 471423b6e5d04d91516391bfa03c153af7f8f722959f55983ae735c1997a8c00
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2920,7 +2922,7 @@ generated_inventory:
     - path: docs/en/guides/motion-planning.md
       sha256: 1908132d2ac632eaa8376d361c1654fd6d6f93ca216e4379d517a3fa04734584
     - path: docs/en/guides/telemetry.md
-      sha256: b0445e6b59e6f5cd393c5572744cdafeb1d39708f26d5fd56337b592914cb0a5
+      sha256: 252a9f0f2cab6932d6ff7364c3cef966e122e1fc542052c5437792290482820f
     - path: docs/en/index.md
       sha256: 6fe7cee30081f3738541b8ba0f9537370f1388ca82b0543763a90ffd099dcab0
     - path: docs/en/maintenance/documentation-guide.md
@@ -2990,7 +2992,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/motion-planning.md
       sha256: 0ed89071c95601852297fea027bc14ca0b32434f2617a136e9b2acff44ab2eab
     - path: docs/zh-CN/guides/telemetry.md
-      sha256: 51c193056edded5fb7bd7f604b5f9fd3c904b3e5ffe007a66e7ce3967407cbc7
+      sha256: b8b66f913a85459716fc932de0306125052cb3de35aabfbfe9d9f6590f9f0c9f
     - path: docs/zh-CN/index.md
       sha256: a863c711c07c029756b8ce8fca8969b68bf5dced54ae25323d2a5a1bfb64ed38
     - path: docs/zh-CN/maintenance/documentation-guide.md

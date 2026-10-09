@@ -93,6 +93,23 @@ def test_scene_state_sampler_reset_clears_acceleration_history() -> None:
     assert np.isnan(after_reset.robots[0].accelerations_rad_s2).all()
 
 
+def test_effort_metadata_uses_actual_clock_modes_and_owned_validity() -> None:
+    runtime = _runtime()
+    runtime.world.simulation_time = 0.35
+    controller = runtime.robots_by_id[0].execution.joint_controller
+    controller.effort_control_modes = ("position/implicit", "effort/direct")
+    sampler = SceneRobotStateSampler(stage=None, include_efforts=True)
+    snapshot = sampler.sample(runtime, step=99)
+    assert snapshot.time_s == 0.35
+    metadata = snapshot.as_dict()["robots"][0]["effort_metadata"]
+    assert metadata["sample_time_s"] == 0.35
+    assert metadata["control_modes"] == ["position/implicit", "effort/direct"]
+    assert metadata["commanded"]["valid"] == [False, True]
+    assert metadata["measured"]["valid"] == [True, True]
+    metadata["measured"]["valid"][0] = False
+    assert snapshot.as_dict()["robots"][0]["effort_metadata"]["measured"]["valid"][0]
+
+
 def test_scene_state_sampler_freezes_cached_hybrid_diagnostics() -> None:
     source = {
         "active": True,

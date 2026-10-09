@@ -27,6 +27,10 @@ their Git commit.
 
 ### Fixed
 
+- Joint effort telemetry identifies commanded, applied and projected sources,
+  per-joint validity and missing-data reasons using the actual physics clock.
+  Newton projected effort remains explicitly unsupported; gains, gravity and armature are unchanged.
+
 - Planning now uses the measured fixed hand shape and mounted hardware, imported fixture bounds and carried-object geometry. Corrected world-to-base obstacle conversion, added scoped contact allowances and sampled path coverage diagnostics.
 
 - Temporarily serialize the bundled USD 25.11 physics parser during asset import to avoid its multi-collider allocator race; restore normal concurrency afterwards.

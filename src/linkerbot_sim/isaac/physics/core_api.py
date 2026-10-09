@@ -623,7 +623,7 @@ class SingleArticulationCoreView(ArticulationCoreView):
         self, joint_indices: object | None = None
     ) -> np.ndarray:
         if self.physics_backend == "newton":
-            raise RuntimeError(
+            raise NotImplementedError(
                 "Newton 1.2.1 does not implement projected/measured joint efforts"
             )
         return _single_values(

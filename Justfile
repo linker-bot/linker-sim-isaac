@@ -127,6 +127,10 @@ smoke-mirror-camera:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_camera.py --profile newton_cpu --cameras 3
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_camera.py --profile newton_cuda --cameras 3
 
+smoke-mirror-efforts:
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_efforts.py --profile physx_cpu
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_efforts.py --profile newton_cpu
+
 # 在全新的受监督进程中重复 Mirror 完整启动/渲染/关闭。默认聚焦最重的 Newton CUDA
 # render closure；发布前可分别传其余三个 profile。失败 JSON 会保留第几轮以及 SIGSEGV
 # 等 POSIX signal 名称，不能用单次成功替代这条间歇性 teardown 验收。
@@ -152,7 +156,7 @@ smoke-mirror-task-flow:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --hand l6 --task-flow --development-cameras
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --hand o6 --profile newton_cuda --task-flow --development-cameras
 
-test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

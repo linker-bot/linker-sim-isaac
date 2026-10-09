@@ -200,6 +200,25 @@ class JointController:
         )
 
     @property
+    def effort_control_modes(self) -> tuple[str, ...]:
+        """每个 articulation DOF 的控制模式/方法，供 effort 来源解释使用。"""
+
+        commands = set(int(index) for index in self.command_indices)
+        followers = set(int(index) for index in self.follower_indices)
+        result = []
+        for index in range(self.robot.num_dof):
+            if index in commands:
+                mode, method = self._active_spec_for_index(index)
+                result.append(f"{mode}/{method}")
+            elif index in followers:
+                result.append(
+                    "mimic/constraint" if self.native_mimic else "position/implicit"
+                )
+            else:
+                result.append("uncontrolled")
+        return tuple(result)
+
+    @property
     def last_control_targets(self) -> ControlTargets | None:
         """返回最后一次完整成功下发的控制目标副本。"""
 
