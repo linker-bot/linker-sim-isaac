@@ -172,20 +172,25 @@ def create_mirror_runtime(
             RenderCoordinator(
                 physics_runtime=assembly.session.physics_runtime,
                 cameras=camera_bundle,
+                gui_frequency_hz=(
+                    config.scene.render_frequency_hz
+                    if config.outputs.render.enabled and config.outputs.render.gui
+                    else None
+                ),
             )
             if render_enabled
             else None
         )
         if rendering is not None:
-            bind_render_frame = getattr(
+            bind_post_step_render = getattr(
                 assembly.motion_backend,
-                "bind_render_frame",
+                "bind_post_step_render",
                 None,
             )
-            if callable(bind_render_frame):
+            if callable(bind_post_step_render):
                 # Timeline 与 idle step 必须复用同一个 coordinator；尤其 Newton
-                # 不能在 motion loop 中退回 manager.render() 的单 update 快捷路径。
-                bind_render_frame(rendering.render_only)
+                # 按相同的到期集合采集，不在 motion loop 中每步强制全部相机。
+                bind_post_step_render(rendering.after_physics_step)
         interface = config.control.interface
         admission = MirrorAdmissionQueue(
             capacity=interface.admission_capacity,

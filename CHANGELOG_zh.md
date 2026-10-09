@@ -14,6 +14,8 @@ Git commit 标识。
 
 ### 变更
 
+- Mirror 只采集到期且有输出消费者的相机；`step(render=True)` 改为允许按需采集，不再每步强制全部传感器。`render(camera_ids=...)` 获取选中相机新帧，不推进物理或录制；空闲传感器停止渲染，暂停、急停和连续查询独立服务 GUI。
+
 - 在 self-hosted runner 稳定性问题解决前，GPU/Isaac `Simulation` 工作流暂时只允许手动触发。
 - 新增由维护者手动触发的发布工作流；发布前会校验 annotated version tag、CPU quality，以及
   同一 commit 上成功的 Simulation run，随后发布带 SHA-256 校验的源码 workspace 归档。

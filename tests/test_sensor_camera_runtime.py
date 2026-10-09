@@ -720,3 +720,21 @@ def test_newton_tracker_uses_native_product_frame_and_renderer_clock() -> None:
     )
     assert tracker.ready
     assert tracker.frame_id == 5
+
+
+def test_physx_render_activation_uses_owned_hydra_product_only_on_change() -> None:
+    from types import SimpleNamespace
+    from linkerbot_sim.sensors.camera.runtime import SensorCameraRuntime
+
+    activations = []
+    native = SimpleNamespace(
+        _hydra_texture=SimpleNamespace(
+            hydra_texture=SimpleNamespace(set_updates_enabled=activations.append)
+        )
+    )
+    runtime = SensorCameraRuntime(settings=SimpleNamespace(), camera=native)
+    for active in (False, False, True, True, False):
+        runtime.set_render_active(active)
+    assert activations == [False, True, False]
+    with pytest.raises(TypeError, match="boolean"):
+        runtime.set_render_active(1)

@@ -34,20 +34,31 @@ intrinsics:
 physics-to-USD sync，不注册、不缓存、不关闭 camera。关闭顺序是停止输出 admission → drain/close
 camera 与 sink → 关闭 physics/session。
 
-`RenderCoordinator` 拥有完整 render transaction。timeline 与会推进物理的 `hold_step` idle 先执行
-`physics.step(render=False)`，再调用 `render_only()`；该方法只推进 renderer，不读取 camera。随后统一的
-post-step observer 按频率与背压策略执行唯一一次 capture/publish，避免同一物理 tick 双 readback。
+`runtime.step(render=True)` 与运动执行器在完成物理步后允许按需采集。只有按仿真时间
+`frequency_hz` 到期、且有输出消费者的相机进入新帧事务；采样期限仍由原有输出 observer
+独占，完成后只发布一次。不整除物理频率的采样点量化到物理 tick，避免长期漂移；不补造
+跳过的历史帧。`render=False` 不请求渲染，也不能给旧像素标注新的物理时间。
 
-`idle_physics_policy: pause` 不推进物理，也不触发 post-step observer；到达 wall-clock 渲染周期时，owner
-loop 显式调用 `MirrorRuntime.render()`，由 `render_frame(capture=True)` 立即返回当前帧。应用代码显式调用
-`runtime.render()` 也使用相同的立即 capture 语义。
+`runtime.render()` 显式返回全部已配置相机的**新帧**；
+`runtime.render(camera_ids=("left_rgb", "top"))` 只采集选中的相机，每台返回启动时配置的
+全部模态。空选择、重复或未知名称在渲染前报错。每次调用都等待新的原生帧，即使物理暂停；
+它不推进物理、不发布自动输出，也不移动录制采样期限。失败事务清除选中相机的捕获元数据。
+
+传感器渲染产品在采集之间停用，传感器窗口可保留最近画面。
+`outputs.camera.enabled=false` 关闭自动采样，仍允许显式取图。相机选择、分辨率、频率和
+模态继续通过已有 camera leaf 或完整内联配置在启动时确定，不增加热修改或图像 JSON 操作。
+
+GUI 使用 `scene.render_frequency_hz` 作为墙钟服务目标，独立于传感器采样。暂停、急停和
+连续查询期间也会服务主 viewport，不推进物理或触发传感器事务；运动逐步提供服务机会。
+headless 空闲且无需采集时不泵 Kit。可靠采集已服务 GUI，不立即重复刷新。阻塞原生调用、
+规划和可靠输出背压仍会延迟 GUI，此目标不保证固定墙钟 FPS。
 
 CPU PhysX 与 Newton 每帧只调用一次 `pre_render()` 发布当前物理位姿，然后调用
 `render_update()`，期间物理时间保持不变。原生相机等待所属 render product 的完成事件，且其
 Kit SWH 帧号必须不小于状态发布后的第一个 update。Newton 没有 SWH stage-update owner，
 改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 50 次 renderer update；超时抛错，
 不返回旧画面。Newton 保留至少四次 update 的 history 预算，多相机按 viewport 逐个激活，异常后
-也恢复激活状态。配置频率控制输出采样；显式 `render()` 在暂停时也请求当前状态的新帧。
+也恢复为空闲停用状态。配置频率控制输出采样；显式 `render()` 在暂停时也请求当前状态的新帧。
 
 PhysX 启用渲染的 headless 模式保留活跃的 startup Hydra viewport，不要求可见窗口或相机机械
 模型。Mirror PhysX Kit 关闭独立的 sensor/TLAS 时钟，使暂停位姿更新进入本次采集。关闭渲染时
@@ -59,10 +70,13 @@ Newton 为 `kit_render_product_frame`）、
 不是原生曝光身份；没有匹配渲染的物理步不能把旧像素标成新观测。原生帧号只在 Kit 进程内有效，
 快照序号只在当前 coordinator 内有效。相机 handle 的 `get_capture_metadata()` 返回相同身份信息。
 
-定向回归为 `scripts/smoke_mirror_camera.py`：不额外推进物理预热首帧、暂停 set/restore 物块、reset，
-以及 120 Hz 物理下连续六个 60 Hz 仿真时刻的采样。可选择 `--gui`、
-`--resolution 1920x1080`、`--cameras 3`、`--record-root <空目录>` 验证对应路径。
-这些检查不代表墙钟吞吐达到 60 FPS。
+定向回归为 `scripts/smoke_mirror_camera.py`：无物理预热的首帧、暂停物块 set/restore、reset、
+产品停用与子集新帧。使用 `--record-root <空目录>` 时每步允许自动采样，supervisor 在关闭后
+解码 RGB/depth 文件并检查原生身份、物理时间和频率。可选 `--gui`、
+`--resolution 1920x1080`、`--cameras 4`，或
+`--cameras 3 --frequencies 60 30 10 --steps 120`。
+`--modalities rgb` / `--modalities depth` 验证单模态。也提供 640×320 诊断分辨率，
+它不是设备标定 preset。这些检查不代表墙钟吞吐达到 60 FPS。
 
 ## 数据与背压
 

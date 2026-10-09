@@ -203,7 +203,7 @@ class MirrorHybridExecutor:
         self._settings = settings
         self._physics_engine = str(physics_engine)
         self._physics_execution = str(physics_execution)
-        self._render_frame: Callable[[], object] | None = None
+        self._post_step_render: Callable[[], object] | None = None
         self._before_step: Callable[[float], None] | None = None
         self._control_mode_provider: Callable[[], str] = lambda: "position"
         self._parameter_provider: Callable[[], HybridParameterSnapshot] | None = None
@@ -213,8 +213,8 @@ class MirrorHybridExecutor:
         self._latest_diagnostics: dict[str, object] = {"active": False}
         self._closed = False
 
-    def bind_render_frame(self, callback: Callable[[], object]) -> None:
-        self._render_frame = callback
+    def bind_post_step_render(self, callback: Callable[[], object]) -> None:
+        self._post_step_render = callback
 
     def bind_before_step(self, callback: Callable[[float], None]) -> None:
         self._before_step = callback
@@ -906,8 +906,8 @@ class MirrorHybridExecutor:
             mark_dirty = getattr(collision, "mark_dirty", None)
             if callable(mark_dirty):
                 mark_dirty()
-            if self._render_frame is not None:
-                self._render_frame()
+            if self._post_step_render is not None:
+                self._post_step_render()
             observe = getattr(self._resources, "observe_after_step", None)
             if callable(observe):
                 observe(

@@ -9,6 +9,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import sys
+import time
 import traceback
 
 import numpy as np
@@ -37,11 +38,29 @@ def parse_args(argv=None):
     )
     parser.add_argument("--gui", action="store_true")
     parser.add_argument(
-        "--resolution", choices=("320x240", "1920x1080"), default="320x240"
+        "--resolution", choices=("320x240", "640x320", "1920x1080"), default="320x240"
     )
-    parser.add_argument("--cameras", type=int, choices=(1, 3), default=1)
+    parser.add_argument("--cameras", type=int, choices=(1, 3, 4), default=1)
     parser.add_argument("--record-root", type=Path)
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--frequencies",
+        type=float,
+        nargs="+",
+        help="One simulation-time Hz value per camera",
+    )
+    parser.add_argument(
+        "--modalities", choices=("rgb", "depth"), nargs="+", default=("rgb", "depth")
+    )
+    parser.add_argument("--steps", type=int, default=12)
+    args = parser.parse_args(argv)
+    if args.steps < 1:
+        parser.error("--steps must be positive")
+    if args.frequencies is not None and (
+        len(args.frequencies) != args.cameras
+        or any(not np.isfinite(hz) or hz <= 0 for hz in args.frequencies)
+    ):
+        parser.error("--frequencies requires one positive finite value per camera")
+    return args
 
 
 def camera_config(args):
@@ -65,7 +84,8 @@ def camera_config(args):
                 ),
             ),
             resolution=(width, height),
-            frequency_hz=60.0,
+            frequency_hz=(args.frequencies[index] if args.frequencies else 60.0),
+            modalities=tuple(args.modalities),
             intrinsics=replace(
                 k, fx=k.fx * sx, fy=k.fy * sy, cx=k.cx * sx, cy=k.cy * sy
             ),
@@ -115,7 +135,8 @@ def capture(runtime):
             item
         )
         assert item["physics_time_s"] == before, item
-        assert np.isfinite(frames[name]["depth"]).any()
+        for pixels in frames[name].values():
+            assert np.isfinite(pixels).any()
     return frames, metadata
 
 
@@ -124,7 +145,10 @@ def changed_pixels(before, after):
         name: int(
             np.count_nonzero(
                 ~np.isclose(
-                    before[name]["depth"], after[name]["depth"], atol=1e-4, rtol=0
+                    before[name]["depth" if "depth" in before[name] else "rgb"],
+                    after[name]["depth" if "depth" in before[name] else "rgb"],
+                    atol=1e-4,
+                    rtol=0,
                 )
             )
         )
@@ -165,25 +189,61 @@ def run(args):
         runtime.restore_snapshot(baseline)
         restored, restored_meta = capture(runtime)
         restore_error = changed_pixels(first, restored)
-        # Depth should be deterministic; tiny backend transform rounding is tolerated.
-        assert all(
-            count < max(10, np.asarray(first[name]["depth"]).size * 0.001)
-            for name, count in restore_error.items()
-        ), restore_error
-        samples = []
-        last = restored_meta
-        for decision in range(12):
-            runtime.step(render=(decision % 2 == 1))
-            if decision % 2:
-                _, meta = capture(runtime)
-                for name in meta:
-                    assert meta[name]["native_frame_id"] > last[name]["native_frame_id"]
-                samples.append(meta)
-                last = meta
-        times = [
-            float(sample[next(iter(sample))]["physics_time_s"]) for sample in samples
-        ]
-        assert np.allclose(np.diff(times), 1.0 / 60.0, rtol=0, atol=1e-9), times
+        if "depth" in args.modalities:
+            assert all(
+                count < max(10, np.asarray(first[name]["depth"]).size * 0.001)
+                for name, count in restore_error.items()
+            ), restore_error
+        activation = exercise_product_selection(runtime)
+        cameras = runtime.scene_resources.sensor_cameras
+        counts = {camera.name: 0 for camera in cameras}
+        for camera in cameras:
+            begin = camera.begin_render_capture
+
+            def counted_begin(camera=camera, begin=begin):
+                counts[camera.name] += 1
+                begin()
+
+            camera.begin_render_capture = counted_begin
+        samples = {camera.name: [] for camera in cameras}
+        last_ids = {
+            camera.name: camera.get_capture_metadata().get("native_frame_id")
+            for camera in cameras
+        }
+        clock = float(runtime.physics_runtime.simulation_time)
+        started = time.perf_counter()
+        for decision in range(args.steps):
+            runtime.step(render=True)
+            for camera in cameras:
+                meta = camera.get_capture_metadata()
+                native_id = meta.get("native_frame_id")
+                if native_id != last_ids[camera.name]:
+                    assert (
+                        meta["physics_time_s"]
+                        == runtime.physics_runtime.simulation_time
+                    )
+                    samples[camera.name].append(meta)
+                    last_ids[camera.name] = native_id
+        sampled_wall_s = time.perf_counter() - started
+        assert (
+            abs(runtime.physics_runtime.simulation_time - clock - args.steps / 120.0)
+            < 1e-6
+        )
+        for camera in cameras:
+            expected = (
+                expected_frames(args, camera.settings.frequency)
+                if args.record_root
+                else 0
+            )
+            assert counts[camera.name] == len(samples[camera.name]) == expected, (
+                counts,
+                expected,
+            )
+        automatic_counts = dict(counts)
+        observer = getattr(runtime.rendering.cameras.output, "observer", None)
+        deadlines = {} if observer is None else dict(observer._next_sample_time)
+        capture(runtime)
+        assert observer is None or observer._next_sample_time == deadlines
         runtime.reset(hold_after_reset=False)
         _, reset_meta = capture(runtime)
         report = {
@@ -195,6 +255,9 @@ def run(args):
             "restore_changed_pixels": restore_error,
             "initial": initial_meta,
             "samples": samples,
+            "automatic_capture_counts": automatic_counts,
+            "sampled_wall_s": sampled_wall_s,
+            "product_selection": activation,
             "reset": reset_meta,
         }
     except BaseException:
@@ -218,36 +281,106 @@ def main():
             success_marker="LINKERBOT_MIRROR_CAMERA_SMOKE_OK",
         )
         if result == 0 and args.record_root is not None:
-            verify_recording(args.record_root, camera_count=args.cameras)
+            verify_recording(args)
         return result
     run(args)
     return 0
 
 
-def verify_recording(root: Path, *, camera_count: int) -> None:
-    """Check drained files in the supervisor after native fast shutdown."""
+def expected_frames(args, frequency: float) -> int:
+    # First sample is the first completed tick; rates above physics sample once per tick.
+    return min(args.steps, int(np.floor((args.steps - 1) * frequency / 120 + 1e-7)) + 1)
 
-    for index in range(camera_count):
-        directory = root / f"probe_{index}"
+
+def exercise_product_selection(runtime):
+    """Prove native inactivity, subset freshness and owner-loop service without physics."""
+    cameras = runtime.scene_resources.sensor_cameras
+    physics = runtime.physics_runtime
+    clock = physics.simulation_time
+
+    def ids():
+        return {camera.name: camera._frame_tracker.frame_id for camera in cameras}
+
+    # Drain submitted work, then verify that GUI updates cannot keep sensors running.
+    for _ in range(8):
+        physics.render_update()
+    before = ids()
+    import omni.kit.viewport.utility as viewport
+
+    main = viewport.get_active_viewport()
+    resolution = main.resolution
+    try:
+        main.resolution = (800, 600)
+        for _ in range(8):
+            physics.render_update()
+    finally:
+        main.resolution = resolution
+    assert ids() == before, (before, ids())
+    for selection in ((), ("missing",), (cameras[0].name, cameras[0].name)):
+        try:
+            runtime.render(selection)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"accepted invalid camera selection: {selection}")
+    selected = cameras[0].name
+    first = runtime.render((selected,))
+    assert tuple(first) == (selected,)
+    frozen = {name: pixels.copy() for name, pixels in first[selected].items()}
+    first_id = cameras[0].get_capture_metadata()["native_frame_id"]
+    runtime.render((selected,))
+    assert cameras[0].get_capture_metadata()["native_frame_id"] > first_id
+    for name in before:
+        if name != selected:
+            assert ids()[name] == before[name]
+    for name, pixels in frozen.items():
+        np.testing.assert_array_equal(first[selected][name], pixels)
+    assert physics.simulation_time == clock
+    return {
+        "inactive_native_ids": before,
+        "selected": selected,
+        "after_subset_ids": ids(),
+    }
+
+
+def verify_recording(args) -> None:
+    """Decode drained files and verify the actual automatic recording cadence."""
+    from PIL import Image
+
+    width, height = (int(value) for value in args.resolution.split("x"))
+    for index in range(args.cameras):
+        directory = args.record_root / f"probe_{index}"
         with (directory / "metadata.jsonl").open() as stream:
             entries = [json.loads(line) for line in stream]
-        for modality in ("rgb", "depth"):
+        frequency = args.frequencies[index] if args.frequencies else 60.0
+        for modality in args.modalities:
             frames = [entry for entry in entries if entry["modality"] == modality]
-            assert len(frames) == 6, (directory, modality, len(frames))
+            assert len(frames) == expected_frames(args, frequency), (
+                directory,
+                modality,
+                len(frames),
+            )
             times = [frame["time_s"] for frame in frames]
-            assert np.allclose(np.diff(times), 1.0 / 60.0, rtol=0, atol=1e-9)
+            if frequency <= 120 and 120 % frequency == 0:
+                assert np.allclose(np.diff(times), 1.0 / frequency, rtol=0, atol=1e-6)
             ids = [frame["capture"]["native_frame_id"] for frame in frames]
             assert all(right > left for left, right in zip(ids, ids[1:]))
-            assert all(
-                (directory / frame["relative_path"]).is_file() for frame in frames
-            )
-            assert all(
-                abs(frame["capture"]["physics_time_s"] - frame["time_s"]) < 1e-9
-                for frame in frames
-            )
+            assert [f["frame_index"] for f in frames] == list(range(len(frames)))
+            for frame in frames:
+                path = directory / frame["relative_path"]
+                assert abs(frame["capture"]["physics_time_s"] - frame["time_s"]) < 1e-9
+                if modality == "rgb":
+                    with Image.open(path) as pixels:
+                        assert pixels.size == (width, height)
+                        assert np.asarray(pixels).max() > np.asarray(pixels).min()
+                elif path.suffix == ".npz":
+                    with np.load(path) as archive:
+                        assert archive[archive.files[0]].shape == (height, width)
+                else:
+                    assert np.load(path).shape == (height, width)
     print(
         "LINKERBOT_MIRROR_CAMERA_RECORDING_OK "
-        + json.dumps({"cameras": camera_count, "frames_per_modality": 6}),
+        + json.dumps({"cameras": args.cameras, "steps": args.steps}),
         flush=True,
     )
 

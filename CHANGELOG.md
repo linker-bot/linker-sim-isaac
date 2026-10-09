@@ -15,6 +15,8 @@ their Git commit.
 
 ### Changed
 
+- Mirror now samples only due cameras with output consumers; `step(render=True)` permits scheduled acquisition rather than forcing every sensor each step. `render(camera_ids=...)` captures fresh selected cameras without advancing physics or recording. Idle sensor products stop rendering, and pause, estop and continuous queries service GUI independently.
+
 - The GPU/Isaac `Simulation` workflow is temporarily manual-only while the
   self-hosted runner is stabilized.
 - A maintainer-only release workflow now verifies an annotated version tag, CPU

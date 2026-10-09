@@ -69,17 +69,34 @@ When camera output is enabled, the selected scene must contain at least one came
 
 ## Render Transaction
 
-`RenderCoordinator` owns the whole render transaction. Timeline and physics-advancing
-`hold_step` idle paths first call `physics.step(render=False)` and then `render_only()`,
-which advances the renderer without reading cameras. The shared post-step observer is
-the only component that captures and publishes those completed physics steps according
-to frequency and backpressure policy, so one tick cannot perform two readbacks.
+`runtime.step(render=True)` and motion execution permit scheduled acquisition after
+each completed physical step. Only cameras due at their configured simulation-time
+`frequency_hz` and having an output consumer enter a fresh-frame transaction. The
+existing output observer owns the schedule and publishes each completed sample once.
+Rates that do not divide the physics rate are quantized onto physical ticks without
+long-term drift; missed historical samples are not synthesized. `render=False`
+requests no rendering and cannot relabel old pixels with the new physical time.
 
-With `idle_physics_policy: pause`, no physics step or post-step observer runs. When its
-wall-clock render cadence expires, the owner loop explicitly calls
-`MirrorRuntime.render()`, which uses `render_frame(capture=True)` and returns the current
-frame immediately. Application code calling `runtime.render()` has the same explicit
-capture semantics.
+`runtime.render()` explicitly returns a **new** frame from every configured camera.
+Use `runtime.render(camera_ids=("left_rgb", "top"))` to capture only selected cameras.
+Each selected camera returns all its configured modalities; empty, duplicate and
+unknown selections fail before rendering. Every call acquires a new native frame,
+even while paused. It never steps physics, publishes automatic outputs, or advances
+the recording schedule. A failed transaction invalidates its selected capture metadata.
+
+Sensor render products are inactive between captures; their windows may retain the
+last image. Turning `outputs.camera.enabled` off disables automatic sampling, while
+explicit capture remains available. Resolution, frequency and modalities remain
+startup settings, selected through existing camera leaves or a complete inline scene
+configuration. There is no runtime reconfiguration or new image JSON operation.
+
+GUI service uses `scene.render_frequency_hz` as a wall-clock target, independently of
+sensor sampling. Pause, estop and continuous query traffic still service the main
+viewport without advancing physics or starting a sensor transaction. Motion provides
+service opportunities at completed steps. Headless idle does not pump Kit without a
+capture request. A capture also services GUI, avoiding an immediate duplicate update.
+Blocking native calls, planning and reliable output backpressure can still delay GUI;
+the target is not a guaranteed wall-clock FPS.
 
 For CPU PhysX and Newton the coordinator calls `pre_render()` once to publish the
 current physics poses, then pumps `render_update()` without advancing physics time.
@@ -89,7 +106,7 @@ owner: it uses the native product frame number and a SyntheticData rational rend
 barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 50 renderer
 updates; a timeout raises instead of returning old data. Newton keeps its minimum
 four-update history budget and selects multiple viewports one at a time, restoring
-activation even on failure. Configured frequency controls output sampling; explicit
+the inactive idle set even on failure. Configured frequency controls output sampling; explicit
 `render()` requests a fresh frozen snapshot even when paused.
 
 Headless PhysX with rendering enabled retains an active startup Hydra viewport; it
@@ -104,11 +121,14 @@ step without a matching render cannot relabel old pixels as a new observation.
 Native IDs are local to the Kit process; snapshot indices are local to the coordinator.
 Camera handles expose the same identity through `get_capture_metadata()`.
 
-The focused regression is `scripts/smoke_mirror_camera.py`: paused object set/restore,
-first frame without physics warmup, reset, and six consecutive 60 Hz simulation-time
-samples at 120 Hz physics. Select `--gui`, `--resolution 1920x1080`, `--cameras 3`, or
-`--record-root <empty-directory>` to exercise the corresponding paths. This does not
-claim 60 FPS wall-clock throughput.
+The focused regression is `scripts/smoke_mirror_camera.py`: first frame without
+physics warmup, paused object set/restore, reset, product inactivity and fresh subset
+capture. With `--record-root <empty-directory>`, every step permits automatic capture;
+the supervisor decodes drained RGB/depth and checks native identities, physical time
+and cadence. Select `--gui`, `--resolution 1920x1080`, `--cameras 4`, or
+`--cameras 3 --frequencies 60 30 10 --steps 120` for focused variants.
+`--modalities rgb` or `--modalities depth` tests a single configured modality.
+A 640×320 diagnostic setting is also available; it is not a device calibration preset.
 
 The physics runtime does not own cameras. `CameraBundle` owns camera handles and their
 output sink; Mirror closes the bundle before the Isaac session.

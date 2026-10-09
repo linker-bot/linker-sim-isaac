@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 import math
-import time
 
 from linkerbot_sim.mirror.interface.transport import MirrorTransportHub
 from linkerbot_sim.mirror.runtime import MirrorCloseReport, MirrorRuntime
@@ -54,8 +53,6 @@ def run_mirror(
         runtime.attach_ingress(hub)
     iterations = 0
     physics_steps = 0
-    render_period = 1.0 / runtime.config.scene.render_frequency_hz
-    next_render_at = time.monotonic() + render_period
     close_report: MirrorCloseReport | None = None
     try:
         # endpoint 全部完成 bind/ready 后才宣布可用；start 中途失败由 hub 逆序回滚，随后
@@ -69,24 +66,23 @@ def run_mirror(
                 break
             if max_iterations is not None and iterations >= max_iterations:
                 break
-            response = runtime.controller.process_next(timeout_s=timeout)
-            if response is None:
-                if runtime.controller.admission.status().estopped:
-                    # estop 后冻结物理；只允许 ingress 提交 reset/status/quit。
-                    iterations += 1
-                    continue
-                policy = runtime.config.control.idle_physics_policy
-                if policy == "hold_step":
-                    # duration 是仿真时间而不是 wall-clock sleep。按 physics dt 量化为整数
-                    # tick，每一 tick 都走同一 post-step output 边界。
+            wait = (
+                timeout
+                if runtime.rendering is None
+                else runtime.rendering.gui_wait_timeout(timeout)
+            )
+            response = runtime.controller.process_next(timeout_s=wait)
+            if response is None and not runtime.controller.admission.status().estopped:
+                if runtime.config.control.idle_physics_policy == "hold_step":
+                    # Every completed tick shares the same sampling/output boundary.
                     for _ in range(_idle_hold_step_count(runtime)):
                         runtime.step(render=runtime.rendering is not None)
                         physics_steps += 1
-                elif (
-                    runtime.rendering is not None and time.monotonic() >= next_render_at
-                ):
-                    runtime.render()
-                    next_render_at = time.monotonic() + render_period
+            # Pause, estop and a continuously busy query queue all service the GUI.
+            # Motion callbacks use this same coordinator; capture already counts
+            # as GUI service and does not cause an immediate duplicate update.
+            if runtime.rendering is not None and not runtime.controller.quit_requested:
+                runtime.rendering.service_gui()
             iterations += 1
     finally:
         if close_on_exit:

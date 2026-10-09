@@ -64,12 +64,12 @@ class _Resource:
 class _BindableMotion(_Resource):
     def __init__(self, name: str, events: list[str]) -> None:
         super().__init__(name, events)
-        self.render_frame = None
+        self.post_step_render = None
         self.step_synchronizer = None
 
-    def bind_render_frame(self, callback) -> None:
-        assert self.render_frame is None
-        self.render_frame = callback
+    def bind_post_step_render(self, callback) -> None:
+        assert self.post_step_render is None
+        self.post_step_render = callback
 
     def bind_step_synchronizer(self, synchronizer) -> None:
         assert self.step_synchronizer is None
@@ -177,7 +177,7 @@ def test_runtime_owns_session_and_closes_in_strict_phase_order() -> None:
     second = runtime.close()
 
     assert not hasattr(runtime, "world")
-    assert events[:2] == ["physics_step:False", "render"]
+    assert events[0] == "physics_step:False"
     assert "pre_render" not in events
     names = (
         "ingress",
@@ -260,11 +260,11 @@ def test_runtime_binds_its_single_render_coordinator_to_motion_backend() -> None
 
     runtime = create_mirror_runtime(config, assembly_factory=assemble)
 
-    assert callable(motion.render_frame)
+    assert callable(motion.post_step_render)
     assert motion.step_synchronizer is runtime.step_synchronizer
     assert runtime.step_synchronizer.enabled is True
-    motion.render_frame()
-    assert events == ["render"]
+    motion.post_step_render()
+    assert events == []
     runtime.close()
 
 
@@ -273,7 +273,8 @@ def test_render_coordinator_honors_direct_camera_update_budget() -> None:
     physics = _DirectPhysics(events)
     camera = SimpleNamespace(
         name="direct",
-        camera=SimpleNamespace(render_update_count=4),
+        render_update_count=4,
+        set_render_active=lambda _active: None,
         get_current_frame=lambda clone: {"clone": clone},
     )
     coordinator = RenderCoordinator(
@@ -301,7 +302,8 @@ def test_render_coordinator_publishes_one_newton_snapshot_for_many_render_update
         cameras=CameraBundle(
             cameras=(
                 SimpleNamespace(
-                    camera=SimpleNamespace(render_update_count=4),
+                    render_update_count=4,
+                    set_render_active=lambda _active: None,
                 ),
             ),
         ),
@@ -318,8 +320,8 @@ def test_render_coordinator_updates_multiple_physx_cameras_together() -> None:
         physics_runtime=_Physics(events),
         cameras=CameraBundle(
             cameras=(
-                SimpleNamespace(name="first"),
-                SimpleNamespace(name="second"),
+                SimpleNamespace(name="first", set_render_active=lambda _active: None),
+                SimpleNamespace(name="second", set_render_active=lambda _active: None),
             ),
             capture_hook=lambda cameras: events.append(f"capture:{len(cameras)}"),
         ),
@@ -330,19 +332,21 @@ def test_render_coordinator_updates_multiple_physx_cameras_together() -> None:
     assert events == ["render", "capture:2"]
 
 
-def test_render_only_leaves_camera_sampling_to_the_post_step_observer() -> None:
+def test_no_output_consumers_skip_automatic_camera_capture() -> None:
     events: list[str] = []
     coordinator = RenderCoordinator(
         physics_runtime=_Physics(events),
         cameras=CameraBundle(
-            cameras=(SimpleNamespace(name="camera"),),
+            cameras=(
+                SimpleNamespace(name="camera", set_render_active=lambda _active: None),
+            ),
             capture_hook=lambda _cameras: events.append("capture"),
         ),
     )
 
-    coordinator.render_only()
+    coordinator.after_physics_step()
 
-    assert events == ["render"]
+    assert events == []
 
 
 def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> None:
@@ -361,8 +365,8 @@ def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> 
     second = DirectCamera("second", 4)
     bundle = CameraBundle(
         cameras=(
-            SimpleNamespace(name="first", camera=first),
-            SimpleNamespace(name="second", camera=second),
+            first,
+            second,
         ),
         capture_hook=lambda _cameras: events.append("capture") or {"ready": True},
     )
@@ -370,6 +374,8 @@ def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> 
 
     assert coordinator.render_frame() == {"ready": True}
     assert events == [
+        "active:first:False",
+        "active:second:False",
         "active:first:True",
         "active:second:False",
         "render",
@@ -380,13 +386,13 @@ def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> 
         "render",
         "render",
         "render",
-        "active:first:True",
-        "active:second:True",
         "capture",
+        "active:first:False",
+        "active:second:False",
     ]
 
 
-def test_render_coordinator_restores_all_direct_cameras_after_render_failure() -> None:
+def test_render_coordinator_deactivates_all_cameras_after_render_failure() -> None:
     events: list[str] = []
 
     class FailingPhysics(_DirectPhysics):
@@ -414,7 +420,7 @@ def test_render_coordinator_restores_all_direct_cameras_after_render_failure() -
     with pytest.raises(RuntimeError, match="render failed"):
         coordinator.render_frame()
 
-    assert events[-2:] == ["active:first:True", "active:second:True"]
+    assert events[-2:] == ["active:first:False", "active:second:False"]
     assert "capture" not in events
 
 
@@ -574,6 +580,9 @@ def test_run_loop_caps_queue_poll_to_physics_dt_only_when_synchronized(
     config = load_mirror_config()
     config = replace(
         config,
+        outputs=replace(
+            config.outputs, render=replace(config.outputs.render, gui=False)
+        ),
         control=replace(
             config.control,
             sync_simulation_to_wall_clock=sync_enabled,
@@ -752,6 +761,7 @@ def test_render_coordinator_waits_for_native_completion_without_stepping() -> No
     ticks = []
     camera = SimpleNamespace(
         name="native",
+        set_render_active=lambda _active: None,
         begin_render_capture=lambda: events.append("begin"),
         render_capture_ready=lambda: len(ticks) >= 3,
         finish_render_capture=lambda **kw: events.append(kw),
@@ -764,14 +774,18 @@ def test_render_coordinator_waits_for_native_completion_without_stepping() -> No
     coordinator = RenderCoordinator(
         physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
     )
-    coordinator.render_only()
+    coordinator.render_frame(capture=False)
     assert len(ticks) == 3
     assert events == ["begin", {"snapshot_index": 1, "physics_time_s": 0.125}]
 
 
 def test_render_coordinator_fails_bounded_stale_frame_wait() -> None:
     ticks = []
-    camera = SimpleNamespace(name="stale", render_capture_ready=lambda: False)
+    camera = SimpleNamespace(
+        name="stale",
+        set_render_active=lambda _: None,
+        render_capture_ready=lambda: False,
+    )
     physics = SimpleNamespace(render=lambda: ticks.append(1))
     coordinator = RenderCoordinator(
         physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
@@ -786,3 +800,95 @@ def test_render_coordinator_rejects_physics_advance_during_capture() -> None:
     physics.render = lambda: setattr(physics, "simulation_time", 0.1)
     with pytest.raises(RuntimeError, match="advanced physics"):
         RenderCoordinator(physics_runtime=physics).render_frame()
+
+
+@pytest.mark.parametrize("selection", [(), [], ("unknown",), ("a", "a"), (7,), "a"])
+def test_invalid_camera_selection_has_no_render_side_effects(selection) -> None:
+    events = []
+    camera = SimpleNamespace(
+        name="a", set_render_active=lambda value: events.append(value)
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=_Physics(events), cameras=CameraBundle(cameras=(camera,))
+    )
+    events.clear()
+    with pytest.raises((TypeError, ValueError)):
+        coordinator.render_frame(selection)
+    assert events == []
+
+
+def test_subset_capture_only_activates_selected_camera_and_does_not_publish() -> None:
+    active = {}
+    seen = []
+    cameras = tuple(
+        SimpleNamespace(
+            name=name,
+            set_render_active=lambda value, name=name: active.__setitem__(name, value),
+            get_current_frame=lambda clone, name=name: {"owner": name, "clone": clone},
+        )
+        for name in ("a", "b", "c")
+    )
+    physics = SimpleNamespace(render=lambda: seen.append(dict(active)))
+    output = SimpleNamespace(
+        publish=lambda _: pytest.fail("explicit capture must not record")
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=physics, cameras=CameraBundle(cameras=cameras, output=output)
+    )
+    assert coordinator.render_frame(("b",)) == {"b": {"owner": "b", "clone": True}}
+    assert seen == [{"a": False, "b": True, "c": False}]
+    assert not any(active.values())
+    coordinator.render_frame(("b",))
+    assert len(seen) == 2  # A second paused request still renders a new frame.
+
+
+def test_partial_camera_failure_invalidates_entire_selected_transaction() -> None:
+    metadata = {}
+    active = {}
+    cameras = tuple(
+        SimpleNamespace(
+            name=name,
+            render_update_count=4,
+            set_render_active=lambda value, name=name: active.__setitem__(name, value),
+            render_capture_ready=lambda name=name: name == "a",
+            finish_render_capture=lambda name=name, **kw: metadata.__setitem__(
+                name, kw
+            ),
+            invalidate_render_capture=lambda name=name: metadata.pop(name, None),
+        )
+        for name in ("a", "b")
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=SimpleNamespace(render=lambda: None),
+        cameras=CameraBundle(cameras=cameras),
+    )
+    with pytest.raises(RuntimeError, match="fresh-frame timeout"):
+        coordinator.render_frame()
+    assert metadata == {}
+    assert not any(active.values())
+
+
+def test_serial_capture_does_not_expose_metadata_until_all_products_complete() -> None:
+    published = {}
+    cameras = tuple(
+        SimpleNamespace(
+            name=name,
+            render_update_count=4,
+            set_render_active=lambda _: None,
+            finish_render_capture=lambda name=name, **kw: published.__setitem__(
+                name, kw
+            ),
+        )
+        for name in ("a", "b")
+    )
+
+    def render():
+        assert published == {}
+
+    coordinator = RenderCoordinator(
+        physics_runtime=SimpleNamespace(render=render),
+        cameras=CameraBundle(cameras=cameras),
+    )
+    coordinator.render_frame()
+    assert set(published) == {"a", "b"}
+    assert published["a"]["snapshot_index"] == published["b"]["snapshot_index"]
