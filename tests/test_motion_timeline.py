@@ -303,12 +303,18 @@ def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> No
             events.append(f"active:{self.name}:{active}")
 
     physics = DirectPhysics()
+    physics.simulation_time = 0.1
     runtime.physics = physics
     first = DirectCamera("first", 2)
     second = DirectCamera("second", 3)
     coordinator = RenderCoordinator(
         physics_runtime=physics,
-        cameras=CameraBundle(cameras=(first, second)),
+        cameras=CameraBundle(
+            cameras=(first, second),
+            output=SimpleNamespace(
+                observer=SimpleNamespace(due_camera_ids=lambda _: ("first", "second"))
+            ),
+        ),
     )
     track = sequential_robot_track(
         0,
@@ -336,7 +342,7 @@ def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> No
         execute_robot_timeline(
             runtime,
             RobotTimeline((track,), physics_dt=0.1),
-            render_frame=coordinator.render_only,
+            post_step_render=coordinator.after_physics_step,
         )
         == 1
     )
@@ -363,7 +369,7 @@ def test_timeline_backend_rebases_step_and_holds_all_robots_after_reset() -> Non
     runtime = _runtime(2)
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
     renders: list[str] = []
-    backend.bind_render_frame(lambda: renders.append("render"))
+    backend.bind_post_step_render(lambda: renders.append("render"))
 
     assert backend.after_scene_reset(hold_duration_s=0.2) == 2
     assert backend.step_count == 2
@@ -382,7 +388,7 @@ def test_timeline_backend_commits_interrupted_motion_step(
 ) -> None:
     runtime = _runtime(1)
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
-    backend.bind_render_frame(lambda: None)
+    backend.bind_post_step_render(lambda: None)
 
     def interrupt(*_args, **_kwargs):
         raise TimelineExecutionInterrupted("cancelled", step=7)
@@ -408,7 +414,7 @@ def test_timeline_backend_passes_its_bound_synchronizer_to_executor(
 ) -> None:
     runtime = _runtime(1)
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
-    backend.bind_render_frame(lambda: None)
+    backend.bind_post_step_render(lambda: None)
     synchronizer = WallClockStepSynchronizer(enabled=False)
     backend.bind_step_synchronizer(synchronizer)
     received_callbacks = []
@@ -438,7 +444,7 @@ def test_timeline_backend_commits_reset_hold_post_step_failure(
 ) -> None:
     runtime = _runtime(1)
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
-    backend.bind_render_frame(lambda: None)
+    backend.bind_post_step_render(lambda: None)
 
     def fail_after_step(*_args, **_kwargs):
         raise TimelinePostStepError("observer failed", step=1)
@@ -749,7 +755,7 @@ def test_mode_compatibility_fails_before_collision_snapshot_or_planner() -> None
     registry.mark_dirty()
     runtime.collision_registry = registry
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
-    backend.bind_render_frame(lambda: None)
+    backend.bind_post_step_render(lambda: None)
     backend.bind_control_mode_provider(lambda: "effort")
 
     with pytest.raises(ControlModeIncompatibleError) as captured:
@@ -785,7 +791,7 @@ def test_mode_compatibility_fails_before_collision_snapshot_or_planner() -> None
 def test_position_mode_rejects_effort_before_any_physics_write() -> None:
     runtime = _runtime(1)
     backend = MirrorTimelineBackend(runtime, config=_MIRROR_CONFIG)
-    backend.bind_render_frame(lambda: None)
+    backend.bind_post_step_render(lambda: None)
     backend.bind_control_mode_provider(lambda: "position")
 
     with pytest.raises(ControlModeIncompatibleError):

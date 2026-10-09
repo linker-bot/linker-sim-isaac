@@ -35,12 +35,12 @@ def execute_robot_timeline(
     *,
     start_step: int = 0,
     should_stop: Callable[[], bool] | None = None,
-    render_frame: Callable[[], object] | None = None,
+    post_step_render: Callable[[], object] | None = None,
     before_step: Callable[[float], None] | None = None,
 ) -> int:
     """每个 tick 先写完所有 robot targets，再共同推进一次 world。
 
-    ``render_frame`` 由产品根绑定到唯一 ``RenderCoordinator``。Timeline 不直接要求
+    ``post_step_render`` 由产品根绑定到唯一 ``RenderCoordinator``。Timeline 不直接要求
     physics adapter 在 ``step`` 内渲染，否则 Newton 会跳过单快照、多 camera
     render budget 与 viewport 轮转合同。
     """
@@ -102,7 +102,7 @@ def execute_robot_timeline(
                 state.base_positions = targets.positions.copy()
             # 物理始终只推进一次且不在 concrete runtime 内隐式渲染。若产品启用 renderer，
             # 下面在已完成 step 边界调用同一个 RenderCoordinator；idle 与 timeline 因而
-            # 共享 Newton 的一次 pre_render + N 次纯 render_update 事务。
+            # 共享到期采样和 GUI 服务，只有需要新图时才进入可靠 render transaction。
             if before_step is not None:
                 before_step(runtime_dt)
             world.step(render=False)
@@ -117,8 +117,8 @@ def execute_robot_timeline(
             try:
                 if callable(mark_dirty):
                     mark_dirty()
-                if render_frame is not None:
-                    render_frame()
+                if post_step_render is not None:
+                    post_step_render()
                 for state, targets in pending:
                     _write_log(
                         state,

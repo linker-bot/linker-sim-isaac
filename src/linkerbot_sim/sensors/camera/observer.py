@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 
@@ -77,6 +78,15 @@ class CameraFrameObserver:
         self._frame_indices: dict[tuple[str, str], int] = {}
         self._native_frames: dict[str, int] = {}
 
+    def due_camera_ids(self, time_s: float) -> tuple[str, ...]:
+        """Read the output schedule without consuming a capture opportunity."""
+
+        return tuple(
+            camera.name
+            for camera in self.cameras
+            if self._should_sample(camera, time_s)
+        )
+
     def observe(self, world, *, step: int, phase: str | None = None) -> None:
         """在 physics step 后采样当前到期的相机并把 frame 提交给 publisher。
 
@@ -112,9 +122,12 @@ class CameraFrameObserver:
             for frame in frames:
                 self.publisher.publish(frame)
             if frames:
-                self._next_sample_time[camera.name] = (
-                    time_s + 1.0 / camera.settings.frequency
-                )
+                period = 1.0 / camera.settings.frequency
+                due = self._next_sample_time.get(camera.name, time_s)
+                # Quantize the nominal cadence onto completed physical steps. Do
+                # not drift for non-divisor frequencies or replay missed history.
+                skipped = max(0, math.floor((time_s - due + 1.0e-9) / period))
+                self._next_sample_time[camera.name] = due + (skipped + 1) * period
             if frames and native_id is not None:
                 self._native_frames[camera.name] = int(native_id)
 
@@ -122,7 +135,7 @@ class CameraFrameObserver:
         """按仿真时间判断当前相机是否到达下一采样点。
 
         ``1e-9`` 容差吸收浮点累积误差，避免理论上恰好到期的帧因极小舍入误差被推迟一个
-        physics step。游标从实际采样时刻向后推进一个周期，不追补跳过的历史帧。
+        physics step。不追补跳过的历史帧，也不重复同一物理时刻。
         """
 
         next_time = self._next_sample_time.get(camera.name)

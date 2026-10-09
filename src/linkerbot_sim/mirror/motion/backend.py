@@ -53,7 +53,7 @@ class MirrorTimelineBackend:
             planner_backend="curobo",
         )
         self._step = 0
-        self._render_frame: Callable[[], object] | None = None
+        self._post_step_render: Callable[[], object] | None = None
         self._step_synchronizer: WallClockStepSynchronizer | None = None
         self._control_mode_provider: Callable[[], ControlMode] = lambda: (
             config.control.mode
@@ -72,17 +72,17 @@ class MirrorTimelineBackend:
         )
         self._closed = False
 
-    def bind_render_frame(self, callback: Callable[[], object]) -> None:
-        """绑定产品根拥有的唯一 render transaction，且只允许绑定一次。"""
+    def bind_post_step_render(self, callback: Callable[[], object]) -> None:
+        """绑定产品根的完成物理步采样/GUI 调度入口，且只允许绑定一次。"""
 
         if self._closed:
             raise RuntimeError("Mirror timeline backend is closed")
         if not callable(callback):
             raise TypeError("timeline render callback must be callable")
-        if self._render_frame is not None:
+        if self._post_step_render is not None:
             raise RuntimeError("timeline render callback is already bound")
-        self._render_frame = callback
-        self._hybrid.bind_render_frame(callback)
+        self._post_step_render = callback
+        self._hybrid.bind_post_step_render(callback)
 
     def bind_step_synchronizer(self, synchronizer: WallClockStepSynchronizer) -> None:
         """绑定产品根拥有的唯一 physics tick 墙钟。"""
@@ -260,7 +260,7 @@ class MirrorTimelineBackend:
                 timeline,
                 start_step=start_step,
                 should_stop=should_stop,
-                render_frame=self._render_frame,
+                post_step_render=self._post_step_render,
                 before_step=(
                     None
                     if self._step_synchronizer is None
@@ -277,7 +277,7 @@ class MirrorTimelineBackend:
     def _require_ready(self) -> None:
         if self._closed:
             raise RuntimeError("Mirror timeline backend is closed")
-        if self._render_required and self._render_frame is None:
+        if self._render_required and self._post_step_render is None:
             raise RuntimeError(
                 "Mirror rendering is enabled, but the timeline has not bound a RenderCoordinator yet"
             )
@@ -292,7 +292,7 @@ class MirrorTimelineBackend:
         result = True if not callable(callback) else callback()
         if close_result_stopped(result):
             self._hybrid.close()
-            self._render_frame = None
+            self._post_step_render = None
             self._step_synchronizer = None
             self._control_mode_provider = lambda: self._config.control.mode
             self._closed = True

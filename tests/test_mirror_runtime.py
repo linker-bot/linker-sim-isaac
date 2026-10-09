@@ -64,12 +64,12 @@ class _Resource:
 class _BindableMotion(_Resource):
     def __init__(self, name: str, events: list[str]) -> None:
         super().__init__(name, events)
-        self.render_frame = None
+        self.post_step_render = None
         self.step_synchronizer = None
 
-    def bind_render_frame(self, callback) -> None:
-        assert self.render_frame is None
-        self.render_frame = callback
+    def bind_post_step_render(self, callback) -> None:
+        assert self.post_step_render is None
+        self.post_step_render = callback
 
     def bind_step_synchronizer(self, synchronizer) -> None:
         assert self.step_synchronizer is None
@@ -177,7 +177,7 @@ def test_runtime_owns_session_and_closes_in_strict_phase_order() -> None:
     second = runtime.close()
 
     assert not hasattr(runtime, "world")
-    assert events[:2] == ["physics_step:False", "render"]
+    assert events[0] == "physics_step:False"
     assert "pre_render" not in events
     names = (
         "ingress",
@@ -260,11 +260,11 @@ def test_runtime_binds_its_single_render_coordinator_to_motion_backend() -> None
 
     runtime = create_mirror_runtime(config, assembly_factory=assemble)
 
-    assert callable(motion.render_frame)
+    assert callable(motion.post_step_render)
     assert motion.step_synchronizer is runtime.step_synchronizer
     assert runtime.step_synchronizer.enabled is True
-    motion.render_frame()
-    assert events == ["render"]
+    motion.post_step_render()
+    assert events == []
     runtime.close()
 
 
@@ -332,7 +332,7 @@ def test_render_coordinator_updates_multiple_physx_cameras_together() -> None:
     assert events == ["render", "capture:2"]
 
 
-def test_render_only_leaves_camera_sampling_to_the_post_step_observer() -> None:
+def test_no_output_consumers_skip_automatic_camera_capture() -> None:
     events: list[str] = []
     coordinator = RenderCoordinator(
         physics_runtime=_Physics(events),
@@ -344,9 +344,9 @@ def test_render_only_leaves_camera_sampling_to_the_post_step_observer() -> None:
         ),
     )
 
-    coordinator.render_only()
+    coordinator.after_physics_step()
 
-    assert events == ["render"]
+    assert events == []
 
 
 def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> None:
@@ -580,6 +580,9 @@ def test_run_loop_caps_queue_poll_to_physics_dt_only_when_synchronized(
     config = load_mirror_config()
     config = replace(
         config,
+        outputs=replace(
+            config.outputs, render=replace(config.outputs.render, gui=False)
+        ),
         control=replace(
             config.control,
             sync_simulation_to_wall_clock=sync_enabled,
@@ -771,7 +774,7 @@ def test_render_coordinator_waits_for_native_completion_without_stepping() -> No
     coordinator = RenderCoordinator(
         physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
     )
-    coordinator.render_only()
+    coordinator.render_frame(capture=False)
     assert len(ticks) == 3
     assert events == ["begin", {"snapshot_index": 1, "physics_time_s": 0.125}]
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+import time
 
 from linkerbot_sim.mirror.lifecycle import close_result_stopped
 
@@ -61,19 +62,21 @@ class RenderCoordinator:
 
     physics_runtime: object
     cameras: CameraBundle | None = None
+    gui_frequency_hz: float | None = None
+    _next_gui_at: float = field(default=0.0, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
     _snapshot_index: int = field(default=0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._activate(())
+        self._gui_serviced()
 
     def render_frame(
         self, camera_ids: Sequence[str] | None = None, *, capture: bool = True
     ) -> object:
         """Capture a new frozen snapshot for selected cameras, without publishing outputs."""
 
-        if self._closed:
-            raise RuntimeError("RenderCoordinator is closed")
+        self._require_open()
         if type(capture) is not bool:
             raise TypeError("render capture must be a boolean")
         cameras = self._select_cameras(camera_ids)
@@ -105,6 +108,7 @@ class RenderCoordinator:
                 else self.cameras.capture(cameras)
             )
             self._activate(())
+            self._gui_serviced()
             return result
         except BaseException as error:
             # A partial group or readback must not leave a successful mixed capture.
@@ -119,10 +123,48 @@ class RenderCoordinator:
                 error.add_note(f"camera deactivation also failed: {cleanup_error}")
             raise
 
-    def render_only(self) -> None:
-        """Complete capture without readback at the completed physics-step boundary."""
+    def after_physics_step(self) -> None:
+        """Acquire due outputs once; the canonical scene observer publishes them."""
 
-        self.render_frame(capture=False)
+        self._require_open()
+        output = None if self.cameras is None else self.cameras.output
+        observer = getattr(output, "observer", None)
+        due = (
+            ()
+            if observer is None
+            else observer.due_camera_ids(float(self.physics_runtime.simulation_time))
+        )
+        if due:
+            self.render_frame(due, capture=False)
+        else:
+            self.service_gui()
+
+    def gui_wait_timeout(self, maximum_s: float) -> float:
+        """Bound admission waits by the next GUI deadline; headless does not wake."""
+
+        if self.gui_frequency_hz is None:
+            return maximum_s
+        return min(maximum_s, max(0.0, self._next_gui_at - time.monotonic()))
+
+    def service_gui(self) -> None:
+        """Publish and display current state without a sensor barrier or physics step."""
+
+        self._require_open()
+        if self.gui_frequency_hz is None or time.monotonic() < self._next_gui_at:
+            return
+        physics_time = getattr(self.physics_runtime, "simulation_time", None)
+        self.physics_runtime.render()
+        if getattr(self.physics_runtime, "simulation_time", None) != physics_time:
+            raise RuntimeError("GUI rendering advanced physics time")
+        self._gui_serviced()
+
+    def _gui_serviced(self) -> None:
+        if self.gui_frequency_hz is not None:
+            self._next_gui_at = time.monotonic() + 1.0 / self.gui_frequency_hz
+
+    def _require_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("RenderCoordinator is closed")
 
     def _select_cameras(self, camera_ids: Sequence[str] | None) -> tuple[object, ...]:
         cameras = () if self.cameras is None else self.cameras.cameras

@@ -187,14 +187,15 @@ class MirrorRuntime:
                 raise RuntimeError(
                     "the current Mirror config does not enable rendering"
                 )
-            # 内部 physics step 只推进 renderer；下面的 scene observer 按 camera frequency
-            # 采样并发布一次。显式 runtime.render() 才立即返回 camera frame。
-            self.rendering.render_only()
+            # 到期相机完成采集后由下方 observer 发布；无采样需求时只服务到期 GUI。
+            self.rendering.after_physics_step()
         observe = getattr(self.scene_resources, "observe_after_step", None)
         if callable(observe):
             observe(phase="idle")
 
     def render(self, camera_ids: Sequence[str] | None = None) -> object:
+        """Return fresh configured modalities for all or selected cameras; never step physics."""
+
         self._require_open("render")
         self._require_owner_thread("render")
         if self.rendering is None:
