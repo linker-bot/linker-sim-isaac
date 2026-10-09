@@ -584,6 +584,7 @@ def test_cpu_solver_constructor_kwargs_select_mujoco_cpu() -> None:
 def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
     manager.physics_spec = IsaacNewtonCudaSpec()
+    manager.physics_dt = 1.0 / 60.0
     manager.execution = "cuda"
     manager.device = "cuda:0"
     manager._num_worlds = 1
@@ -632,7 +633,7 @@ def _scoped_stream_recorder(monkeypatch: pytest.MonkeyPatch):
     return wp, active_streams, scopes
 
 
-def test_simulate_collides_once_then_reuses_contacts_for_all_substeps(
+def test_simulate_refreshes_contacts_after_each_internal_motion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _wp, _active_streams, scopes = _scoped_stream_recorder(monkeypatch)
@@ -666,7 +667,7 @@ def test_simulate_collides_once_then_reuses_contacts_for_all_substeps(
     manager._collision_pipeline = _CollisionPipeline()
     manager._contacts = contacts
     manager.physics_dt = 0.03
-    manager.physics_spec = SimpleNamespace(substeps=3)
+    manager.physics_spec = SimpleNamespace(substeps=3, max_substep_dt_s=0.01)
 
     manager._simulate()
 
@@ -680,6 +681,17 @@ def test_simulate_collides_once_then_reuses_contacts_for_all_substeps(
         event[4] is contacts and event[5] == pytest.approx(0.01) for event in steps
     )
     assert events.count("clear") == 3
+    assert [event[0] if isinstance(event, tuple) else event for event in events] == [
+        "collide",
+        "step",
+        "clear",
+        "collide",
+        "step",
+        "clear",
+        "collide",
+        "step",
+        "clear",
+    ]
 
 
 def test_step_captures_solver_persistent_state_after_physics(
@@ -735,7 +747,7 @@ def test_cpu_step_runs_eager_without_owner_stream_and_captures_persistent_state(
     manager._collision_pipeline = None
     manager._contacts = None
     manager.physics_dt = 0.02
-    manager.physics_spec = IsaacNewtonCpuSpec(substeps=2)
+    manager.physics_spec = IsaacNewtonCpuSpec(substeps=2, max_substep_dt_s=0.01)
     manager._solver_integration_store = _Store()
     manager._graph_state = "disabled"
     manager._sim_time = 0.0
@@ -1889,3 +1901,17 @@ def test_multi_world_executor_metadata_reads_only_prototype_usd(
     assert queried_paths == ["/World/envs/env_0/Robot/follower"]
     assert metadata.follower_drive_prim_paths == expected_drive_paths
     assert metadata.follower_actuator_labels == ()
+
+
+@pytest.mark.parametrize(
+    "hz, minimum, expected",
+    [(60, 1, 9), (120, 1, 5), (240, 1, 3), (1000, 1, 1), (60, 20, 20)],
+)
+def test_internal_step_bound_preserves_outer_duration(hz, minimum, expected):
+    manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager.physics_dt = 1.0 / hz
+    manager.physics_spec = IsaacNewtonCpuSpec(substeps=minimum)
+    assert manager._effective_substeps == expected
+    dt = manager.physics_dt / manager._effective_substeps
+    assert dt <= manager.physics_spec.max_substep_dt_s
+    assert dt * manager._effective_substeps == pytest.approx(1.0 / hz)

@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 import logging
+import math
 from pathlib import Path
 from typing import Any
 import weakref
@@ -341,6 +342,7 @@ class NewtonRuntime:
             up_axis="Z",
             load_visual_shapes=False,
             skip_mesh_approximation=True,
+            default_contact_time_constant_s=self.physics_spec.default_contact_time_constant_s,
         )
         relation_counts = {
             name: len(parse_mjcf_joint_equalities(getattr(robot, "asset_path", None)))
@@ -1027,6 +1029,12 @@ class NewtonRuntime:
             "world_count": self._num_worlds,
             "nconmax_per_world": int(self.physics_spec.nconmax_per_world),
             "njmax_per_world": int(self.physics_spec.njmax_per_world),
+            "physics_dt_s": self.physics_dt,
+            "configured_substeps": self.physics_spec.substeps,
+            "effective_substeps": self._effective_substeps,
+            "substep_dt_s": self.physics_dt / self._effective_substeps,
+            "max_substep_dt_s": self.physics_spec.max_substep_dt_s,
+            "default_contact_time_constant_s": self.physics_spec.default_contact_time_constant_s,
             "constraint_solver": self._constraint_solver,
             "contact_pipeline": self._contact_pipeline_kind,
             "contact_pipeline_trigger_labels": list(
@@ -1157,20 +1165,30 @@ class NewtonRuntime:
 
         wp.synchronize_stream(stream)
 
+    @property
+    def _effective_substeps(self) -> int:
+        return max(
+            int(self.physics_spec.substeps),
+            math.ceil(self.physics_dt / self.physics_spec.max_substep_dt_s),
+        )
+
     def _simulate(self) -> None:
         assert self.solver is not None
         assert self.state is not None
         assert self.control is not None
-        substep_dt = self.physics_dt / int(self.physics_spec.substeps)
+        substeps = self._effective_substeps
+        substep_dt = self.physics_dt / substeps
         with self._owner_stream_scope():
             # contacts buffer 与 solver/state 都归 owner。CUDA 可捕获整段 DAG；CPU 在同一
             # 结构下 eager 执行。state 同时作为输入/输出是 Newton 原地积分的预期 ABI。
-            contacts = None
-            if self._collision_pipeline is not None:
-                assert self._contacts is not None
-                self._collision_pipeline.collide(self.state, self._contacts)
-                contacts = self._contacts
-            for _ in range(int(self.physics_spec.substeps)):
+            for _ in range(substeps):
+                # The previous solve moved the bodies. Reusing the outer step's
+                # contacts misses pairs that first touch during an internal step.
+                contacts = None
+                if self._collision_pipeline is not None:
+                    assert self._contacts is not None
+                    self._collision_pipeline.collide(self.state, self._contacts)
+                    contacts = self._contacts
                 self.solver.step(
                     self.state,
                     self.state,

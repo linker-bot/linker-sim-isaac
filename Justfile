@@ -156,7 +156,11 @@ smoke-mirror-task-flow:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --hand l6 --task-flow --development-cameras
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_mirror_assemblies.py --hand o6 --profile newton_cuda --task-flow --development-cameras
 
-test-simulation: test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+# Native drop and within-step contact creation, using the pinned Newton runtime.
+smoke-newton-contact:
+    {{python}} -m pytest -q tests/test_newton_contact_dynamics.py tests/test_newton_manager.py
+
+test-simulation: smoke-newton-contact test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

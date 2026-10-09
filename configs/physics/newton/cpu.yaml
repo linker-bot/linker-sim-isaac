@@ -9,8 +9,13 @@ physics:
   nconmax_per_world: 200
   # 每个 world 的约束 Jacobian/求解工作区容量；不足会限制复杂关节与接触约束。
   njmax_per_world: 1200
-  # 每个 physics step 拆分的内部子步数，必须 >= 1；增加可改善快速接触稳定性但更慢。
+  # 每个 physics step 拆分的最少内部子步数，必须 >= 1；增加可改善快速接触稳定性但更慢。
   substeps: 1
+  # 实际子步数为 max(substeps, ceil(physics_dt / max_substep_dt_s))；外部时钟不变。
+  max_substep_dt_s: 0.002
+  # 未显式作者化的接触采用临界阻尼的响应时间（秒），不是关节驱动增益。
+  # Newton ke=1/t²、kd=2/t；MuJoCo 正值 solref 仍受 >=2*内部 dt 的 refsafe 约束。
+  default_contact_time_constant_s: 0.004
   # 每个子步的主约束求解迭代上限。
   iterations: 100
   # Newton/CG 更新中的 line-search 迭代上限；更高可能改善收敛但提高最坏耗时。

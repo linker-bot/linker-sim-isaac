@@ -378,6 +378,8 @@ def session_spec_from_config(
             njmax_per_world=int(physics_source.njmax_per_world),
             use_cuda_graph=bool(physics_source.use_cuda_graph),
             substeps=int(physics_source.substeps),
+            max_substep_dt_s=physics_source.max_substep_dt_s,
+            default_contact_time_constant_s=physics_source.default_contact_time_constant_s,
             iterations=int(physics_source.iterations),
             line_search_iterations=int(physics_source.line_search_iterations),
             constraint_solver=str(physics_source.constraint_solver),

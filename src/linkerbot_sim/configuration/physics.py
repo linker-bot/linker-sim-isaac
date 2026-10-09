@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
 from typing import Literal, TypeAlias, TypedDict, cast
 
 from .common import (
@@ -204,6 +205,8 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
         "nconmax_per_world",
         "njmax_per_world",
         "substeps",
+        "max_substep_dt_s",
+        "default_contact_time_constant_s",
         "iterations",
         "line_search_iterations",
         "constraint_solver",
@@ -227,6 +230,8 @@ class _NewtonCommonValues(TypedDict):
     nconmax_per_world: int
     njmax_per_world: int
     substeps: int
+    max_substep_dt_s: float
+    default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
@@ -250,6 +255,16 @@ def _newton_common_from_mapping(
             minimum=1,
         ),
         substeps=as_int(mapping["substeps"], label=f"{label}.substeps", minimum=1),
+        max_substep_dt_s=as_float(
+            mapping["max_substep_dt_s"],
+            label=f"{label}.max_substep_dt_s",
+            strictly_positive=True,
+        ),
+        default_contact_time_constant_s=as_float(
+            mapping["default_contact_time_constant_s"],
+            label=f"{label}.default_contact_time_constant_s",
+            strictly_positive=True,
+        ),
         iterations=as_int(
             mapping["iterations"], label=f"{label}.iterations", minimum=1
         ),
@@ -284,6 +299,15 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         raise ConfigurationError(f"{owner}.constraint_solver is invalid")
     if getattr(value, "contact_pipeline") not in _NEWTON_CONTACT_PIPELINES:
         raise ConfigurationError(f"{owner}.contact_pipeline is invalid")
+    for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+        value_s = getattr(value, name)
+        if (
+            isinstance(value_s, bool)
+            or not isinstance(value_s, (int, float))
+            or not math.isfinite(value_s)
+            or value_s <= 0.0
+        ):
+            raise ConfigurationError(f"physics.{name} must be finite and positive")
     for name in _NEWTON_POSITIVE_INT_FIELDS:
         field_value = getattr(value, name)
         if type(field_value) is not int or field_value < 1:
@@ -304,6 +328,8 @@ class NewtonCudaSettings:
     njmax_per_world: int
     use_cuda_graph: bool
     substeps: int
+    max_substep_dt_s: float
+    default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
@@ -357,6 +383,8 @@ class NewtonCpuSettings:
     nconmax_per_world: int
     njmax_per_world: int
     substeps: int
+    max_substep_dt_s: float
+    default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
@@ -394,6 +422,8 @@ class NewtonCpuSettings:
             nconmax_per_world=common["nconmax_per_world"],
             njmax_per_world=common["njmax_per_world"],
             substeps=common["substeps"],
+            max_substep_dt_s=common["max_substep_dt_s"],
+            default_contact_time_constant_s=common["default_contact_time_constant_s"],
             iterations=common["iterations"],
             line_search_iterations=common["line_search_iterations"],
             constraint_solver=common["constraint_solver"],

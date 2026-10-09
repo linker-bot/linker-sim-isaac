@@ -19,7 +19,7 @@ drive 替代 prototype 解析出的任一主从关系。
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Any
 
@@ -150,7 +150,12 @@ def _load_newton_dependencies() -> _NewtonDependencies:
     )
 
 
-def _new_registered_builder(dependencies: _NewtonDependencies, *, up_axis: str):
+def _new_registered_builder(
+    dependencies: _NewtonDependencies,
+    *,
+    up_axis: str,
+    default_contact_time_constant_s: float | None = None,
+):
     """创建 builder，并在 USD 解析前注册 MuJoCo 自定义列。
 
     注册顺序不可后移：equality/contact/actuator 等 solver metadata 在 ``add_usd`` 时写入；
@@ -158,22 +163,50 @@ def _new_registered_builder(dependencies: _NewtonDependencies, *, up_axis: str):
     """
 
     builder = dependencies.model_builder_type(up_axis=up_axis)
+    if default_contact_time_constant_s is not None:
+        # Importer-authored per-shape ke/kd (including mjc:solref) take precedence.
+        # This only changes the fallback; no USD material or joint gain is rewritten.
+        time_constant = float(default_contact_time_constant_s)
+        if not math.isfinite(time_constant) or time_constant <= 0.0:
+            raise ValueError(
+                "default_contact_time_constant_s must be finite and positive"
+            )
+        builder.default_shape_cfg.ke = 1.0 / time_constant**2
+        builder.default_shape_cfg.kd = 2.0 / time_constant
     dependencies.solver_mujoco_type.register_custom_attributes(builder)
     return builder
 
 
-def _new_schema_resolvers(dependencies: _NewtonDependencies) -> list[object]:
+def _new_schema_resolvers(
+    dependencies: _NewtonDependencies, *, use_builder_contact_defaults: bool = False
+) -> list[object]:
     """返回与 Isaac Sim Newton extension 一致的 schema resolver 优先级。
 
     Newton/MJC 特有 schema 先消费，PhysX resolver 作为兼容兜底。这里保持与 Isaac Newton
     extension 相同的顺序，避免因调用方自行拼装 resolver 而产生解析语义漂移。
     """
 
-    return [
+    resolvers = [
         dependencies.schema_resolver_newton_type(),
         dependencies.schema_resolver_mjc_type(),
         dependencies.schema_resolver_physx_type(),
     ]
+    if use_builder_contact_defaults:
+        # Newton 1.2.1's USD importer omits the caller default for shape ke/kd.
+        # MJC's mapping fallback then wins before builder.default_shape_cfg is
+        # reached, even when no solref is authored. Change only this instance's
+        # mapping defaults; authored values and schema priority remain intact.
+        mjc = resolvers[1]
+        mjc.mapping = {
+            kind: {
+                key: replace(attribute, default=None)
+                if key in {"ke", "kd"}
+                else attribute
+                for key, attribute in fields.items()
+            }
+            for kind, fields in mjc.mapping.items()
+        }
+    return resolvers
 
 
 def _normalized_prim_path(value: object, *, label: str) -> str:
@@ -509,6 +542,7 @@ def build_replicated_newton_builder(
     load_visual_shapes: bool = True,
     skip_mesh_approximation: bool = True,
     joint_drive_gains_scaling: float = _USD_RADIAN_DRIVE_GAIN_SCALING,
+    default_contact_time_constant_s: float | None = None,
 ) -> NewtonReplicationResult:
     """只解析一次已配置 USD prototype，并复制进多个 Newton world。
 
@@ -529,6 +563,8 @@ def build_replicated_newton_builder(
         global_ignore_paths: Additional paths excluded from the global parse.
         up_axis: Newton builder up axis.
         load_visual_shapes: Forwarded to the prototype/global USD parsers.
+        default_contact_time_constant_s: Optional critically damped contact fallback,
+            in seconds. Authored per-shape stiffness/damping retain precedence.
         skip_mesh_approximation: Preserve importer collision topology by
             default instead of rebuilding per-copy approximations.
         joint_drive_gains_scaling: Newton USD parser 的 drive 增益单位换算因子。默认使用
@@ -585,8 +621,16 @@ def build_replicated_newton_builder(
         transforms[0] if source_world_transform is None else source_world_transform
     )
 
-    builder = _new_registered_builder(dependencies, up_axis=up_axis)
-    prototype_builder = _new_registered_builder(dependencies, up_axis=up_axis)
+    builder = _new_registered_builder(
+        dependencies,
+        up_axis=up_axis,
+        default_contact_time_constant_s=default_contact_time_constant_s,
+    )
+    prototype_builder = _new_registered_builder(
+        dependencies,
+        up_axis=up_axis,
+        default_contact_time_constant_s=default_contact_time_constant_s,
+    )
     # fixed joint 不折叠，才能让 prototype/final model 的 joint label、equality endpoint
     # 与资产审计保持可追踪。视觉 shape 可关闭，但 collision topology 默认原样保留。
     common_parse_kwargs = {
@@ -611,7 +655,11 @@ def build_replicated_newton_builder(
         global_stage_info = builder.add_usd(
             stage,
             ignore_paths=ignored_paths,
-            schema_resolvers=_new_schema_resolvers(dependencies),
+            schema_resolvers=_new_schema_resolvers(
+                dependencies,
+                use_builder_contact_defaults=default_contact_time_constant_s
+                is not None,
+            ),
             **common_parse_kwargs,
         )
     _apply_body_collision_filters(builder, stage, global_stage_info)
@@ -624,7 +672,11 @@ def build_replicated_newton_builder(
         prototype_stage_info = prototype_builder.add_usd(
             stage,
             root_path=source_root,
-            schema_resolvers=_new_schema_resolvers(dependencies),
+            schema_resolvers=_new_schema_resolvers(
+                dependencies,
+                use_builder_contact_defaults=default_contact_time_constant_s
+                is not None,
+            ),
             **common_parse_kwargs,
         )
     _apply_body_collision_filters(prototype_builder, stage, prototype_stage_info)

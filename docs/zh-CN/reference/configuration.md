@@ -264,6 +264,22 @@ OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
 Newton 的 `nconmax_per_world`、`njmax_per_world` 和 world 数属于另一套容量合同，不能由这四个 PhysX
 字段或该脚本推断。
 
+### Newton 接触积分
+
+Newton CPU/CUDA leaf 均要求有限正值的 `max_substep_dt_s` 和
+`default_contact_time_constant_s`，单位为秒。实际内部子步数是
+`max(substeps, ceil(physics_dt / max_substep_dt_s))`。默认步长上限 0.002 秒时，
+60 / 120 / 240 Hz 外部时钟分别使用 9 / 5 / 3 个内部子步；不会增加决策、callback、渲染帧或改变仿真时间。
+碰撞管线每个内部子步刷新接触，额外求解会降低吞吐，评测前应明确并记录配置。
+
+默认接触响应时间 0.004 秒按临界阻尼转换为 Newton `ke=1/t²`、`kd=2/t`，对应 MuJoCo
+`solref=(t, 1)`，在 USD 导入前设置到 builder。每 shape 显式设置的 Newton/MJC 刚度和阻尼
+保留上游 resolver 的正常优先级。这是数值接触响应，不是关节驱动增益或已经标定的力学材料模型；
+当前 CPU/native MuJoCo 路径使用旧转换。MuJoCo `refsafe` 仍将正值响应时间限制为至少两倍实际内部步长。
+
+`diagnostics()` 报告外部/内部步长、配置/实际子步数和默认接触响应。有限时间步与柔性接触仍可能在冲击时
+出现侵入，需针对任务速度、质量和接触几何验证所选配置；改变后也需复验已有策略。
+
 ## Robot 与 object 的物理 leaf
 
 Robot profile 把后端中立重力策略和 PhysX 专属资产属性分开：

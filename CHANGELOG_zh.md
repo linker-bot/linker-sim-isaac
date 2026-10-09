@@ -22,6 +22,9 @@ Git commit 标识。
 
 ### 修复
 
+- Newton 每个内部子步刷新接触，默认内部步长不超过 2 ms，未显式设置的接触采用明确的 4 ms 响应。保留外部控制/渲染时钟及每 shape 显式接触参数，诊断输出实际积分配置。
+  原有 Newton physics YAML leaf 需补充 `max_substep_dt_s` 和 `default_contact_time_constant_s`；增加内部积分会降低吞吐并改变接触轨迹。
+
 - 关节 effort 遥测区分 commanded、applied、projected 来源，按实际物理时钟记录逐关节有效性和缺测原因。
   Newton projected 明确标为不支持；不改变增益、重力和 armature。
 
