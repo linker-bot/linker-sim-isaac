@@ -32,6 +32,6 @@ curobo:
     # 保留值仍会严格校验，但不会传给后端或触发 cache 分配。
     collision_cache:
       # 可缓存的 cuboid 障碍物数量，包含对象 profile 的规划 cuboid 和运行时更新。
-      cuboid: 48
+      cuboid: 128
       # 可缓存的 triangle-mesh 障碍物数量；mesh 通常比 cuboid 占用更多资源。
       mesh: 4

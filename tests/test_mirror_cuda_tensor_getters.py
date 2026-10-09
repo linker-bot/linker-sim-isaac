@@ -347,6 +347,7 @@ def test_collision_and_object_state_accept_cuda_getters() -> None:
     provider.urdf_path = "fake.urdf"
     provider._kinematics = _Kinematics()
     provider._spheres = {"tool": ((np.zeros(3, dtype=float), 0.05),)}
+    provider._mounted_boxes = ()
 
     obstacles = provider.collision_objects()
     assert len(obstacles) == 1

@@ -16,6 +16,7 @@ from linkerbot_sim.backends.curobo.context import CuroboContext
 from linkerbot_sim.mirror.collision.registry import SceneCollisionRegistry
 from linkerbot_sim.objects.state_views import SceneObjectStateView
 from linkerbot_sim.planning.collision_objects import CollisionObject
+from linkerbot_sim.planning.collision_validation import AllowedPlanningContact
 from linkerbot_sim.robots.capabilities import PlanningCapability, RobotKind
 
 
@@ -23,6 +24,29 @@ def _obstacle(name: str, x: float = 0.0) -> CollisionObject:
     pose = np.eye(4, dtype=float)
     pose[0, 3] = x
     return CollisionObject(name, "sphere", pose, (0.1,))
+
+
+def test_phase_contacts_restore_nested_policy_even_after_failure():
+    seam = AllowedPlanningContact(0, "base", "mount")
+    finger = AllowedPlanningContact(0, "finger", "block")
+    other = AllowedPlanningContact(1, "finger", "block")
+    registry = SceneCollisionRegistry(allowed_contacts=(seam,))
+    before = registry.snapshot()
+    with pytest.raises(RuntimeError, match="phase failed"):
+        with registry.contact_scope((finger,)):
+            phase = registry.snapshot()
+            assert phase.allowed_contacts == (seam, finger)
+            with registry.contact_scope((other,)):
+                assert registry.snapshot().allowed_contacts == (seam, finger, other)
+            assert registry.snapshot().allowed_contacts == (seam, finger)
+            raise RuntimeError("phase failed")
+    after = registry.snapshot()
+    assert after.allowed_contacts == (seam,)
+    assert phase.allowed_contacts == (seam, finger)
+    assert before.version < phase.version < after.version
+    assert before.view_fingerprint(
+        0, include_other_robots=True
+    ) != phase.view_fingerprint(0, include_other_robots=True)
 
 
 class _Context:
@@ -57,6 +81,9 @@ def _robot(robot_id: int, *, supports_planning: bool = True):
         supports_planning=capability.supports_planning,
         curobo_config=SimpleNamespace(robot=None),
         joint_groups=SimpleNamespace(arm=(f"j{robot_id}",)),
+        scene_instance=SimpleNamespace(
+            root_pose=SimpleNamespace(xyz=(0, 0, 0), rpy=(0, 0, 0))
+        ),
     )
 
 
@@ -237,6 +264,7 @@ def test_object_collision_pose_does_not_fallback_when_stage_prim_is_missing() ->
         config=SimpleNamespace(
             root_pose=SimpleNamespace(xyz=(1.0, 2.0, 3.0), rpy=(0.0, 0.0, 0.0)),
             planning_collision=SimpleNamespace(
+                source="explicit",
                 shape="sphere",
                 size=(0.1,),
                 xyz=(0.0, 0.0, 0.0),
@@ -270,6 +298,7 @@ def test_runtime_object_collision_registry_prefers_live_rigid_pose() -> None:
         model=SimpleNamespace(prim_path="/World/stale"),
         config=SimpleNamespace(
             planning_collision=SimpleNamespace(
+                source="explicit",
                 shape="sphere",
                 size=(0.1,),
                 xyz=(1.0, 0.0, 0.0),
@@ -294,3 +323,48 @@ def test_runtime_object_collision_registry_prefers_live_rigid_pose() -> None:
         [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
         atol=1e-12,
     )
+
+
+def test_planning_world_is_transformed_into_rotated_robot_base():
+    robot = _robot(0)
+    robot.scene_instance.root_pose = SimpleNamespace(
+        xyz=(1, 2, 3), rpy=(0, 0, np.pi / 2)
+    )
+    context = _Context()
+    captured = []
+    context.sync_collision_world = lambda objects: captured.extend(objects)
+    registry = RobotPlanningRegistry(
+        RobotRegistry((robot,)), context_factory=lambda robot: context
+    )
+    geometry = SceneCollisionRegistry()
+    obstacle = _obstacle("world")
+    obstacle.pose[:3, 3] = (1, 3, 3)
+    geometry.register_provider("world", lambda: (obstacle,))
+    registry.sync_before_plan(0, geometry.snapshot())
+    np.testing.assert_allclose(captured[0].pose[:3, 3], (1, 0, 0), atol=1e-12)
+    np.testing.assert_allclose(obstacle.pose[:3, 3], (1, 3, 3), atol=1e-12)
+
+
+def test_static_usd_planning_object_preserves_rotation_and_local_offset():
+    from pxr import Usd, UsdGeom
+    from linkerbot_sim.configuration.objects import RigidObjectPlanningCollisionConfig
+    from linkerbot_sim.mirror.collision.object_provider import (
+        collision_objects_from_runtime_objects,
+    )
+
+    stage = Usd.Stage.CreateInMemory()
+    root = UsdGeom.Xform.Define(stage, "/block")
+    root.AddTranslateOp().Set((1, 2, 3))
+    root.AddRotateZOp().Set(90)
+    handle = SimpleNamespace(
+        name="block",
+        model=SimpleNamespace(prim_path="/block"),
+        config=SimpleNamespace(
+            planning_collision=RigidObjectPlanningCollisionConfig(
+                shape="cuboid", size=(1, 2, 3), xyz=(1, 0, 0)
+            )
+        ),
+    )
+    (collision,) = collision_objects_from_runtime_objects((handle,), stage=stage)
+    np.testing.assert_allclose(collision.pose[:3, 3], (1, 3, 3), atol=1e-12)
+    np.testing.assert_allclose(collision.pose[:3, 0], (0, 1, 0), atol=1e-12)

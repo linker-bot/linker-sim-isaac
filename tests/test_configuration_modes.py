@@ -416,7 +416,7 @@ def test_mirror_scene_rejects_unknown_planning_startup_policy(tmp_path: Path) ->
             Path("objects/workstation_armbase.yaml"),
             "    static: true",
             "    static: false",
-            "Kaleidoscope scene must contain exactly one non-static rigid object",
+            "source=colliders currently requires object.physics.static=true",
         ),
         (
             Path("tasks/kaleidoscope/tblock_push_v1.yaml"),
@@ -659,7 +659,7 @@ def test_physx_cpu_mirror_compute_is_consumed_by_curobo() -> None:
     assert backend.ik.collision_cache == {}
     assert backend.motion_planner.use_cuda_graph is False
     assert backend.motion_planner.collision_cache == {
-        "cuboid": 48,
+        "cuboid": 128,
         "mesh": 4,
     }
 

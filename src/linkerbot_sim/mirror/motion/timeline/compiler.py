@@ -200,7 +200,7 @@ class TimelinePlanningSession:
         metadata: dict[str, object] = {"command_id": request.command_id}
         if snapshot is not None:
             metadata["scene_fingerprint"] = snapshot.fingerprint
-        return RobotTimeline(
+        timeline = RobotTimeline(
             tracks=tuple(tracks),
             physics_dt=self.physics_dt,
             coordination=request.coordination,
@@ -209,6 +209,89 @@ class TimelinePlanningSession:
             ),
             metadata=metadata,
         )
+        if snapshot is not None:
+            self._validate_frozen_geometry(request, timeline, snapshot)
+        return timeline
+
+    def _validate_frozen_geometry(self, request, timeline, snapshot) -> None:
+        """Reject commanded changes to geometry frozen by a collision-aware plan.
+
+        This checks the compiled samples, so redundant position goals are allowed.
+        Changes after the plan are also allowed. It does not certify physical holds
+        or dynamic obstacles: execution still needs task-level monitoring.
+        """
+        plans = []
+        changes = []
+        for track_index, (raw_track, track) in enumerate(
+            zip(request.tracks, timeline.tracks, strict=True)
+        ):
+            robot = self.runtime.robot_registry.resolve(track.robot_id)
+            initial = dict(
+                zip(
+                    robot.joint_groups.command_joint_names,
+                    _current_command(robot),
+                    strict=True,
+                )
+            )
+            for unit_index, (raw_unit, unit) in enumerate(
+                zip(raw_track.units, track.units, strict=True)
+            ):
+                expanded = _expand_full_command_unit(robot, raw_unit)
+                for raw_group, group in zip(
+                    expanded.group_tracks, unit.group_tracks, strict=True
+                ):
+                    for segment_index, (raw_segment, segment) in enumerate(
+                        zip(raw_group.segments, group.segments, strict=True)
+                    ):
+                        location = TimelinePlanningLocation(
+                            robot.robot_id,
+                            robot.label,
+                            track_index,
+                            unit_index,
+                            group.group,
+                            segment_index,
+                        )
+                        start = unit.start_tick + group.start_tick + segment.start_tick
+                        if (
+                            raw_segment.avoid_collisions
+                            and raw_segment.kind in _PLANNING_KINDS
+                        ):
+                            plans.append((location, start + segment.duration_ticks))
+                        if not segment.duration_ticks:
+                            continue
+                        positions = np.atleast_2d(segment.positions)
+                        baseline = np.asarray(
+                            [initial[name] for name in segment.joint_names]
+                        )
+                        changed = np.any(np.abs(positions - baseline) > 1e-9, axis=1)
+                        if isinstance(segment, MotionSegment):
+                            changed |= np.any(np.abs(segment.velocities) > 1e-9, axis=1)
+                        # Even zero-effort control need not hold a frozen pose.
+                        if raw_segment.kind == "joint_effort":
+                            changed[:] = True
+                        indices = np.flatnonzero(changed)
+                        if indices.size:
+                            changes.append((location, start + int(indices[0])))
+        for plan, end in plans:
+            for change, start in changes:
+                if start >= end:
+                    continue
+                if change.robot_id == plan.robot_id:
+                    invalid = change.group == "hand" and any(
+                        model.robot_id == plan.robot_id
+                        for model in snapshot.mounted_models
+                    )
+                    reason = "mounted hand geometry is frozen"
+                else:
+                    invalid = request.coordination == "static_others"
+                    reason = "static_others freezes the other robots"
+                if invalid:
+                    raise TimelinePlanningError(
+                        f"collision-aware timeline cannot change robot {change.robot_label!r} "
+                        f"group {change.group!r} before its plan ends: {reason}; "
+                        "execute the change separately, then capture a new planning snapshot",
+                        location=plan,
+                    )
 
     def _compile_group_track(
         self,
@@ -491,6 +574,17 @@ class TimelinePlanningSession:
         )
 
 
+_PLANNING_KINDS = frozenset(
+    {
+        "plan_cspace_goal",
+        "plan_cspace_delta",
+        "ik_pose",
+        "ik_offset",
+        "plan_linear_pose_path",
+    }
+)
+
+
 def _request_requires_planning_snapshot(request: RobotTimelineRequest) -> bool:
     """判断请求中是否存在会读取规划场景几何的 segment。
 
@@ -498,15 +592,8 @@ def _request_requires_planning_snapshot(request: RobotTimelineRequest) -> bool:
     不必要的 planning snapshot。
     """
 
-    planning_kinds = {
-        "plan_cspace_goal",
-        "plan_cspace_delta",
-        "ik_pose",
-        "ik_offset",
-        "plan_linear_pose_path",
-    }
     return any(
-        segment.kind in planning_kinds
+        segment.kind in _PLANNING_KINDS
         for track in request.tracks
         for unit in track.units
         for group_track in unit.group_tracks

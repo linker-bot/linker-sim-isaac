@@ -12,7 +12,7 @@
 #   configs/scenes/<mode>/<scene>.yaml。
 # - 这里不写 IK、planner、轨迹优化等算法参数；这些由 configs/curobo/*.yaml 管理。
 # - 该组合资产包含 AR5V2_L 机械臂和 L6V1 左手，但 cuRobo 只加载机械臂 URDF；
-#   因此手部可参与 Isaac 接触与控制，却不属于 cuRobo 的运动学链或 collision spheres。
+#   固定手型与附件通过下方 mounted_urdf 从实际 collider 更新法兰规划包络。
 
 robot:
   # 能力类别：arm_hand 要求 arm/hand 两个 joint group 都非空，规划能力只绑定 arm。
@@ -30,6 +30,9 @@ robot:
   # 该 MJCF 由共享仓库 linker-sim-assets 的组合单元 ar5_08_l6_l 生成，同时包含
   # AR5V2_L 机械臂（== ar5_08 左臂）与 LinkerHand L6 左手，手部 mimic/equality 均保留。
   asset_path: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l6_l/workstation.xml
+
+  planning_collision:
+    mounted_urdf: packages/linker-robot-assets/src/linker_robot_assets/assets/units/ar5_08_l6_l/workstation.urdf
 
   import:
     # Isaac importer 生成碰撞几何时使用的近似方式。
@@ -126,7 +129,7 @@ curobo:
 
     # cuRobo robot YAML，提供机械臂 collision spheres、C-space 和模型侧关节信息。
     robot_config_path: assets/single_system/arm/AR5V2_L/AR5V2_L_curobo.yml
-    # true 表示把上述机械臂 collision spheres 加载到规划 context；不包含组合资产中的手部。
+    # 加载臂球；Mirror 同步时用实际固定手型/附件包络替换旧通用抓手球。
     load_collision_spheres: true
 
 joint_groups:

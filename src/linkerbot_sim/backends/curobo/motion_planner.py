@@ -34,16 +34,13 @@ class CuroboMotionPlanner:
 
         self.context = context
         # 单问题 MotionPlanner warmup 显存开销较大，因此延迟到真正执行 ``plan()`` 时再创建。
-        self._planner = None
         self.tcp_frame_name = str(tcp_frame_name or context.default_tcp_frame)
 
     @property
     def planner(self):
         """按需取得 context 的单问题 MotionPlanner。"""
 
-        if self._planner is None:
-            self._planner = self.context.motion_planner
-        return self._planner
+        return self.context.motion_planner
 
     def joint_names(self) -> list[str]:
         """返回 planner 使用的 C-space 关节名。"""
@@ -61,11 +58,12 @@ class CuroboMotionPlanner:
         """
 
         if isinstance(request, LinearPosePathRequest):
-            return plan_linear_pose_path(
+            result = plan_linear_pose_path(
                 self.context,
                 request,
                 tcp_frame_name=self.tcp_frame_name,
             )
+            return self._validate_result(result, request.avoid_collisions)
         request.validate_structure()
         if request.avoid_collisions and not context_supports_collision_queries(
             self.context,
@@ -98,13 +96,18 @@ class CuroboMotionPlanner:
                 orientation_free=request.goal_pose.orientation is None,
             )
             result = self.planner.plan_pose(goal, current_state)
-        return _motion_result_from_curobo(
+        result = _motion_result_from_curobo(
             result,
             joint_names=tuple(self.joint_names()),
             duration_s=request.duration_s,
             sample_dt_s=request.sample_dt_s,
             start_q=np.asarray(request.current_q, dtype=float).reshape(-1),
         )
+        return self._validate_result(result, request.avoid_collisions)
+
+    def _validate_result(self, result, avoid_collisions):
+        validate = getattr(self.context, "validate_motion_collision", None)
+        return validate(result) if avoid_collisions and callable(validate) else result
 
 
 def _collision_unsupported_motion_result(context=None) -> MotionResult:

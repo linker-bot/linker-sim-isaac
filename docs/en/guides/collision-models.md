@@ -97,6 +97,95 @@ Descendant rigid links remain collidable. PhysX keeps the original USD relations
 This preserves named assembly seams such as AR5 link5–link7 without disabling the hand
 or camera, and applies equally to Mirror and Kaleidoscope.
 
+## Mounted Hands, Fixtures and Carried Objects
+
+The eight flanged L6/O6 profiles declare `robot.planning_collision.mounted_urdf`.
+Mirror reads each imported collider in its named link frame and evaluates the full
+URDF with the current measured joints, including hand followers. During an arm plan
+this hand shape is frozen. A collision-aware timeline rejects hand changes before
+that plan ends; execute the hand change first and plan from a new snapshot. With
+`static_others`, commands that move other robots before a plan ends are likewise
+rejected. Holds/current-position goals and changes after the plan remain allowed.
+Direct simultaneous control remains available; these checks do not certify
+physical pose holding, dynamic obstacles, or coupled multi-robot motion. Volume-covering spheres replace the old generic gripper
+sphere at the flange; they move with each candidate arm configuration. The old AR5
+YAML already contained a coarse L6 envelope, not articulated finger geometry.
+
+This is a conservative approximation of collider boxes, with a 0.03 m maximum cell
+edge. It can reject a narrow but physically feasible passage. Self-contact *inside*
+the frozen hand/flange/camera assembly is not checked by the flange envelope; Tasks
+must validate hand-shape transitions and the current O6 thumb/camera limitation.
+The current AR5 cuRobo YAML excludes the flange/TCP against own-arm links 4, 6
+and 7. Because the envelope shares that flange frame, these exclusions also apply
+to the hand, camera and carried object. `ignored_own_arm_links` in mounted coverage
+reports the actual configured names; it does not claim complete own-arm coverage.
+Tasks must check those interactions separately. Removing the exclusions requires
+first improving the coarse arm spheres and validating installation contacts.
+Carried-object contact is checked against all mounted links except explicitly named
+`touch_links`. Neither check is a whole-body hand-motion planner.
+
+The workstation and top camera profiles use `object.planning_collision.source:
+colliders` for static objects. Dynamic objects retain explicit shapes following
+the live root pose; dynamic-chain collider extraction is not provided. Every imported
+collider gets its own bound; empty spaces between parts
+are preserved. Geometry names are `<object name>/<path below the instance root>`.
+Providers publish world coordinates; the registry converts them to the target
+robot's base before cuRobo queries. Other robots' arm spheres and mounted boxes enter
+`static_others` snapshots. `independent` deliberately omits other robots.
+
+`scene.planning_contacts` lists exact `robot_label`, `link_name`, `geometry_name`
+triples. The example scenes allow only fixed-base installation contacts. cuRobo 0.8
+cannot express a link/world-object exclusion, so the named geometry is omitted from
+optimization and checked against every non-exempt link before a successful path is
+returned. This may reject a candidate that needs further planning around that part;
+it does not disable the part globally or change physical contact filters.
+
+Paths are checked at endpoints and intermediate samples with at most 0.02 rad
+between joint samples, capped at 10,000 samples. This is sampled validation, not
+continuous collision detection. `MotionResult.diagnostics.coverage` and the planning
+registry's latest coverage report expose sample counts, minimum sampled clearance,
+model fingerprint, approximation and contact allowances. Direct joint commands do
+not invoke this planner validation. The canonical direct IK profile remains
+collision-unaware; motion planning owns avoidance.
+
+Use the Mirror Python facade after establishing a physical grasp:
+
+```python
+runtime.attach_planning_object("Tblock", 0, touch_links=("hand_lh_index_distal",))
+# Plan and execute the arm motion while maintaining that grasp.
+runtime.detach_planning_object("Tblock")
+```
+
+This declares planning geometry; it creates no physical joint or grasp controller.
+Each snapshot freezes the current object-to-flange transform from live state, so a
+changed grip or object position updates the next plan. The object is removed from
+its owner's world view, included in the candidate flange envelope and still visible
+to other robots. Detach returns it to the live world view. Snapshot/state capture
+preserves declarations by robot label; restore validates them before physics writes,
+and reset clears them. Geometry or attachment asset changes require a new runtime.
+
+Hand/payload model changes destroy and lazily rebuild all affected cuRobo solvers,
+including graph and validation models. Arm motion alone reuses the mounted model.
+The Mirror cuboid cache is 128 entries, sufficient for the example's other mounted
+robot and fixtures; larger scenes must set an explicit adequate capacity.
+
+`just smoke-mirror-planning-geometry` checks native hand/camera-only obstacles,
+state refresh, carried mid-path collisions and attachment lifecycle. These smokes
+use planning fixtures and do not claim to demonstrate a successful physical grasp.
+
+For a task phase, use exact link/geometry pairs and plan **and execute** inside the scope:
+
+```python
+with runtime.planning_contact_scope(0, (("hand_lh_index_distal", "Tblock"),)):
+    # Run the task's grasp-approach planning and execution here.
+    ...
+```
+
+Leaving the scope restores the previous planning policy, including on exceptions;
+nested scopes preserve outer allowances. Other links remain checked against the
+object. This does not change physical contact filters or grant persistent permissions
+through reset/snapshot restore. Carried-object `touch_links` are a separate declaration.
+
 ## Pinned USD Parser Workaround
 
 Kit's OpenUSD 25.11 collider parser can race when several meshes belong to one rigid

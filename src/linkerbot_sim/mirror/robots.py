@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 from pathlib import Path
 from threading import RLock
 from time import perf_counter
 from typing import Literal
+
+import numpy as np
 
 from linkerbot_sim.mirror.collision.registry import PlanningSceneSnapshot
 from linkerbot_sim.configuration.fingerprint import semantic_config_fingerprint
@@ -24,6 +26,7 @@ from linkerbot_sim.configuration.robots import RobotProfileSettings
 from linkerbot_sim.robots.capabilities import PlanningCapability, RobotKind
 from linkerbot_sim.robots.joint_groups import JointGroupLayout
 from linkerbot_sim.robots.tcp_binding import PhysicalTcpBinding
+from linkerbot_sim.utils.math_utils import make_rpy_transform
 
 
 ConsumerRole = Literal["interactive", "ik", "planner", "mpc"]
@@ -263,6 +266,21 @@ class RobotPlanningRegistry:
             model_fingerprint=model_fingerprint,
         )
         with entry.lock:
+            mounted = next(
+                (
+                    model
+                    for model in snapshot.mounted_models
+                    if model.robot_id == robot_id
+                ),
+                None,
+            )
+            if mounted is not None:
+                sync_mounted = getattr(entry.context, "sync_mounted_geometry", None)
+                if not callable(sync_mounted):
+                    raise RuntimeError(
+                        "planning context cannot synchronize mounted geometry"
+                    )
+                sync_mounted(mounted)
             if (
                 not force
                 and entry.synced_scene_version == snapshot.version
@@ -273,13 +291,33 @@ class RobotPlanningRegistry:
                 robot_id,
                 include_other_robots=include_robots,
             )
+            # Providers publish world coordinates; the cuRobo URDF is rooted at
+            # robot_base. Apply exactly the same boundary as world-frame goals.
+            root = robot.scene_instance.root_pose
+            world_to_base = np.linalg.inv(make_rpy_transform(root.xyz, root.rpy))
+            objects = tuple(
+                replace(value, pose=world_to_base @ value.pose) for value in objects
+            )
             started = perf_counter()
+            contacts = tuple(
+                contact
+                for contact in snapshot.allowed_contacts
+                if contact.robot_id == robot_id
+            )
+            sync_view = getattr(entry.context, "sync_planning_collision_view", None)
             sync = getattr(entry.context, "sync_collision_world", None)
             if not callable(sync):
                 raise RuntimeError(
                     "planning context cannot synchronize collision world"
                 )
-            world = sync(objects)
+            if callable(sync_view):
+                world = sync_view(objects, contacts)
+            elif contacts:
+                raise RuntimeError(
+                    "planning context cannot enforce scoped allowed contacts"
+                )
+            else:
+                world = sync(objects)
             entry.sync_duration_s = perf_counter() - started
             entry.obstacle_count = len(objects)
             entry.synced_scene_version = snapshot.version
@@ -378,6 +416,9 @@ class RobotPlanningRegistry:
                     "obstacle_count": entry.obstacle_count,
                     "planner_prewarm_duration_s": (entry.planner_prewarm_duration_s),
                     "planner_prewarmed": entry.planner_prewarmed,
+                    "last_collision_coverage": getattr(
+                        entry.context, "last_planning_coverage", None
+                    ),
                 }
                 for key, entry in entries
             ],

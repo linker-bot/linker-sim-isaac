@@ -135,12 +135,13 @@ class ObjectPhysxMaterialConfig:
 class RigidObjectPlanningCollisionConfig:
     """规划后端使用的简化碰撞几何，不改变仿真碰撞体。"""
 
-    shape: str
-    size: tuple[float, ...]
+    shape: str = "cuboid"
+    size: tuple[float, ...] = ()
     xyz: tuple[float, float, float] = (0.0, 0.0, 0.0)
     rpy: tuple[float, float, float] = (0.0, 0.0, 0.0)
     enabled: bool = True
     padding: float = 0.0
+    source: str = "explicit"
 
     @classmethod
     def from_mapping(
@@ -153,6 +154,19 @@ class RigidObjectPlanningCollisionConfig:
 
         if data is None:
             return None
+        if data.get("source") == "colliders":
+            unsupported = set(data) - {"source", "enabled", "padding"}
+            if unsupported:
+                raise ValueError(
+                    f"{label}: collider bounds do not accept explicit shape fields: {sorted(unsupported)}"
+                )
+            enabled = data.get("enabled", True)
+            if not isinstance(enabled, bool):
+                raise ValueError(f"{label}.enabled must be a boolean")
+            padding = _finite_float(data.get("padding", 0.0), f"{label}.padding")
+            if padding < 0:
+                raise ValueError(f"{label}.padding cannot be negative")
+            return cls(source="colliders", enabled=enabled, padding=padding)
         unsupported = set(data) - {
             "shape",
             "size",
@@ -387,6 +401,15 @@ class RigidObjectProfileConfig:
         if self.import_config.fix_base is True and not self.physics.static:
             raise ValueError(
                 "object.import.fix_base=true conflicts with object.physics.static=false"
+            )
+        if (
+            self.planning_collision is not None
+            and self.planning_collision.source == "colliders"
+            and not self.physics.static
+        ):
+            raise ValueError(
+                "object.planning_collision.source=colliders currently requires "
+                "object.physics.static=true; use an explicit live-root shape for dynamic objects"
             )
 
 
