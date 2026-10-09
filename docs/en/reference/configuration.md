@@ -419,6 +419,29 @@ per-link gravity changes are unsupported. `newton_cuda` is both an explicit Mirr
 Kaleidoscope selector and the resolved CUDA runtime kind; the implementation module is
 simply `isaac.physics.newton`.
 
+### Newton contact integration
+
+Both Newton physics leaves require `max_substep_dt_s` and
+`default_contact_time_constant_s` (finite positive seconds). The runtime uses
+`max(substeps, ceil(physics_dt / max_substep_dt_s))` internal steps. With the
+canonical 0.002 s bound, 60 / 120 / 240 Hz outer clocks use 9 / 5 / 3 internal steps.
+This does not add decisions, callbacks or rendered frames, or change simulation time.
+The contact pipeline refreshes contacts at every internal step. The additional
+physics work costs throughput; select and record these values before benchmarking.
+
+The canonical 0.004 s contact fallback maps to Newton `ke=1/t²`, `kd=2/t`
+(critical damping), yielding MuJoCo `solref=(t, 1)`. It is applied to the builder
+before USD import. Authored per-shape Newton/MJC stiffness and damping retain the
+normal upstream resolver precedence. This is a numerical contact response, not a
+joint drive gain or a calibrated force-space material law: the pinned CPU/native
+MuJoCo path uses the legacy Newton conversion. MuJoCo's `refsafe` still limits a
+positive time constant to at least twice the actual internal timestep.
+
+`diagnostics()` reports the outer and internal timestep, configured and effective
+substeps, and the default contact response. Finite steps and compliant contacts can
+still penetrate during impacts; validate the chosen configuration on the task's
+velocities, masses and contact geometry. Recheck learned policies after changing it.
+
 ## Robot And Object Physics Leaves
 
 A robot profile separates backend-neutral gravity policy from PhysX-only asset facts:

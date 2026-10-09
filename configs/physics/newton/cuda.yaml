@@ -13,8 +13,13 @@ physics:
   njmax_per_world: 1200
   # 捕获固定 world batch 的 CUDA graph，降低重复 physics step 的 kernel launch 开销。
   use_cuda_graph: true
-  # 每个 physics step 的内部子步数，必须 >= 1；增加会按比例提高求解成本。
+  # 每个 physics step 的最少内部子步数，必须 >= 1；增加会按比例提高求解成本。
   substeps: 1
+  # 实际子步数为 max(substeps, ceil(physics_dt / max_substep_dt_s))；外部时钟不变。
+  max_substep_dt_s: 0.002
+  # 未显式作者化的接触采用临界阻尼的响应时间（秒），不是关节驱动增益。
+  # Newton ke=1/t²、kd=2/t；MuJoCo 正值 solref 仍受 >=2*内部 dt 的 refsafe 约束。
+  default_contact_time_constant_s: 0.004
   # 每个子步的主约束求解迭代上限。
   iterations: 100
   # 每次主更新允许的 line-search 迭代上限。

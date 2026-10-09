@@ -1,0 +1,157 @@
+"""Native contact regressions; run explicitly with the simulation interpreter."""
+
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from linkerbot_sim.isaac.physics.newton.manager import NewtonRuntime
+from linkerbot_sim.isaac.physics.newton.replication import (
+    _load_newton_dependencies,
+    _new_registered_builder,
+)
+from linkerbot_sim.isaac.spec import IsaacNewtonCpuSpec, IsaacNewtonCudaSpec
+
+
+def _box_runtime(execution, *, height, downward_speed=0.0):
+    newton = pytest.importorskip("newton")
+    wp = pytest.importorskip("warp")
+    wp.init()
+    if execution == "cuda" and not wp.is_cuda_available():
+        pytest.skip("CUDA is required")
+    spec = IsaacNewtonCpuSpec() if execution == "cpu" else IsaacNewtonCudaSpec()
+    device = "cpu" if execution == "cpu" else "cuda:0"
+    builder = _new_registered_builder(
+        _load_newton_dependencies(),
+        up_axis="Z",
+        default_contact_time_constant_s=spec.default_contact_time_constant_s,
+    )
+    cfg = builder.default_shape_cfg
+    cfg.gap = 0.0
+    body = builder.add_link(
+        xform=wp.transform(wp.vec3(0.0, 0.0, height), wp.quat_identity())
+    )
+    builder.add_shape_box(body, hx=0.02, hy=0.02, hz=0.02)
+    joint = builder.add_joint_free(body)
+    builder.add_articulation([joint])
+    builder.add_shape_box(
+        -1,
+        xform=wp.transform(wp.vec3(0.0, 0.0, -0.1), wp.quat_identity()),
+        hx=1.0,
+        hy=1.0,
+        hz=0.1,
+    )
+    model = builder.finalize(device=device)
+    state = model.state()
+    qd = state.joint_qd.numpy()
+    qd[2] = -downward_speed
+    state.joint_qd.assign(qd)
+    newton.eval_fk(model, state.joint_q, state.joint_qd, state)
+    manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager.physics_spec = spec
+    manager.physics_dt = 1.0 / 60.0
+    manager.stream = wp.Stream(device) if execution == "cuda" else None
+    manager.execution = execution
+    manager.state = state
+    manager.control = model.control()
+    manager.solver = newton.solvers.SolverMuJoCo(
+        model,
+        use_mujoco_cpu=execution == "cpu",
+        use_mujoco_contacts=execution == "cpu",
+        iterations=100,
+        ls_iterations=50,
+        solver="newton",
+    )
+    manager._collision_pipeline = (
+        newton.CollisionPipeline(model) if execution == "cuda" else None
+    )
+    manager._contacts = (
+        manager._collision_pipeline.contacts()
+        if manager._collision_pipeline is not None
+        else None
+    )
+    return manager
+
+
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+def test_default_contact_resolves_ten_centimeter_drop(execution):
+    runtime = _box_runtime(execution, height=0.12)
+    original = runtime.solver.step
+    bottoms = []
+
+    def observed_step(*args):
+        original(*args)
+        bottoms.append(float(runtime.state.body_q.numpy()[0, 2]) - 0.02)
+
+    runtime.solver.step = observed_step
+    for _ in range(120):
+        runtime._simulate()
+    assert len(bottoms) == 120 * runtime._effective_substeps
+    assert np.isfinite(bottoms).all()
+    assert min(bottoms) > -0.004, min(bottoms)
+    assert abs(bottoms[-1]) < 0.0005
+    assert np.linalg.norm(runtime.state.body_qd.numpy()[0]) < 0.001
+    assert runtime.solver.mj_model.geom_solref[:, 0] == pytest.approx(0.004)
+
+
+def test_new_contact_is_detected_inside_the_outer_step():
+    runtime = _box_runtime("cuda", height=0.021, downward_speed=1.0)
+    calls = []
+    collide = runtime._collision_pipeline.collide
+
+    def observed_collide(state, contacts):
+        collide(state, contacts)
+        calls.append(int(contacts.rigid_contact_count.numpy()[0]))
+
+    runtime._collision_pipeline.collide = observed_collide
+    runtime._simulate()
+    assert len(calls) == runtime._effective_substeps
+    assert calls[0] == 0
+    assert any(count > 0 for count in calls[1:])
+    assert float(runtime.state.body_q.numpy()[0, 2]) > 0.018
+
+
+def test_usd_contact_defaults_preserve_authored_values_and_other_instances():
+    pytest.importorskip("newton")
+    from newton._src.usd.schema_resolver import PrimType, SchemaResolverManager
+    from linkerbot_sim.isaac.physics.newton.replication import _new_schema_resolvers
+
+    class Prim:
+        def __init__(self, values):
+            self.values = values
+
+        def GetPath(self):
+            return "/test"
+
+        def GetAuthoredPropertiesInNamespace(self, namespace):
+            return []
+
+        def GetAttribute(self, name):
+            if name not in self.values:
+                return None
+            return SimpleNamespace(
+                HasAuthoredValue=lambda: True, Get=lambda: self.values[name]
+            )
+
+    dependencies = _load_newton_dependencies()
+    original = dependencies.schema_resolver_mjc_type.mapping[PrimType.SHAPE][
+        "ke"
+    ].default
+    resolvers = _new_schema_resolvers(dependencies, use_builder_contact_defaults=True)
+    manager = SchemaResolverManager(resolvers)
+    assert manager.get_value(Prim({}), PrimType.SHAPE, "ke") is None
+    assert manager.get_value(Prim({}), PrimType.SHAPE, "kd") is None
+    assert manager.get_value(
+        Prim({"mjc:solref": [0.05, 1]}), PrimType.SHAPE, "ke"
+    ) == pytest.approx(400)
+    assert manager.get_value(
+        Prim({"mjc:solref": [0.05, 1]}), PrimType.SHAPE, "kd"
+    ) == pytest.approx(40)
+    authored = Prim({"newton:contact_ke": 123, "mjc:solref": [0.05, 1]})
+    assert manager.get_value(authored, PrimType.SHAPE, "ke") == 123
+    assert (
+        dependencies.schema_resolver_mjc_type.mapping[PrimType.SHAPE]["ke"].default
+        == original
+    )
+    ordinary = SchemaResolverManager(_new_schema_resolvers(dependencies))
+    assert ordinary.get_value(Prim({}), PrimType.SHAPE, "ke") == pytest.approx(2500)

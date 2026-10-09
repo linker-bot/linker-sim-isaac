@@ -27,6 +27,9 @@ their Git commit.
 
 ### Fixed
 
+- Newton refreshes contacts on every internal step and bounds internal timesteps to 2 ms by default; previously unauthored contacts use an explicit 4 ms response. Outer control/render clocks and authored per-shape contact parameters are preserved; diagnostics report effective integration settings.
+  Existing Newton physics YAML leaves must add `max_substep_dt_s` and `default_contact_time_constant_s`; increased internal integration reduces throughput and changes contact trajectories.
+
 - Joint effort telemetry identifies commanded, applied and projected sources,
   per-joint validity and missing-data reasons using the actual physics clock.
   Newton projected effort remains explicitly unsupported; gains, gravity and armature are unchanged.

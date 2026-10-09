@@ -1452,3 +1452,17 @@ def test_configuration_facade_has_no_runtime_dependencies() -> None:
         "from gymnasium",
     ):
         assert forbidden_import not in sources
+
+
+@pytest.mark.parametrize("profile", ["newton_cpu", "newton_cuda"])
+@pytest.mark.parametrize(
+    "name", ["max_substep_dt_s", "default_contact_time_constant_s"]
+)
+@pytest.mark.parametrize("value", [0.0, -0.1, float("nan"), float("inf"), True])
+def test_newton_contact_time_fields_reject_invalid_values(profile, name, value):
+    from dataclasses import asdict
+
+    config = asdict(load_mirror_config(profile).physics)
+    config[name] = value
+    with pytest.raises((ConfigurationError, ValueError)):
+        physics_settings_from_mapping(config)

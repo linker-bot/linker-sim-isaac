@@ -71,6 +71,8 @@ class IsaacNewtonCudaSpec:
     njmax_per_world: int = 1200
     use_cuda_graph: bool = True
     substeps: int = 1
+    max_substep_dt_s: float = 0.002
+    default_contact_time_constant_s: float = 0.004
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"
@@ -91,6 +93,15 @@ class IsaacNewtonCudaSpec:
             _require_positive_int(getattr(self, name), f"physics.{name}")
         if type(self.use_cuda_graph) is not bool:
             raise TypeError("physics.use_cuda_graph must be boolean")
+        for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+            value_s = getattr(self, name)
+            if (
+                isinstance(value_s, bool)
+                or not isinstance(value_s, (int, float))
+                or not isfinite(value_s)
+                or value_s <= 0.0
+            ):
+                raise ValueError(f"physics.{name} must be finite and positive")
         if self.constraint_solver not in {"auto", "cg", "newton"}:
             raise ValueError("physics.constraint_solver is invalid")
         if self.contact_pipeline not in {"auto", "mujoco", "newton"}:
@@ -110,6 +121,8 @@ class IsaacNewtonCpuSpec:
     nconmax_per_world: int = 200
     njmax_per_world: int = 1200
     substeps: int = 1
+    max_substep_dt_s: float = 0.002
+    default_contact_time_constant_s: float = 0.004
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"
@@ -130,6 +143,15 @@ class IsaacNewtonCpuSpec:
             _require_positive_int(getattr(self, name), f"physics.{name}")
         if self.world_count != 1:
             raise ValueError("Newton CPU requires world_count=1")
+        for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+            value_s = getattr(self, name)
+            if (
+                isinstance(value_s, bool)
+                or not isinstance(value_s, (int, float))
+                or not isfinite(value_s)
+                or value_s <= 0.0
+            ):
+                raise ValueError(f"physics.{name} must be finite and positive")
         if self.constraint_solver not in {"auto", "cg", "newton"}:
             raise ValueError("physics.constraint_solver is invalid")
         if self.contact_pipeline not in {"auto", "mujoco"}:
