@@ -14,6 +14,8 @@ Git commit 标识。
 
 ### 变更
 
+- 支持基线迁移至 Isaac Sim 6.1.0、Newton 1.5、Warp 1.16 和 MuJoCo 3.11。Newton 使用新目标字段并明确要求 DOF 布局，同步适配模型通知与控制快照；仿真环境需按新锁文件重建。
+
 - Mirror 只采集到期且有输出消费者的相机；`step(render=True)` 改为允许按需采集，不再每步强制全部传感器。`render(camera_ids=...)` 获取选中相机新帧，不推进物理或录制；空闲传感器停止渲染，暂停、急停和连续查询独立服务 GUI。
 
 - 在 self-hosted runner 稳定性问题解决前，GPU/Isaac `Simulation` 工作流暂时只允许手动触发。
@@ -23,6 +25,8 @@ Git commit 标识。
 - 补齐默认分支 ruleset 策略文件，供对应测试和定时 drift 审计读取。
 
 ### 修复
+
+- 修正 Isaac 6.1 的 PhysX 导入：保留 MJCF 分层后丢失的原生 mimic 目标和系数，将 MJCF/URDF 的 articulation root 元数据放在已有世界固定关节上，使固定相机装配在积分中保持固定；任务空间绑定通过精确 body 关系处理关节型 root。
 
 - 将 AR5 臂手默认 `AR5V2_L/R_pinch_tcp` 改名为 `AR5V2_L/R_flange_tcp`，明确其为零偏移机械臂法兰参考。
   显式 TCP selector 需改用新名，不保留旧名别名；不改变坐标变换、物理行为或独立配置的任务 TCP。
@@ -35,7 +39,7 @@ Git commit 标识。
 
 - 规划接入当前固定手型、附件、实际工装包围盒与携带物；修正障碍世界坐标到基座坐标转换，增加明确接触对和采样路径覆盖诊断。
 
-- 资产导入期间临时串行化携带的 USD 25.11 物理解析器，规避多 collider 的分配器竞争；之后恢复正常并发。
+- 配套运行时已覆盖旧问题，删除 USD 解析串行保护和 Warp `func(module=...)` 绕行。Newton 等式审计适配 MuJoCo 命名空间并保留原生 joint-equality 执行者；未显式设置的接触默认值不再修改 resolver 映射。
 
 - Mirror 相机通过原生帧完成事件刷新暂停位姿与 headless 图像，不推进物理；记录保留渲染身份，避免将旧帧标记为新的物理时刻。
 

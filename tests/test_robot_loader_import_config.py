@@ -672,6 +672,9 @@ class FakeImporterRuntime:
 
 def _install_fake_importer(monkeypatch, mode: str) -> FakeImporterRuntime:
     runtime = FakeImporterRuntime(mode)
+    monkeypatch.setattr(
+        robot_import, "_repair_physx_import", lambda _path, **_kwargs: None
+    )
 
     class PublicConfig(FakeImportConfig):
         def __init__(self, **kwargs: object) -> None:

@@ -634,14 +634,11 @@ def _incoming_joint_frame(
 ) -> _JointFrame:
     from pxr import Usd, UsdPhysics
 
-    root_path = str(getattr(articulation, "prim_path", ""))
-    root = stage.GetPrimAtPath(root_path) if root_path else None
-    if root is None or not root.IsValid():
-        # Mirror imports may expose a nested articulation root; walking from the
-        # stage pseudo-root is still name/relationship based and remains strict.
-        root = stage.GetPseudoRoot()
+    # Isaac 6.1 can place the articulation root on its world-anchor joint,
+    # which is not an ancestor of the other joints. Match the exact child path
+    # across the stage at this cold binding boundary; never match by basename.
     matches = []
-    for prim in Usd.PrimRange(root):
+    for prim in Usd.PrimRange(stage.GetPseudoRoot()):
         if not prim.IsA(UsdPhysics.Joint):
             continue
         targets = tuple(

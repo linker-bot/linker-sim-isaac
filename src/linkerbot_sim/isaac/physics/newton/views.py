@@ -1836,7 +1836,7 @@ class NewtonArticulationView(_NewtonViewBase):
     ) -> object:
         control = self._control()
         return self._qd.gather(
-            _required_array(control, "joint_target_pos", category="control"),
+            _required_array(control, "joint_target_q", category="control"),
             rows=indices,
             columns=dof_indices,
             slot="position_targets",
@@ -1852,7 +1852,7 @@ class NewtonArticulationView(_NewtonViewBase):
         self._require_controllable(dof_indices, field="position target")
         control = self._control()
         selection = self._qd.scatter(
-            _required_array(control, "joint_target_pos", category="control"),
+            _required_array(control, "joint_target_q", category="control"),
             positions,
             rows=indices,
             columns=dof_indices,
@@ -1860,7 +1860,7 @@ class NewtonArticulationView(_NewtonViewBase):
         )
         self._notify(
             category="control",
-            field="joint_target_pos",
+            field="joint_target_q",
             world_indices=self._selected_worlds(selection),
         )
 
@@ -1872,7 +1872,7 @@ class NewtonArticulationView(_NewtonViewBase):
     ) -> object:
         control = self._control()
         return self._qd.gather(
-            _required_array(control, "joint_target_vel", category="control"),
+            _required_array(control, "joint_target_qd", category="control"),
             rows=indices,
             columns=dof_indices,
             slot="velocity_targets",
@@ -1888,7 +1888,7 @@ class NewtonArticulationView(_NewtonViewBase):
         self._require_controllable(dof_indices, field="velocity target")
         control = self._control()
         selection = self._qd.scatter(
-            _required_array(control, "joint_target_vel", category="control"),
+            _required_array(control, "joint_target_qd", category="control"),
             velocities,
             rows=indices,
             columns=dof_indices,
@@ -1896,7 +1896,7 @@ class NewtonArticulationView(_NewtonViewBase):
         )
         self._notify(
             category="control",
-            field="joint_target_vel",
+            field="joint_target_qd",
             world_indices=self._selected_worlds(selection),
         )
 

@@ -104,6 +104,18 @@ def _constraint_topology(
         values["joint_qd_start"] = np.arange(joint_count + 1, dtype=np.int32)
         values["equality_constraint_count"] = len(expectations)
         values["constraint_mimic_count"] = 0
+    equalities = {
+        name: values.pop(name)
+        for name in tuple(values)
+        if name.startswith("equality_constraint_")
+    }
+    if representation == "model":
+        values["mujoco"] = SimpleNamespace(**equalities)
+    else:
+        values["custom_attributes"] = {
+            f"mujoco:{name}": SimpleNamespace(values=value, default=None)
+            for name, value in equalities.items()
+        }
     return SimpleNamespace(**values), tuple(expectations)
 
 
@@ -169,7 +181,7 @@ def test_audit_rejects_any_constraint_mimic_representation() -> None:
 
 def test_audit_rejects_wrong_polycoef_and_disabled_equality() -> None:
     source, expected = _constraint_topology(representation="builder")
-    source.equality_constraint_polycoef[3][1] = 9.0
+    source.custom_attributes["mujoco:equality_constraint_polycoef"].values[3][1] = 9.0
 
     with pytest.raises(NewtonConstraintAuditError, match="polycoef differs"):
         audit_native_master_follower_constraints(
@@ -179,8 +191,10 @@ def test_audit_rejects_wrong_polycoef_and_disabled_equality() -> None:
             executor_metadata=_metadata(),
         )
 
-    source.equality_constraint_polycoef[3][1] = expected[3].polycoef[1]
-    source.equality_constraint_enabled[3] = False
+    source.custom_attributes["mujoco:equality_constraint_polycoef"].values[3][1] = (
+        expected[3].polycoef[1]
+    )
+    source.custom_attributes["mujoco:equality_constraint_enabled"].values[3] = False
     with pytest.raises(NewtonConstraintAuditError, match="row is disabled"):
         audit_native_master_follower_constraints(
             source,
@@ -192,13 +206,15 @@ def test_audit_rejects_wrong_polycoef_and_disabled_equality() -> None:
 
 def test_audit_allows_anonymous_unrelated_equality_but_not_anonymous_joint() -> None:
     source, expected = _constraint_topology(representation="builder")
-    source.equality_constraint_type.append(0)
-    source.equality_constraint_joint1.append(-1)
-    source.equality_constraint_joint2.append(-1)
-    source.equality_constraint_enabled.append(True)
-    source.equality_constraint_world.append(0)
-    source.equality_constraint_label.append("")
-    source.equality_constraint_polycoef.append([0.0] * 5)
+    source.custom_attributes["mujoco:equality_constraint_type"].values.append(0)
+    source.custom_attributes["mujoco:equality_constraint_joint1"].values.append(-1)
+    source.custom_attributes["mujoco:equality_constraint_joint2"].values.append(-1)
+    source.custom_attributes["mujoco:equality_constraint_enabled"].values.append(True)
+    source.custom_attributes["mujoco:equality_constraint_world"].values.append(0)
+    source.custom_attributes["mujoco:equality_constraint_label"].values.append("")
+    source.custom_attributes["mujoco:equality_constraint_polycoef"].values.append(
+        [0.0] * 5
+    )
 
     result = audit_native_master_follower_constraints(
         source,
@@ -208,7 +224,7 @@ def test_audit_allows_anonymous_unrelated_equality_but_not_anonymous_joint() -> 
     )
     assert result.relation_count == 20
 
-    source.equality_constraint_label[0] = ""
+    source.custom_attributes["mujoco:equality_constraint_label"].values[0] = ""
     with pytest.raises(NewtonConstraintAuditError, match="non-empty exact label"):
         audit_native_master_follower_constraints(
             source,
@@ -279,7 +295,7 @@ def test_audit_rejects_second_executor_metadata(
 
 def test_audit_rejects_wrong_world_and_duplicate_follower() -> None:
     source, expected = _constraint_topology(representation="builder")
-    source.equality_constraint_world[10] = 0
+    source.custom_attributes["mujoco:equality_constraint_world"].values[10] = 0
 
     with pytest.raises(NewtonConstraintAuditError, match="distributed evenly"):
         audit_native_master_follower_constraints(
@@ -518,11 +534,16 @@ def test_audit_real_newton_builder_and_finalized_model() -> None:
         coefficient = 1.125676 if relation < 9 else 1.226495
         polycoef = (0.0, coefficient, 0.0, 0.0, 0.0)
         constraint_label = f"hand/couple_{relation}"
-        prototype.add_equality_constraint_joint(
-            joint1=pair[0],
-            joint2=pair[1],
-            polycoef=list(polycoef),
-            label=constraint_label,
+        prototype.add_custom_values(
+            **{
+                "mujoco:equality_constraint_type": 2,
+                "mujoco:equality_constraint_joint1": pair[0],
+                "mujoco:equality_constraint_joint2": pair[1],
+                "mujoco:equality_constraint_polycoef": list(polycoef),
+                "mujoco:equality_constraint_label": constraint_label,
+                "mujoco:equality_constraint_enabled": True,
+                "mujoco:equality_constraint_world": -1,
+            }
         )
         prototype_relations.append(
             (
@@ -535,7 +556,14 @@ def test_audit_real_newton_builder_and_finalized_model() -> None:
     prototype.add_articulation(joints, label="hand")
     # An unrelated equality may be anonymous and must not be counted as one of
     # the ten native master/follower rows.
-    prototype.add_equality_constraint_connect(body1=bodies[0], body2=bodies[-1])
+    prototype.add_custom_values(
+        **{
+            "mujoco:equality_constraint_type": 0,
+            "mujoco:equality_constraint_body1": bodies[0],
+            "mujoco:equality_constraint_body2": bodies[-1],
+            "mujoco:equality_constraint_world": -1,
+        }
+    )
 
     builder = newton.ModelBuilder()
     newton.solvers.SolverMuJoCo.register_custom_attributes(builder)
@@ -573,5 +601,5 @@ def test_audit_real_newton_builder_and_finalized_model() -> None:
     assert builder_audit.representation == "builder"
     assert model_audit.representation == "model"
     assert model_audit.relation_count == 20
-    assert model.equality_constraint_count == 22
+    assert model.mujoco.equality_constraint_count == 22
     assert model.constraint_mimic_count == 0

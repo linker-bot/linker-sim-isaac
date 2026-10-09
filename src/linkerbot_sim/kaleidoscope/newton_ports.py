@@ -701,7 +701,7 @@ class NewtonArticulationTensorPort:
         if implicit.numel():
             self._write_joint(
                 "control",
-                "joint_target_pos",
+                "joint_target_q",
                 self._position_target.subset(implicit),
                 ids,
                 data.index_select(1, implicit),
@@ -744,7 +744,7 @@ class NewtonArticulationTensorPort:
         if implicit.numel():
             self._write_joint(
                 "control",
-                "joint_target_vel",
+                "joint_target_qd",
                 self._velocity_target.subset(implicit),
                 ids,
                 data.index_select(1, implicit),
@@ -792,7 +792,7 @@ class NewtonArticulationTensorPort:
         if self._active_control_runtime is None:
             self._write_joint(
                 "control",
-                "joint_target_pos",
+                "joint_target_q",
                 self._position_target,
                 env_ids,
                 values,
@@ -841,11 +841,11 @@ class NewtonArticulationTensorPort:
         if common.implicit_indices.numel():
             self._position_target.subset(common.implicit_indices).prewarm(
                 self._all_env_ids,
-                scatter_slots=("write_joint_target_pos",),
+                scatter_slots=("write_joint_target_q",),
             )
             self._velocity_target.subset(common.implicit_indices).prewarm(
                 self._all_env_ids,
-                scatter_slots=("write_joint_target_vel",),
+                scatter_slots=("write_joint_target_qd",),
             )
         if common.explicit_indices.numel():
             self._q.prewarm(self._all_env_ids, gather_slots=("joint_q",))
@@ -1143,8 +1143,8 @@ class NewtonArticulationTensorPort:
         for view, category, name in (
             (self.view, "state", "joint_q"),
             (self.view, "state", "joint_qd"),
-            (self.view, "control", "joint_target_pos"),
-            (self.view, "control", "joint_target_vel"),
+            (self.view, "control", "joint_target_q"),
+            (self.view, "control", "joint_target_qd"),
             (self.view, "control", "joint_f"),
             (self.tcp_view, "state", "body_q"),
         ):

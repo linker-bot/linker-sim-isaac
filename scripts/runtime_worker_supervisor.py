@@ -13,7 +13,9 @@ import sys
 
 
 WORKER_ENV_VAR = "LINKERBOT_ISAAC_RUNTIME_WORKER"
-DEFAULT_WORKER_TIMEOUT_S = 120.0
+# Newton 1.5's first MuJoCo-Warp CUDA compilation can exceed two minutes.
+# Keep a finite process bound that also admits a cold shader/kernel cache.
+DEFAULT_WORKER_TIMEOUT_S = 300.0
 
 
 def in_runtime_worker() -> bool:

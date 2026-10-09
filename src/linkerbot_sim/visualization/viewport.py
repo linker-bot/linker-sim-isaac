@@ -61,7 +61,7 @@ def set_viewport_camera_navigation_enabled(
 ) -> None:
     """只切换一个 ``ViewportWindow`` 的鼠标相机导航 layer。
 
-    Isaac Sim 6.0.1 的 camera manipulator 是进程级 extension，但每个 viewport window
+    Isaac Sim 6.1 的 camera manipulator 是进程级 extension，但每个 viewport window
     都拥有独立的 ``Camera/manipulator`` layer。这里有意使用该固定版本提供的
     ``_find_viewport_layer`` 桥接点，使主观察视口可以交互，同时让 SyntheticData
     相机窗口保持只读；找不到 layer 时直接失败，避免传感器窗口静默变成可编辑视口。

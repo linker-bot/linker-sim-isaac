@@ -197,3 +197,16 @@ def test_port_rejects_link_index_metadata_that_disagrees_with_body_rows() -> Non
             ARM_NAMES,
             _binding(root),
         )
+
+
+def test_tcp_binding_accepts_articulation_root_on_sibling_anchor_joint() -> None:
+    from pxr import UsdPhysics
+
+    stage, root = _stage()
+    anchor = UsdPhysics.FixedJoint.Define(stage, f"{root}/base/root_anchor")
+    anchor.CreateBody1Rel().SetTargets([f"{root}/base"])
+    UsdPhysics.ArticulationRootAPI.Apply(anchor.GetPrim())
+    articulation = _FakeArticulation(prim_path=str(anchor.GetPath()))
+    port = PhysxTaskSpacePort(articulation, stage, ARM_NAMES, _binding(root))
+    assert port.binding.incoming_joint_name == "joint6"
+    assert port.binding.arm_column_indices == ARM_COLUMNS

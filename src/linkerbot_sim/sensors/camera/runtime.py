@@ -65,7 +65,7 @@ class SensorCameraRuntime:
         if isinstance(self.camera, _NewtonSyntheticDataCamera):
             self.camera.set_render_active(active)
         else:
-            # Isaac 6.0.1 CameraSensor exposes the USD product but no public pause
+            # Isaac 6.1 CameraSensor exposes the USD product but no public pause
             # method. Replicator owns this Hydra handle and uses the same switch;
             # keep the version-specific access here, alongside native cleanup.
             self.camera._hydra_texture.hydra_texture.set_updates_enabled(active)
@@ -518,7 +518,7 @@ class _NativeFrameTracker:
 class _NewtonSyntheticDataCamera:
     """由独占 SyntheticData viewport 支撑的 Newton RGB/depth camera。
 
-    Isaac Sim 6.0.1 下，本项目经 provenance 审计的 exclusive render closure 不使用
+    Isaac Sim 6.1 下，本项目经 provenance 审计的 exclusive render closure 不使用
     Replicator/Isaac CameraSensor 的默认依赖闭包，因为其中包含 Newton 模式禁止的
     physics-owner/stage-update 依赖。每台相机拥有独立 viewport 与 render product；Newton
     manager 只负责发布同一份 body transform 快照和轮转 product，相机本身不调用 solver，

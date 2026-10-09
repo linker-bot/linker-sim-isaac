@@ -15,6 +15,8 @@ their Git commit.
 
 ### Changed
 
+- Move the supported runtime to Isaac Sim 6.1.0, Newton 1.5, Warp 1.16 and MuJoCo 3.11. Newton controls use the new target fields with an explicit DOF-layout requirement; model notifications and control snapshots follow the matched runtime. Recreate the simulation environment from the updated lockfile.
+
 - Mirror now samples only due cameras with output consumers; `step(render=True)` permits scheduled acquisition rather than forcing every sensor each step. `render(camera_ids=...)` captures fresh selected cameras without advancing physics or recording. Idle sensor products stop rendering, and pause, estop and continuous queries service GUI independently.
 
 - The GPU/Isaac `Simulation` workflow is temporarily manual-only while the
@@ -28,6 +30,8 @@ their Git commit.
   scheduled drift audit.
 
 ### Fixed
+
+- Repair Isaac 6.1 PhysX imports so MJCF mimic targets and coefficients survive physics-variant routing, and existing MJCF/URDF world anchors carry the articulation-root metadata. Fixed camera assemblies stay fixed during integration. Task-space binding follows exact body relationships when the root is a joint.
 
 - Renamed the AR5 arm-hand default `AR5V2_L/R_pinch_tcp` frames to
   `AR5V2_L/R_flange_tcp` to describe their zero-offset arm-flange reference.
@@ -43,7 +47,7 @@ their Git commit.
 
 - Planning now uses the measured fixed hand shape and mounted hardware, imported fixture bounds and carried-object geometry. Corrected world-to-base obstacle conversion, added scoped contact allowances and sampled path coverage diagnostics.
 
-- Temporarily serialize the bundled USD 25.11 physics parser during asset import to avoid its multi-collider allocator race; restore normal concurrency afterwards.
+- Remove the USD parser serialization and Warp `func(module=...)` workaround now covered by the matched runtime. Newton equality audits read the MuJoCo namespace and preserve the native joint-equality executor; unauthored contact defaults no longer require resolver patches.
 
 - Mirror cameras now refresh paused poses and headless captures using native frame completion, without stepping physics; records retain native render identity and stale frames are not retimestamped.
 

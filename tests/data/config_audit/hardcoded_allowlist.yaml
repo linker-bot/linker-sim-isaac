@@ -1,7 +1,7 @@
 inventory:
   source_root: src/linkerbot_sim
   source_python_glob: src/linkerbot_sim/**/*.py
-  source_python_count: 252
+  source_python_count: 251
   reviewed_on: 2026-07-15
   candidate_scan:
     engine: python_ast

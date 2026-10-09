@@ -19,11 +19,11 @@ drive 替代 prototype 解析出的任一主从关系。
 from __future__ import annotations
 
 from collections.abc import Mapping, MutableMapping, MutableSequence, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import math
 from typing import Any
 
-from linkerbot_sim.isaac.usd_physics_parse import serialized_usd_physics_parse
+from linkerbot_sim.isaac.physics.newton.constraints import read_mujoco_equality_column
 
 
 # 项目在 USD 中按 SI/弧度语义写入 revolute drive 的 stiffness 和 damping。Newton
@@ -42,7 +42,6 @@ _BUILTIN_LABEL_TYPES: tuple[str, ...] = (
     "shape",
     "articulation",
     "constraint_mimic",
-    "equality_constraint",
 )
 
 
@@ -107,7 +106,9 @@ class _BuilderCounts:
             shape=int(getattr(builder, "shape_count", 0)),
             joint=int(getattr(builder, "joint_count", 0)),
             articulation=int(getattr(builder, "articulation_count", 0)),
-            equality_constraint=len(getattr(builder, "equality_constraint_type", ())),
+            equality_constraint=len(
+                read_mujoco_equality_column(builder, "equality_constraint_type") or ()
+            ),
             constraint_mimic=len(getattr(builder, "constraint_mimic_joint0", ())),
         )
 
@@ -177,36 +178,18 @@ def _new_registered_builder(
     return builder
 
 
-def _new_schema_resolvers(
-    dependencies: _NewtonDependencies, *, use_builder_contact_defaults: bool = False
-) -> list[object]:
-    """返回与 Isaac Sim Newton extension 一致的 schema resolver 优先级。
+def _new_schema_resolvers(dependencies: _NewtonDependencies) -> list[object]:
+    """Keep Newton/MJC-specific schemas ahead of the PhysX fallback.
 
-    Newton/MJC 特有 schema 先消费，PhysX resolver 作为兼容兜底。这里保持与 Isaac Newton
-    extension 相同的顺序，避免因调用方自行拼装 resolver 而产生解析语义漂移。
+    Newton 1.5 preserves unauthored contact values as None, allowing the builder's
+    configured defaults to apply without modifying resolver mappings.
     """
 
-    resolvers = [
+    return [
         dependencies.schema_resolver_newton_type(),
         dependencies.schema_resolver_mjc_type(),
         dependencies.schema_resolver_physx_type(),
     ]
-    if use_builder_contact_defaults:
-        # Newton 1.2.1's USD importer omits the caller default for shape ke/kd.
-        # MJC's mapping fallback then wins before builder.default_shape_cfg is
-        # reached, even when no solref is authored. Change only this instance's
-        # mapping defaults; authored values and schema priority remain intact.
-        mjc = resolvers[1]
-        mjc.mapping = {
-            kind: {
-                key: replace(attribute, default=None)
-                if key in {"ke", "kd"}
-                else attribute
-                for key, attribute in fields.items()
-            }
-            for kind, fields in mjc.mapping.items()
-        }
-    return resolvers
 
 
 def _normalized_prim_path(value: object, *, label: str) -> str:
@@ -473,7 +456,11 @@ def _validate_replication_contract(
         ),
     )
     for label, attribute_name, expected_per_world in per_world_columns:
-        worlds = getattr(builder, attribute_name, ())
+        worlds = (
+            (read_mujoco_equality_column(builder, attribute_name) or ())
+            if attribute_name.startswith("equality_constraint_")
+            else getattr(builder, attribute_name, ())
+        )
         counts = _world_counts(worlds, world_count)
         if counts != (expected_per_world,) * world_count:
             raise RuntimeError(
@@ -491,7 +478,12 @@ def _validate_replication_contract(
         ("equality constraint", "equality_constraint_world"),
         ("mimic constraint", "constraint_mimic_world"),
     ):
-        if any(int(world) == -1 for world in getattr(builder, attribute_name, ())):
+        worlds = (
+            (read_mujoco_equality_column(builder, attribute_name) or ())
+            if attribute_name.startswith("equality_constraint_")
+            else getattr(builder, attribute_name, ())
+        )
+        if any(int(world) == -1 for world in worlds):
             raise RuntimeError(
                 f"global Newton scope contains a {label}; only static shapes are allowed"
             )
@@ -641,6 +633,10 @@ def build_replicated_newton_builder(
         "load_visual_shapes": bool(load_visual_shapes),
         "skip_mesh_approximation": bool(skip_mesh_approximation),
         "force_position_velocity_actuation": True,
+        # Newton 1.5 otherwise converts authored MuJoCo equalities into generic
+        # mimic/loop constraints. Keep the existing native EqType.JOINT executor,
+        # polynomial metadata and per-world audit instead of changing semantics.
+        "convert_mjc_equality_constraints": False,
     }
     ignored_paths = _unique_paths(
         [
@@ -651,34 +647,24 @@ def build_replicated_newton_builder(
             ),
         ]
     )
-    with serialized_usd_physics_parse():
-        global_stage_info = builder.add_usd(
-            stage,
-            ignore_paths=ignored_paths,
-            schema_resolvers=_new_schema_resolvers(
-                dependencies,
-                use_builder_contact_defaults=default_contact_time_constant_s
-                is not None,
-            ),
-            **common_parse_kwargs,
-        )
+    global_stage_info = builder.add_usd(
+        stage,
+        ignore_paths=ignored_paths,
+        schema_resolvers=_new_schema_resolvers(dependencies),
+        **common_parse_kwargs,
+    )
     _apply_body_collision_filters(builder, stage, global_stage_info)
     global_counts = _BuilderCounts.from_builder(builder)
 
     # 这是唯一一次 prototype parse。逐 destination 重复 add_usd 不仅有 CPU 开销，还可能
     # 让 importer 每次生成不同的匿名 label/index。parse 与 add_builder 之间也不得编辑任一
     # native coupling table，确保 prototype 中解析出的全部 equality 逐 world 原样复制。
-    with serialized_usd_physics_parse():
-        prototype_stage_info = prototype_builder.add_usd(
-            stage,
-            root_path=source_root,
-            schema_resolvers=_new_schema_resolvers(
-                dependencies,
-                use_builder_contact_defaults=default_contact_time_constant_s
-                is not None,
-            ),
-            **common_parse_kwargs,
-        )
+    prototype_stage_info = prototype_builder.add_usd(
+        stage,
+        root_path=source_root,
+        schema_resolvers=_new_schema_resolvers(dependencies),
+        **common_parse_kwargs,
+    )
     _apply_body_collision_filters(prototype_builder, stage, prototype_stage_info)
     prototype_counts = _BuilderCounts.from_builder(prototype_builder)
 

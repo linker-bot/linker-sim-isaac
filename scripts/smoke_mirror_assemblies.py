@@ -189,11 +189,51 @@ def exercise_task_flow(runtime):
     }
 
 
+def audit_physx_import(runtime):
+    """Check the native base type and exact mimic data after variant selection."""
+    if runtime.physics_runtime.backend != "physx":
+        return {}
+    from pxr import Usd, UsdPhysics
+    from linkerbot_sim.robots.mimic.mjcf import parse_mjcf_joint_equalities
+
+    results = {}
+    for robot in runtime.scene_resources.robots_by_id.values():
+        assert robot.articulation._articulation_view._metadata.fixed_base
+        root = runtime.session.stage.GetPrimAtPath(robot.imported.imported_root_path)
+        joints = {
+            prim.GetName(): prim
+            for prim in Usd.PrimRange(root)
+            if prim.IsA(UsdPhysics.Joint)
+        }
+        relations = parse_mjcf_joint_equalities(robot.imported.asset_path)
+        assert relations
+        for relation in relations:
+            follower = joints[relation.dependent_joint]
+            assert follower.HasAPI("NewtonMimicAPI")
+            assert follower.GetRelationship("newton:mimicJoint").GetTargets() == [
+                joints[relation.master_joint].GetPath()
+            ]
+            assert np.isclose(
+                follower.GetAttribute("newton:mimicCoef1").Get(),
+                relation.polycoef[1],
+                atol=1e-6,
+            )
+            # These arm-hand MJCF equalities have no offset; preserve it exactly.
+            assert relation.polycoef[0] == 0
+            assert follower.GetAttribute("newton:mimicCoef0").Get() == 0
+        results[robot.label] = {
+            "fixed_base": True,
+            "native_mimic_count": len(relations),
+        }
+    return results
+
+
 def run(args):
     runtime = create_mirror_runtime(assembly_config(args))
     try:
         resources = runtime.scene_resources
         cameras = resources.sensor_cameras
+        import_audit = audit_physx_import(runtime)
         flow = exercise_task_flow(runtime) if args.task_flow else None
 
         def capture():
@@ -221,6 +261,7 @@ def run(args):
             "wrists": args.wrists,
             "gui": args.gui,
             "task_flow": flow,
+            "import_audit": import_audit,
             "initial_poses": initial_poses,
             "mounts": {c.name: c.get_capture_metadata() for c in cameras},
         }
@@ -329,6 +370,20 @@ def run(args):
                 }
                 for c in data.contact[: data.ncon]
             ]
+        # Fixed camera mounts must remain fixed through actual integration;
+        # snapshot/root-Xform equality alone cannot detect a floating child body.
+        _, settled_poses = capture()
+        report["static_camera_pose_after_steps"] = {}
+        for name, pose in initial_poses.items():
+            if name.startswith(("left_", "right_")):
+                continue
+            actual = settled_poses[name]
+            assert np.allclose(pose[0], actual[0], atol=1e-5, rtol=0), name
+            assert any(
+                np.allclose(pose[1], sign * np.asarray(actual[1]), atol=1e-6, rtol=0)
+                for sign in (1, -1)
+            ), name
+            report["static_camera_pose_after_steps"][name] = actual
         report["gravity_disabled"] = {}
         from pxr import PhysxSchema, Usd, UsdPhysics
 

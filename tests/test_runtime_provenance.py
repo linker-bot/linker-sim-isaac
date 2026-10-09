@@ -28,29 +28,29 @@ def _target_provenance(**overrides: object) -> RuntimeProvenance:
         "physics_execution": "cpu",
         "physics_engines": (PhysicsEngineProvenance("physx", True),),
         "isaacsim": ModuleProvenance(
-            "isaacsim", "6.0.1.0", "isaacsim", "/isaac/__init__.py"
+            "isaacsim", "6.1.0.0", "isaacsim", "/isaac/__init__.py"
         ),
         "torch": ModuleProvenance(
             "torch", "2.11.0+cu128", "torch", "/torch", "2.11.0+cu128"
         ),
         "warp": ModuleProvenance(
             "warp-lang",
-            "1.13.0",
+            "1.16.0",
             "warp",
-            "/isaac/extscache/omni.warp.core-1.13.0/warp/__init__.py",
-            "1.13.0",
+            "/isaac/extscache/omni.warp.core-1.16.0/warp/__init__.py",
+            "1.16.0",
         ),
         "newton": ModuleProvenance(
-            "newton", "1.2.1", "newton", "/newton/__init__.py", "1.2.1"
+            "newton", "1.5.0", "newton", "/newton/__init__.py", "1.5.0"
         ),
         "mujoco_warp": ModuleProvenance(
             "mujoco-warp",
-            "3.8.0.3",
+            "3.11.0",
             "mujoco_warp",
             "/mujoco_warp/__init__.py",
-            "3.8.0.3",
+            "3.11.0",
         ),
-        "pxr": ModuleProvenance("isaacsim-kernel", "6.0.1.0", "pxr.Usd", "/pxr/Usd.so"),
+        "pxr": ModuleProvenance("isaacsim-kernel", "6.1.0.0", "pxr.Usd", "/pxr/Usd.so"),
         "torch_cuda": "12.8",
         "cuda_available": True,
         "cuda_device": 0,
@@ -62,7 +62,7 @@ def _target_provenance(**overrides: object) -> RuntimeProvenance:
             KitExtensionProvenance(
                 "isaacsim.simulation_app", "2.18.4", "/simulation-app"
             ),
-            KitExtensionProvenance("isaacsim.core.api", "6.0.1", "/core"),
+            KitExtensionProvenance("isaacsim.core.api", "6.1.0", "/core"),
             KitExtensionProvenance("isaacsim.asset.importer.urdf", "3.0.0", "/urdf"),
             KitExtensionProvenance("isaacsim.asset.importer.mjcf", "3.0.0", "/mjcf"),
             KitExtensionProvenance(
@@ -70,11 +70,11 @@ def _target_provenance(**overrides: object) -> RuntimeProvenance:
             ),
             KitExtensionProvenance(
                 "omni.warp.core",
-                "1.13.0",
-                "/isaac/extscache/omni.warp.core-1.13.0",
+                "1.16.0",
+                "/isaac/extscache/omni.warp.core-1.16.0",
             ),
             KitExtensionProvenance("omni.kit.loop-isaac", "1.6.0", "/loop"),
-            KitExtensionProvenance("omni.kit.usd.layers", "2.6.1", "/usd-layers"),
+            KitExtensionProvenance("omni.kit.usd.layers", "2.7.2", "/usd-layers"),
             KitExtensionProvenance("omni.physics.physx", "110.1.0", "/physx"),
         ),
         "curobo": ModuleProvenance("nvidia-curobo", "0.8.0", "curobo", "/curobo"),
@@ -472,10 +472,10 @@ def test_validate_target_runtime_rejects_shadow_warp_module() -> None:
     provenance = _target_provenance(
         warp=ModuleProvenance(
             "warp-lang",
-            "1.13.0",
+            "1.16.0",
             "warp",
             "/shadow/warp/__init__.py",
-            "1.13.0",
+            "1.16.0",
         )
     )
 
@@ -505,7 +505,7 @@ def test_validate_target_runtime_rejects_newton_module_version_mismatch() -> Non
             }
         ),
         newton=ModuleProvenance(
-            "newton", "1.2.1", "newton", "/newton/__init__.py", "1.3.0"
+            "newton", "1.5.0", "newton", "/newton/__init__.py", "1.3.0"
         ),
     )
 
@@ -516,7 +516,7 @@ def test_validate_target_runtime_rejects_newton_module_version_mismatch() -> Non
             physics_execution="cuda",
         )
     except RuntimeError as exc:
-        assert "newton.__version__='1.3.0' expected '1.2.1'" in str(exc)
+        assert "newton.__version__='1.3.0' expected '1.5.0'" in str(exc)
     else:
         raise AssertionError("Newton module/distribution mismatch was accepted")
 
@@ -625,7 +625,7 @@ def test_collect_physx_provenance_never_imports_newton_modules(monkeypatch) -> N
         ),
         "warp": SimpleNamespace(
             __file__="/warp/__init__.py",
-            __version__="1.13.0",
+            __version__="1.16.0",
         ),
         "pxr.Usd": SimpleNamespace(__file__="/isaac/pxr/Usd.so"),
         "isaacsim": SimpleNamespace(__file__="/isaac/isaacsim/__init__.py"),
@@ -650,9 +650,9 @@ def test_collect_physx_provenance_never_imports_newton_modules(monkeypatch) -> N
         "version",
         lambda distribution: {
             "torch": "2.11.0",
-            "warp-lang": "1.13.0",
-            "isaacsim": "6.0.1.0",
-            "isaacsim-kernel": "6.0.1.0",
+            "warp-lang": "1.16.0",
+            "isaacsim": "6.1.0.0",
+            "isaacsim-kernel": "6.1.0.0",
         }[distribution],
     )
 
@@ -750,15 +750,15 @@ def test_module_provenance_records_distribution_and_module_versions(
     module = type(
         "FakeModule",
         (),
-        {"__version__": "1.2.1", "__file__": "/runtime/newton/__init__.py"},
+        {"__version__": "1.5.0", "__file__": "/runtime/newton/__init__.py"},
     )()
     monkeypatch.setattr(
         "linkerbot_sim.isaac.provenance.importlib.metadata.version",
-        lambda distribution: "1.2.1" if distribution == "newton" else "unexpected",
+        lambda distribution: "1.5.0" if distribution == "newton" else "unexpected",
     )
 
     result = _module_provenance("newton", "newton", module)
 
-    assert result.version == "1.2.1"
-    assert result.module_version == "1.2.1"
+    assert result.version == "1.5.0"
+    assert result.module_version == "1.5.0"
     assert result.path == "/runtime/newton/__init__.py"

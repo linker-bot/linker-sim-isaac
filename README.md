@@ -59,7 +59,7 @@ The roots reference the product-namespaced scene selectors `mirror/scene3` and
 
 - Linux x86_64
 - Python 3.12
-- Isaac Sim 6.0.1
+- Isaac Sim 6.1.0
 - PyTorch 2.11 with CUDA 12.8
 - NVIDIA cuRobo 0.8.0 for planning or end-effector actions
 - A compatible NVIDIA GPU for Kaleidoscope and Newton

@@ -111,7 +111,7 @@ def test_new_contact_is_detected_inside_the_outer_step():
     assert float(runtime.state.body_q.numpy()[0, 2]) > 0.018
 
 
-def test_usd_contact_defaults_preserve_authored_values_and_other_instances():
+def test_upstream_usd_contact_defaults_preserve_authored_values():
     pytest.importorskip("newton")
     from newton._src.usd.schema_resolver import PrimType, SchemaResolverManager
     from linkerbot_sim.isaac.physics.newton.replication import _new_schema_resolvers
@@ -137,7 +137,7 @@ def test_usd_contact_defaults_preserve_authored_values_and_other_instances():
     original = dependencies.schema_resolver_mjc_type.mapping[PrimType.SHAPE][
         "ke"
     ].default
-    resolvers = _new_schema_resolvers(dependencies, use_builder_contact_defaults=True)
+    resolvers = _new_schema_resolvers(dependencies)
     manager = SchemaResolverManager(resolvers)
     assert manager.get_value(Prim({}), PrimType.SHAPE, "ke") is None
     assert manager.get_value(Prim({}), PrimType.SHAPE, "kd") is None
@@ -154,4 +154,4 @@ def test_usd_contact_defaults_preserve_authored_values_and_other_instances():
         == original
     )
     ordinary = SchemaResolverManager(_new_schema_resolvers(dependencies))
-    assert ordinary.get_value(Prim({}), PrimType.SHAPE, "ke") == pytest.approx(2500)
+    assert ordinary.get_value(Prim({}), PrimType.SHAPE, "ke") is None
