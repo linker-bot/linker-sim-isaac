@@ -4,7 +4,7 @@ Isaac 的 position/velocity drive 最终也会在 PhysX 中产生关节力/力�
 服务 direct effort 控制。这里区分三种值：
 
 * ``commanded_effort``：项目控制器在 Python 侧显式下发的 effort。implicit drive 没有这个值。
-* ``measured_effort``：PhysX 求解器沿 DOF 方向计算/测得的关节 effort。
+* ``measured_effort``：PhysX incoming link wrench 沿关节轴的投影；不是纯外部接触力矩。
 * ``applied_effort``：Isaac runtime 当前记录的关节 actuation effort。
 
 不同 Isaac wrapper 暴露的读取方法略有差异。本模块优先使用 ``SingleArticulation`` 的
@@ -23,6 +23,22 @@ from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
 
 @dataclass(frozen=True)
+class EffortStatus:
+    """来源与逐关节有效性；与对应 effort 数组使用同一 joint_names 顺序。"""
+
+    source: str
+    valid: tuple[bool, ...]
+    reason: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "source": self.source,
+            "valid": list(self.valid),
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class JointEffortSample:
     """一次关节 effort 采样。
 
@@ -35,6 +51,8 @@ class JointEffortSample:
 
     measured: np.ndarray
     applied: np.ndarray
+    measured_status: EffortStatus
+    applied_status: EffortStatus
 
 
 def _expected_size(robot, joint_indices: np.ndarray | None) -> int:
@@ -71,45 +89,59 @@ def _to_numpy_vector(values: Any, expected_size: int) -> np.ndarray | None:
     return array
 
 
-def _read_effort_method(
-    source, method_name: str, joint_indices: np.ndarray | None, expected_size: int
-) -> np.ndarray | None:
-    """调用一个 Isaac effort 读取方法，并把返回值规范化。"""
-
-    method = getattr(source, method_name, None)
-    if method is None:
-        return None
-    try:
-        if joint_indices is None:
-            values = method()
-        else:
-            try:
-                values = method(joint_indices=joint_indices)
-            except TypeError:
-                values = method(joint_indices)
-    except Exception:
-        return None
-    return _to_numpy_vector(values, expected_size)
-
-
 def _read_effort(
-    robot, method_name: str, joint_indices: np.ndarray | None, expected_size: int
-) -> np.ndarray:
+    robot,
+    method_name: str,
+    joint_indices: np.ndarray | None,
+    expected_size: int,
+    *,
+    enabled: bool,
+) -> tuple[np.ndarray, EffortStatus]:
     """从 robot 或其 articulation view 读取一种 effort。
 
     Isaac 版本之间 API 暴露位置不同；这里先试高层 articulation，再试底层 view。两处都失败
     时返回 ``nan``，让日志缺测保持显式但不打断仿真。
     """
 
-    values = _read_effort_method(robot, method_name, joint_indices, expected_size)
-    if values is not None:
-        return values
+    if not enabled:
+        return _nan_vector(expected_size), EffortStatus(
+            method_name, (False,) * expected_size, "disabled"
+        )
+    reason = "api_unavailable"
     view = getattr(robot, "_articulation_view", None)
-    if view is not None:
-        values = _read_effort_method(view, method_name, joint_indices, expected_size)
+    # The experimental facade points _articulation_view back to itself. Do not
+    # perform the same failed native read twice or substitute a different source.
+    sources = (robot, view) if view is not None and view is not robot else (robot,)
+    for source in sources:
+        method = getattr(source, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            if joint_indices is None:
+                raw = method()
+            else:
+                try:
+                    raw = method(joint_indices=joint_indices)
+                except TypeError:
+                    raw = method(joint_indices)
+        except NotImplementedError as exc:
+            reason = f"unsupported_backend: {exc}"
+            break
+        except Exception as exc:
+            # Optional telemetry must not stop physics, but a native read failure
+            # must be distinguishable from an absent API or an implicit drive.
+            reason = f"read_failed: {type(exc).__name__}"
+            continue
+        values = _to_numpy_vector(raw, expected_size)
         if values is not None:
-            return values
-    return _nan_vector(expected_size)
+            valid = tuple(bool(value) for value in np.isfinite(values))
+            return values.copy(), EffortStatus(
+                method_name, valid, None if all(valid) else "nonfinite_readback"
+            )
+        reason = "invalid_readback_shape_or_type"
+    return _nan_vector(expected_size), EffortStatus(
+        method_name, (False,) * expected_size, reason
+    )
 
 
 def read_joint_efforts(
@@ -136,17 +168,17 @@ def read_joint_efforts(
         else np.asarray(joint_indices, dtype=int).reshape(-1)
     )
     expected_size = _expected_size(robot, indices)
+    measured_values, measured_status = _read_effort(
+        robot, "get_measured_joint_efforts", indices, expected_size, enabled=measured
+    )
+    applied_values, applied_status = _read_effort(
+        robot, "get_applied_joint_efforts", indices, expected_size, enabled=applied
+    )
     return JointEffortSample(
-        measured=(
-            _read_effort(robot, "get_measured_joint_efforts", indices, expected_size)
-            if measured
-            else _nan_vector(expected_size)
-        ),
-        applied=(
-            _read_effort(robot, "get_applied_joint_efforts", indices, expected_size)
-            if applied
-            else _nan_vector(expected_size)
-        ),
+        measured=measured_values,
+        applied=applied_values,
+        measured_status=measured_status,
+        applied_status=applied_status,
     )
 
 

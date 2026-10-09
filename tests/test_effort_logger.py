@@ -107,6 +107,47 @@ def test_read_joint_efforts_returns_nan_when_api_missing() -> None:
 
     assert np.isnan(sample.measured).all()
     assert np.isnan(sample.applied).all()
+    assert sample.measured_status.reason == "api_unavailable"
+    assert sample.measured_status.valid == (False, False)
+
+
+def test_effort_status_preserves_sources_and_partial_validity() -> None:
+    robot = _RobotWithEfforts()
+    robot.get_measured_joint_efforts = lambda **_: np.asarray([np.nan, 0.507])
+    sample = read_joint_efforts(robot, [2, 0])
+    assert sample.measured_status.valid == (False, True)
+    assert sample.measured_status.reason == "nonfinite_readback"
+    np.testing.assert_allclose(sample.applied, [6, 4])
+    assert sample.applied_status.source == "get_applied_joint_efforts"
+    assert sample.applied_status.reason is None
+
+
+def test_unsupported_measured_effort_never_falls_back_to_applied() -> None:
+    class NewtonRobot(_RobotWithEfforts):
+        def get_measured_joint_efforts(self, joint_indices=None):
+            self.measured_reads += 1
+            raise NotImplementedError("Newton projected effort unavailable")
+
+    robot = NewtonRobot()
+    robot._articulation_view = robot
+    sample = read_joint_efforts(robot)
+    assert robot.measured_reads == 1
+    assert np.isnan(sample.measured).all()
+    assert sample.measured_status.reason.startswith("unsupported_backend:")
+    np.testing.assert_array_equal(sample.applied, [4, 5, 6])
+
+
+def test_effort_read_failure_and_disabled_source_are_distinct() -> None:
+    robot = _RobotWithEfforts()
+
+    def broken():
+        raise RuntimeError("invalid native handle")
+
+    robot.get_measured_joint_efforts = broken
+    sample = read_joint_efforts(robot, applied=False)
+    assert sample.measured_status.reason == "read_failed: RuntimeError"
+    assert sample.applied_status.reason == "disabled"
+    assert robot.applied_reads == 0
 
 
 def test_commanded_efforts_from_controller_slices_last_command() -> None:

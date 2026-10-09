@@ -55,6 +55,41 @@ articulation getter.
 Telemetry is read-only. A sink failure must never write simulation state or adjust
 control targets.
 
+## Joint effort sources
+
+Keep all three arrays in the same `joint_names` order. Revolute effort uses N·m;
+prismatic effort uses N.
+
+| Array | Source and meaning | Limitation |
+| --- | --- | --- |
+| `commanded_efforts` | Explicit controller effort commands | Implicit position/velocity drives have no Python effort command; missing values are not zero. Explicit PD may produce effort in logical position mode. |
+| `applied_efforts` | Isaac actuation-effort readback | Corresponds to direct effort in the tested mode; it is not the total output of an implicit drive. |
+| `measured_efforts` | PhysX incoming link wrench projected along the joint axis | Includes dynamics and constraints; not pure external contact torque, fingertip force, or tactile sensing. |
+
+With efforts enabled, each robot's JSON state includes `effort_metadata`:
+`sample_time_s` (actual physics time), `units_by_joint_type`, per-joint
+`control_modes` (`mode/method`), and each source's `source`, per-joint `valid` mask
+and missing-data `reason`. Masks and modes follow the array's joint-name order.
+Unknown modes are `null`. Reasons distinguish disabled sampling, missing API,
+unsupported backend, failed read, invalid shape, nonfinite readback and joints
+without an explicit command. Invalid JSON numbers remain `null`; source-named CSV
+columns retain `nan`. Use JSON state for validity/reasons alongside CSV values.
+
+Newton currently has no projected-effort readback. Its measured array stays invalid
+with an `unsupported_backend` reason; applied is never relabeled as measured.
+The getter raises `NotImplementedError` (a `RuntimeError` subclass) for direct callers.
+
+Do not scale measured effort or clear armature to force the arrays to agree. In an
+earlier isolated 1 N·m accelerating-joint probe, projected torque was about 0.507 N·m
+and armature × acceleration about 0.493 N·m. This explains that probe, not a universal
+correction factor or external-force estimator. Attachments change inertia; this
+telemetry does not change gravity or gains.
+
+`just smoke-mirror-efforts` verifies real positive/negative/zero commands,
+cancellation, reset and source validity on PhysX and Newton. Cartesian hybrid
+force/position control retains its physical-TCP, tare, feedback, backend and 240 Hz
+requirements. Exposing joint torque does not add measured-wrench support to a backend.
+
 ## Bounded Handoff
 
 A slow consumer cannot be allowed to grow memory without limit. The stream capacity

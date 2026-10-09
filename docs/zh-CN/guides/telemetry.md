@@ -34,6 +34,33 @@ timeout 由 Mirror outputs profile 拥有。
 Hybrid controller 每个 control tick 只替换一份 owner-owned 缓存；sampler 把它深拷贝进
 `StateSnapshot`。后台 publisher 不调用 PhysX wrench/Jacobian/articulation getter。
 
+## 关节 effort 来源
+
+三组数组全部保留，按同一 `joint_names` 排列。旋转关节单位为 N·m，移动关节为 N。
+
+| 数组 | 来源与语义 | 限制 |
+| --- | --- | --- |
+| `commanded_efforts` | 控制器显式下发的 effort | 隐式位置/速度驱动没有 Python effort 命令，缺测不能当零；显式 PD 在逻辑位置模式也可能有此值。 |
+| `applied_efforts` | Isaac actuation effort 读回 | 在所测 direct effort 模式与命令对应，不是隐式驱动的全部输出。 |
+| `measured_efforts` | PhysX incoming link wrench 沿关节轴投影 | 包含动力学和约束影响，不是纯外部接触力矩、指尖力或触觉。 |
+
+启用 effort 时，每个机器人的 JSON 状态增加 `effort_metadata`：实际物理采样时间 `sample_time_s`、
+`units_by_joint_type`、逐关节 `control_modes`（`mode/method`），以及三来源的 `source`、逐关节
+`valid` 和缺失原因 `reason`。mask 和模式与数组共用 joint-name 顺序；未知模式为 `null`。
+原因区分禁用、API 缺失、后端不支持、读取失败、形状错误、非有限读回和没有显式命令。
+JSON 无效数值仍为 `null`，原 CSV 按来源命名的列继续用 `nan` 表示缺测；需要有效性与原因时同时使用 JSON 状态。
+
+Newton 当前没有 projected effort 读回，measured 数组保持无效，原因标记 `unsupported_backend`，
+不将 applied 冒充 measured。直接调用 getter 抛出 `NotImplementedError`，它是 `RuntimeError` 的子类。
+
+不要通过缩放 measured 或清零 armature 强行让三者相等。此前隔离的加速关节实验中，1 N·m
+对应约 0.507 N·m projected，armature×角加速度约 0.493 N·m；它解释该次差额，不是通用修正系数
+或外力估计公式。新增附件影响惯性，本次遥测不改变重力或增益。
+
+`just smoke-mirror-efforts` 在 PhysX/Newton 中验证正/负/零命令、取消、reset 和来源有效性。
+既有笛卡尔混合力位控制继续遵守 physical TCP、tare、有效反馈、后端和 240 Hz 局部控制要求；
+开放关节力矩不等于给后端增加 measured wrench 支持。
+
 ## 安全与资源
 
 - Live server 只绑定 loopback，无认证/TLS；

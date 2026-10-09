@@ -17,7 +17,7 @@ from threading import Condition
 import numpy as np
 
 from linkerbot_sim.isaac.scene.pose import read_prim_world_pose
-from linkerbot_sim.logging.effort_logger import read_joint_efforts
+from linkerbot_sim.logging.effort_logger import EffortStatus, read_joint_efforts
 from linkerbot_sim.objects.runtime import runtime_object_prim_path
 from linkerbot_sim.utils.tensors import tensor_like_to_numpy
 
@@ -40,6 +40,7 @@ class RobotJointStateSnapshot:
     commanded_efforts: np.ndarray | None = None
     measured_efforts: np.ndarray | None = None
     applied_efforts: np.ndarray | None = None
+    effort_metadata: Mapping[str, object] | None = None
 
     def effort_values(self, field: str) -> np.ndarray | None:
         """按 Foxglove ``JointStates.effort`` 配置选择一类力矩向量。
@@ -72,6 +73,8 @@ class RobotJointStateSnapshot:
         }
         result["robot_id"] = int(self.robot_id)
         result["label"] = self.label
+        if self.effort_metadata is not None:
+            result["effort_metadata"] = deepcopy(dict(self.effort_metadata))
         return result
 
 
@@ -319,7 +322,7 @@ class SceneRobotStateSampler:
         """
 
         physics_dt = _runtime_physics_dt(runtime)
-        time_s = (int(step) + 1) * physics_dt
+        time_s = _runtime_physics_time(runtime, fallback=(int(step) + 1) * physics_dt)
         robots = tuple(
             self._sample_robot(robot, time_s=time_s)
             for robot in runtime.robots_by_id.values()
@@ -371,6 +374,7 @@ class SceneRobotStateSampler:
         else:
             accelerations = (velocities - previous[1]) / (time_s - previous[0])
         commanded = measured = applied = None
+        effort_metadata = None
         if self.include_efforts:
             commanded = _commanded_efforts(execution.joint_controller, positions.size)
             efforts = read_joint_efforts(
@@ -378,6 +382,24 @@ class SceneRobotStateSampler:
             )
             measured = efforts.measured
             applied = efforts.applied
+            valid_command = tuple(bool(value) for value in np.isfinite(commanded))
+            modes = getattr(execution.joint_controller, "effort_control_modes", ())
+            effort_metadata = {
+                "sample_time_s": time_s,
+                "units_by_joint_type": {"revolute": "N*m", "prismatic": "N"},
+                "control_modes": list(modes)
+                if len(modes) == positions.size
+                else [None] * positions.size,
+                "commanded": EffortStatus(
+                    "controller.last_commanded_efforts",
+                    valid_command,
+                    None
+                    if all(valid_command)
+                    else "no_explicit_command_for_invalid_joints",
+                ).as_dict(),
+                "applied": efforts.applied_status.as_dict(),
+                "measured": efforts.measured_status.as_dict(),
+            }
         return RobotJointStateSnapshot(
             robot_id=runtime.robot_id,
             label=runtime.label,
@@ -388,6 +410,7 @@ class SceneRobotStateSampler:
             commanded_efforts=commanded,
             measured_efforts=measured,
             applied_efforts=applied,
+            effort_metadata=effort_metadata,
         )
 
 
@@ -411,6 +434,27 @@ class SceneRobotStateObserver:
         """把 reset 传播给 sampler 的 derivative history。"""
 
         self.sampler.reset()
+
+
+def _runtime_physics_time(runtime: object, *, fallback: float) -> float:
+    """正式 runtime 使用真实物理时钟；简单外部采样器仍可提供 step/dt。"""
+
+    owners = [getattr(getattr(runtime, "session", None), "physics_runtime", None)]
+    owners.extend(
+        getattr(runtime, name, None)
+        for name in ("physics_runtime", "physics", "simulation_world", "world")
+    )
+    for physics in owners:
+        for attribute in ("simulation_time", "current_time"):
+            value = getattr(physics, attribute, None)
+            if value is not None:
+                time_s = float(value)
+                if not np.isfinite(time_s) or time_s < 0:
+                    raise ValueError(
+                        "physics simulation_time must be finite and nonnegative"
+                    )
+                return time_s
+    return fallback
 
 
 def _runtime_physics_dt(runtime: object) -> float:
