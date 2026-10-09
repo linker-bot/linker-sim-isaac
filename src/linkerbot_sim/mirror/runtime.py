@@ -194,12 +194,12 @@ class MirrorRuntime:
         if callable(observe):
             observe(phase="idle")
 
-    def render(self) -> object:
+    def render(self, camera_ids: Sequence[str] | None = None) -> object:
         self._require_open("render")
         self._require_owner_thread("render")
         if self.rendering is None:
             raise RuntimeError("the current Mirror config does not enable rendering")
-        return self.rendering.render_frame()
+        return self.rendering.render_frame(camera_ids)
 
     def get_state(self) -> dict[str, object]:
         self._require_open("get_state")

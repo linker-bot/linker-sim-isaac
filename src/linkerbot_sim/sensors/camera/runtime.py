@@ -49,6 +49,27 @@ class SensorCameraRuntime:
     _capture_metadata: dict[str, object] = field(
         default_factory=dict, init=False, repr=False
     )
+    _render_active: bool | None = field(default=None, init=False, repr=False)
+
+    @property
+    def render_update_count(self) -> int:
+        return getattr(self.camera, "render_update_count", 1)
+
+    def set_render_active(self, active: bool) -> None:
+        """Enable only this owned product, without recreating sensors or advancing physics."""
+
+        if type(active) is not bool:
+            raise TypeError("camera render activation must be a boolean")
+        if self._render_active is active:
+            return
+        if isinstance(self.camera, _NewtonSyntheticDataCamera):
+            self.camera.set_render_active(active)
+        else:
+            # Isaac 6.0.1 CameraSensor exposes the USD product but no public pause
+            # method. Replicator owns this Hydra handle and uses the same switch;
+            # keep the version-specific access here, alongside native cleanup.
+            self.camera._hydra_texture.hydra_texture.set_updates_enabled(active)
+        self._render_active = active
 
     def begin_render_capture(self) -> None:
         """Invalidate the last capture before publishing another frozen snapshot."""

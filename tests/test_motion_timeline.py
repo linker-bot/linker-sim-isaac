@@ -341,6 +341,8 @@ def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> No
         == 1
     )
     assert events == [
+        "active:first:False",
+        "active:second:False",
         "step:False",
         "pre_render",
         "active:first:True",
@@ -352,8 +354,8 @@ def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> No
         "render_update",
         "render_update",
         "render_update",
-        "active:first:True",
-        "active:second:True",
+        "active:first:False",
+        "active:second:False",
     ]
 
 
