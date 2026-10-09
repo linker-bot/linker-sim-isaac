@@ -5,6 +5,20 @@
 Mirror 面向业务 motion；Kaleidoscope 面向固定 shape RL action。两者不共享 command envelope。只有
 Mirror 拥有 control profile；Kaleidoscope action 语义来自 task，默认 controller bundle 由 physics 派生。
 
+## 法兰与任务 TCP
+
+两个产品的 AR5 臂手 profile 默认使用 `AR5V2_L_flange_tcp` / `AR5V2_R_flange_tcp`。
+它们相对配置中的机械臂 `flange_frame` 均为零位移、零旋转；即使安装了实体法兰或腕部相机，
+也不表示指尖、捏取点或经过标定的接触点。
+
+原来显式选择 `AR5V2_L_pinch_tcp` / `AR5V2_R_pinch_tcp` 的请求需改用对应的 `flange_tcp`
+名称，不保留旧名兼容别名。省略 `tcp_frame_name` 时仍使用配置默认值。本次改名不改变数值位姿、
+物理绑定、IK 目标或 wrench 参考点。单独机械臂 profile 保留原有 `AR5V2_L_tool_tcp` 名称。
+
+实际工具/接触点应在 `curobo.robot.custom_tcps` 中另行命名，给出相对指定 `parent_frame` 的实测
+`xyz`（m）和 `rpy`（rad），再通过 `default_tcp_frame` 或操作支持的 TCP selector 选择。
+固定偏移只描述定义时的手型，手指关节变化可能改变接触点。混合力位控制与 tare 必须使用配置的物理 TCP。
+
 ## Mirror
 
 Mirror controller 在 owner thread 执行 10 类 motion operation。Timeline 把多个 robot track 编译到

@@ -27,6 +27,11 @@ their Git commit.
 
 ### Fixed
 
+- Renamed the AR5 arm-hand default `AR5V2_L/R_pinch_tcp` frames to
+  `AR5V2_L/R_flange_tcp` to describe their zero-offset arm-flange reference.
+  Explicit TCP selectors must use the new names; no old-name aliases remain.
+  Frame transforms, physics, and separately configured task TCPs are unchanged.
+
 - Newton refreshes contacts on every internal step and bounds internal timesteps to 2 ms by default; previously unauthored contacts use an explicit 4 ms response. Outer control/render clocks and authored per-shape contact parameters are preserved; diagnostics report effective integration settings.
   Existing Newton physics YAML leaves must add `max_substep_dt_s` and `default_contact_time_constant_s`; increased internal integration reduces throughput and changes contact trajectories.
 

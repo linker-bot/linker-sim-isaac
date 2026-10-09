@@ -82,7 +82,7 @@ message bytes、目录 bytes 和 shutdown timeout 都必须有上限。Overflow 
 
 静态对象 `workstation_zed2i` 加入顶部相机和支架。示例放在立柱居中安装基准；其他场景
 需填写自己的实测根变换。光学 frame 和惯性采用标明来源的 CAD 标称配准/估计，并非设备标定。
-旧的零偏移 `pinch_tcp` 仍是臂末端参考，本次装配修改不会自动把它修正成抓取点。
+默认 `AR5V2_L_flange_tcp` / `AR5V2_R_flange_tcp` 与机械臂法兰重合；安装手或相机不会使它成为抓取/接触点。
 
 `parent_prim_path` 填机器人/对象实例根，`parent_link` 填导入后唯一的精确 link 名。
 资产导入后解析层级，缺失/重名直接失败。`prim_path` 的末段作为新相机名，实际放到解析出的

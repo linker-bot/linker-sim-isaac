@@ -170,7 +170,7 @@ def test_curobo_config_from_profiles_applies_profile_defaults() -> None:
         cuda_device=0,
     )
 
-    assert config.robot.default_tcp_frame == "AR5V2_L_pinch_tcp"
+    assert config.robot.default_tcp_frame == "AR5V2_L_flange_tcp"
     assert config.device.device == "cuda:0"
     assert config.device.tensor_dtype == "float32"
     assert config.device.collision_geometry_dtype == "float32"
@@ -603,8 +603,8 @@ def test_typed_robot_profile_projects_curobo_collision_model() -> None:
     assert config.robot.urdf_path.name == "workstation.urdf"
     assert config.robot.base_link == "world"
     assert config.robot.flange_frame == "arm_AR5_5_08L_W4C4A6_tcp"
-    assert config.robot.default_tcp_frame == "AR5V2_L_pinch_tcp"
-    assert config.robot.resolved_tool_frames == ("AR5V2_L_pinch_tcp",)
+    assert config.robot.default_tcp_frame == "AR5V2_L_flange_tcp"
+    assert config.robot.resolved_tool_frames == ("AR5V2_L_flange_tcp",)
     assert config.robot.custom_tcp_frames[0].parent_frame == "arm_AR5_5_08L_W4C4A6_tcp"
     assert config.robot.load_collision_spheres is True
 
@@ -621,13 +621,17 @@ def test_curobo_collision_model_ignores_concentric_wrist_links(side: str) -> Non
     assert f"{prefix}_tcp" in ignored
 
 
-@pytest.mark.parametrize("profile_name", ("ar5_08_l6_l", "ar5_08_l6_r"))
+@pytest.mark.parametrize(
+    "hand", ("l6", "o6", "l25", "l20lite", "l6_gemini335l", "o6_gemini335l")
+)
+@pytest.mark.parametrize("side", ("l", "r"))
 def test_curobo_solver_input_materializes_profile_paths_and_tcp(
-    profile_name: str,
+    hand: str,
+    side: str,
     tmp_path: Path,
 ) -> None:
     config = curobo_config_from_profiles(
-        load_robot_profile_by_name(profile_name),
+        load_robot_profile_by_name(f"ar5_08_{hand}_{side}"),
         cuda_device=0,
     )
     source_urdf_path = config.robot.urdf_path
@@ -653,6 +657,7 @@ def test_curobo_solver_input_materializes_profile_paths_and_tcp(
         link.get("name") for link in ET.parse(materialized_urdf_path).findall("link")
     }
     assert materialized.robot.default_tcp_frame in urdf_links
+    assert f"AR5V2_{side.upper()}_pinch_tcp" not in urdf_links
 
 
 def test_curobo_materialization_uses_environment_cache_root(

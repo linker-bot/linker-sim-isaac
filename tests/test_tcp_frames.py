@@ -42,13 +42,13 @@ def test_write_tcp_urdf(tmp_path) -> None:
     assert 'link="arm_AR5_5_08L_W4C4A6_tcp"' in text
 
 
-def _stage_with_parent(*, duplicate: bool = False):
+def _stage_with_parent(*, side: str = "l", duplicate: bool = False):
     from pxr import Usd, UsdGeom, UsdPhysics
 
     stage = Usd.Stage.CreateInMemory()
     root = "/World/Robots/left"
     UsdGeom.Xform.Define(stage, root)
-    parent_name = "arm_AR5_5_08L_W4C4A6_tcp"
+    parent_name = f"arm_AR5_5_08{side.upper()}_W4C4A6_tcp"
     parent = UsdGeom.Xform.Define(stage, f"{root}/{parent_name}").GetPrim()
     UsdPhysics.RigidBodyAPI.Apply(parent)
     if duplicate:
@@ -57,12 +57,37 @@ def _stage_with_parent(*, duplicate: bool = False):
     return stage, root
 
 
+@pytest.mark.parametrize(
+    "hand", ("l6", "o6", "l25", "l20lite", "l6_gemini335l", "o6_gemini335l")
+)
+@pytest.mark.parametrize("side", ("l", "r"))
+def test_arm_hand_default_tcp_binds_to_the_flange(hand: str, side: str) -> None:
+    profile = load_robot_profile_by_name(f"ar5_08_{hand}_{side}")
+    stage, root = _stage_with_parent(side=side)
+
+    binding = resolve_physical_tcp_binding(
+        stage=stage,
+        imported_root_path=root,
+        profile=profile,
+    )
+
+    parent = f"arm_AR5_5_08{side.upper()}_W4C4A6_tcp"
+    assert binding == PhysicalTcpBinding(
+        tcp_frame_name=f"AR5V2_{side.upper()}_flange_tcp",
+        parent_frame_name=parent,
+        parent_body_path=f"{root}/{parent}",
+        offset_xyz=(0.0, 0.0, 0.0),
+        offset_rpy=(0.0, 0.0, 0.0),
+    )
+
+
 def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
     profile = load_robot_profile_by_name("ar5_08_l6_l")
     robot = profile.curobo.robot
     assert robot is not None
     frame = replace(
         robot.custom_tcp_frames[0],
+        frame_name="task_contact_tcp",
         xyz=(0.01, -0.02, 0.13),
         rpy=(0.2, -0.1, 0.3),
     )
@@ -70,7 +95,9 @@ def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
         profile,
         curobo=replace(
             profile.curobo,
-            robot=replace(robot, custom_tcp_frames=(frame,)),
+            robot=replace(
+                robot, default_tcp_frame=frame.frame_name, custom_tcp_frames=(frame,)
+            ),
         ),
     )
     stage, root = _stage_with_parent()
@@ -82,7 +109,7 @@ def test_physical_tcp_binding_preserves_nonzero_fixed_transform() -> None:
     )
 
     assert binding == PhysicalTcpBinding(
-        tcp_frame_name="AR5V2_L_pinch_tcp",
+        tcp_frame_name="task_contact_tcp",
         parent_frame_name="arm_AR5_5_08L_W4C4A6_tcp",
         parent_body_path=f"{root}/arm_AR5_5_08L_W4C4A6_tcp",
         offset_xyz=(0.01, -0.02, 0.13),

@@ -481,7 +481,7 @@ def test_physical_tcp_binding_consumes_catalog_typed_robot_profile() -> None:
     )
 
     assert binding == (
-        "AR5V2_L_pinch_tcp",
+        "AR5V2_L_flange_tcp",
         parent_name,
         f"{root_path}/{parent_name}",
         (0.0, 0.0, 0.0),

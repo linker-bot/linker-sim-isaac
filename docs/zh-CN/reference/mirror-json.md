@@ -153,7 +153,7 @@ motion 共用 admission queue，它不可能插入正在运行的控制循环。
   "arguments": {
     "robot_id": 0,
     "robot_label": "left_arm",
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "reference_frame": "world"
   }
 }
@@ -439,7 +439,7 @@ right_arm/arm:
     "robot_id": 0,
     "robot_label": "left_arm",
     "duration_s": 0.5,
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "reference_frame": "world",
     "target_position": [0.35, 0.0, 0.25],
     "target_orientation_wxyz": [1.0, 0.0, 0.0, 0.0],
@@ -526,7 +526,7 @@ right_arm/arm:
     "group": "arm",
     "target_position": [0.35, 0.0, 0.25],
     "target_orientation_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "reference_frame": "robot_base",
     "duration_s": 2.0,
     "sample_dt_s": 0.02,
@@ -550,7 +550,7 @@ right_arm/arm:
     "group": "arm",
     "offset": [0.0, 0.0, 0.03],
     "offset_frame": "tcp",
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "duration_s": 1.0,
     "avoid_collisions": false
   }
@@ -574,7 +574,7 @@ TCP 姿态：
     "offset": [0.0, 0.0, 0.05],
     "offset_frame": "tcp",
     "orientation_mode": "current",
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "duration_s": 1.5,
     "sample_dt_s": 0.02,
     "avoid_collisions": true,
@@ -598,7 +598,7 @@ TCP 姿态：
     "reference_frame": "robot_base",
     "orientation_mode": "target",
     "target_orientation_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
-    "tcp_frame_name": "AR5V2_L_pinch_tcp",
+    "tcp_frame_name": "AR5V2_L_flange_tcp",
     "duration_s": 2.0,
     "sample_dt_s": 0.02,
     "avoid_collisions": false
