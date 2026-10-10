@@ -56,8 +56,10 @@ headless 空闲且无需采集时不泵 Kit。可靠采集已服务 GUI，不立
 CPU PhysX 与 Newton 每帧只调用一次 `pre_render()` 发布当前物理位姿，然后调用
 `render_update()`，期间物理时间保持不变。原生相机等待所属 render product 的完成事件，且其
 Kit SWH 帧号必须不小于状态发布后的第一个 update。Newton 没有 SWH stage-update owner，
-改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 50 次 renderer update；超时抛错，
-不返回旧画面。Newton 保留至少四次 update 的 history 预算，多相机按 viewport 逐个激活，异常后
+改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 150 次 app update，
+与 SyntheticData 的 render-simulation 等待上限一致；异步渲染的一帧可能跨多次应用更新。超时抛错，
+不返回旧画面。Newton 保留至少四次 update 的 history 预算，选中产品共同激活、共享更新，逐路等待
+真实新帧完成；调用仍在 owner thread 上执行，不并发操作 USD。异常后
 也恢复为空闲停用状态。配置频率控制输出采样；显式 `render()` 在暂停时也请求当前状态的新帧。
 
 PhysX 启用渲染的 headless 模式保留活跃的 startup Hydra viewport，不要求可见窗口或相机机械

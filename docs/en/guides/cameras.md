@@ -103,10 +103,13 @@ current physics poses, then pumps `render_update()` without advancing physics ti
 Native cameras wait for a matching render-product completion whose Kit SWH frame
 number is at least the first update after publication. Newton has no SWH stage-update
 owner: it uses the native product frame number and a SyntheticData rational render-clock
-barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 50 renderer
-updates; a timeout raises instead of returning old data. Newton keeps its minimum
-four-update history budget and selects multiple viewports one at a time, restoring
-the inactive idle set even on failure. Configured frequency controls output sampling; explicit
+barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 150 application
+updates, matching SyntheticData’s render-simulation wait: asynchronous rendering
+can take several app updates per completed frame. A timeout raises instead of returning old data. Newton keeps its minimum
+four-update history budget. Selected products are activated together and share
+renderer updates until each has completed a fresh frame; all return to the inactive
+idle set even on failure. This uses the owner thread, not concurrent USD calls.
+Configured frequency controls output sampling; explicit
 `render()` requests a fresh frozen snapshot even when paused.
 
 Headless PhysX with rendering enabled retains an active startup Hydra viewport; it

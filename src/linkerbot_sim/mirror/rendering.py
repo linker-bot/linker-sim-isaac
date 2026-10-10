@@ -9,6 +9,11 @@ import time
 from linkerbot_sim.mirror.lifecycle import close_result_stopped
 
 
+# Match SyntheticData next_render_simulation_async: asynchronous RTX can need
+# more app updates than SWH sensor waits when several products initialize together.
+_MAX_CAPTURE_UPDATES = 150
+
+
 def _close_resource(resource: object) -> bool:
     callback = getattr(resource, "close", None)
     if not callable(callback):
@@ -96,18 +101,11 @@ class RenderCoordinator:
                 invalidate = getattr(camera, "invalidate_render_capture", None)
                 if callable(invalidate):
                     invalidate()
-            # Newton requires an independent continuous budget per product. PhysX
-            # can complete the selected products together in one renderer group.
-            groups = (
-                tuple((target,) for target in targets)
-                if any(count > 1 for _camera, count in targets)
-                else (targets,)
-            )
-            for group in groups:
-                self._activate(tuple(camera for camera, _count in group))
-                self._render_group(render_tick, group)
-            # All groups belong to the same frozen physical state. Expose their
-            # identities together, never while a later group is still pending.
+            # Selected products share renderer updates for one frozen snapshot.
+            # Keep each product's history budget and native completion barrier.
+            self._activate(cameras)
+            self._render_group(render_tick, targets)
+            # Expose identities only after every selected product has completed.
             for camera in cameras:
                 finish = getattr(camera, "finish_render_capture", None)
                 if callable(finish):
@@ -247,7 +245,8 @@ class RenderCoordinator:
         pending = []
         # Native completion may lag several renderer updates. Bound warmup instead
         # of advancing physics or returning old annotator data under a new index.
-        for update in range(max(count, 50)):
+        limit = max(count, _MAX_CAPTURE_UPDATES)
+        for update in range(limit):
             render()
             if getattr(self.physics_runtime, "simulation_time", None) != physics_time:
                 raise RuntimeError("camera rendering advanced physics time")
@@ -268,7 +267,7 @@ class RenderCoordinator:
             if callable(status := getattr(camera, "render_capture_status", None))
         }
         raise RuntimeError(
-            f"camera fresh-frame timeout after 50 renderer updates: {names}; {details}"
+            f"camera fresh-frame timeout after {limit} renderer updates: {names}; {details}"
         )
 
     def close(self) -> bool:

@@ -521,14 +521,14 @@ class _NewtonSyntheticDataCamera:
     Isaac Sim 6.1 下，本项目经 provenance 审计的 exclusive render closure 不使用
     Replicator/Isaac CameraSensor 的默认依赖闭包，因为其中包含 Newton 模式禁止的
     physics-owner/stage-update 依赖。每台相机拥有独立 viewport 与 render product；Newton
-    manager 只负责发布同一份 body transform 快照和轮转 product，相机本身不调用 solver，
-    也不拥有 simulation time。
+    manager 只发布 body transform 快照，Mirror 协调选中产品的激活与采集。相机本身不调用
+    solver，也不拥有 simulation time。
     """
 
     # render Kit 保留三帧 history。一次新 Newton snapshot 发布后，前三个 app.update 仍可能
     # 只推进 RTX/SyntheticData 内部流水线，第四次才包含完整输出帧；单相机也不能缩成一次。
-    # 多相机由 Mirror RenderCoordinator 按 product 逐个执行这四次 update，期间 physics state
-    # 与 clock 均冻结；物理 manager 不感知 camera 或 viewport。
+    # Mirror RenderCoordinator 共同激活选中产品、共享 update，并逐路等待原生新帧；期间
+    # physics state 与 clock 均冻结，物理 manager 不感知 camera 或 viewport。
     render_update_count = 4
 
     @property

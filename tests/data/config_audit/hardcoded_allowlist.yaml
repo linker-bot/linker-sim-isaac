@@ -7,8 +7,8 @@ inventory:
     engine: python_ast
     assignment_scope: module
     name_regex: ^_?[A-Z][A-Z0-9_]+$
-    reviewed_candidate_count: 117
-    reviewed_candidate_sha256: 03a1d5283b64af924f8587e3a6a142905c112b271b6cc4e73de9f66082da01a2
+    reviewed_candidate_count: 118
+    reviewed_candidate_sha256: 0442fb401a343ec3853e4851dcf595a7750cce9580a943c0cdea86e62855f50b
     review_dispositions:
       - yaml_or_request_owned
       - allowlisted_retained
