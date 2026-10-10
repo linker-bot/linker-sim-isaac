@@ -409,7 +409,7 @@ generated_inventory:
   production_python:
     count: 252
     path_sha256: 45da1865fa05761a6f4f39381ff3f5bd59ec24de0f80c06dd266f1c35e22c41e
-    path_content_sha256: 526a08f866591700e7a359a544215f2c2b8d624ba208b0229344f2c48a6eed09
+    path_content_sha256: a70bd4a158b85080cc6a634f1832aa6f0df3b7215eeb397b9d395a60632fa3c5
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
@@ -1220,7 +1220,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: owner path
     - path: src/linkerbot_sim/isaac/spec.py
-      sha256: 92176c18de963c99e52f7f6d1bda93a40060238dd197b06fd7a420d06b5d9fe2
+      sha256: f6b60726d7a384b7dd4876bf092fdc1b369d9c069bcb3c2318951f21e32209a3
       module: linkerbot_sim.isaac.spec
       group: isaac
       layer: isaac_infrastructure
@@ -2430,7 +2430,7 @@ generated_inventory:
   test_python:
     count: 130
     path_sha256: 193ad6dcf05441ec042d5479f4acef8e8f593361ad73aac7715416ac3221b8ea
-    path_content_sha256: 5b880dbd1f54f7e04431dc8ffa7d8a04f4d7b35348f7346872ee6d2e6e76d541
+    path_content_sha256: 258e7bff096af38657e891e37133d58b92025beac5321b689859b51b92fae4cf
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2581,7 +2581,7 @@ generated_inventory:
     - path: tests/test_newton_constraints.py
       sha256: b5a78513f4fa9b1aa1de53f3b5ca83042a2d62dd9f8c9f8c68bb688c7acfe8df
     - path: tests/test_newton_contact_dynamics.py
-      sha256: b756e2596b5cc73f1fdfcf1c073651c342a93b9dd62a0a0e121e6b783d37ffff
+      sha256: 7a787e7505678d2a4108df43769c17599d11334c92cd5e45600a1bdc84b8b6c4
     - path: tests/test_newton_integration_state.py
       sha256: c14d88630be808b34c764d2d31967d24637c0d184d46f847d0ed2d973cadb20e
     - path: tests/test_newton_manager.py
@@ -2695,7 +2695,7 @@ generated_inventory:
   configuration_yaml:
     count: 55
     path_sha256: 5e779aa3fca5d8004b5b321e7ebe491720baf436f4f3b9c32bebd371e08cad04
-    path_content_sha256: dc5dac2c7cf027742d5a403cc0f98632aa39f6225507ff2a677b8c3daf229d0c
+    path_content_sha256: 51552073d81209b008ae179582a0493cd67546abf0f5aa8a89713852674cebed
     files:
     - path: configs/cameras/development_1080p_60.yaml
       sha256: 080f782aad76fc0a107135d3fa578ecaeec820fffdcb4085dd150447ced95338
@@ -2754,9 +2754,9 @@ generated_inventory:
     - path: configs/outputs/mirror_default.yaml
       sha256: 34634b4dc819f08a69c255772de56e3f041afe855676cbefa12ccab5c8bef9ee
     - path: configs/physics/newton/cpu.yaml
-      sha256: 44c61082db8b0865857d391333bc8c4a74eee4eb94457a3c759db53b89fd0450
+      sha256: 30aacdf309dc49d2af9a31a1fccdb13540e24d5b9335caf15d0af45ac533c9d8
     - path: configs/physics/newton/cuda.yaml
-      sha256: cca1198da05eb90e8b82066bfaa15fe00d1160e13cfdad3031456d087022d981
+      sha256: 4a12216ccef04bd44de14de4f6d90cef462a89e5f6c51b78f4dcfb90f1c55cc1
     - path: configs/physics/physx/cpu.yaml
       sha256: 5cc749f2e1f8dfa414bcb26a062639b45d701283ac6f740e6ce73f5940b5b9fb
     - path: configs/physics/physx/cuda.yaml
@@ -2883,7 +2883,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: 8624623af3ebc11fbe967f07271da17bf6c7d3ee9749ed5ddb9bc7af72ab047b
+    path_content_sha256: 4613d89cdc3959a7654b0404ec5f56fdc3870cf1bd055c83e51b3df5f5bb32c7
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2944,7 +2944,7 @@ generated_inventory:
     - path: docs/en/operations/troubleshooting.md
       sha256: c6873ee57f92fa33cdfb810c92fa652ef0b3c753a3817f09963339818459071a
     - path: docs/en/reference/configuration.md
-      sha256: 96d47f5282cee45114439685b66c29dd0af17e242113c201c901351aa2af3305
+      sha256: f27928bf7aba7f684c587a0df06d5b67cd0a34583cf158b415a546d2e22b265f
     - path: docs/en/reference/kaleidoscope-api.md
       sha256: 02e65bf094c8b08a775702a89b2c5096a08ae93b7fb3480af024d787620718a3
     - path: docs/en/reference/mirror-cli.md
@@ -3014,7 +3014,7 @@ generated_inventory:
     - path: docs/zh-CN/operations/troubleshooting.md
       sha256: 1586926ae7e5ad8b631cd6a7cf644e1fefbda1587d5d3a35a82464263c155536
     - path: docs/zh-CN/reference/configuration.md
-      sha256: 75c29c7ed6a7978cc2d41c3511d062a01bab5c4b7064c434430bd769524e353d
+      sha256: ab49ed3fd5d0b54f3c4404f750e875cec24a0a40e9b2a8ec8c478ed19d579236
     - path: docs/zh-CN/reference/kaleidoscope-api.md
       sha256: 5ae26293083198351a747ca9d78175d0fa4921915389eb038c25d23dd89bad88
     - path: docs/zh-CN/reference/mirror-cli.md

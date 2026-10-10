@@ -15,6 +15,8 @@ their Git commit.
 
 ### Changed
 
+- Restore the Newton CPU/CUDA contact-response default to 20 ms in profiles and programmatic specs. Keep the 2 ms internal timestep bound, per-substep contact refresh and explicit source settings; revalidate task contact behavior after changing this numerical default.
+
 - Move the supported runtime to Isaac Sim 6.1.0, Newton 1.5, Warp 1.16 and MuJoCo 3.11. Newton controls use the new target fields with an explicit DOF-layout requirement; model notifications and control snapshots follow the matched runtime. Recreate the simulation environment from the updated lockfile.
 
 - Mirror now samples only due cameras with output consumers; `step(render=True)` permits scheduled acquisition rather than forcing every sensor each step. `render(camera_ids=...)` captures fresh selected cameras without advancing physics or recording. Idle sensor products stop rendering, and pause, estop and continuous queries service GUI independently.
@@ -40,7 +42,7 @@ their Git commit.
   Explicit TCP selectors must use the new names; no old-name aliases remain.
   Frame transforms, physics, and separately configured task TCPs are unchanged.
 
-- Newton refreshes contacts on every internal step and bounds internal timesteps to 2 ms by default; previously unauthored contacts use an explicit 4 ms response. Outer control/render clocks and authored per-shape contact parameters are preserved; diagnostics report effective integration settings.
+- Newton refreshes contacts on every internal step and bounds internal timesteps to 2 ms by default; unauthored contacts use the configured response, now defaulting to 20 ms. Outer control/render clocks and authored per-shape contact parameters are preserved; diagnostics report effective integration settings.
   Existing Newton physics YAML leaves must add `max_substep_dt_s` and `default_contact_time_constant_s`; increased internal integration reduces throughput and changes contact trajectories.
 
 - Joint effort telemetry identifies commanded, applied and projected sources,

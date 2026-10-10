@@ -429,15 +429,16 @@ This does not add decisions, callbacks or rendered frames, or change simulation 
 The contact pipeline refreshes contacts at every internal step. The additional
 physics work costs throughput; select and record these values before benchmarking.
 
-The canonical 0.004 s contact fallback maps to Newton `ke=1/t²`, `kd=2/t`
+The canonical 0.02 s contact fallback maps to Newton `ke=1/t²`, `kd=2/t`
 (critical damping), yielding MuJoCo `solref=(t, 1)`. It is applied to the builder
 before USD import. Authored per-shape Newton/MJC stiffness and damping retain the
 normal upstream resolver precedence. For MJCF robots, a temporary source copy
 sets the main geom default only when `solref` is omitted, before Isaac converts
 it to USD. MuJoCo resolves includes and class inheritance; explicit geom or
-inherited values (including an explicit 20 ms) remain authoritative. Source assets
-and PhysX imports are unchanged. This prevents Isaac 6.1's serialization of the
-implicit MuJoCo 20 ms default from overriding the configured project fallback.
+inherited values remain authoritative. Source assets and PhysX imports are
+unchanged. The default now matches MuJoCo's 20 ms response; if a task selects a
+different fallback, the temporary source still preserves it through Isaac 6.1
+conversion instead of silently replacing it with the implicit MuJoCo default.
 This is a numerical contact response, not a
 joint drive gain or a calibrated force-space material law: the pinned CPU/native
 MuJoCo path uses the legacy Newton conversion. MuJoCo's `refsafe` still limits a

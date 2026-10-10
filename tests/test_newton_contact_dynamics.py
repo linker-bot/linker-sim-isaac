@@ -1,5 +1,6 @@
 """Native contact regressions; run explicitly with the simulation interpreter."""
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -53,13 +54,17 @@ def test_mjcf_fallback_keeps_native_inheritance_and_geometry(tmp_path):
         np.testing.assert_array_equal(getattr(before, field), getattr(after, field))
 
 
-def _box_runtime(execution, *, height, downward_speed=0.0):
+def _box_runtime(
+    execution, *, height, downward_speed=0.0, contact_time_constant_s=None
+):
     newton = pytest.importorskip("newton")
     wp = pytest.importorskip("warp")
     wp.init()
     if execution == "cuda" and not wp.is_cuda_available():
         pytest.skip("CUDA is required")
     spec = IsaacNewtonCpuSpec() if execution == "cpu" else IsaacNewtonCudaSpec()
+    if contact_time_constant_s is not None:
+        spec = replace(spec, default_contact_time_constant_s=contact_time_constant_s)
     device = "cpu" if execution == "cpu" else "cuda:0"
     builder = _new_registered_builder(
         _load_newton_dependencies(),
@@ -114,8 +119,11 @@ def _box_runtime(execution, *, height, downward_speed=0.0):
 
 
 @pytest.mark.parametrize("execution", ["cpu", "cuda"])
-def test_default_contact_resolves_ten_centimeter_drop(execution):
-    runtime = _box_runtime(execution, height=0.12)
+@pytest.mark.parametrize("contact_time_constant_s", [None, 0.004])
+def test_contact_resolves_ten_centimeter_drop(execution, contact_time_constant_s):
+    runtime = _box_runtime(
+        execution, height=0.12, contact_time_constant_s=contact_time_constant_s
+    )
     original = runtime.solver.step
     bottoms = []
 
@@ -128,14 +136,21 @@ def test_default_contact_resolves_ten_centimeter_drop(execution):
         runtime._simulate()
     assert len(bottoms) == 120 * runtime._effective_substeps
     assert np.isfinite(bottoms).all()
-    assert min(bottoms) > -0.004, min(bottoms)
+    # The 20 ms default permits transient soft-contact compression, but the
+    # box center must stay above the support surface and then settle. Keep the
+    # former 4 ms penetration bound as a regression for that explicit setting.
+    penetration_limit = 0.02 if contact_time_constant_s is None else 0.004
+    assert min(bottoms) > -penetration_limit, min(bottoms)
     assert abs(bottoms[-1]) < 0.0005
     assert np.linalg.norm(runtime.state.body_qd.numpy()[0]) < 0.001
-    assert runtime.solver.mj_model.geom_solref[:, 0] == pytest.approx(0.004)
+    expected_response = 0.02 if contact_time_constant_s is None else 0.004
+    assert runtime.solver.mj_model.geom_solref[:, 0] == pytest.approx(expected_response)
 
 
 def test_new_contact_is_detected_inside_the_outer_step():
-    runtime = _box_runtime("cuda", height=0.021, downward_speed=1.0)
+    runtime = _box_runtime(
+        "cuda", height=0.021, downward_speed=1.0, contact_time_constant_s=0.004
+    )
     calls = []
     collide = runtime._collision_pipeline.collide
 
