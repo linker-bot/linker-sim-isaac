@@ -72,7 +72,7 @@ class IsaacNewtonCudaSpec:
     use_cuda_graph: bool = True
     substeps: int = 1
     max_substep_dt_s: float = 0.002
-    default_contact_time_constant_s: float = 0.02
+    default_contact_time_constant_s: float = 0.01
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"
@@ -122,7 +122,7 @@ class IsaacNewtonCpuSpec:
     njmax_per_world: int = 1200
     substeps: int = 1
     max_substep_dt_s: float = 0.002
-    default_contact_time_constant_s: float = 0.02
+    default_contact_time_constant_s: float = 0.01
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"

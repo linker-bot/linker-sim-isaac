@@ -14,7 +14,7 @@ Git commit 标识。
 
 ### 变更
 
-- Newton CPU/CUDA profile 和程序规格的默认接触恢复时间恢复为 20 ms，保留 2 ms 内部步长上限、每子步接触刷新和源模型显式值；改变此数值默认值后需复验任务接触行为。
+- Newton CPU/CUDA profile 和程序规格的默认接触恢复时间设为 10 ms，保留 2 ms 内部步长上限、每子步接触刷新和源模型显式值；改变此数值默认值后需复验任务接触行为。
 
 - 支持基线迁移至 Isaac Sim 6.1.0、Newton 1.5、Warp 1.16 和 MuJoCo 3.11。Newton 使用新目标字段并明确要求 DOF 布局，同步适配模型通知与控制快照；仿真环境需按新锁文件重建。
 
@@ -35,7 +35,7 @@ Git commit 标识。
 - 将 AR5 臂手默认 `AR5V2_L/R_pinch_tcp` 改名为 `AR5V2_L/R_flange_tcp`，明确其为零偏移机械臂法兰参考。
   显式 TCP selector 需改用新名，不保留旧名别名；不改变坐标变换、物理行为或独立配置的任务 TCP。
 
-- Newton 每个内部子步刷新接触，默认内部步长不超过 2 ms，未显式设置的接触使用配置响应，当前默认 20 ms。保留外部控制/渲染时钟及每 shape 显式接触参数，诊断输出实际积分配置。
+- Newton 每个内部子步刷新接触，默认内部步长不超过 2 ms，未显式设置的接触使用配置响应，当前默认 10 ms。保留外部控制/渲染时钟及每 shape 显式接触参数，诊断输出实际积分配置。
   原有 Newton physics YAML leaf 需补充 `max_substep_dt_s` 和 `default_contact_time_constant_s`；增加内部积分会降低吞吐并改变接触轨迹。
 
 - 关节 effort 遥测区分 commanded、applied、projected 来源，按实际物理时钟记录逐关节有效性和缺测原因。

@@ -136,14 +136,14 @@ def test_contact_resolves_ten_centimeter_drop(execution, contact_time_constant_s
         runtime._simulate()
     assert len(bottoms) == 120 * runtime._effective_substeps
     assert np.isfinite(bottoms).all()
-    # The 20 ms default permits transient soft-contact compression, but the
+    # The 10 ms default permits transient soft-contact compression, but the
     # box center must stay above the support surface and then settle. Keep the
     # former 4 ms penetration bound as a regression for that explicit setting.
     penetration_limit = 0.02 if contact_time_constant_s is None else 0.004
     assert min(bottoms) > -penetration_limit, min(bottoms)
     assert abs(bottoms[-1]) < 0.0005
     assert np.linalg.norm(runtime.state.body_qd.numpy()[0]) < 0.001
-    expected_response = 0.02 if contact_time_constant_s is None else 0.004
+    expected_response = 0.01 if contact_time_constant_s is None else 0.004
     assert runtime.solver.mj_model.geom_solref[:, 0] == pytest.approx(expected_response)
 
 
