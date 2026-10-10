@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from linkerbot_sim.assets.robot_config import RobotAssetConfig
+from linkerbot_sim.assets.mjcf_defaults import prepare_mjcf_contact_defaults
 from linkerbot_sim.assets.root_pose import (
     RootPoseConfig,
     apply_root_pose,
@@ -61,6 +62,7 @@ def configure_mjcf_import(
     physics_backend: object | None = None,
     prepare_newton_render_topology: bool = False,
     root_pose: RootPoseConfig | None = None,
+    default_contact_time_constant_s: float | None = None,
 ) -> str:
     """使用 Isaac 6 MJCF Importer 3.0 并按明确后端映射 root prim。"""
 
@@ -75,8 +77,15 @@ def configure_mjcf_import(
     _validate_native_mjcf_mimics(mjcf_path)
     import_directory = TemporaryDirectory(prefix="linkerbot-sim-mjcf-")
     try:
+        import_source = mjcf_path
+        if backend == "newton" and default_contact_time_constant_s is not None:
+            import_source = prepare_mjcf_contact_defaults(
+                mjcf_path,
+                Path(import_directory.name) / "source" / mjcf_path.name,
+                time_constant_s=default_contact_time_constant_s,
+            )
         import_config = MJCFImporterConfig(
-            mjcf_path=str(mjcf_path),
+            mjcf_path=str(import_source),
             # Importer 3.0 的 usd_path 是输出目录；返回值才是生成的 root USD。
             usd_path=import_directory.name,
             # Physics scene 由项目 World 统一创建，资产不得带入第二套 simulation settings。
@@ -684,6 +693,7 @@ def import_robot_asset(
     physics_backend: object | None = None,
     prepare_newton_render_topology: bool = False,
     root_pose: RootPoseConfig | None = None,
+    default_contact_time_constant_s: float | None = None,
 ) -> tuple[str, Path, str]:
     """按明确物理后端导入机器人并返回 articulation、资产和导入根路径。"""
 
@@ -702,6 +712,7 @@ def import_robot_asset(
             physics_backend=physics_backend,
             prepare_newton_render_topology=prepare_newton_render_topology,
             root_pose=root_pose,
+            default_contact_time_constant_s=default_contact_time_constant_s,
         )
         articulation_path = find_articulation_root(imported_path)
         return articulation_path, asset_path, imported_path

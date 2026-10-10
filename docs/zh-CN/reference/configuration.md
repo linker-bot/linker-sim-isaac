@@ -274,7 +274,10 @@ Newton CPU/CUDA leaf 均要求有限正值的 `max_substep_dt_s` 和
 
 默认接触响应时间 0.004 秒按临界阻尼转换为 Newton `ke=1/t²`、`kd=2/t`，对应 MuJoCo
 `solref=(t, 1)`，在 USD 导入前设置到 builder。每 shape 显式设置的 Newton/MJC 刚度和阻尼
-保留上游 resolver 的正常优先级。这是数值接触响应，不是关节驱动增益或已经标定的力学材料模型；
+保留上游 resolver 的正常优先级。MJCF 机器人在转成 USD 前使用临时源副本，仅在主 geom default
+未指定 `solref` 时补入配置值；MuJoCo 继续解析 include 和 class 继承，geom 或继承中显式设置的值
+（包括显式 20 ms）仍优先。源资产和 PhysX 导入不变，避免 Isaac 6.1 将 MuJoCo 隐含的 20 ms
+序列化后覆盖项目默认值。这是数值接触响应，不是关节驱动增益或已经标定的力学材料模型；
 当前 CPU/native MuJoCo 路径使用旧转换。MuJoCo `refsafe` 仍将正值响应时间限制为至少两倍实际内部步长。
 
 `diagnostics()` 报告外部/内部步长、配置/实际子步数和默认接触响应。有限时间步与柔性接触仍可能在冲击时

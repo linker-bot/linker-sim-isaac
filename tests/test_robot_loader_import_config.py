@@ -66,6 +66,36 @@ def test_configure_mjcf_import_defaults_self_collision_to_false(monkeypatch) -> 
     assert importer.config.allow_self_collision is False
 
 
+@pytest.mark.parametrize("backend", ["newton", "physx"])
+def test_mjcf_contact_fallback_is_supplied_only_to_newton(
+    monkeypatch, tmp_path, backend
+):
+    import xml.etree.ElementTree as ET
+
+    importer = _install_fake_importer(monkeypatch, "mjcf")
+    monkeypatch.setattr(
+        robot_import, "_deactivate_imported_mjcf_actuators", lambda _root: 0
+    )
+    source = tmp_path / "model.xml"
+    source.write_text("<mujoco><worldbody/></mujoco>")
+    original = source.read_bytes()
+    configure_mjcf_import(
+        source,
+        "/World/Robot",
+        physics_backend=backend,
+        default_contact_time_constant_s=0.008,
+    )
+    imported_source = Path(importer.config.mjcf_path)
+    if backend == "newton":
+        assert imported_source != source
+        assert (
+            ET.parse(imported_source).find("./default/geom").get("solref") == "0.008 1"
+        )
+    else:
+        assert imported_source == source
+    assert source.read_bytes() == original
+
+
 def test_configure_mjcf_import_forwards_explicit_backend(monkeypatch) -> None:
     _install_fake_importer(monkeypatch, "mjcf")
     forwarded: list[tuple[object, bool]] = []

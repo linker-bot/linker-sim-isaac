@@ -31,6 +31,8 @@ their Git commit.
 
 ### Fixed
 
+- Preserve the configured Newton contact fallback through Isaac 6.1 MJCF conversion. Prepare an owned temporary source with the missing default, retaining explicitly authored and inherited `solref` values; source assets and PhysX imports are unchanged.
+
 - Repair Isaac 6.1 PhysX imports so MJCF mimic targets and coefficients survive physics-variant routing, and existing MJCF/URDF world anchors carry the articulation-root metadata. Fixed camera assemblies stay fixed during integration. Task-space binding follows exact body relationships when the root is a joint.
 
 - Renamed the AR5 arm-hand default `AR5V2_L/R_pinch_tcp` frames to

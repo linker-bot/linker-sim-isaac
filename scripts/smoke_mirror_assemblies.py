@@ -265,6 +265,25 @@ def run(args):
             "initial_poses": initial_poses,
             "mounts": {c.name: c.get_capture_metadata() for c in cameras},
         }
+        if args.profile.startswith("newton"):
+            # These canonical L6/O6 sources omit solref. Check the actual solver
+            # model so converter-authored defaults cannot mask the configured one.
+            model = runtime.physics_runtime.solver.mj_model
+            values = np.asarray(
+                [
+                    model.geom_solref[index]
+                    for index in range(model.ngeom)
+                    if "Robots" in model.geom(index).name
+                ]
+            )
+            expected = (
+                runtime.physics_runtime.physics_spec.default_contact_time_constant_s
+            )
+            assert len(values) > 0 and np.allclose(values, [expected, 1]), values
+            report["robot_contact_defaults"] = {
+                "count": len(values),
+                "solref": np.unique(values, axis=0).tolist(),
+            }
         moved = {}
         for robot in resources.robots_by_id.values():
             articulation = robot.execution.articulation

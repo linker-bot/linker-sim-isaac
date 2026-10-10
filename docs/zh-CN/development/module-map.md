@@ -89,12 +89,13 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | configuration | `linkerbot_sim.configuration.visualization` | configuration | configuration 层 visualization 实现 owner | pure | internal | [架构参考](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.visualization.kaleidoscope` | configuration | Kaleidoscope 严格配置根 | pure | internal | [架构参考](../reference/configuration.md) |
 
-### assets (8)
+### assets (9)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | assets | `linkerbot_sim.assets` | isaac_infrastructure | 强类型资产 profile 合同 | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.instance_paths` | isaac_infrastructure | assets 层 instance paths 实现 owner | pure | internal | [架构参考](naming.md) |
+| assets | `linkerbot_sim.assets.mjcf_defaults` | isaac_infrastructure | assets 层 mjcf defaults 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_config` | isaac_infrastructure | assets 层 robot config 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_import` | isaac_infrastructure | assets 层 robot import 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_instances` | isaac_infrastructure | assets 层 robot instances 实现 owner | pure | internal | [架构参考](naming.md) |

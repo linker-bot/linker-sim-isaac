@@ -13,6 +13,46 @@ from linkerbot_sim.isaac.physics.newton.replication import (
 from linkerbot_sim.isaac.spec import IsaacNewtonCpuSpec, IsaacNewtonCudaSpec
 
 
+def test_mjcf_fallback_keeps_native_inheritance_and_geometry(tmp_path):
+    mujoco = pytest.importorskip("mujoco")
+    from linkerbot_sim.assets.mjcf_defaults import prepare_mjcf_contact_defaults
+
+    source = tmp_path / "model.xml"
+    includes = tmp_path / "parts"
+    includes.mkdir()
+    (includes / "defaults.xml").write_text(
+        '<mujocoinclude><default><geom friction=".6 .005 .0001"/>'
+        '<default class="soft"><geom solref=".02 1"/>'
+        '<default class="nested"/></default></default></mujocoinclude>'
+    )
+    source.write_text(
+        '<mujoco><include file="parts/defaults.xml"/><worldbody>'
+        '<geom name="implicit" type="sphere" size=".1"/>'
+        '<body childclass="nested"><geom name="inherited" type="sphere" size=".1"/>'
+        '<geom name="explicit" type="sphere" size=".1" solref=".03 2"/>'
+        "</body></worldbody></mujoco>"
+    )
+    output = prepare_mjcf_contact_defaults(
+        source, tmp_path / "output/model.xml", time_constant_s=0.004
+    )
+    before = mujoco.MjModel.from_xml_path(str(source))
+    after = mujoco.MjModel.from_xml_path(str(output))
+    for name, expected in (
+        ("implicit", [0.004, 1]),
+        ("inherited", [0.02, 1]),
+        ("explicit", [0.03, 2]),
+    ):
+        np.testing.assert_allclose(after.geom(name).solref, expected)
+    for field in (
+        "body_mass",
+        "body_inertia",
+        "geom_size",
+        "geom_friction",
+        "geom_solimp",
+    ):
+        np.testing.assert_array_equal(getattr(before, field), getattr(after, field))
+
+
 def _box_runtime(execution, *, height, downward_speed=0.0):
     newton = pytest.importorskip("newton")
     wp = pytest.importorskip("warp")

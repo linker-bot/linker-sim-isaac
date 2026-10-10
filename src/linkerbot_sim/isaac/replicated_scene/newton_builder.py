@@ -130,6 +130,9 @@ def build_replicated_newton_scene(
         physics_backend="newton",
         prepare_newton_render_topology=prepare_newton_render_topology,
         object_configs=object_configs,
+        default_contact_time_constant_s=getattr(
+            runtime, "physics_spec"
+        ).default_contact_time_constant_s,
     )
 
     # 先从唯一 USD prototype 派生全部 Newton world path。manager 在 finalize 后立即审计

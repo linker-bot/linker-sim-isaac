@@ -120,7 +120,7 @@ def test_newton_import_projects_only_backend_neutral_robot_usd_fields(
     monkeypatch.setattr(
         setup,
         "import_robot_asset",
-        lambda _config, *, physics_backend, prepare_newton_render_topology, root_pose: (
+        lambda _config, *, physics_backend, prepare_newton_render_topology, root_pose, default_contact_time_constant_s: (
             render_intents.append(("import", prepare_newton_render_topology))
             or (
                 "/World/Robot",
@@ -226,7 +226,7 @@ def test_physx_import_projects_robot_leaf_and_solver(
     monkeypatch.setattr(
         setup,
         "import_robot_asset",
-        lambda _config, *, physics_backend, prepare_newton_render_topology, root_pose: (
+        lambda _config, *, physics_backend, prepare_newton_render_topology, root_pose, default_contact_time_constant_s: (
             render_intents.append(("import", prepare_newton_render_topology))
             or (
                 "/World/Robot",

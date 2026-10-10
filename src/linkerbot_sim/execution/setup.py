@@ -97,6 +97,7 @@ def import_execution_robot_to_stage(
     physics_backend: object,
     prepare_newton_render_topology: bool,
     defer_articulation_binding: bool = False,
+    default_contact_time_constant_s: float | None = None,
 ) -> ImportedRobot:
     """导入一个机器人 articulation，并写入 reset 前的 stage 级覆盖。
 
@@ -111,6 +112,7 @@ def import_execution_robot_to_stage(
         physics_backend=backend,
         prepare_newton_render_topology=prepare_newton_render_topology,
         root_pose=robot_execution.root_pose,
+        default_contact_time_constant_s=default_contact_time_constant_s,
     )
     # root_pose 写在导入根 prim 上，保证 Isaac 执行模型和 cuRobo 双臂生成模型使用同一安装位姿。
     apply_root_pose(
