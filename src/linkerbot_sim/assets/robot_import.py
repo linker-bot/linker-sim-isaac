@@ -6,13 +6,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from linkerbot_sim.assets.robot_config import RobotAssetConfig
+from linkerbot_sim.assets.mjcf_defaults import prepare_mjcf_contact_defaults
 from linkerbot_sim.assets.root_pose import (
     RootPoseConfig,
     apply_root_pose,
     apply_root_pose_transform,
 )
 from linkerbot_sim.configuration.robots import AssetImportConfig
-from linkerbot_sim.isaac.usd_physics_parse import serialized_usd_physics_parse
 from linkerbot_sim.isaac.physics.backend import (
     active_physics_backend,
     normalize_physics_backend,
@@ -62,6 +62,7 @@ def configure_mjcf_import(
     physics_backend: object | None = None,
     prepare_newton_render_topology: bool = False,
     root_pose: RootPoseConfig | None = None,
+    default_contact_time_constant_s: float | None = None,
 ) -> str:
     """使用 Isaac 6 MJCF Importer 3.0 并按明确后端映射 root prim。"""
 
@@ -76,8 +77,15 @@ def configure_mjcf_import(
     _validate_native_mjcf_mimics(mjcf_path)
     import_directory = TemporaryDirectory(prefix="linkerbot-sim-mjcf-")
     try:
+        import_source = mjcf_path
+        if backend == "newton" and default_contact_time_constant_s is not None:
+            import_source = prepare_mjcf_contact_defaults(
+                mjcf_path,
+                Path(import_directory.name) / "source" / mjcf_path.name,
+                time_constant_s=default_contact_time_constant_s,
+            )
         import_config = MJCFImporterConfig(
-            mjcf_path=str(mjcf_path),
+            mjcf_path=str(import_source),
             # Importer 3.0 的 usd_path 是输出目录；返回值才是生成的 root USD。
             usd_path=import_directory.name,
             # Physics scene 由项目 World 统一创建，资产不得带入第二套 simulation settings。
@@ -89,8 +97,9 @@ def configure_mjcf_import(
             run_asset_transformer=True,
             run_multi_physics_conversion=True,
         )
-        with serialized_usd_physics_parse():
-            destination = Path(MJCFImporter(import_config).import_mjcf())
+        destination = Path(MJCFImporter(import_config).import_mjcf())
+        if backend == "physx":
+            _repair_physx_import(destination)
         source_prim_path = _discover_imported_root_path(destination)
         reference_asset = (
             _prepare_newton_render_reference_asset(
@@ -120,6 +129,78 @@ def configure_mjcf_import(
         raise
     _live_import_directories.append(import_directory)
     return prim_path
+
+
+def _repair_physx_import(
+    source_usd_path: Path, *, allow_common_physics_variant: bool = False
+) -> None:
+    """Repair Isaac 6.1 importer variant routing in the owned temporary import only.
+
+    MjcJointAPI inherits NewtonMimicAPI properties, so the transformer moves the
+    target and coefficients into the MuJoCo-only layer. PhysX 6.1 now consumes
+    NewtonMimicAPI directly; restore those exact values in its own variant.
+    The converter also leaves root metadata on a body when an existing fixed
+    world anchor is present. Relocate it with the importer's own implementation,
+    preserving that joint, its transforms and the configured base type.
+    """
+    from isaacsim.asset.importer.utils.impl.asset_utils import (
+        _relocate_articulation_root,
+    )
+    from pxr import Usd, UsdPhysics
+
+    stage = Usd.Stage.Open(str(source_usd_path))
+    root = stage.GetDefaultPrim()
+    _select_imported_physics_variant(
+        root,
+        physics_backend="newton",
+        allow_common_physics_variant=allow_common_physics_variant,
+    )
+    mimics = []
+    for prim in Usd.PrimRange(root):
+        if not prim.HasAPI("NewtonMimicAPI"):
+            continue
+        targets = prim.GetRelationship("newton:mimicJoint").GetTargets()
+        if len(targets) != 1 or not targets[0].HasPrefix(root.GetPath()):
+            raise RuntimeError(f"invalid imported mimic target: {prim.GetPath()}")
+        attributes = tuple(
+            (attr.GetName(), attr.GetTypeName(), attr.Get())
+            for attr in prim.GetAttributes()
+            if attr.GetName().startswith("newton:mimic")
+            and attr.HasAuthoredValueOpinion()
+        )
+        mimics.append((prim.GetPath(), targets, attributes))
+
+    _select_imported_physics_variant(
+        root,
+        physics_backend="physx",
+        allow_common_physics_variant=allow_common_physics_variant,
+    )
+    with root.GetVariantSet("Physics").GetVariantEditContext():
+        for path, targets, attributes in mimics:
+            prim = stage.GetPrimAtPath(path)
+            prim.CreateRelationship("newton:mimicJoint").SetTargets(targets)
+            for name, value_type, value in attributes:
+                prim.CreateAttribute(name, value_type).Set(value)
+        prims = tuple(Usd.PrimRange(root))
+        for body in prims:
+            if not body.HasAPI(UsdPhysics.ArticulationRootAPI) or not body.HasAPI(
+                UsdPhysics.RigidBodyAPI
+            ):
+                continue
+            anchors = [
+                prim
+                for prim in prims
+                if prim.IsA(UsdPhysics.FixedJoint)
+                and prim.GetRelationship("physics:body1").GetTargets()
+                == [body.GetPath()]
+                and prim.GetRelationship("physics:body0").GetTargets()
+                in ([], [root.GetPath()])
+            ]
+            if len(anchors) > 1:
+                raise RuntimeError(f"ambiguous imported root anchor: {body.GetPath()}")
+            if anchors:
+                _relocate_articulation_root(body, anchors[0])
+    stage.GetRootLayer().Save()
 
 
 def _validate_native_mjcf_mimics(mjcf_path: Path) -> None:
@@ -202,8 +283,12 @@ def configure_urdf_import(
             run_asset_transformer=True,
             run_multi_physics_conversion=True,
         )
-        with serialized_usd_physics_parse():
-            destination = Path(URDFImporter(import_config).import_urdf())
+        destination = Path(URDFImporter(import_config).import_urdf())
+        if backend == "physx":
+            _repair_physx_import(
+                destination,
+                allow_common_physics_variant=allow_common_physics_variant,
+            )
         imported_root = _discover_imported_root_path(destination)
         target_root = prim_path or imported_root
         reference_asset = (
@@ -608,6 +693,7 @@ def import_robot_asset(
     physics_backend: object | None = None,
     prepare_newton_render_topology: bool = False,
     root_pose: RootPoseConfig | None = None,
+    default_contact_time_constant_s: float | None = None,
 ) -> tuple[str, Path, str]:
     """按明确物理后端导入机器人并返回 articulation、资产和导入根路径。"""
 
@@ -626,6 +712,7 @@ def import_robot_asset(
             physics_backend=physics_backend,
             prepare_newton_render_topology=prepare_newton_render_topology,
             root_pose=root_pose,
+            default_contact_time_constant_s=default_contact_time_constant_s,
         )
         articulation_path = find_articulation_root(imported_path)
         return articulation_path, asset_path, imported_path

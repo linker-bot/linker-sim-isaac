@@ -9,7 +9,7 @@ binaries, containers, or integrated products.
 
 - Project: NVIDIA Isaac Sim
 - Upstream: [https://developer.nvidia.com/isaac/sim](https://developer.nvidia.com/isaac/sim)
-- Version: 6.0.1 (pinned via the `simulation` extra).
+- Version: 6.1.0 (pinned via the `simulation` extra).
 - License: Dual.
   - The Isaac Sim source-code wrapper is released under the Apache
     License 2.0.

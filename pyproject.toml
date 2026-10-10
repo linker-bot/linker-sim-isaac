@@ -42,7 +42,7 @@ training = [
 ]
 simulation = [
   # Core simulator, its offline extension cache, and matching PyTorch release.
-  "isaacsim[all,extscache]==6.0.1.0",
+  "isaacsim[all,extscache]==6.1.0.0",
   # isaacsim-core pins this release candidate; declaring it directly lets uv
   # admit the exact candidate without enabling unrelated pre-release packages.
   "tinyobjloader==2.0.0rc13",
@@ -60,8 +60,8 @@ simulation = [
   "nvidia-curobo[cu12] @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
 
   # Runtime libraries used outside the Kit-managed Python path as well.
-  # Isaac Sim 6.0.1's Newton 1.2.1 dependency requires Warp 1.13.x.
-  "warp-lang==1.13.0",
+  # Isaac Sim 6.1's Newton 1.5 dependency requires Warp 1.16.x.
+  "warp-lang==1.16.0",
 ]
 
 [tool.uv]

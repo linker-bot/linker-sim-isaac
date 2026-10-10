@@ -624,7 +624,7 @@ class SingleArticulationCoreView(ArticulationCoreView):
     ) -> np.ndarray:
         if self.physics_backend == "newton":
             raise NotImplementedError(
-                "Newton 1.2.1 does not implement projected/measured joint efforts"
+                "This Newton runtime does not implement projected/measured joint efforts"
             )
         return _single_values(
             self._view.get_dof_projected_joint_forces(
@@ -638,7 +638,7 @@ class SingleArticulationCoreView(ArticulationCoreView):
     def disable_gravity(self) -> None:
         if not self.supports_per_link_gravity:
             raise RuntimeError(
-                "Newton 1.2.1 does not implement runtime per-link gravity "
+                "This Newton runtime does not implement runtime per-link gravity "
                 "disabling; robot gravity policy must be projected to MuJoCo "
                 "gravcomp before Newton model finalization"
             )
@@ -647,7 +647,7 @@ class SingleArticulationCoreView(ArticulationCoreView):
     def enable_gravity(self) -> None:
         if not self.supports_per_link_gravity:
             raise RuntimeError(
-                "Newton 1.2.1 does not implement runtime per-link gravity "
+                "This Newton runtime does not implement runtime per-link gravity "
                 "enabling; robot gravity policy must be projected before direct "
                 "model finalization"
             )
@@ -1367,7 +1367,7 @@ class _NewtonRigidSelection:
 
 
 def _newton_rigid_tensor_context(tensor_view: object) -> _NewtonRigidTensorContext:
-    """解析 Isaac 6.0.1 当前 Newton stage，并校验 tensor view 归属。"""
+    """解析当前 Isaac Newton stage，并校验 tensor view 归属。"""
 
     api_backend = getattr(tensor_view, "_backend", None)
     providers = tuple(

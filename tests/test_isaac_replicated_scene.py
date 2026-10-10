@@ -272,7 +272,7 @@ def test_newton_source_robot_freezes_render_topology_after_root_pose(
     monkeypatch.setattr(
         replicated_assets,
         "import_robot_asset",
-        lambda _robot, *, physics_backend, prepare_newton_render_topology, root_pose: (
+        lambda _robot, *, physics_backend, prepare_newton_render_topology, root_pose, default_contact_time_constant_s: (
             render_intents.append(("import", prepare_newton_render_topology))
             or (
                 "/World/envs/env_0/Robots/arm/Articulation",

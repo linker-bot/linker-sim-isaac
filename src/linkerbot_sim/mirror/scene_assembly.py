@@ -592,6 +592,9 @@ def create_mirror_scene_resources(
                 physics_backend=session.physics_runtime.backend,
                 prepare_newton_render_topology=prepare_newton_render_topology,
                 defer_articulation_binding=newton_runtime,
+                default_contact_time_constant_s=getattr(
+                    session_spec.physics, "default_contact_time_constant_s", None
+                ),
             )
             for execution, profiles in zip(
                 execution_configs, controller_profiles, strict=True

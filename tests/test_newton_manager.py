@@ -314,6 +314,7 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
 
     class _Model:
         world_count = 1
+        use_coord_layout_targets = False
         articulation_world = object()
 
         def __init__(self, device: object) -> None:
@@ -1241,9 +1242,10 @@ def test_cpu_gain_write_notifies_solver_without_enabling_cuda_graph(
 ) -> None:
     notification_flag = object()
     solvers = ModuleType("newton.solvers")
-    solvers.SolverNotifyFlags = SimpleNamespace(JOINT_DOF_PROPERTIES=notification_flag)
+    model_flags = SimpleNamespace(JOINT_DOF_PROPERTIES=notification_flag)
     newton = ModuleType("newton")
     newton.solvers = solvers
+    newton.ModelFlags = model_flags
     monkeypatch.setitem(sys.modules, "newton", newton)
     monkeypatch.setitem(sys.modules, "newton.solvers", solvers)
     notifications: list[object] = []
@@ -1274,9 +1276,10 @@ def test_cpu_gravity_write_notifies_solver_without_enabling_cuda_graph(
 ) -> None:
     notification_flag = object()
     solvers = ModuleType("newton.solvers")
-    solvers.SolverNotifyFlags = SimpleNamespace(MODEL_PROPERTIES=notification_flag)
+    model_flags = SimpleNamespace(MODEL_PROPERTIES=notification_flag)
     newton = ModuleType("newton")
     newton.solvers = solvers
+    newton.ModelFlags = model_flags
     monkeypatch.setitem(sys.modules, "newton", newton)
     monkeypatch.setitem(sys.modules, "newton.solvers", solvers)
     events: list[object] = []
@@ -1522,14 +1525,14 @@ def test_control_copy_forwards_owner_stream_to_every_warp_copy(
     monkeypatch.setattr(wp, "copy", _copy)
     destination = SimpleNamespace(
         joint_f=object(),
-        joint_target_pos=object(),
-        joint_target_vel=object(),
+        joint_target_q=object(),
+        joint_target_qd=object(),
         joint_act=None,
     )
     source = SimpleNamespace(
         joint_f=object(),
-        joint_target_pos=object(),
-        joint_target_vel=object(),
+        joint_target_q=object(),
+        joint_target_qd=object(),
         joint_act=object(),
     )
 

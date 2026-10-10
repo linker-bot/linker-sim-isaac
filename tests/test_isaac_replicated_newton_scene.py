@@ -14,6 +14,7 @@ class _Runtime:
 
     def __init__(self) -> None:
         self.world_count = 0
+        self.physics_spec = SimpleNamespace(default_contact_time_constant_s=0.008)
         self.calls: list[dict[str, object]] = []
 
     def initialize_worlds(self, **kwargs: object) -> None:
@@ -155,6 +156,7 @@ def test_newton_scene_imports_one_prototype_then_finalizes_all_worlds(
     assert object_backends == ["newton"]
     assert object_render_intents == [True]
     assert calls[1][1]["prepare_newton_render_topology"] is True
+    assert calls[1][1]["default_contact_time_constant_s"] == 0.008
     assert len(runtime.calls) == 1
     assert runtime.calls[0]["env_root_paths"] == roots
     manager_robot = runtime.calls[0]["robots"]["left"]

@@ -12,7 +12,6 @@ from linkerbot_sim.backends.curobo.config import CuroboConfig, CuroboRobotConfig
 from linkerbot_sim.backends.curobo.context import CuroboContext
 from linkerbot_sim.backends.curobo.runtime_imports import ensure_torch_device_usable
 from linkerbot_sim.backends.curobo.warp_compat import (
-    ensure_warp_func_module_keyword_compatible,
     ensure_warp_torch_namespace_compatible,
 )
 
@@ -197,44 +196,6 @@ def test_curobo_context_records_cuda_core_and_allows_repeated_close(
     assert calls[2] == ("device", torch, "cuda:0")
 
 
-def test_ensure_warp_func_module_keyword_compatible_patches_signature_without_keyword(
-    monkeypatch,
-) -> None:
-    warp = _warp_module_without_module_keyword()
-    monkeypatch.setitem(sys.modules, "warp", warp)
-
-    ensure_warp_func_module_keyword_compatible()
-
-    assert getattr(warp.func, "_linkerbot_accepts_module_keyword")
-
-    def sample_func() -> None:
-        pass
-
-    registered = warp.func(sample_func, module="curobo.fake.kernel")
-    assert registered.func is sample_func
-    assert "sample_func" in warp._modules["curobo.fake.kernel"].functions
-
-    unique_registered = warp.func(module="unique")(sample_func)
-    assert unique_registered.func is sample_func
-    assert unique_registered.module.name == "sample_func"
-
-
-def test_ensure_warp_func_module_keyword_compatible_keeps_signature_with_keyword(
-    monkeypatch,
-) -> None:
-    warp = ModuleType("warp")
-
-    def decorator_factory_func(f=None, *, name=None, module=None):
-        return (f, name, module)
-
-    warp.func = decorator_factory_func
-    monkeypatch.setitem(sys.modules, "warp", warp)
-
-    ensure_warp_func_module_keyword_compatible()
-
-    assert warp.func is decorator_factory_func
-
-
 def test_ensure_warp_torch_namespace_compatible_maps_top_level_converter(
     monkeypatch,
 ) -> None:
@@ -259,29 +220,6 @@ def test_ensure_warp_torch_namespace_compatible_keeps_existing_namespace(
     ensure_warp_torch_namespace_compatible()
 
     assert warp.torch is existing
-
-
-def _warp_module_without_module_keyword() -> ModuleType:
-    warp = ModuleType("warp")
-    modules: dict[str, _FakeWarpModule] = {}
-
-    def func_without_module_keyword(f=None, *, name=None):
-        return (f, name)
-
-    def get_module(name: str) -> "_FakeWarpModule":
-        return modules.setdefault(name, _FakeWarpModule(name))
-
-    warp.func = func_without_module_keyword
-    warp.context = SimpleNamespace(
-        Function=_FakeWarpFunction,
-        Module=_FakeWarpModule,
-        get_module=get_module,
-    )
-    warp.codegen = SimpleNamespace(
-        make_full_qualified_name=lambda func: func.__name__,
-    )
-    warp._modules = modules
-    return warp
 
 
 def _fake_context_config(calls: list[object]) -> CuroboConfig:

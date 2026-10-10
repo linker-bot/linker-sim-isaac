@@ -15,8 +15,12 @@
   NVIDIA 驱动和 GPU；
 - 足以容纳 Isaac Sim wheel 与 extension cache 的本地空间。
 
-仓库当前锁定 Python 3.12、Isaac Sim 6.0.1、PyTorch 2.11/cu128、Warp 1.13.0 和
-cuRobo 0.8.0。准确版本以 `pyproject.toml` 与 `uv.lock` 为准。
+仓库当前锁定 Python 3.12、Isaac Sim 6.1.0、PyTorch 2.11/cu128、Warp 1.16.0 和
+Newton 1.5.0、MuJoCo/MuJoCo-Warp 3.11.0、cuRobo 0.8.0。准确版本以 `pyproject.toml` 与 `uv.lock` 为准。
+
+6.1 源码必须使用这套配套环境，不支持沿用 6.0.1 环境。旧任务修订请保留独立的 checkout
+和环境。资产 pin 和配置的物理参数未变，但求解器升级可能改变接触轨迹；采用新基线前应
+重新验收任务策略。
 
 ## 2. 获取工作区
 

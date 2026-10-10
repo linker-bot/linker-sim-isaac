@@ -116,6 +116,37 @@ class NativeMasterFollowerAudit:
         )
 
 
+def read_mujoco_equality_column(source: object, name: str) -> object | None:
+    """Read Newton 1.5 MuJoCo equality storage without copying a model tensor.
+
+    Builders own custom attributes; finalized models own the ``mujoco`` namespace.
+    Builder defaults are materialized only on this cold audit boundary, matching
+    finalize's treatment of missing rows. No old top-level aliases are supported.
+    """
+
+    attributes = getattr(source, "custom_attributes", None)
+    if not isinstance(attributes, Mapping):
+        return getattr(getattr(source, "mujoco", None), name, None)
+    attribute = attributes.get(f"mujoco:{name}")
+    type_attribute = attributes.get("mujoco:equality_constraint_type")
+    if attribute is None or type_attribute is None:
+        return None
+    count = len(type_attribute.values or ())
+    values = attribute.values or ()
+    return [
+        values[index]
+        if index < len(values) and values[index] is not None
+        else attribute.default
+        for index in range(count)
+    ]
+
+
+def _source_column(source: object, name: str) -> object | None:
+    if name.startswith("equality_constraint_"):
+        return read_mujoco_equality_column(source, name)
+    return getattr(source, name, None)
+
+
 def audit_native_master_follower_constraints(
     source: object,
     expectations: Sequence[ExpectedMasterFollowerConstraint],
@@ -200,7 +231,9 @@ def audit_native_master_follower_constraints(
         },
     )
     if resolved_representation == "model":
-        declared_count = getattr(source, "equality_constraint_count", None)
+        declared_count = read_mujoco_equality_column(
+            source, "equality_constraint_count"
+        )
         if declared_count is None or int(declared_count) != equality_count:
             raise NewtonConstraintAuditError(
                 "Finalized Newton equality_constraint_count does not match its columns: "
@@ -1041,7 +1074,7 @@ def _resolve_representation(
         )
     if representation != "auto":
         return representation
-    equality_types = getattr(source, "equality_constraint_type", None)
+    equality_types = read_mujoco_equality_column(source, "equality_constraint_type")
     return "builder" if isinstance(equality_types, list) else "model"
 
 
@@ -1084,7 +1117,7 @@ def _require_zero_mimic_representation(
 
 
 def _read_1d(source: object, name: str, *, dtype: object) -> np.ndarray:
-    value = getattr(source, name, None)
+    value = _source_column(source, name)
     if value is None:
         raise NewtonConstraintAuditError(
             f"Newton source does not expose required column {name!r}"
@@ -1098,7 +1131,7 @@ def _read_1d(source: object, name: str, *, dtype: object) -> np.ndarray:
 
 
 def _read_polycoef(source: object, name: str) -> np.ndarray:
-    value = getattr(source, name, None)
+    value = _source_column(source, name)
     if value is None:
         raise NewtonConstraintAuditError(
             f"Newton source does not expose required column {name!r}"
@@ -1124,7 +1157,7 @@ def _read_labels(
     *,
     allow_empty: bool = False,
 ) -> tuple[str, ...]:
-    value = getattr(source, name, None)
+    value = _source_column(source, name)
     if value is None:
         raise NewtonConstraintAuditError(
             f"Newton source does not expose required labels {name!r}"
@@ -1306,6 +1339,7 @@ def _require_warp_vector(
 
 
 __all__ = [
+    "read_mujoco_equality_column",
     "COLD_STATE_PROJECTION_SCOPE",
     "NATIVE_JOINT_EQUALITY_EXECUTOR",
     "ExpectedMasterFollowerConstraint",

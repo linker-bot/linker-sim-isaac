@@ -89,12 +89,13 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | configuration | `linkerbot_sim.configuration.visualization` | configuration | configuration 层 visualization 实现 owner | pure | internal | [架构参考](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.visualization.kaleidoscope` | configuration | Kaleidoscope 严格配置根 | pure | internal | [架构参考](../reference/configuration.md) |
 
-### assets (8)
+### assets (9)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | assets | `linkerbot_sim.assets` | isaac_infrastructure | 强类型资产 profile 合同 | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.instance_paths` | isaac_infrastructure | assets 层 instance paths 实现 owner | pure | internal | [架构参考](naming.md) |
+| assets | `linkerbot_sim.assets.mjcf_defaults` | isaac_infrastructure | assets 层 mjcf defaults 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_config` | isaac_infrastructure | assets 层 robot config 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_import` | isaac_infrastructure | assets 层 robot import 实现 owner | pure | internal | [架构参考](naming.md) |
 | assets | `linkerbot_sim.assets.robot_instances` | isaac_infrastructure | assets 层 robot instances 实现 owner | pure | internal | [架构参考](naming.md) |
@@ -203,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends 层 trajectory adapter 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends 层 warp compat 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 
-### isaac (36)
+### isaac (35)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -241,7 +242,6 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.scene.pose` | isaac_infrastructure | isaac 层 pose 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.session` | isaac_infrastructure | SimulationApp、stage 与物理 runtime owner | Isaac main thread | owner path | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.spec` | isaac_infrastructure | isaac 层 spec 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
-| isaac | `linkerbot_sim.isaac.usd_physics_parse` | isaac_infrastructure | isaac 层 usd physics parse 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.world` | isaac_infrastructure | isaac 层 world 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 
 ### sensors (10)

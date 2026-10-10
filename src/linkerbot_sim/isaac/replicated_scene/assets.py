@@ -176,6 +176,7 @@ def import_source_robots(
     physics_backend: str,
     prepare_newton_render_topology: bool,
     object_configs: Sequence[RuntimeObjectConfig],
+    default_contact_time_constant_s: float | None = None,
 ) -> tuple[SourceReplicatedRobot, ...]:
     """按明确物理后端导入全部机器人，并重绑 MJCF world joint。
 
@@ -250,6 +251,7 @@ def import_source_robots(
             physics_backend=physics_backend,
             prepare_newton_render_topology=prepare_newton_render_topology,
             root_pose=execution.root_pose,
+            default_contact_time_constant_s=default_contact_time_constant_s,
         )
         apply_root_pose(
             stage,

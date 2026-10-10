@@ -92,7 +92,7 @@ wheels = [
 
 [[package]]
 name = "aiohttp"
-version = "3.13.4"
+version = "3.14.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
@@ -101,12 +101,13 @@ dependencies = [
     { name = "frozenlist" },
     { name = "multidict" },
     { name = "propcache" },
+    { name = "typing-extensions" },
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/45/4a/064321452809dae953c1ed6e017504e72551a26b6f5708a5a80e4bf556ff/aiohttp-3.13.4.tar.gz", hash = "sha256:d97a6d09c66087890c2ab5d49069e1e570583f7ac0314ecf98294c1b6aaebd38", size = 7859748, upload-time = "2026-03-28T17:19:40.6Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/78/8ea7308cac6934de8c74a14f3d5f65d1c89287426688be79538d0e5c013d/aiohttp-3.14.1.tar.gz", hash = "sha256:307f2cff90a764d329e77040603fa032db89c5c24fdad50c4c15334cba744035", size = 7955794, upload-time = "2026-06-07T21:09:35.529Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b0/b6/f7f4f318c7e58c23b761c9b13b9a3c9b394e0f9d5d76fbc6622fa98509f6/aiohttp-3.13.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:54203e10405c06f8b6020bd1e076ae0fe6c194adcee12a5a78af3ffa3c57025e", size = 1773938, upload-time = "2026-03-28T17:16:21.125Z" },
-    { url = "https://files.pythonhosted.org/packages/eb/0f/60374e18d590de16dcb39d6ff62f39c096c1b958e6f37727b5870026ea30/aiohttp-3.13.4-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:b08149419994cdd4d5eecf7fd4bc5986b5a9380285bcd01ab4c0d6bfca47b79d", size = 1737289, upload-time = "2026-03-28T17:16:38.187Z" },
+    { url = "https://files.pythonhosted.org/packages/20/9c/d445818389df371f56d141d881153ba23183c4735a03f7356ffb43f7757d/aiohttp-3.14.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3e6fc1a85fa7194a1a7d19f44e8609180f4a8eb5fa4c7ed8b4355f080fad235c", size = 1790278, upload-time = "2026-06-07T21:06:54.049Z" },
+    { url = "https://files.pythonhosted.org/packages/70/0a/e0075ce9ca0279ee1d4f0c0b85f54fea02ebc83c3007651a72bece658fec/aiohttp-3.14.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:6f71173be42d3241d428f760122febb748de0623f44308a6f120d0dd9ec572e3", size = 1767580, upload-time = "2026-06-07T21:07:07.873Z" },
 ]
 
 [[package]]
@@ -380,21 +381,21 @@ wheels = [
 
 [[package]]
 name = "cryptography"
-version = "46.0.7"
+version = "50.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/47/93/ac8f3d5ff04d54bc814e961a43ae5b0b146154c89c61b47bb07557679b18/cryptography-46.0.7.tar.gz", hash = "sha256:e4cfd68c5f3e0bfdad0d38e023239b96a2fe84146481852dffbcca442c245aa5", size = 750652, upload-time = "2026-04-08T01:57:54.692Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/ad/5d6702db60b1e40b41ef513b6967ff5848f307d50f8449baf1634f5908f1/cryptography-50.0.1.tar.gz", hash = "sha256:5dd9bda1c12b4162f6ff568eeb5e0ff956c28d14406e875cfe8a63a2d414ff20", size = 880381, upload-time = "2026-08-25T19:45:45.499Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4a/9a/1765afe9f572e239c3469f2cb429f3ba7b31878c893b246b4b2994ffe2fe/cryptography-46.0.7-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:5ad9ef796328c5e3c4ceed237a183f5d41d21150f972455a9d926593a1dcb308", size = 4426670, upload-time = "2026-04-08T01:56:21.415Z" },
-    { url = "https://files.pythonhosted.org/packages/2d/cf/054b9d8220f81509939599c8bdbc0c408dbd2bdd41688616a20731371fe0/cryptography-46.0.7-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:420b1e4109cc95f0e5700eed79908cef9268265c773d3a66f7af1eef53d409ef", size = 4459985, upload-time = "2026-04-08T01:56:27.309Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/0b/333ddab4270c4f5b972f980adef4faa66951a4aaf646ca067af597f15563/cryptography-46.0.7-cp311-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:42a1e5f98abb6391717978baf9f90dc28a743b7d9be7f0751a6f56a75d14065b", size = 4459756, upload-time = "2026-04-08T01:56:34.306Z" },
-    { url = "https://files.pythonhosted.org/packages/10/f2/19ceb3b3dc14009373432af0c13f46aa08e3ce334ec6eff13492e1812ccd/cryptography-46.0.7-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:5d1c02a14ceb9148cc7816249f64f623fbfee39e8c03b3650d842ad3f34d637e", size = 4674868, upload-time = "2026-04-08T01:56:38.034Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/6c/1a42450f464dda6ffbe578a911f773e54dd48c10f9895a23a7e88b3e7db5/cryptography-46.0.7-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:128c5edfe5e5938b86b03941e94fac9ee793a94452ad1365c9fc3f4f62216832", size = 4415405, upload-time = "2026-04-08T01:57:14.923Z" },
-    { url = "https://files.pythonhosted.org/packages/c7/08/ffd537b605568a148543ac3c2b239708ae0bd635064bab41359252ef88ed/cryptography-46.0.7-cp38-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:1d25aee46d0c6f1a501adcddb2d2fee4b979381346a78558ed13e50aa8a59067", size = 4450634, upload-time = "2026-04-08T01:57:21.185Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/c7/201d3d58f30c4c2bdbe9b03844c291feb77c20511cc3586daf7edc12a47b/cryptography-46.0.7-cp38-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:35719dc79d4730d30f1c2b6474bd6acda36ae2dfae1e3c16f2051f215df33ce0", size = 4449961, upload-time = "2026-04-08T01:57:29.068Z" },
-    { url = "https://files.pythonhosted.org/packages/41/52/a8908dcb1a389a459a29008c29966c1d552588d4ae6d43f3a1a4512e0ebe/cryptography-46.0.7-cp38-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:a1529d614f44b863a7b480c6d000fe93b59acee9c82ffa027cfadc77521a9f5e", size = 4664256, upload-time = "2026-04-08T01:57:33.144Z" },
+    { url = "https://files.pythonhosted.org/packages/57/26/e6d4fc8512a51a5f9ee7bfdbfb853bce1197087df40c9ad993ad370b846f/cryptography-50.0.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ff838d62ec1bfce4f9ba7fa16f4a7b554cd8d0c299e6be37502161a660c84eef", size = 4712478, upload-time = "2026-08-25T19:44:07.375Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/1b/82f0f0d8858d4432be1af790477edf62aef90324041aa07c57e57bef1af7/cryptography-50.0.1-cp311-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:51593d180cf6d179bde5c5d065bed81386b1f381656ae7d042b7ffc87a9895ad", size = 4746720, upload-time = "2026-08-25T19:44:14.051Z" },
+    { url = "https://files.pythonhosted.org/packages/85/66/6ccca4722987ddedaa7fc9c3f4708af7431f5535666c174350830888c6b7/cryptography-50.0.1-cp311-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:51afcfceb15597cf2635068e4ac9a56b2abde622edde17f37d85fd7b5306497a", size = 4746230, upload-time = "2026-08-25T19:44:22.376Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/22/c3654cccc856e9d682817b04ac3ee79731cb09ca6f95996a95c904de2883/cryptography-50.0.1-cp311-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:9ebcdd5519be9b652a46f507817a74591774fc3d6923ac364e4dfa64e36b291b", size = 5014082, upload-time = "2026-08-25T19:44:26.709Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/3c/0e77bd5ffcf078e9dd27d3074aad6c030d9b10d0bf69329d573c927a188c/cryptography-50.0.1-cp39-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e22dfed744bd4002e909464cb23d2f0b05c6f3113a79ef2e9864a53db737c733", size = 4738357, upload-time = "2026-08-25T19:45:02.786Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/51/3f9701867a46b6c1740c9b52fc4d3bed6cbdcfedcc9b6e64305c07f39cff/cryptography-50.0.1-cp39-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:407fe2b6db00939c05c0e945e9914238f2f0a430974839429dafc82b1ee6bee5", size = 4772942, upload-time = "2026-08-25T19:45:09.396Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/eb/5d7124083e8d8cda8f5b348f544b71ad6f707ad63193758ef4d8e569da02/cryptography-50.0.1-cp39-abi3-manylinux_2_34_x86_64.whl", hash = "sha256:9dde0a357190eb3b1da1bb9ab750e9c85cba82ca5977aa0836cbb94e92611239", size = 4772694, upload-time = "2026-08-25T19:45:18.315Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/ab/89e2b798d2c3925f82e2bb72d5979f3d2f6da2dd22ef4a8cd8b70d920039/cryptography-50.0.1-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:2a93d05e34d5f67fba6f891fe85d929999baa7195e853923ea6d7576c9e68c5e", size = 5044355, upload-time = "2026-08-25T19:45:22.353Z" },
 ]
 
 [[package]]
@@ -543,17 +544,18 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.120.4"
+version = "0.139.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
     { name = "pydantic" },
     { name = "starlette" },
     { name = "typing-extensions" },
+    { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/3a/0bf90d5189d7f62dc2bd0523899629ca59b58ff4290d631cd3bb5c8889d4/fastapi-0.120.4.tar.gz", hash = "sha256:2d856bc847893ca4d77896d4504ffdec0fb04312b705065fca9104428eca3868", size = 339716, upload-time = "2025-10-31T18:37:28.81Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/cd/95/d3f0ae10836324a2eab98a52b61210ac609f08200bf4bb0dc8132d32f78a/fastapi-0.139.2.tar.gz", hash = "sha256:333145a6891e9b5b3cfceb69baf817e8240cde4d4588ae5a10bf56ffacb6255e", size = 423428, upload-time = "2026-07-16T15:06:17.912Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/47/14a76b926edc3957c8a8258423db789d3fa925d2fed800102fce58959413/fastapi-0.120.4-py3-none-any.whl", hash = "sha256:9bdf192308676480d3593e10fd05094e56d6fdc7d9283db26053d8104d5f82a0", size = 108235, upload-time = "2025-10-31T18:37:27.038Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/c7/cb03251d9dfb177246a9809a76f189d21df32dbd4a845951881d11323b7f/fastapi-0.139.2-py3-none-any.whl", hash = "sha256:b9ad015a835173d59865e2f5d8296fbc2b317bf56a2ba1a5bfbdd03de2fd4b1c", size = 130234, upload-time = "2026-07-16T15:06:19.557Z" },
 ]
 
 [[package]]
@@ -563,6 +565,14 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/b8/00651a0f559862f3bb7d6f7477b192afe3f583cc5e26403b44e59a55ab34/filelock-3.25.2.tar.gz", hash = "sha256:b64ece2b38f4ca29dd3e810287aa8c48182bbecd1ae6e9ae126c9b35f1382694", size = 40480, upload-time = "2026-03-11T20:45:38.487Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/a5/842ae8f0c08b61d6484b52f99a03510a3a72d23141942d216ebe81fefbce/filelock-3.25.2-py3-none-any.whl", hash = "sha256:ca8afb0da15f229774c9ad1b455ed96e85a81373065fb10446672f64444ddf70", size = 26759, upload-time = "2026-03-11T20:45:37.437Z" },
+]
+
+[[package]]
+name = "flatbuffers"
+version = "25.12.19"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", hash = "sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4", size = 26661, upload-time = "2025-12-19T23:16:13.622Z" },
 ]
 
 [[package]]
@@ -760,13 +770,13 @@ wheels = [
 
 [[package]]
 name = "isaacsim"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim/isaacsim-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:d3fea3b40b513482e85c62e552bfdfb73a3ac950662a843c7375cfa8c97941c2" },
+    { url = "https://pypi.nvidia.com/isaacsim/isaacsim-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:55fb65052c0fe025f7165f10e71b4e693e26b6fc2f8c7cc08875ac41b00e695d" },
 ]
 
 [package.optional-dependencies]
@@ -800,52 +810,52 @@ extscache = [
 
 [[package]]
 name = "isaacsim-app"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-app/isaacsim_app-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:108bd30ac91cf8bdafd520b7c22f1eac81907174998b614ded104cf126792fd4" },
+    { url = "https://pypi.nvidia.com/isaacsim-app/isaacsim_app-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:aa3cd2ae94489d6818186afd722a31e4fc82018ff3e8a4d07199a93d500a84e2" },
 ]
 
 [[package]]
 name = "isaacsim-asset"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-storage" },
     { name = "isaacsim-utils" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-asset/isaacsim_asset-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:fc62712adb1641ce53aad11c257331f5c4fccba59255ba8d2514a745cb0efbe4" },
+    { url = "https://pypi.nvidia.com/isaacsim-asset/isaacsim_asset-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:cf1338595aa99fc4d4aafb0d091883864332003f602f89a8e15d1e424ebdd97a" },
 ]
 
 [[package]]
 name = "isaacsim-benchmark"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-benchmark/isaacsim_benchmark-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:89917f3e36113ccb032e99b89ca9d5c6c4d7cc030f325baf5a808731b6ba5b52" },
+    { url = "https://pypi.nvidia.com/isaacsim-benchmark/isaacsim_benchmark-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:c5090850b594ddd7b422f2b7c9da14cd6a61e3ab0943bf5bbc3d6f1eacff9dfb" },
 ]
 
 [[package]]
 name = "isaacsim-code-editor"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-code-editor/isaacsim_code_editor-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:adbf216dcb34471c7e67a0683bb9f746a7773040b91cf42432f1a21dee95a665" },
+    { url = "https://pypi.nvidia.com/isaacsim-code-editor/isaacsim_code_editor-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:145f281814263424ff14ebe47f834bba62700a409489369a1b4e58caa5c5c47e" },
 ]
 
 [[package]]
 name = "isaacsim-core"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "absl-py" },
@@ -883,11 +893,10 @@ dependencies = [
     { name = "nest-asyncio" },
     { name = "networkx" },
     { name = "newton", extra = ["sim"], marker = "extra == 'extra-16-linker-sim-isaac-simulation'" },
-    { name = "newton-actuators" },
     { name = "newton-usd-schemas" },
     { name = "numpy-stl" },
     { name = "oauthlib" },
-    { name = "opencv-python-headless" },
+    { name = "opencv-python-headless-noffmpeg" },
     { name = "osqp" },
     { name = "packaging" },
     { name = "portalocker" },
@@ -913,70 +922,70 @@ dependencies = [
     { name = "urdf-usd-converter" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-core/isaacsim_core-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:aadb3c5dffd433d5caec5cf0c4c7a314d30b222997bb8496385baae67dd3367c" },
+    { url = "https://pypi.nvidia.com/isaacsim-core/isaacsim_core-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2dbde879bc55c1e30a4579539eef250c27fd3e3bc17dc909ef90b16b0aedb8ad" },
 ]
 
 [[package]]
 name = "isaacsim-cortex"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
     { name = "isaacsim-ros1" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-cortex/isaacsim_cortex-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:71e455b2ea5fae001fb841ba11115bdbc1e738bfa98fcaf9aebbde4d5694db8a" },
+    { url = "https://pypi.nvidia.com/isaacsim-cortex/isaacsim_cortex-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:df0f3133aa9aa2e43188942a7e3b5d62af73c5aeeb6c9c59cf1bbd10ad63db6a" },
 ]
 
 [[package]]
 name = "isaacsim-example"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-cortex" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-example/isaacsim_example-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:4c22448a337a2bbf0b99934cb6d5c84ebde4692b088846acefba04e8b949f588" },
+    { url = "https://pypi.nvidia.com/isaacsim-example/isaacsim_example-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:0d7364274750bace6f04d0529f5828b98ecd8c489bcd198f63b9b517e85e4909" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-kit"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit/isaacsim_extscache_kit-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:35b64cf35ce3d31875ef43025f243c8bd03e29cb28fe844b0cd06b76ba535714" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit/isaacsim_extscache_kit-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3e2e96b0badc486000e3cbee3ccabc1f7eb9b1191c7334a25a39b689ca535e09" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-kit-sdk"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit-sdk/isaacsim_extscache_kit_sdk-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:a39c7a71f7a859e9db4ce6f81382f63a480d7e1938c6f3653702c9e6dd609c5e" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit-sdk/isaacsim_extscache_kit_sdk-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:dd587ecb5066427a47063ee117a716e33498bf5e0eee1f8f4f77d502333fadd8" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-physics"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-physics/isaacsim_extscache_physics-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e666e4985f99752df68c3aee25daf8d8771d17a5546d76dde26c038985f60127" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-physics/isaacsim_extscache_physics-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:94ab00d5e878148bf92335e068c38e7ba995fc083607781dc788ccf0df14be23" },
 ]
 
 [[package]]
 name = "isaacsim-gui"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-core" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-gui/isaacsim_gui-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:92568f2553dc3f9bc9a5e411b5035a48b12b65544b43d3029ef9cbe31b4f0983" },
+    { url = "https://pypi.nvidia.com/isaacsim-gui/isaacsim_gui-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:9a911be5d95d9451b5403a6d3040767fcd95e1309b51a10a0457daafb7e021af" },
 ]
 
 [[package]]
 name = "isaacsim-kernel"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "aiobotocore" },
@@ -986,6 +995,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "aioitertools" },
     { name = "aiosignal" },
+    { name = "anyio" },
     { name = "asteval" },
     { name = "async-timeout" },
     { name = "attrs" },
@@ -1020,92 +1030,98 @@ dependencies = [
     { name = "yarl" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-kernel/isaacsim_kernel-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:618fd6fb09d7d67ca5102251b999bf1a851a8918dadbeea0789e7d4f2a24bbb1" },
+    { url = "https://pypi.nvidia.com/isaacsim-kernel/isaacsim_kernel-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:fe795f2d965e8fb82befa71071a13687aba519d61f980820117b02261ae3cec7" },
 ]
 
 [[package]]
 name = "isaacsim-replicator"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-core" },
     { name = "isaacsim-storage" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-replicator/isaacsim_replicator-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:01485414698e1052ce04d5c61942aca8284fe69cbc969bca129f7950736f3445" },
+    { url = "https://pypi.nvidia.com/isaacsim-replicator/isaacsim_replicator-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:6c69c090e42100a49c333bf46a6e94632bc121100a4c701f97852fdf00cb0d3f" },
 ]
 
 [[package]]
 name = "isaacsim-rl"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-benchmark" },
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-rl/isaacsim_rl-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:fda0f6f9a200dacc7bb76e363ed66f8b9bce3ebdb9d254e00533a5789e121d73" },
+    { url = "https://pypi.nvidia.com/isaacsim-rl/isaacsim_rl-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:441d1a0af29643c4058ee666368ea7a4e0d72874623a1ff081af8c7151cc53d6" },
 ]
 
 [[package]]
 name = "isaacsim-robot"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
     { name = "isaacsim-sensor" },
+    { name = "onnxruntime" },
+    { name = "py-trees" },
+    { name = "pydot" },
+    { name = "pyparsing" },
+    { name = "six" },
+    { name = "transitions" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot/isaacsim_robot-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2b5e23d06e80b5ba538803c3e63b2ccd909a8bc10516e75ee7693ad49e3407b5" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot/isaacsim_robot-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e5f28c9901343ee09edac33170f03506875f71dd675c1565deeb1e9f41a7ae0c" },
 ]
 
 [[package]]
 name = "isaacsim-robot-motion"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot-motion/isaacsim_robot_motion-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2a6af11d616efbde551813d40ac22cd2ce992a862fbe8395a3f83ca5d4a937de" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot-motion/isaacsim_robot_motion-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e807b6879b6fb680f8348edfd3507da4f5971b3b8d1dc39142b6eaabae3b9856" },
 ]
 
 [[package]]
 name = "isaacsim-robot-setup"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot-setup/isaacsim_robot_setup-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:b199045e8f8d9ca9806e5d7eb8a119654746cff8bc33a2ef254494502d832ea2" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot-setup/isaacsim_robot_setup-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:c20c36e8db72166ef0d2089a13ce5476658ff1f89589db531fb2bc1092e47f44" },
 ]
 
 [[package]]
 name = "isaacsim-ros1"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-sensor" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-ros1/isaacsim_ros1-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3ce21fa59dc5c717452f3c038064fc294b139200a2d35a35b92032117f20db41" },
+    { url = "https://pypi.nvidia.com/isaacsim-ros1/isaacsim_ros1-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:87537710b5560762fa0a468f3feb4f410f917ff64e739d267dea3615ea51d0a5" },
 ]
 
 [[package]]
 name = "isaacsim-ros2"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-sensor" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-ros2/isaacsim_ros2-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3bbfc86ecf12a67858bbb4a226a2acbbcc3b754f504da1a78ba4bf80dde8fae7" },
+    { url = "https://pypi.nvidia.com/isaacsim-ros2/isaacsim_ros2-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:f8455420dfabbcecd8150c1df5d7d1eac691938e311ed634bdcca43b9a793ae9" },
 ]
 
 [[package]]
 name = "isaacsim-sensor"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
@@ -1113,52 +1129,52 @@ dependencies = [
     { name = "isaacsim-utils" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-sensor/isaacsim_sensor-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:d4fbcda65fb9ea5c1c8a097d015130dabd6ea0416a878068d4a92fa7ef2f9594" },
+    { url = "https://pypi.nvidia.com/isaacsim-sensor/isaacsim_sensor-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:eaa4d80b1fb2933835c580eba6c2b7139cddf427d320dd275b0ed0b3f4ba7acf" },
 ]
 
 [[package]]
 name = "isaacsim-storage"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-storage/isaacsim_storage-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:66b5734f9104066395a97ae9dcecb5855a1a4201eb9dea3c01e012b39a1968fe" },
+    { url = "https://pypi.nvidia.com/isaacsim-storage/isaacsim_storage-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2f7fd9325300c4baa528c26f4df6b37ae3f0093db7e30c6b8831e6b33a5cb37b" },
 ]
 
 [[package]]
 name = "isaacsim-template"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
     { name = "isaacsim-storage" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-template/isaacsim_template-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:5b5c8697847002a49cfd342ba3aeb313c5c574e0da7fc56cd1e3861ebd654a27" },
+    { url = "https://pypi.nvidia.com/isaacsim-template/isaacsim_template-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:bf5660b1f6aecfce33f81aa5bcedc752d66a7f85e467f98833519cabe1e3ec7c" },
 ]
 
 [[package]]
 name = "isaacsim-test"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-test/isaacsim_test-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:90b7b58d7bed986c0e523f88411706394c5fd9c24911016b6c38b713c4b9aa66" },
+    { url = "https://pypi.nvidia.com/isaacsim-test/isaacsim_test-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:1c037cdf2623ade77cfae8c350ec9a903b2e7ebae0a25efabb9e2ba362d73111" },
 ]
 
 [[package]]
 name = "isaacsim-utils"
-version = "6.0.1.0"
+version = "6.1.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-utils/isaacsim_utils-6.0.1.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:588a32a81e430c8f9759c8769f41bd76e6ca5c39351bd0bdb8f9fb5888715b53" },
+    { url = "https://pypi.nvidia.com/isaacsim-utils/isaacsim_utils-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:5582f31bc825bdc92623ea6c667c69777cab57d096782d5801af586e14e81d59" },
 ]
 
 [[package]]
@@ -1175,14 +1191,14 @@ wheels = [
 
 [[package]]
 name = "jinja2"
-version = "3.1.5"
+version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markupsafe" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/92/b3130cbbf5591acf9ade8708c365f3238046ac7cb8ccba6e81abccb0ccff/jinja2-3.1.5.tar.gz", hash = "sha256:8fefff8dc3034e27bb80d67c671eb8a9bc424c0ef4c0826edbff304cceff43bb", size = 244674, upload-time = "2024-12-21T18:30:22.828Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/0f/2ba5fbcd631e3e88689309dbe978c5769e883e4b84ebfe7da30b43275c5a/jinja2-3.1.5-py3-none-any.whl", hash = "sha256:aba0f4dc9ed8013c424088f68a5c226f7d6097ed89b246d7749c2ec4175c6adb", size = 134596, upload-time = "2024-12-21T18:30:19.133Z" },
+    { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
 ]
 
 [[package]]
@@ -1300,7 +1316,7 @@ requires-dist = [
     { name = "cuda-bindings", extras = ["all"], marker = "extra == 'simulation'", specifier = "==12.9.7" },
     { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.26.0" },
     { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.3.0" },
-    { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.0.1.0" },
+    { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.1.0.0" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
     { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.411" },
@@ -1315,7 +1331,7 @@ requires-dist = [
     { name = "torchaudio", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "extra == 'simulation'", specifier = "==0.26.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "usd-core", marker = "extra == 'dev'", specifier = "==26.8" },
-    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.13.0" },
+    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.16.0" },
     { name = "websockets", specifier = "==12.0" },
 ]
 provides-extras = ["test", "dev", "visualization", "training", "simulation"]
@@ -1437,16 +1453,16 @@ wheels = [
 
 [[package]]
 name = "msal"
-version = "1.35.1"
+version = "1.38.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "pyjwt", extra = ["crypto"], marker = "extra == 'extra-16-linker-sim-isaac-simulation'" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/aa/5a646093ac218e4a329391d5a31e5092a89db7d2ef1637a90b82cd0b6f94/msal-1.35.1.tar.gz", hash = "sha256:70cac18ab80a053bff86219ba64cfe3da1f307c74b009e2da57ef040eb1b5656", size = 165658, upload-time = "2026-03-04T23:38:51.812Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/1f/10f9d47a63d3a2e61b2c43e15bee6b95682aab827018f9a1b97a80787e25/msal-1.38.0.tar.gz", hash = "sha256:4f10ff1257bacfd1781f22e85bd2b8d43ad1b490f3b6aafd7906671cadedd464", size = 203411, upload-time = "2026-08-24T10:22:46.053Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/86/16815fddf056ca998853c6dc525397edf0b43559bb4073a80d2bc7fe8009/msal-1.35.1-py3-none-any.whl", hash = "sha256:8f4e82f34b10c19e326ec69f44dc6b30171f2f7098f3720ea8a9f0c11832caa3", size = 119909, upload-time = "2026-03-04T23:38:50.452Z" },
+    { url = "https://files.pythonhosted.org/packages/c4/ca/d768f77a27d81ed0a6884f2458f8613c31c79b2eb95defbeca2273fd0754/msal-1.38.0-py3-none-any.whl", hash = "sha256:765b9b98b6aa380ee8b8f1c75636e08863edaf0a953498955bd668650dde5d49", size = 131057, upload-time = "2026-08-24T10:22:47.485Z" },
 ]
 
 [[package]]
@@ -1473,7 +1489,7 @@ wheels = [
 
 [[package]]
 name = "mujoco"
-version = "3.8.0"
+version = "3.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -1482,14 +1498,14 @@ dependencies = [
     { name = "numpy" },
     { name = "pyopengl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e2/d8/9aae1a021b6e15ee69d805d893e01dda71cbaae1c75d5f8ec8e12916cb7c/mujoco-3.8.0.tar.gz", hash = "sha256:250afe57458d6881b2d7659fa0029a128cb57cbbb620268d95647fb9ad742183", size = 918250, upload-time = "2026-04-24T22:59:07.531Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/2d/290f3f4062eec1c0d5246de0a75f1b18b59a1961081f49ddc97333fc8263/mujoco-3.11.0.tar.gz", hash = "sha256:390856102af9547dfd87cb2791eb105a3d2e00a37323fe9a12ed17e512aff1a6", size = 1139880, upload-time = "2026-07-28T01:23:32.252Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/de/bc2271210dad5c6ab73af294779226308e9cf4ed8bc2dbe59922eb8702ed/mujoco-3.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:323fedd14905b73cfe56ea8ff916716ccf8b57cff348a7aa6932c8983a465d64", size = 7226045, upload-time = "2026-04-24T22:58:41.117Z" },
+    { url = "https://files.pythonhosted.org/packages/41/d6/7b79f5d8fbd019658a3b5feb6ffd09c1e727eaf93f518685d3cc105a28f5/mujoco-3.11.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f40214fefc8c2fe0002a3c8abadf30de7a3330634f3c45cc29b407b40a0173fc", size = 18868030, upload-time = "2026-07-28T01:22:50.494Z" },
 ]
 
 [[package]]
 name = "mujoco-usd-converter"
-version = "0.2.0"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mujoco" },
@@ -1498,14 +1514,14 @@ dependencies = [
     { name = "tinyobjloader" },
     { name = "usd-exchange" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/71/33/fc9c68f45aa6a6bc4d7012cfc5568b583577628d9c4f011c2816f2e3b0d2/mujoco_usd_converter-0.2.0.tar.gz", hash = "sha256:7aebb06590573583d642616fbaa7523cf098a7b31621023ef48d50538eef3e8a", size = 301687, upload-time = "2026-04-29T23:02:32.558Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/91/11/144434c0c3b18ebd1412a92fd0af838290b10d783eb4d50566b24867f449/mujoco_usd_converter-0.5.0.tar.gz", hash = "sha256:426d92330c5941bab6dbf08b56bbd3333284e6c8446e0a1e080c954c7ae463a9", size = 312136, upload-time = "2026-08-05T18:25:41.757Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/64/59/b91b7e63876f534dd9f77d7aca3102c4a3beb9d505fa4942412e82825d60/mujoco_usd_converter-0.2.0-py3-none-any.whl", hash = "sha256:2c8e3e1b607cb48990106a99ad7eb7438e56e8d93dd934e4951b6ae8d0e4cced", size = 52586, upload-time = "2026-04-29T23:02:31.24Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/5a/4c3be263beeda406d622ad273e0f5daba8e0ce3996e9e46a35cba820039f/mujoco_usd_converter-0.5.0-py3-none-any.whl", hash = "sha256:e4a97f9817fdd56b06e6207e0878e0de8baae5ee82880e365815c89d9a2058f4", size = 55631, upload-time = "2026-08-05T18:25:40.546Z" },
 ]
 
 [[package]]
 name = "mujoco-warp"
-version = "3.8.0.3"
+version = "3.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -1514,9 +1530,9 @@ dependencies = [
     { name = "numpy" },
     { name = "warp-lang" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/63/7dabf7f487c0946894a8ec85ea5d978c19e6b1afb6d6b6f63f457dff75ee/mujoco_warp-3.8.0.3.tar.gz", hash = "sha256:ca143a82f76b8df60984ca0d3c0f269a745886621cc2168beaa58e1d2c2358b8", size = 1938832, upload-time = "2026-05-08T23:27:41.058Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2c/02/da883029b3661619651d0e2469ec17df92dd64ca5de25119886d516ee1de/mujoco_warp-3.11.0.tar.gz", hash = "sha256:e9e521a3809b95baa98c44bd4fcaccb035b5c700e2616efc52ebc33d29ae2eef", size = 2075418, upload-time = "2026-07-28T01:21:41.987Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/f5/30c736dfe87ad7e8f7a7f8f43b80e0ff43c6af46cef65ba95d3ba172129a/mujoco_warp-3.8.0.3-py3-none-any.whl", hash = "sha256:dfbfa24e376e0b03bf6dcebaed7ef69b4885280a020e5f0fd805c125fae3d129", size = 2019908, upload-time = "2026-05-08T23:27:39.283Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/03/9bf86946c755a9a020c1bea587841472b0206351f73f67e41050fcb2a20c/mujoco_warp-3.11.0-py3-none-any.whl", hash = "sha256:97e77e877c1c2ea064ae68eaace2333dec94f2d8984091ba7b383bc8c34958f6", size = 2153348, upload-time = "2026-07-28T01:21:40.18Z" },
 ]
 
 [[package]]
@@ -1550,40 +1566,28 @@ wheels = [
 
 [[package]]
 name = "newton"
-version = "1.2.1"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "warp-lang" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/a2/37101b824e0d444875d941ad6b41f64c1fe3829272d591d6a7ad07819790/newton-1.2.1-py3-none-any.whl", hash = "sha256:a5eb8bbdfb6033b272a8542b86e4f250b110122cd359bda06e1fcf162ddf77eb", size = 4288070, upload-time = "2026-06-04T18:28:57.296Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/a8/706cd18af6c42a47f750a129c2605e7ed9af5800a37665ad78b870d34383/newton-1.5.0-py3-none-any.whl", hash = "sha256:a9eef789e2e0f857e40df3382f101b5faadff5dd8a61cb86dd5ec5382dd27865", size = 5556791, upload-time = "2026-08-11T13:06:15.61Z" },
 ]
 
 [package.optional-dependencies]
 sim = [
     { name = "mujoco" },
     { name = "mujoco-warp" },
-    { name = "newton-actuators" },
-]
-
-[[package]]
-name = "newton-actuators"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "warp-lang" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/53/ee/3119604cad4ca894fb80ef8ccd06b6bbd0b485b38ddc152ca753c67e0e76/newton_actuators-0.1.0-py3-none-any.whl", hash = "sha256:ba08923d12faaed6ef2b36d06948321425aee11d2f67c43cbd74d88a2649acce", size = 25990, upload-time = "2026-01-28T10:17:14.975Z" },
 ]
 
 [[package]]
 name = "newton-usd-schemas"
-version = "0.2.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/55/9c/5a40c3fd86975172e01d46872e3f0b2c08409e22bdcac9d75e1e814f2e71/newton_usd_schemas-0.2.0.tar.gz", hash = "sha256:b483a029e54f4a7b06d3156c47860e3e8b77e33e3ee4c4fd525c335d74f898a0", size = 69375, upload-time = "2026-05-07T17:53:51.544Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/5f/aad1672263880d7e0ee3a7ce9b877ef16e99dba45fb5eb8084181eb7ee1e/newton_usd_schemas-0.4.1.tar.gz", hash = "sha256:1f6946ce2741d7a86ca8e3e84d7b64328c88b42a3b29160a7607b2ce0c837bf4", size = 69561, upload-time = "2026-07-30T17:40:41.505Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/7c/79ff957c828116966894268a749eccf455e4d11f08ef66ea681084c3faaa/newton_usd_schemas-0.2.0-py3-none-any.whl", hash = "sha256:b6402affb6cdc59b0a237994ee5196cc1b43f04f766e527b7e6ef061c0719acf", size = 15551, upload-time = "2026-05-07T17:53:50.13Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/24/d1d44f682dbd28392ef0b6f9e6f9e40374c6009af06e494fa6a9308f79e2/newton_usd_schemas-0.4.1-py3-none-any.whl", hash = "sha256:8911e846c65448426609a2945db6d1135d33e84bf4107efd888a62287b1aa93d", size = 19424, upload-time = "2026-07-30T17:40:40.076Z" },
 ]
 
 [[package]]
@@ -1819,15 +1823,28 @@ wheels = [
 ]
 
 [[package]]
-name = "opencv-python-headless"
-version = "4.13.0.90"
+name = "onnxruntime"
+version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flatbuffers" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "protobuf" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/43/2a4e04f8dbeffad19bbcced4bcd4289bf478921518437404d6b92bdf213b/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9b6dd70599005bd1bf29779f04a91978b92b5e719c11a20068a8f8e535f725b6", size = 18185439, upload-time = "2026-05-08T19:07:36.299Z" },
+]
+
+[[package]]
+name = "opencv-python-headless-noffmpeg"
+version = "4.14.0.94rc1"
+source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/13/af150685be342dc09bfb0824e2a280020ccf1c7fc64e15a31d9209016aa9/opencv_python_headless-4.13.0.90-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:dbc1f4625e5af3a80ebdbd84380227c0f445228588f2521b11af47710caca1ba", size = 57683677, upload-time = "2026-01-18T09:10:23.588Z" },
-    { url = "https://files.pythonhosted.org/packages/81/a1/facfe2801a861b424c4221d66e1281cf19735c00e07f063a337a208c11b5/opencv_python_headless-4.13.0.90-cp37-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:f46b17ea0aa7e4124ca6ad71143f89233ae9557f61d2326bcdb34329a1ddf9bd", size = 62535926, upload-time = "2026-01-18T09:12:47.229Z" },
+    { url = "https://pypi.nvidia.com/opencv-python-headless-noffmpeg/opencv_python_headless_noffmpeg-4.14.0.94rc1-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:758e5c9fbee25005c9d3fc163d9c66443af7a1776789a75683a630d1ed974393" },
 ]
 
 [[package]]
@@ -1927,6 +1944,18 @@ wheels = [
 ]
 
 [[package]]
+name = "py-trees"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydot" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/79/9c/b8c39a86ce887e3547b415e6bd61b70e1004af0a8ba1b44e75233a4406a2/py_trees-2.4.0.tar.gz", hash = "sha256:cd8738a80e7422aec2b133270b6aa92e3e83926ded2ba9b3614028dba99cdb41", size = 85359, upload-time = "2025-11-13T22:46:01.41Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/0a/2e0c30342586dabb0b4b7946393a7aeb725fca7b4549fb02e128a1a0fe87/py_trees-2.4.0-py3-none-any.whl", hash = "sha256:c26a2d23f70871ce093abd5f8425998529bfe7b97cc563316e9c3c9cec20c312", size = 114099, upload-time = "2025-11-13T22:45:58.884Z" },
+]
+
+[[package]]
 name = "pycares"
 version = "5.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1987,6 +2016,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/ad/88/5f2260bdfae97aabf
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/41/4b043778cf9c4285d59742281a769eac371b9e47e35f98ad321349cc5d61/pydantic_core-2.33.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8f57a69461af2a5fa6e6bbd7a5f60d3b7e6cebb687f55106933188e79ad155c1", size = 2002028, upload-time = "2025-04-23T18:31:39.095Z" },
     { url = "https://files.pythonhosted.org/packages/27/b9/9c17f0396a82b3d5cbea4c24d742083422639e7bb1d5bf600e12cb176a13/pydantic_core-2.33.2-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:5f483cfb75ff703095c59e365360cb73e00185e01aaea067cd19acffd2ab20ea", size = 2234187, upload-time = "2025-04-23T18:31:45.891Z" },
+]
+
+[[package]]
+name = "pydot"
+version = "4.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/50/35/b17cb89ff865484c6a20ef46bf9d95a5f07328292578de0b295f4a6beec2/pydot-4.0.1.tar.gz", hash = "sha256:c2148f681c4a33e08bf0e26a9e5f8e4099a82e0e2a068098f32ce86577364ad5", size = 162594, upload-time = "2025-06-17T20:09:56.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7e/32/a7125fb28c4261a627f999d5fb4afff25b523800faed2c30979949d6facd/pydot-4.0.1-py3-none-any.whl", hash = "sha256:869c0efadd2708c0be1f916eb669f3d664ca684bc57ffb7ecc08e70d5e93fee6", size = 37087, upload-time = "2025-06-17T20:09:55.25Z" },
 ]
 
 [[package]]
@@ -2106,11 +2147,11 @@ wheels = [
 
 [[package]]
 name = "python-multipart"
-version = "0.0.26"
+version = "0.0.32"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/88/71/b145a380824a960ebd60e1014256dbb7d2253f2316ff2d73dfd8928ec2c3/python_multipart-0.0.26.tar.gz", hash = "sha256:08fadc45918cd615e26846437f50c5d6d23304da32c341f289a617127b081f17", size = 43501, upload-time = "2026-04-10T14:09:59.473Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/42/55c32bb9b12693c092ad250a0e82edb5b31ddeda6eb772de5f308b3804ad/python_multipart-0.0.32.tar.gz", hash = "sha256:be54b7f3fa167bb83e4fcd936b887b708f4e57fe75911c02aebf53efaf8d938e", size = 46881, upload-time = "2026-06-04T16:18:58.647Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/22/f1925cdda983ab66fc8ec6ec8014b959262747e58bdca26a4e3d1da29d56/python_multipart-0.0.26-py3-none-any.whl", hash = "sha256:c0b169f8c4484c13b0dcf2ef0ec3a4adb255c4b7d18d8e420477d2b1dd03f185", size = 28847, upload-time = "2026-04-10T14:09:58.131Z" },
+    { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
 ]
 
 [[package]]
@@ -2536,6 +2577,18 @@ wheels = [
 ]
 
 [[package]]
+name = "transitions"
+version = "0.9.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/83/9e90f3494057d73c9e6bd8de8488af7c9fa714666ccc2db30fe07d147818/transitions-0.9.3.tar.gz", hash = "sha256:881fb75bb1654ed55d86060bb067f2c716f8e155f57bb73fd444e53713aafec8", size = 1191029, upload-time = "2025-07-02T10:49:03.153Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f4/05/fea3020e90aa378941ff10de8860fb3b1288313c27efd10fa0c476498f7e/transitions-0.9.3-py2.py3-none-any.whl", hash = "sha256:02463248f2b668d86f66636b1e3c9e8de84d93e22915247f4e1aa9ee1cae28aa", size = 112792, upload-time = "2025-07-02T10:49:01.415Z" },
+]
+
+[[package]]
 name = "trimesh"
 version = "4.11.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2627,7 +2680,7 @@ wheels = [
 
 [[package]]
 name = "urdf-usd-converter"
-version = "0.1.3"
+version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "newton-usd-schemas" },
@@ -2636,18 +2689,18 @@ dependencies = [
     { name = "tinyobjloader" },
     { name = "usd-exchange" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/de/1ba6cd4d985e617024cd7a50d9e269690c39ab9a4e08d3ba5023e63ab0ec/urdf_usd_converter-0.1.3.tar.gz", hash = "sha256:954f15a5c7f5a772b2df6eb206749a1af712de840cafb8e8a5d92349b9d32c86", size = 213029, upload-time = "2026-05-22T20:11:07.017Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/62/efd04d3aee2d83e378864298618f67d58f43a941018bbbc2eeeef07bc401/urdf_usd_converter-0.3.2.tar.gz", hash = "sha256:9a202a3d6529cfa404b3734d17a7a2e87bd1c8d53a909edf97c9813c4d253833", size = 219755, upload-time = "2026-07-31T01:56:29.736Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0d/05/49564250b895976fd75dfddcccffb92283c1422a17aa7bf54d5b5adb0646/urdf_usd_converter-0.1.3-py3-none-any.whl", hash = "sha256:0db78b712ac99eed1b9180ce3d1d293020713476b818a31c56d2eee1c3f85fb6", size = 62288, upload-time = "2026-05-22T20:11:04.83Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/d5/dfb7dd5a5cef24c96887dfe02c55c0e536c826d741ad9e06eb552a5c1faf/urdf_usd_converter-0.3.2-py3-none-any.whl", hash = "sha256:9d280df0d7534c4e5951d7a5b1391c9107ab653aac915eaee187db6445671346", size = 63696, upload-time = "2026-07-31T01:56:28.454Z" },
 ]
 
 [[package]]
 name = "urllib3"
-version = "2.6.3"
+version = "2.7.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/c7/24/5f1b3bdffd70275f6661c76461e25f024d5a38a46f04aaca912426a2b1d3/urllib3-2.6.3.tar.gz", hash = "sha256:1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed", size = 435556, upload-time = "2026-01-07T16:24:43.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/39/08/aaaad47bc4e9dc8c725e68f9d04865dbcb2052843ff09c97b08904852d84/urllib3-2.6.3-py3-none-any.whl", hash = "sha256:bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4", size = 131584, upload-time = "2026-01-07T16:24:42.685Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
 ]
 
 [[package]]
@@ -2732,13 +2785,13 @@ wheels = [
 
 [[package]]
 name = "warp-lang"
-version = "1.13.0"
+version = "1.16.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.13.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:ac2479c70ad410d58deb088c2a64168792be588efc1bec22dc51f92238e8c8c3" },
+    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.16.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:96449fc1e3b354185e2f09434fb794b5953ab2e8673b104d7e7f48d5d418bb35" },
 ]
 
 [[package]]

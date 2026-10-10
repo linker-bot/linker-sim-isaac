@@ -178,7 +178,7 @@ def validate_target_runtime(
     experience_family: str = "mirror",
     rendering_required: bool = False,
 ) -> None:
-    """严格校验七个正式 Kit 的 Isaac 6.0.1 运行时闭包。"""
+    """严格校验七个正式 Kit 的 Isaac 6.1.0 运行时闭包。"""
 
     expected_backend = normalize_physics_backend(expected_physics_backend)
     execution = normalize_physics_execution(physics_execution)
@@ -190,33 +190,33 @@ def validate_target_runtime(
     newton_runtime = expected_backend == "newton"
     expected = {
         "python": (provenance.python, "3.12."),
-        "isaacsim": (provenance.isaacsim.version, "6.0.1.0"),
+        "isaacsim": (provenance.isaacsim.version, "6.1.0.0"),
         "torch": (provenance.torch.version, "2.11.0"),
-        "warp": (provenance.warp.version, "1.13.0"),
-        "warp.__version__": (provenance.warp.module_version, "1.13.0"),
+        "warp": (provenance.warp.version, "1.16.0"),
+        "warp.__version__": (provenance.warp.module_version, "1.16.0"),
         "torch_cuda": (provenance.torch_cuda, "12.8"),
     }
     if expected_backend == "newton":
         if provenance.newton is None:
-            expected["newton"] = (None, "1.2.1")
-            expected["newton.__version__"] = (None, "1.2.1")
+            expected["newton"] = (None, "1.5.0")
+            expected["newton.__version__"] = (None, "1.5.0")
         else:
-            expected["newton"] = (provenance.newton.version, "1.2.1")
+            expected["newton"] = (provenance.newton.version, "1.5.0")
             expected["newton.__version__"] = (
                 provenance.newton.module_version,
-                "1.2.1",
+                "1.5.0",
             )
         if provenance.mujoco_warp is None:
-            expected["mujoco-warp"] = (None, "3.8.0.3")
-            expected["mujoco_warp.__version__"] = (None, "3.8.0.3")
+            expected["mujoco-warp"] = (None, "3.11.0")
+            expected["mujoco_warp.__version__"] = (None, "3.11.0")
         else:
             expected["mujoco-warp"] = (
                 provenance.mujoco_warp.version,
-                "3.8.0.3",
+                "3.11.0",
             )
             expected["mujoco_warp.__version__"] = (
                 provenance.mujoco_warp.module_version,
-                "3.8.0.3",
+                "3.11.0",
             )
     if require_curobo:
         if provenance.curobo is None:
@@ -328,7 +328,7 @@ def validate_target_runtime(
             "omni.syntheticdata",
         ]
         if not rendering_required:
-            # ``isaacsim.core.api`` 在 Isaac Sim 6.0.1 中硬依赖
+            # ``isaacsim.core.api`` 在 Isaac Sim 6.1.0 中硬依赖
             # ``omni.hydra.usdrt_delegate``；它只是 USD Runtime delegate。无渲染闭包
             # 仍只拒绝真正的 RTX/viewport 实现，显式 viewport 闭包则允许这些命名空间。
             forbidden_prefixes.extend(
@@ -370,9 +370,9 @@ def validate_target_runtime(
             f"active physics registry engines={active_engines!r} "
             f"expected [{expected_backend!r}]"
         )
-    expected_extension_versions = {"omni.warp.core": "1.13.0"}
+    expected_extension_versions = {"omni.warp.core": "1.16.0"}
     if newton_runtime:
-        expected_extension_versions["omni.kit.usd.layers"] = "2.6.1"
+        expected_extension_versions["omni.kit.usd.layers"] = "2.7.2"
         forbidden_exact = {
             "isaacsim.core.api",
             "isaacsim.core.cloner",

@@ -4,7 +4,7 @@
 
 ## 平台
 
-- Linux x86-64、Python 3.12、Isaac Sim 6.0.1；
+- Linux x86-64、Python 3.12、Isaac Sim 6.1.0；
 - 仿真环境使用 Kit `pxr`，CPU dev 环境使用 `usd-core`，二者不混装；
 - EULA 必须由部署者通过 `OMNI_KIT_ACCEPT_EULA` 明确接受；
 - 仓库是 checkout application，不支持 wheel/editable install。

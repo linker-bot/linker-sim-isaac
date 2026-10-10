@@ -89,12 +89,13 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | configuration | `linkerbot_sim.configuration.visualization` | configuration | configuration implementation owner for visualization | pure | internal | [Architecture reference](../reference/configuration.md) |
 | configuration | `linkerbot_sim.configuration.visualization.kaleidoscope` | configuration | Kaleidoscope strict configuration root | pure | internal | [Architecture reference](../reference/configuration.md) |
 
-### assets (8)
+### assets (9)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
 | assets | `linkerbot_sim.assets` | isaac_infrastructure | typed asset profile contracts | pure | internal | [Architecture reference](naming.md) |
 | assets | `linkerbot_sim.assets.instance_paths` | isaac_infrastructure | assets implementation owner for instance paths | pure | internal | [Architecture reference](naming.md) |
+| assets | `linkerbot_sim.assets.mjcf_defaults` | isaac_infrastructure | assets implementation owner for mjcf defaults | pure | internal | [Architecture reference](naming.md) |
 | assets | `linkerbot_sim.assets.robot_config` | isaac_infrastructure | assets implementation owner for robot config | pure | internal | [Architecture reference](naming.md) |
 | assets | `linkerbot_sim.assets.robot_import` | isaac_infrastructure | assets implementation owner for robot import | pure | internal | [Architecture reference](naming.md) |
 | assets | `linkerbot_sim.assets.robot_instances` | isaac_infrastructure | assets implementation owner for robot instances | pure | internal | [Architecture reference](naming.md) |
@@ -203,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends implementation owner for trajectory adapter | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends implementation owner for warp compat | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 
-### isaac (36)
+### isaac (35)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -241,7 +242,6 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.scene.pose` | isaac_infrastructure | isaac implementation owner for pose | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.session` | isaac_infrastructure | SimulationApp, stage, and physics runtime owner | Isaac main thread | owner path | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.spec` | isaac_infrastructure | isaac implementation owner for spec | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
-| isaac | `linkerbot_sim.isaac.usd_physics_parse` | isaac_infrastructure | isaac implementation owner for usd physics parse | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.world` | isaac_infrastructure | isaac implementation owner for world | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 
 ### sensors (10)

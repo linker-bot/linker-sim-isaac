@@ -15,6 +15,7 @@ class _CustomAttribute:
     frequency: object
     references: str | None
     values: object
+    default: object = None
 
 
 class _SchemaResolverNewton:
@@ -48,6 +49,15 @@ class _FakeSolverMuJoCo:
     def register_custom_attributes(builder: _FakeBuilder) -> None:
         builder.registered_before_parse = True
         builder.custom_attributes = {
+            **{
+                f"mujoco:equality_constraint_{name}": _CustomAttribute(
+                    dtype=str if name == "label" else int,
+                    frequency="mujoco:equality_constraint",
+                    references="world" if name == "world" else None,
+                    values=[],
+                )
+                for name in ("type", "joint1", "joint2", "world", "label")
+            },
             "test:target_label": _CustomAttribute(
                 dtype=str,
                 frequency="test:actuator",
@@ -106,11 +116,6 @@ class _FakeBuilder:
         self.shape_label: list[str] = []
         self.joint_label: list[str] = []
         self.articulation_label: list[str] = []
-        self.equality_constraint_type: list[int] = []
-        self.equality_constraint_joint1: list[int] = []
-        self.equality_constraint_joint2: list[int] = []
-        self.equality_constraint_world: list[int] = []
-        self.equality_constraint_label: list[str] = []
         self.constraint_mimic_joint0: list[int] = []
         self.constraint_mimic_joint1: list[int] = []
         self.constraint_mimic_world: list[int] = []
@@ -147,11 +152,17 @@ class _FakeBuilder:
         self.shape_label = [f"{source}/shape_{i}" for i in range(self.shape_count)]
         self.joint_label = [f"{source}/joint_{i}" for i in range(self.joint_count)]
         self.articulation_label = [f"{source}/arm_{i}" for i in range(2)]
-        self.equality_constraint_type = [2] * 10
-        self.equality_constraint_joint1 = list(range(0, 20, 2))
-        self.equality_constraint_joint2 = list(range(1, 20, 2))
-        self.equality_constraint_world = [-1] * 10
-        self.equality_constraint_label = [f"{source}/equality_{i}" for i in range(10)]
+        self.custom_attributes["mujoco:equality_constraint_type"].values = [2] * 10
+        self.custom_attributes["mujoco:equality_constraint_joint1"].values = list(
+            range(0, 20, 2)
+        )
+        self.custom_attributes["mujoco:equality_constraint_joint2"].values = list(
+            range(1, 20, 2)
+        )
+        self.custom_attributes["mujoco:equality_constraint_world"].values = [-1] * 10
+        self.custom_attributes["mujoco:equality_constraint_label"].values = [
+            f"{source}/equality_{i}" for i in range(10)
+        ]
         self.custom_attributes["test:target_label"].values = [f"{source}/joint_1"]
         self.custom_attributes["test:actuator_world"].values = [-1]
         return {"scope": "prototype", "root": source}
@@ -188,17 +199,28 @@ class _FakeBuilder:
         self.joint_label.extend(prototype.joint_label)
         self.articulation_label.extend(prototype.articulation_label)
 
-        self.equality_constraint_type.extend(prototype.equality_constraint_type)
-        self.equality_constraint_joint1.extend(
-            index + joint_offset for index in prototype.equality_constraint_joint1
+        self.custom_attributes["mujoco:equality_constraint_type"].values.extend(
+            prototype.custom_attributes["mujoco:equality_constraint_type"].values
         )
-        self.equality_constraint_joint2.extend(
-            index + joint_offset for index in prototype.equality_constraint_joint2
+        self.custom_attributes["mujoco:equality_constraint_joint1"].values.extend(
+            index + joint_offset
+            for index in prototype.custom_attributes[
+                "mujoco:equality_constraint_joint1"
+            ].values
         )
-        self.equality_constraint_world.extend(
-            [world] * len(prototype.equality_constraint_type)
+        self.custom_attributes["mujoco:equality_constraint_joint2"].values.extend(
+            index + joint_offset
+            for index in prototype.custom_attributes[
+                "mujoco:equality_constraint_joint2"
+            ].values
         )
-        self.equality_constraint_label.extend(prototype.equality_constraint_label)
+        self.custom_attributes["mujoco:equality_constraint_world"].values.extend(
+            [world]
+            * len(prototype.custom_attributes["mujoco:equality_constraint_type"].values)
+        )
+        self.custom_attributes["mujoco:equality_constraint_label"].values.extend(
+            prototype.custom_attributes["mujoco:equality_constraint_label"].values
+        )
         self.constraint_mimic_joint0.extend(
             index + joint_offset for index in prototype.constraint_mimic_joint0
         )
@@ -296,6 +318,7 @@ def test_build_parses_once_and_replicates_native_joint_equalities(
     ]
     assert prototype.add_usd_calls[0][1]["root_path"] == "/World/envs/env_0"
     for current in (builder, prototype):
+        assert current.add_usd_calls[0][1]["convert_mjc_equality_constraints"] is False
         assert current.add_usd_calls[0][1][
             "joint_drive_gains_scaling"
         ] == pytest.approx(math.pi / 180.0)
@@ -310,13 +333,28 @@ def test_build_parses_once_and_replicates_native_joint_equalities(
     assert builder.world_count == 2
     assert builder.current_world == -1
     assert builder.add_builder_xforms == [0, 10]
-    assert builder.equality_constraint_type == [2] * 20
-    assert builder.equality_constraint_world == [0] * 10 + [1] * 10
-    assert builder.equality_constraint_joint1 == list(range(0, 40, 2))
-    assert builder.equality_constraint_joint2 == list(range(1, 40, 2))
+    assert (
+        builder.custom_attributes["mujoco:equality_constraint_type"].values == [2] * 20
+    )
+    assert (
+        builder.custom_attributes["mujoco:equality_constraint_world"].values
+        == [0] * 10 + [1] * 10
+    )
+    assert builder.custom_attributes[
+        "mujoco:equality_constraint_joint1"
+    ].values == list(range(0, 40, 2))
+    assert builder.custom_attributes[
+        "mujoco:equality_constraint_joint2"
+    ].values == list(range(1, 40, 2))
     assert builder.constraint_mimic_joint0 == []
-    assert builder.equality_constraint_label[0] == "/World/envs/env_0/equality_0"
-    assert builder.equality_constraint_label[10] == "/World/envs/env_1/equality_0"
+    assert (
+        builder.custom_attributes["mujoco:equality_constraint_label"].values[0]
+        == "/World/envs/env_0/equality_0"
+    )
+    assert (
+        builder.custom_attributes["mujoco:equality_constraint_label"].values[10]
+        == "/World/envs/env_1/equality_0"
+    )
     assert builder.shape_label[0] == "/World/ground"
     assert builder.shape_label[1] == "/World/envs/env_0/shape_0"
     assert builder.shape_label[21] == "/World/envs/env_1/shape_0"
@@ -387,7 +425,9 @@ def test_single_world_uses_identity_and_only_ignores_prototype(
     assert result.environment_root == "/World/robot"
     assert result.world_transforms == (0,)
     assert result.source_world_transform == 0
-    assert len(builder.equality_constraint_type) == 10
+    assert (
+        len(builder.custom_attributes["mujoco:equality_constraint_type"].values) == 10
+    )
 
 
 def test_label_rewrite_is_exact_boundary_safe_and_supports_mapping_columns() -> None:
@@ -399,11 +439,15 @@ def test_label_rewrite_is_exact_boundary_safe_and_supports_mapping_columns() -> 
             "display name",
         ],
         body_world=[0, 1, 1, 0],
-        equality_constraint_key=["/Source/equality"],
-        equality_constraint_world=[1],
         constraint_mimic_label=["/Source/mimic"],
         constraint_mimic_world=[0],
         custom_attributes={
+            "mujoco:equality_constraint_label": _CustomAttribute(
+                str, "mujoco:equality_constraint", None, ["/Source/equality"]
+            ),
+            "mujoco:equality_constraint_world": _CustomAttribute(
+                int, "mujoco:equality_constraint", "world", [1]
+            ),
             "test:label": _CustomAttribute(
                 dtype=str,
                 frequency="test:item",
@@ -431,7 +475,9 @@ def test_label_rewrite_is_exact_boundary_safe_and_supports_mapping_columns() -> 
         "/SourceSibling/link",
         "display name",
     ]
-    assert builder.equality_constraint_key == ["/Dest/one/equality"]
+    assert builder.custom_attributes["mujoco:equality_constraint_label"].values == [
+        "/Dest/one/equality"
+    ]
     assert builder.constraint_mimic_label == ["/Dest/zero/mimic"]
     assert builder.custom_attributes["test:label"].values == {
         3: "/Dest/zero",

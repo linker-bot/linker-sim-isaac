@@ -14,6 +14,10 @@ Git commit 标识。
 
 ### 变更
 
+- Newton CPU/CUDA profile 和程序规格的默认接触恢复时间设为 10 ms，保留 2 ms 内部步长上限、每子步接触刷新和源模型显式值；改变此数值默认值后需复验任务接触行为。
+
+- 支持基线迁移至 Isaac Sim 6.1.0、Newton 1.5、Warp 1.16 和 MuJoCo 3.11。Newton 使用新目标字段并明确要求 DOF 布局，同步适配模型通知与控制快照；仿真环境需按新锁文件重建。
+
 - Mirror 只采集到期且有输出消费者的相机；`step(render=True)` 改为允许按需采集，不再每步强制全部传感器。`render(camera_ids=...)` 获取选中相机新帧，不推进物理或录制；空闲传感器停止渲染，暂停、急停和连续查询独立服务 GUI。
 
 - 在 self-hosted runner 稳定性问题解决前，GPU/Isaac `Simulation` 工作流暂时只允许手动触发。
@@ -24,10 +28,14 @@ Git commit 标识。
 
 ### 修复
 
+- 保证配置的 Newton 接触默认值在 Isaac 6.1 MJCF 转换后实际生效：在自有临时源副本中补全缺失默认值，保留显式或继承的 `solref`，不修改源资产或 PhysX 导入。
+
+- 修正 Isaac 6.1 的 PhysX 导入：保留 MJCF 分层后丢失的原生 mimic 目标和系数，将 MJCF/URDF 的 articulation root 元数据放在已有世界固定关节上，使固定相机装配在积分中保持固定；任务空间绑定通过精确 body 关系处理关节型 root。
+
 - 将 AR5 臂手默认 `AR5V2_L/R_pinch_tcp` 改名为 `AR5V2_L/R_flange_tcp`，明确其为零偏移机械臂法兰参考。
   显式 TCP selector 需改用新名，不保留旧名别名；不改变坐标变换、物理行为或独立配置的任务 TCP。
 
-- Newton 每个内部子步刷新接触，默认内部步长不超过 2 ms，未显式设置的接触采用明确的 4 ms 响应。保留外部控制/渲染时钟及每 shape 显式接触参数，诊断输出实际积分配置。
+- Newton 每个内部子步刷新接触，默认内部步长不超过 2 ms，未显式设置的接触使用配置响应，当前默认 10 ms。保留外部控制/渲染时钟及每 shape 显式接触参数，诊断输出实际积分配置。
   原有 Newton physics YAML leaf 需补充 `max_substep_dt_s` 和 `default_contact_time_constant_s`；增加内部积分会降低吞吐并改变接触轨迹。
 
 - 关节 effort 遥测区分 commanded、applied、projected 来源，按实际物理时钟记录逐关节有效性和缺测原因。
@@ -35,7 +43,7 @@ Git commit 标识。
 
 - 规划接入当前固定手型、附件、实际工装包围盒与携带物；修正障碍世界坐标到基座坐标转换，增加明确接触对和采样路径覆盖诊断。
 
-- 资产导入期间临时串行化携带的 USD 25.11 物理解析器，规避多 collider 的分配器竞争；之后恢复正常并发。
+- 配套运行时已覆盖旧问题，删除 USD 解析串行保护和 Warp `func(module=...)` 绕行。Newton 等式审计适配 MuJoCo 命名空间并保留原生 joint-equality 执行者；未显式设置的接触默认值不再修改 resolver 映射。
 
 - Mirror 相机通过原生帧完成事件刷新暂停位姿与 headless 图像，不推进物理；记录保留渲染身份，避免将旧帧标记为新的物理时刻。
 

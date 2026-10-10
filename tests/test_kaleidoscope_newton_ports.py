@@ -142,12 +142,12 @@ def _runtime() -> tuple[_Manager, tuple[str, ...], tuple[str, ...], tuple[str, .
         body_qd=_warp_array(body_qd, wp.spatial_vector, manager),
     )
     manager.control = SimpleNamespace(
-        joint_target_pos=_warp_array(
+        joint_target_q=_warp_array(
             [4.0, 40.0, 5.0, 50.0, 6.0, 60.0] + [0.0] * 18,
             wp.float32,
             manager,
         ),
-        joint_target_vel=_warp_array([0.0] * 24, wp.float32, manager),
+        joint_target_qd=_warp_array([0.0] * 24, wp.float32, manager),
         joint_f=_warp_array([0.0] * 24, wp.float32, manager),
     )
     return manager, robot_paths, tcp_paths, object_paths
@@ -245,11 +245,11 @@ def test_articulation_port_maps_cuda_env_rows_and_reuses_borrowed_output() -> No
         torch.tensor([0.7, 1.0, 0.2, 2.0, 0.9, 3.0], device="cuda"),
     )
     torch.testing.assert_close(
-        _torch_alias(manager.control.joint_target_pos)[:6],
+        _torch_alias(manager.control.joint_target_q)[:6],
         torch.tensor([6.0, 40.0, 5.0, 50.0, 8.0, 60.0], device="cuda"),
     )
     assert ("state", "joint_q", (0, 1, 2)) in manager.events
-    assert ("control", "joint_target_pos", (0, 1, 2)) in manager.events
+    assert ("control", "joint_target_q", (0, 1, 2)) in manager.events
 
     torch.testing.assert_close(
         port.read_all_joint_positions(ids),
@@ -277,8 +277,8 @@ def test_newton_control_runtime_prewarms_and_preserves_owner_addresses() -> None
         "ke": manager.model.joint_target_ke,
         "kd": manager.model.joint_target_kd,
         "limit": manager.model.joint_effort_limit,
-        "position": manager.control.joint_target_pos,
-        "velocity": manager.control.joint_target_vel,
+        "position": manager.control.joint_target_q,
+        "velocity": manager.control.joint_target_qd,
         "effort": manager.control.joint_f,
     }
     owner_pointers = {
@@ -436,7 +436,7 @@ def test_empty_same_step_mask_preserves_newton_owner_state_bitwise() -> None:
         name: _torch_alias(getattr(owner, name)).clone()
         for owner, names in (
             (manager.state, ("joint_q", "joint_qd", "body_q", "body_qd")),
-            (manager.control, ("joint_target_pos",)),
+            (manager.control, ("joint_target_q",)),
         )
         for name in names
     }
@@ -458,14 +458,14 @@ def test_empty_same_step_mask_preserves_newton_owner_state_bitwise() -> None:
 
     for owner, names in (
         (manager.state, ("joint_q", "joint_qd", "body_q", "body_qd")),
-        (manager.control, ("joint_target_pos",)),
+        (manager.control, ("joint_target_q",)),
     ):
         for name in names:
             assert torch.equal(_torch_alias(getattr(owner, name)), original[name])
     assert {field for _category, field, _mask in manager.device_mask_events} == {
         "joint_q",
         "joint_qd",
-        "joint_target_pos",
+        "joint_target_q",
         "body_q",
         "body_qd",
     }

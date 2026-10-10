@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 
 from linkerbot_sim.backends.curobo.warp_compat import (
-    ensure_warp_func_module_keyword_compatible,
     ensure_warp_torch_namespace_compatible,
 )
 
@@ -13,7 +12,6 @@ from linkerbot_sim.backends.curobo.warp_compat import (
 def import_curobo_module():
     """导入 cuRobo 顶层包，并把缺依赖转换为可执行诊断。"""
 
-    ensure_warp_func_module_keyword_compatible()
     ensure_warp_torch_namespace_compatible()
     try:
         return importlib.import_module("curobo")
@@ -34,7 +32,6 @@ def import_curobo_module():
 def import_curobo_public(module_name: str):
     """延迟导入一个 cuRobo public module。"""
 
-    ensure_warp_func_module_keyword_compatible()
     ensure_warp_torch_namespace_compatible()
     try:
         return importlib.import_module(f"curobo.{module_name}")

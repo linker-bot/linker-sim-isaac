@@ -42,6 +42,7 @@ from linkerbot_sim.isaac.physics.newton.constraints import (
     NewtonColdStateProjector,
     NewtonDeviceWorldMasks,
     audit_native_master_follower_constraints,
+    read_mujoco_equality_column,
 )
 from linkerbot_sim.isaac.physics.newton.replication import (
     NewtonReplicationResult,
@@ -368,6 +369,12 @@ class NewtonRuntime:
 
         with wp.ScopedDevice(wp_device), self._owner_stream_scope():
             model = self.replication.builder.finalize(device=wp_device)
+        # Newton 1.5 permits coord-shaped targets (FREE joints have 7 coordinates
+        # but 6 DOFs). Our views and GPU ports intentionally use DOF slots for
+        # both target arrays; reject an externally changed global layout before
+        # any target writes instead of silently addressing a different joint.
+        if model.use_coord_layout_targets:
+            raise RuntimeError("Newton runtime requires DOF-layout joint targets")
         if int(getattr(model, "world_count", -1)) != len(roots):
             raise RuntimeError(
                 "finalized Newton world count mismatch: "
@@ -874,11 +881,11 @@ class NewtonRuntime:
             with self._owner_stream_scope():
                 self.model.set_gravity(self.gravity)
                 if self.solver is not None:
-                    from newton.solvers import SolverNotifyFlags
+                    from newton import ModelFlags
 
                     # SolverMuJoCo 持有独立的 mj_model/mjw_model；仅修改 Newton model
                     # 不会刷新 CPU ``mj_model.opt.gravity`` 或 CUDA solver cache。
-                    self.solver.notify_model_changed(SolverNotifyFlags.MODEL_PROPERTIES)
+                    self.solver.notify_model_changed(ModelFlags.MODEL_PROPERTIES)
             if self.solver is not None and bool(
                 getattr(self.physics_spec, "use_cuda_graph", False)
             ):
@@ -950,13 +957,13 @@ class NewtonRuntime:
             # snapshot/clone 的权威 solver state。这四类写入只需 FK。其它 generalized setter
             # 仍是 command/reset 语义，必须先恢复 native equality follower。
         elif category == "model" and self.solver is not None:
-            from newton.solvers import SolverNotifyFlags
+            from newton import ModelFlags
 
             # view scatter 与 solver cache invalidation 必须在同一 owner stream 排序。
             # ``sync_enter=False`` 是有意的：scatter 已入此流，无需再与 default stream
             # 建 fence，更不能为一次 gain 写引入 device-wide synchronize。
             with self._owner_stream_scope():
-                self.solver.notify_model_changed(SolverNotifyFlags.JOINT_DOF_PROPERTIES)
+                self.solver.notify_model_changed(ModelFlags.JOINT_DOF_PROPERTIES)
             if bool(getattr(self.physics_spec, "use_cuda_graph", False)):
                 self._graph = None
                 self._graph_state = "pending"
@@ -1647,7 +1654,8 @@ def _audit_prototype_constraints(
     # equality；这里明确拒绝同时存在 mimic 表示，防止一个 follower 被两套求解器重复执行。
     mimic_count = len(getattr(prototype, "constraint_mimic_joint0", ()))
     equality_types = _host_array(
-        getattr(prototype, "equality_constraint_type", ()), dtype=np.int32
+        read_mujoco_equality_column(prototype, "equality_constraint_type"),
+        dtype=np.int32,
     ).reshape(-1)
     joint_equality_count = int(np.count_nonzero(equality_types == 2))
     if mimic_count != 0 or joint_equality_count != expected_relation_count:
@@ -1870,7 +1878,7 @@ def _copy_control(
 ) -> None:
     import warp as wp
 
-    for name in ("joint_f", "joint_target_pos", "joint_target_vel", "joint_act"):
+    for name in ("joint_f", "joint_target_q", "joint_target_qd", "joint_act"):
         target = getattr(destination, name, None)
         value = getattr(source, name, None)
         if target is not None and value is not None:

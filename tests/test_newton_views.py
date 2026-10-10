@@ -107,8 +107,8 @@ def _runtime() -> _Manager:
         ),
     )
     control = SimpleNamespace(
-        joint_target_pos=_array([3.0, 30.0, 4.0, 40.0] + [0.0] * 12, wp.float32),
-        joint_target_vel=_array([0.3, 3.0, 0.4, 4.0] + [0.0] * 12, wp.float32),
+        joint_target_q=_array([3.0, 30.0, 4.0, 40.0] + [0.0] * 12, wp.float32),
+        joint_target_qd=_array([0.3, 3.0, 0.4, 4.0] + [0.0] * 12, wp.float32),
         joint_f=_array([0.0] * 16, wp.float32),
     )
     return _Manager(model, state, control)
@@ -146,18 +146,18 @@ def test_articulation_view_binds_exact_world_rows_and_scatters_targets() -> None
         dof_indices=[0],
     )
     np.testing.assert_allclose(
-        _numpy(manager.control.joint_target_pos)[:4],
+        _numpy(manager.control.joint_target_q)[:4],
         [7.0, 30.0, 8.0, 40.0],
     )
     np.testing.assert_allclose(
-        _numpy(manager.control.joint_target_vel)[:4],
+        _numpy(manager.control.joint_target_qd)[:4],
         [0.7, 3.0, 0.8, 4.0],
     )
     with pytest.raises(RuntimeError, match="follower"):
         view.set_dof_position_targets([[99.0]], indices=[0], dof_indices=[1])
 
-    assert ("control", "joint_target_pos", (0, 1)) in manager.events
-    assert ("control", "joint_target_vel", (0, 1)) in manager.events
+    assert ("control", "joint_target_q", (0, 1)) in manager.events
+    assert ("control", "joint_target_qd", (0, 1)) in manager.events
 
 
 def test_articulation_state_writes_preserve_targets_and_core_cold_contract() -> None:
@@ -168,7 +168,7 @@ def test_articulation_state_writes_preserve_targets_and_core_cold_contract() -> 
         controllable_dof_names=("joint_a",),
     )
     core = ArticulationCoreView(raw, physics_backend="newton")
-    before_targets = _numpy(manager.control.joint_target_pos)
+    before_targets = _numpy(manager.control.joint_target_q)
 
     core.set_joint_positions([[42.0]], indices=[1], joint_indices=[0])
     core.set_joint_velocities([[4.2]], indices=[1], joint_indices=[0])
@@ -182,7 +182,7 @@ def test_articulation_state_writes_preserve_targets_and_core_cold_contract() -> 
         [[0.1], [4.2]],
     )
     np.testing.assert_array_equal(
-        _numpy(manager.control.joint_target_pos), before_targets
+        _numpy(manager.control.joint_target_q), before_targets
     )
     assert ("state", "joint_q", (1,)) in manager.events
     assert ("state", "joint_qd", (1,)) in manager.events

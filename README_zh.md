@@ -53,7 +53,7 @@ physics 与 render 规格作出唯一选择。公开 selector 显式声明合法
 
 - Linux x86_64
 - Python 3.12
-- Isaac Sim 6.0.1
+- Isaac Sim 6.1.0
 - PyTorch 2.11，配合 CUDA 12.8
 - 规划或 end-effector action 需要 NVIDIA cuRobo 0.8.0
 - Kaleidoscope 与 Newton 需要兼容的 NVIDIA GPU
