@@ -11,7 +11,7 @@ from linkerbot_sim.assets.robot_config import RobotAssetConfig
 from linkerbot_sim.assets.root_pose import RootPoseConfig
 from linkerbot_sim.configuration.robots import AssetImportConfig
 from linkerbot_sim.assets.robot_import import (
-    _apply_mesh_collision_approximation,
+    _apply_imported_mesh_collision_approximation,
     _deactivate_imported_mjcf_actuators,
     _discover_imported_root_path,
     _reference_imported_prim_from_usd,
@@ -618,22 +618,29 @@ def test_file_backed_reference_allows_common_physics_for_rigid_object(
     assert target.GetVariantSet("Physics").GetVariantSelection() == "physics"
 
 
-def test_apply_mesh_collision_approximation_only_updates_collision_meshes() -> None:
+def test_apply_imported_mesh_collision_approximation_only_updates_collision_meshes(
+    tmp_path: Path,
+) -> None:
     pytest.importorskip("pxr")
     from pxr import Usd, UsdGeom, UsdPhysics
 
-    stage = Usd.Stage.CreateInMemory()
-    stage.DefinePrim("/World/Robot")
-    collision_mesh = UsdGeom.Mesh.Define(stage, "/World/Robot/collision")
-    visual_mesh = UsdGeom.Mesh.Define(stage, "/World/Robot/visual")
+    source_path = tmp_path / "robot.usda"
+    stage = Usd.Stage.CreateNew(str(source_path))
+    stage.DefinePrim("/Robot")
+    collision_mesh = UsdGeom.Mesh.Define(stage, "/Robot/collision")
+    visual_mesh = UsdGeom.Mesh.Define(stage, "/Robot/visual")
     UsdPhysics.CollisionAPI.Apply(collision_mesh.GetPrim())
+    stage.GetRootLayer().Save()
 
-    count = _apply_mesh_collision_approximation(
-        "/World/Robot",
+    count = _apply_imported_mesh_collision_approximation(
+        source_path,
+        root_path="/Robot",
         approximation="convex_decomposition",
-        stage=stage,
     )
 
+    stage = Usd.Stage.Open(str(source_path))
+    collision_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/Robot/collision"))
+    visual_mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/Robot/visual"))
     assert count == 1
     assert (
         UsdPhysics.MeshCollisionAPI(collision_mesh.GetPrim())
@@ -642,6 +649,134 @@ def test_apply_mesh_collision_approximation_only_updates_collision_meshes() -> N
         == "convexDecomposition"
     )
     assert not visual_mesh.GetPrim().HasAPI(UsdPhysics.MeshCollisionAPI)
+
+
+def test_apply_imported_mesh_collision_approximation_updates_instance_proxy_layer(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pxr")
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    import_root = tmp_path / "imported"
+    payload_root = import_root / "payloads"
+    payload_root.mkdir(parents=True)
+    payload_path = payload_root / "instances.usda"
+    payload_stage = Usd.Stage.CreateNew(str(payload_path))
+    payload_stage.DefinePrim("/ColliderAsset", "Xform")
+    collision_mesh = UsdGeom.Mesh.Define(
+        payload_stage,
+        "/ColliderAsset/collision",
+    )
+    UsdPhysics.CollisionAPI.Apply(collision_mesh.GetPrim())
+    UsdPhysics.MeshCollisionAPI.Apply(
+        collision_mesh.GetPrim()
+    ).CreateApproximationAttr().Set("convexHull")
+    payload_stage.GetRootLayer().Save()
+
+    source_path = import_root / "robot.usda"
+    source_stage = Usd.Stage.CreateNew(str(source_path))
+    source_stage.DefinePrim("/Robot", "Xform")
+    instance = source_stage.DefinePrim("/Robot/instance", "Xform")
+    instance.GetReferences().AddReference(str(payload_path), "/ColliderAsset")
+    instance.SetInstanceable(True)
+    source_stage.GetRootLayer().Save()
+
+    count = _apply_imported_mesh_collision_approximation(
+        source_path,
+        root_path="/Robot",
+        approximation="convex_decomposition",
+    )
+
+    source_stage = Usd.Stage.Open(str(source_path))
+    proxy = source_stage.GetPrimAtPath("/Robot/instance/collision")
+    assert proxy.IsInstanceProxy()
+    assert count == 1
+    assert (
+        UsdPhysics.MeshCollisionAPI(proxy).GetApproximationAttr().Get()
+        == "convexDecomposition"
+    )
+    payload_stage = Usd.Stage.Open(str(payload_path))
+    assert (
+        UsdPhysics.MeshCollisionAPI(
+            payload_stage.GetPrimAtPath("/ColliderAsset/collision")
+        )
+        .GetApproximationAttr()
+        .Get()
+        == "convexDecomposition"
+    )
+
+
+def test_apply_imported_mesh_collision_approximation_rejects_external_proxy_layer(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pxr")
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    external_path = tmp_path / "shared.usda"
+    external_stage = Usd.Stage.CreateNew(str(external_path))
+    external_stage.DefinePrim("/ColliderAsset", "Xform")
+    collision_mesh = UsdGeom.Mesh.Define(
+        external_stage,
+        "/ColliderAsset/collision",
+    )
+    UsdPhysics.CollisionAPI.Apply(collision_mesh.GetPrim())
+    UsdPhysics.MeshCollisionAPI.Apply(
+        collision_mesh.GetPrim()
+    ).CreateApproximationAttr().Set("convexHull")
+    external_stage.GetRootLayer().Save()
+
+    import_root = tmp_path / "imported"
+    import_root.mkdir()
+    source_path = import_root / "robot.usda"
+    source_stage = Usd.Stage.CreateNew(str(source_path))
+    source_stage.DefinePrim("/Robot", "Xform")
+    instance = source_stage.DefinePrim("/Robot/instance", "Xform")
+    instance.GetReferences().AddReference(str(external_path), "/ColliderAsset")
+    instance.SetInstanceable(True)
+    source_stage.GetRootLayer().Save()
+
+    with pytest.raises(RuntimeError, match="importer-owned writable"):
+        _apply_imported_mesh_collision_approximation(
+            source_path,
+            root_path="/Robot",
+            approximation="convex_decomposition",
+        )
+
+    external_stage = Usd.Stage.Open(str(external_path))
+    assert (
+        UsdPhysics.MeshCollisionAPI(
+            external_stage.GetPrimAtPath("/ColliderAsset/collision")
+        )
+        .GetApproximationAttr()
+        .Get()
+        == "convexHull"
+    )
+
+
+def test_apply_imported_mesh_collision_approximation_allows_non_mesh_object(
+    tmp_path: Path,
+) -> None:
+    pytest.importorskip("pxr")
+    from pxr import Usd, UsdGeom, UsdPhysics
+
+    source_path = tmp_path / "box.usda"
+    stage = Usd.Stage.CreateNew(str(source_path))
+    root = stage.DefinePrim("/Object", "Xform")
+    box = UsdGeom.Cube.Define(stage, "/Object/collision")
+    UsdPhysics.CollisionAPI.Apply(box.GetPrim())
+    stage.SetDefaultPrim(root)
+    stage.GetRootLayer().Save()
+
+    assert (
+        _apply_imported_mesh_collision_approximation(
+            source_path,
+            root_path="/Object",
+            approximation="convex_decomposition",
+            require_collision_meshes=False,
+        )
+        == 0
+    )
+    assert not box.GetPrim().HasAPI(UsdPhysics.MeshCollisionAPI)
 
 
 def test_deactivate_imported_mjcf_actuators_keeps_joint_target_and_other_prims() -> (
@@ -697,7 +832,7 @@ class FakeImporterRuntime:
         self.generated_path = Path()
         self.method_calls: list[str] = []
         self.references: list[tuple[object, str, str]] = []
-        self.collision_approximations: list[tuple[str, str]] = []
+        self.collision_approximations: list[tuple[object, str, str, bool]] = []
 
 
 def _install_fake_importer(monkeypatch, mode: str) -> FakeImporterRuntime:
@@ -753,9 +888,17 @@ def _install_fake_importer(monkeypatch, mode: str) -> FakeImporterRuntime:
     )
     monkeypatch.setattr(
         robot_import,
-        "_apply_mesh_collision_approximation",
-        lambda root_path, *, approximation: runtime.collision_approximations.append(
-            (root_path, approximation)
+        "_apply_imported_mesh_collision_approximation",
+        lambda source_usd_path, *, root_path, approximation, require_collision_meshes=True: (
+            runtime.collision_approximations.append(
+                (
+                    source_usd_path,
+                    root_path,
+                    approximation,
+                    require_collision_meshes,
+                )
+            )
+            or 1
         ),
     )
     monkeypatch.setattr(

@@ -10,6 +10,11 @@ Git commit 标识。
 
 ## [Unreleased]
 
+### 新增
+
+- Kaleidoscope 可以在不启动物理的情况下按 seed 采样 reset 场景描述，保存和读取带版本校验的 JSON，并在相同配置、相同后端的另一进程中恢复。原有进程内 snapshot 路径继续可用。
+- Kaleidoscope PhysX CUDA 新增只读的活动臂手碰撞查询，使用当前工作台、物体和其他机器人的真实 collider。Newton 明确报告该能力不可用；查询不推进物理，也不改动任务状态。
+
 - 接入 L6/O6 共用法兰、可选 Gemini 335L 腕部组件及顶部 ZED 模块，提供具名光学挂载与独立相机规格。修正 USD 姿态读回和快照恢复时的根旋转表示切换。
 
 ### 变更

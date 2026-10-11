@@ -249,6 +249,16 @@ def _runtime(module: str, module_map: Mapping[str, object]) -> str:
         if isinstance(value, str):
             return value
 
+    overrides = _mapping(
+        module_map.get("runtime_module_overrides", {}),
+        label="runtime_module_overrides",
+    )
+    override = overrides.get(module)
+    if override is not None:
+        if not isinstance(override, str):
+            raise ValueError(f"runtime override for {module} must be a string")
+        return override
+
     for prefix in _string_sequence(
         module_map.get("pure_module_prefixes", ()), label="pure_module_prefixes"
     ):
@@ -353,6 +363,38 @@ _RESPONSIBILITY_LEAVES = {
     "checkpoint": (
         "explicit cold persistent checkpoint boundary",
         "显式冷持久化 checkpoint 边界",
+    ),
+    "collision_kinematics": (
+        "full arm-hand reference FK and candidate collider transform composition",
+        "完整臂手参考 FK 与候选 collider 变换组合",
+    ),
+    "collision_hits": (
+        "exact-identity hit filtering and discrete-path aggregation",
+        "精确身份命中过滤与离散 path 聚合",
+    ),
+    "collision_factory": (
+        "transactional PhysX collision-query resource composition",
+        "事务式 PhysX 碰撞查询资源组合",
+    ),
+    "collision_overlap": (
+        "Isaac-thread candidate-shadow overlap execution and ownership",
+        "Isaac 主线程候选 shadow overlap 执行与所有权",
+    ),
+    "collision_registry": (
+        "multi-robot collision service dispatch and lifecycle ownership",
+        "多机器人碰撞 service 分发与生命周期所有权",
+    ),
+    "collision_root_transforms": (
+        "Isaac-thread capture of exact robot-root world transforms",
+        "Isaac 主线程精确机器人根世界变换读取",
+    ),
+    "collision_service": (
+        "validated single-robot articulated collision query orchestration",
+        "已校验的单机器人关节碰撞查询编排",
+    ),
+    "collision_torch": (
+        "explicit synchronous CUDA-Torch collision query boundary",
+        "显式同步 CUDA-Torch 碰撞查询边界",
     ),
     "cli": ("command-line parsing and process startup", "命令行解析与进程启动"),
     "catalog": (
@@ -677,7 +719,10 @@ def _hardcoded_allowlist() -> str:
 
 def _relative_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(
-        sorted(path.relative_to(REPO_ROOT) for path in paths if path.is_file())
+        sorted(
+            (path.relative_to(REPO_ROOT) for path in paths if path.is_file()),
+            key=lambda path: path.as_posix(),
+        )
     )
 
 
@@ -686,12 +731,18 @@ def _path_digest(paths: Sequence[Path]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _normalized_content_bytes(path: Path) -> bytes:
+    """Hash text files consistently when Git checks them out with CRLF."""
+
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def _path_content_digest(paths: Sequence[Path]) -> str:
     digest = hashlib.sha256()
     for relative in paths:
         digest.update(relative.as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update((REPO_ROOT / relative).read_bytes())
+        digest.update(_normalized_content_bytes(REPO_ROOT / relative))
         digest.update(b"\0")
     return digest.hexdigest()
 
@@ -717,7 +768,9 @@ def _inventory_group(
     for relative in paths:
         entry: dict[str, object] = {
             "path": relative.as_posix(),
-            "sha256": hashlib.sha256((REPO_ROOT / relative).read_bytes()).hexdigest(),
+            "sha256": hashlib.sha256(
+                _normalized_content_bytes(REPO_ROOT / relative)
+            ).hexdigest(),
         }
         fact = facts_by_path.get(relative)
         if fact is not None:
@@ -786,7 +839,7 @@ def _generated_inventory(manifest: Mapping[str, object]) -> str:
         "generated_by": "scripts/update_architecture_inventory.py",
         "hash_serialization": (
             "path_sha256 uses UTF-8 POSIX path plus LF; path_content_sha256 uses "
-            "UTF-8 POSIX path, NUL, raw content, NUL"
+            "UTF-8 POSIX path, NUL, UTF-8 text with CRLF normalized to LF, NUL"
         ),
         "pending_facades": pending,
     }

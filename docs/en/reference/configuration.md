@@ -312,6 +312,27 @@ Kaleidoscope scene fields stop at `physics_frequency_hz`, `robots`, and `objects
 There is no render frequency, camera, viewport, light, or replication count in this
 schema. Its scene describes one environment template only.
 
+Every Kaleidoscope `robots[]` entry must also declare a nominal reset position by
+joint name:
+
+```yaml
+reset_joint_positions:
+  arm_AR5_5_08L_W4C4A6_joint_1: 0.0
+  hand_lh_index_mcp_pitch: 0.0
+  # every other command joint is required
+```
+
+The keys must exactly match the selected robot profile's `command_joint_names`; missing
+and unknown joints are both errors. Values must be finite numbers. The catalog validates
+and freezes this mapping before Isaac, Torch, or CUDA starts, and consumers can project
+it into canonical command-joint order. This is the env-local nominal baseline for reset
+sampling; task randomization is added separately. Mirror scenes reject this field.
+
+This mapping is also the single command-joint baseline for normal GPU reset. After
+scene assembly, startup compares it with the imported articulation's default
+command-joint positions and rejects an error greater than `1e-6 rad`. An asset default
+change therefore cannot silently split offline descriptions from runtime reset.
+
 The catalog expands every robot/object profile and effective controller bundle from the
 same configuration root before Kit starts. A Kaleidoscope scene may contain any
 number of static rigid objects, but
@@ -354,13 +375,14 @@ physics:
   execution: cuda
   solver_type: PGS
   use_fabric: true
-  enable_scene_query_support: false
+  enable_scene_query_support: true
   memory: { ... }
 ```
 
 This variant belongs to Kaleidoscope. Fabric must be enabled and scene-query support
-must be disabled because the product has no planning collision world. Engine allocation
-capacity is not a project configuration field.
+must be enabled for the explicit PhysX articulated candidate query. That capability
+does not construct a planning collision world and does not enter the training step.
+Engine allocation capacity is not a project configuration field.
 
 The process-level `memory` mapping is the complete `GpuMemoryBudget`; missing fields
 do not receive defaults:

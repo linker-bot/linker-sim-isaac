@@ -11,6 +11,7 @@ from linkerbot_sim.kaleidoscope.geometry import (
     wrap_to_pi,
 )
 from linkerbot_sim.kaleidoscope.observations import tblock_heading
+from linkerbot_sim.kaleidoscope.reset_projection import ResetCommandPayload
 from linkerbot_sim.kaleidoscope.tensors import require_cuda_tensor
 
 if TYPE_CHECKING:
@@ -99,9 +100,67 @@ class TBlockResetCommand:
     block_velocity: "torch.Tensor"
     goal_position: "torch.Tensor"
     goal_yaw: "torch.Tensor"
+    # Portable description restore 会显式携带后续采样所需的 logical RNG state；
+    # 原有随机 reset 已直接推进 task-owned buffer，因此保持 None。
+    rng_key: "torch.Tensor | None" = None
+    rng_counter_after: "torch.Tensor | None" = None
     # SAME_STEP 保持固定 N 行以避免 ``nonzero`` 主机同步；该 mask 由支持设备选择的后端
     # 消费。普通显式 reset 使用 ``None``，其 env_ids 本身就是精确选择。
     device_reset_mask: "torch.Tensor | None" = None
+
+
+def tblock_reset_command_from_payload(
+    payload: ResetCommandPayload,
+    *,
+    env_id: int,
+    num_envs: int,
+    device: "torch.device",
+) -> TBlockResetCommand:
+    """Copy one validated CPU payload into owned one-row CUDA tensors."""
+
+    import torch
+
+    if not isinstance(payload, ResetCommandPayload):
+        raise TypeError("payload must be a ResetCommandPayload")
+    if type(num_envs) is not int or num_envs < 1:
+        raise ValueError("num_envs must be a positive int")
+    if type(env_id) is not int or not 0 <= env_id < num_envs:
+        raise ValueError("env_id must be an in-range int")
+    if not isinstance(device, torch.device) or device.type != "cuda":
+        raise ValueError("reset payload target device must be a torch CUDA device")
+
+    def float_row(values: tuple[float, ...]) -> "torch.Tensor":
+        return torch.tensor(
+            [values],
+            device=device,
+            dtype=torch.float32,
+        ).contiguous()
+
+    return TBlockResetCommand(
+        env_ids=torch.tensor([env_id], device=device, dtype=torch.int64),
+        joint_positions=float_row(payload.joint_positions),
+        joint_velocities=float_row(payload.joint_velocities),
+        joint_targets=float_row(payload.joint_targets),
+        block_position=float_row(payload.block_position),
+        block_orientation_wxyz=float_row(payload.block_orientation_wxyz),
+        block_velocity=float_row(payload.block_velocity),
+        goal_position=float_row(payload.goal_position),
+        goal_yaw=torch.tensor(
+            [payload.goal_yaw],
+            device=device,
+            dtype=torch.float32,
+        ),
+        rng_key=torch.tensor(
+            [payload.generator.rng_key],
+            device=device,
+            dtype=torch.int64,
+        ),
+        rng_counter_after=torch.tensor(
+            [payload.generator.rng_counter_after],
+            device=device,
+            dtype=torch.int64,
+        ),
+    )
 
 
 def build_tblock_reset_command(
@@ -221,4 +280,9 @@ def _uniform_range(unit: "torch.Tensor", bounds: tuple[float, float]) -> "torch.
     return low + unit * (high - low)
 
 
-__all__ = ["DeviceCounterRNG", "TBlockResetCommand", "build_tblock_reset_command"]
+__all__ = [
+    "DeviceCounterRNG",
+    "TBlockResetCommand",
+    "build_tblock_reset_command",
+    "tblock_reset_command_from_payload",
+]

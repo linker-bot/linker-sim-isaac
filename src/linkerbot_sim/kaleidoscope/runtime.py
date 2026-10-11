@@ -6,6 +6,8 @@ from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 import math
+from threading import get_ident
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Iterator, Literal, Protocol, runtime_checkable
 
 from linkerbot_sim.controllers.control_mode import ControlModeLockedError
@@ -28,6 +30,27 @@ from linkerbot_sim.kaleidoscope.tensors import normalize_env_ids, require_cuda_t
 
 if TYPE_CHECKING:
     import torch
+
+    from linkerbot_sim.kaleidoscope.collision_query import (
+        ArticulatedCollisionQueryResult,
+        ArticulatedCollisionQuerySpec,
+        CollisionQueryTarget,
+    )
+    from linkerbot_sim.kaleidoscope.reset_description import (
+        KaleidoscopeResetSceneDescription,
+    )
+
+    ResetDescriptionCommandFactory = Callable[
+        [KaleidoscopeResetSceneDescription | Mapping[str, object], int],
+        TBlockResetCommand,
+    ]
+else:
+    ResetDescriptionCommandFactory = Callable[[object, int], TBlockResetCommand]
+
+
+_EMPTY_ARTICULATED_COLLISION_QUERY_SPECS: Mapping[
+    str, "ArticulatedCollisionQuerySpec"
+] = MappingProxyType({})
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,8 +119,8 @@ class SameStepToken:
 class KaleidoscopeRuntime:
     """拥有一个 IsaacSession、mode views、action term 与 task。
 
-    ``IsaacSession`` 是 App/stage/concrete PhysicsRuntime 的唯一直接 owner。Runtime 在关闭时先
-    关闭 task/views，再关闭 session；它从不单独持有或关闭 Isaac World。
+    ``IsaacSession`` 是 App/stage/concrete PhysicsRuntime 的唯一直接 owner。Runtime 在关闭时
+    先关闭 action/query/task/views，再关闭 session；它从不单独持有或关闭 Isaac World。
     """
 
     def __init__(
@@ -109,7 +132,9 @@ class KaleidoscopeRuntime:
         task: VectorTask,
         state_api: KaleidoscopeStateAPI,
         control_mode_coordinator: KaleidoscopeControlModeCoordinator | None = None,
+        reset_description_factory: ResetDescriptionCommandFactory | None = None,
         ik_failure_penalty: float = -1.0,
+        collision_query_resources: object | None = None,
         viewport: object | None = None,
         viewport_reconfigure: Callable[[], None] | None = None,
     ) -> None:
@@ -124,6 +149,7 @@ class KaleidoscopeRuntime:
                 "Kaleidoscope only accepts physx_cuda or newton_cuda PhysicsRuntime, "
                 f"got {backend_kind!r}"
             )
+        self._owner_thread_id = get_ident()
         if views.num_envs != task.num_envs or views.num_envs != state_api.num_envs:
             raise ValueError("views/task/state_api num_envs must match")
         if views.device != task.device or views.device != state_api.device:
@@ -139,6 +165,15 @@ class KaleidoscopeRuntime:
         self.action_term = action_term
         self.task = task
         self.state_api = state_api
+        if collision_query_resources is not None and not callable(
+            getattr(collision_query_resources, "close", None)
+        ):
+            raise TypeError("collision_query_resources must implement close()")
+        if backend_kind == "newton_cuda" and collision_query_resources is not None:
+            raise ValueError(
+                "Newton runtime cannot own PhysX collision query resources"
+            )
+        self.collision_query_resources = collision_query_resources
         self.num_envs = views.num_envs
         self.device = views.device
         self.action_dim = action_term.action_dim
@@ -166,6 +201,10 @@ class KaleidoscopeRuntime:
                 raise ValueError("render_every_n_steps must be positive")
         if viewport_reconfigure is not None and not callable(viewport_reconfigure):
             raise TypeError("viewport_reconfigure must be callable or None")
+        if reset_description_factory is not None and not callable(
+            reset_description_factory
+        ):
+            raise TypeError("reset_description_factory must be callable or None")
         if (
             self.viewport_enabled
             and backend_kind == "newton_cuda"
@@ -175,6 +214,7 @@ class KaleidoscopeRuntime:
                 "Newton Kaleidoscope viewport requires viewport_reconfigure"
             )
         self._viewport_reconfigure = viewport_reconfigure
+        self._reset_description_factory = reset_description_factory
         # Newton 的轻量 Kit 会在首个 app.update 中初始化默认 camera controller，
         # 从而覆盖 assembly 已写入的 world view。只在首次显式 render 内补一次 camera 写入
         # 与 renderer update；训练 step 仍固定 render=False，且 body_q 仍只 D2H 一次。
@@ -187,7 +227,13 @@ class KaleidoscopeRuntime:
         self._failed = False
         self._fatal_error: str | None = None
         self._phase: Literal[
-            "idle", "step", "reset", "same_step", "mode_switch", "closing"
+            "idle",
+            "step",
+            "reset",
+            "same_step",
+            "mode_switch",
+            "collision_query",
+            "closing",
         ] = "idle"
         self._generation = 0
         self._outstanding_token: SameStepToken | None = None
@@ -221,6 +267,34 @@ class KaleidoscopeRuntime:
     def fatal_error(self) -> str | None:
         return getattr(self, "_fatal_error", None)
 
+    @property
+    def supports_articulated_collision_queries(self) -> bool:
+        """Report the configured backend capability, independent of current phase."""
+
+        from linkerbot_sim.kaleidoscope.collision_query import (
+            ArticulatedCollisionQueryPort,
+        )
+
+        resources = getattr(self, "collision_query_resources", None)
+        query_port = getattr(resources, "query_adapter", None)
+        return str(getattr(self.physics_runtime, "kind", "")) == "physx_cuda" and (
+            isinstance(query_port, ArticulatedCollisionQueryPort)
+        )
+
+    @property
+    def articulated_collision_query_specs(
+        self,
+    ) -> Mapping[str, "ArticulatedCollisionQuerySpec"]:
+        """Return immutable startup metadata for queryable robots."""
+
+        if str(getattr(self.physics_runtime, "kind", "")) != "physx_cuda":
+            return _EMPTY_ARTICULATED_COLLISION_QUERY_SPECS
+        resources = getattr(self, "collision_query_resources", None)
+        specs = getattr(resources, "query_specs", None)
+        if not isinstance(specs, Mapping):
+            return _EMPTY_ARTICULATED_COLLISION_QUERY_SPECS
+        return specs
+
     def get_control_mode(self):
         if self._closed:
             raise RuntimeError("Kaleidoscope runtime is closed")
@@ -244,6 +318,41 @@ class KaleidoscopeRuntime:
         if self._fatal_error is None:
             self._fatal_error = str(message)
         self._failed = True
+
+    def query_articulated_collisions(
+        self,
+        *,
+        robot_label: str,
+        joint_positions: "torch.Tensor",
+        env_ids: "torch.Tensor",
+        targets: tuple["CollisionQueryTarget", ...],
+    ) -> "ArticulatedCollisionQueryResult":
+        """Synchronously query a candidate arm-hand path while runtime is idle."""
+
+        from linkerbot_sim.kaleidoscope.collision_query import (
+            ArticulatedCollisionQueryPort,
+            CollisionQueryUnavailableError,
+        )
+
+        self._require_usable()
+        self._require_owner_thread("query_articulated_collisions")
+        self._require_no_same_step_transaction(operation="query articulated collisions")
+        with self._phase_scope("collision_query"):
+            backend_kind = str(getattr(self.physics_runtime, "kind", ""))
+            resources = self.collision_query_resources
+            if backend_kind != "physx_cuda" or resources is None:
+                raise CollisionQueryUnavailableError(backend_kind)
+            query_port = getattr(resources, "query_adapter", None)
+            if not isinstance(query_port, ArticulatedCollisionQueryPort):
+                raise RuntimeError(
+                    "PhysX collision query resources did not publish a valid adapter"
+                )
+            return query_port.query(
+                robot_label=robot_label,
+                joint_positions=joint_positions,
+                env_ids=env_ids,
+                targets=targets,
+            )
 
     def reset(self) -> tuple["torch.Tensor", Mapping[str, "torch.Tensor"]]:
         return self.reset_idx(self._all_env_ids)
@@ -278,6 +387,44 @@ class KaleidoscopeRuntime:
                 self._failed = True
                 raise
         # index_select 已返回独立 storage；无需再做第二次 device-to-device copy。
+        observations = self.task.buffers.last_finite_observation.index_select(0, ids)
+        return observations, {"env_ids": ids.clone()}
+
+    def reset_from_description(
+        self,
+        description: "KaleidoscopeResetSceneDescription | Mapping[str, object]",
+        env_id: int,
+    ) -> tuple["torch.Tensor", Mapping[str, "torch.Tensor"]]:
+        """用一条 portable description 重置单个环境的内部冷路径。"""
+
+        self._require_usable()
+        self._require_no_same_step_transaction()
+        with self._phase_scope("reset"):
+            try:
+                if self._reset_description_factory is None:
+                    raise RuntimeError(
+                        "runtime has no reset description command factory"
+                    )
+                command = self._reset_description_factory(description, env_id)
+                if not isinstance(command, TBlockResetCommand):
+                    raise TypeError(
+                        "reset description factory must return TBlockResetCommand"
+                    )
+                stage = getattr(self.task, "stage_reset_description", None)
+                if not callable(stage):
+                    raise RuntimeError(
+                        "configured task does not support reset descriptions"
+                    )
+                stage(command)
+                ids = command.env_ids
+                self.control_mode.write_reset(command)
+                self.action_term.reset(ids, command)
+                self.physics_runtime.forward()
+                state = self.views.refresh(ids)
+                self.task.initialize_after_reset(ids, state)
+            except BaseException:
+                self._failed = True
+                raise
         observations = self.task.buffers.last_finite_observation.index_select(0, ids)
         return observations, {"env_ids": ids.clone()}
 
@@ -434,7 +581,7 @@ class KaleidoscopeRuntime:
         return bool(callback())
 
     def close(self, *, exit_code: int = 0) -> None:
-        """按 action/IK → views/task → session 的固定依赖顺序幂等关闭。
+        """按 action/IK → collision query → views/task → session 顺序幂等关闭。
 
         child 关闭失败时仍尝试其它 child，但绝不提前关闭 Session；成功项记录进度，
         调用方重试时只处理失败项。这样 cuRobo CUDA graph 或 raw view 不会在 native App
@@ -445,13 +592,23 @@ class KaleidoscopeRuntime:
             raise ValueError("exit_code must be a non-negative int")
         if self._closed:
             return
+        collision_resources = getattr(self, "collision_query_resources", None)
+        if (
+            collision_resources is not None
+            and "collision_query_resources" not in self._close_completed
+        ):
+            self._require_owner_thread("close collision query resources")
         self._closing_started = True
         self._phase = "closing"
         first_error: BaseException | None = None
-        children = (
-            ("action_term", self.action_term.close),
-            ("views", self.views.close),
-            ("task", self.task.close),
+        children = [("action_term", self.action_term.close)]
+        if collision_resources is not None:
+            children.append(("collision_query_resources", collision_resources.close))
+        children.extend(
+            (
+                ("views", self.views.close),
+                ("task", self.task.close),
+            )
         )
         for label, callback in children:
             if label in self._close_completed:
@@ -488,9 +645,7 @@ class KaleidoscopeRuntime:
             else:
                 self._close_completed.add("session")
         self._closed = self._close_completed == {
-            "action_term",
-            "views",
-            "task",
+            *(label for label, _callback in children),
             "session",
         }
         if first_error is not None:
@@ -653,16 +808,24 @@ class KaleidoscopeRuntime:
                 raise RuntimeError("SAME_STEP token has already been stepped")
             raise RuntimeError("SAME_STEP token has not been stepped")
 
-    def _require_no_same_step_transaction(self) -> None:
+    def _require_no_same_step_transaction(
+        self,
+        *,
+        operation: str = "mutate runtime",
+    ) -> None:
         if self._outstanding_token is not None:
             raise RuntimeError(
-                "cannot mutate runtime during an active SAME_STEP transaction"
+                f"cannot {operation} during an active SAME_STEP transaction"
             )
+
+    def _require_owner_thread(self, operation: str) -> None:
+        if get_ident() != getattr(self, "_owner_thread_id", None):
+            raise RuntimeError(f"{operation} must run on the Kaleidoscope owner thread")
 
     @contextmanager
     def _phase_scope(
         self,
-        phase: Literal["step", "reset", "same_step", "mode_switch"],
+        phase: Literal["step", "reset", "same_step", "mode_switch", "collision_query"],
     ) -> Iterator[None]:
         current = getattr(self, "_phase", "idle")
         if current != "idle":
@@ -708,5 +871,6 @@ __all__ = [
     "ActionTerm",
     "KaleidoscopeRuntime",
     "KaleidoscopeViews",
+    "ResetDescriptionCommandFactory",
     "SameStepToken",
 ]

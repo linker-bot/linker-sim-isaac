@@ -101,6 +101,11 @@ def configure_mjcf_import(
         if backend == "physx":
             _repair_physx_import(destination)
         source_prim_path = _discover_imported_root_path(destination)
+        _apply_imported_mesh_collision_approximation(
+            destination,
+            root_path=source_prim_path,
+            approximation=asset_import.collision_approximation,
+        )
         reference_asset = (
             _prepare_newton_render_reference_asset(
                 destination,
@@ -120,10 +125,6 @@ def configure_mjcf_import(
         )
         if backend == "newton":
             _deactivate_imported_mjcf_actuators(prim_path)
-        _apply_mesh_collision_approximation(
-            prim_path,
-            approximation=asset_import.collision_approximation,
-        )
     except BaseException:
         import_directory.cleanup()
         raise
@@ -228,6 +229,7 @@ def configure_urdf_import(
     physics_backend: object | None = None,
     prepare_newton_render_topology: bool = False,
     root_pose: RootPoseConfig | None = None,
+    require_collision_meshes: bool = True,
 ) -> str:
     """使用 Isaac 6 URDF Importer 3.0 导入并按明确后端映射完整分层资产。"""
 
@@ -291,6 +293,12 @@ def configure_urdf_import(
             )
         imported_root = _discover_imported_root_path(destination)
         target_root = prim_path or imported_root
+        _apply_imported_mesh_collision_approximation(
+            destination,
+            root_path=imported_root,
+            approximation=asset_import.collision_approximation,
+            require_collision_meshes=require_collision_meshes,
+        )
         reference_asset = (
             _prepare_newton_render_reference_asset(
                 destination,
@@ -309,10 +317,6 @@ def configure_urdf_import(
             physics_backend=backend,
             allow_common_physics_variant=allow_common_physics_variant,
             prepare_newton_render_topology=prepare_newton_render_topology,
-        )
-        _apply_mesh_collision_approximation(
-            target_root,
-            approximation=asset_import.collision_approximation,
         )
     except BaseException:
         if import_directory is not None:
@@ -349,40 +353,97 @@ def _discover_imported_root_path(source_usd_path: Path) -> str:
     return str(roots[0].GetPath())
 
 
-def _apply_mesh_collision_approximation(
-    root_path: str,
+def _apply_imported_mesh_collision_approximation(
+    source_usd_path: Path,
     *,
+    root_path: str,
     approximation: str,
-    stage=None,
+    require_collision_meshes: bool = True,
 ) -> int:
-    """对 importer 已有 collision mesh 显式写入标准 USD 近似策略。"""
+    """在 importer 临时 USD 层中固定所有 collision mesh 的近似策略。"""
 
     from pxr import Sdf, Usd, UsdGeom, UsdPhysics
 
+    source = Path(source_usd_path).resolve()
+    stage = Usd.Stage.Open(str(source))
     if stage is None:
-        import omni.usd
-
-        stage = omni.usd.get_context().get_stage()
+        raise RuntimeError(f"Failed to open imported USD: {source}")
     root = stage.GetPrimAtPath(Sdf.Path(root_path))
     if not root.IsValid():
         raise RuntimeError(
-            f"Cannot configure imported collision meshes; prim not found: {root_path}"
+            "Cannot configure imported collision meshes; prim not found: "
+            f"{source}:{root_path}"
         )
     token = {
         "convex_decomposition": "convexDecomposition",
         "convex_hull": "convexHull",
     }[approximation]
-    count = 0
-    for prim in Usd.PrimRange(root):
+
+    direct_prims = []
+    proxy_specs: dict[tuple[str, str], object] = {}
+    proxy_paths: dict[tuple[str, str], list[str]] = {}
+    imported_layer_root = source.parent
+    for prim in Usd.PrimRange(root, Usd.TraverseInstanceProxies()):
         if not prim.IsA(UsdGeom.Mesh) or not prim.HasAPI(UsdPhysics.CollisionAPI):
             continue
+        if not prim.IsInstanceProxy():
+            direct_prims.append(prim)
+            continue
+
+        approximation_attr = UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr()
+        editable_spec = None
+        for spec in approximation_attr.GetPropertyStack(Usd.TimeCode.Default()):
+            layer = spec.layer
+            real_path = str(layer.realPath)
+            if not real_path or not bool(layer.permissionToEdit):
+                continue
+            layer_path = Path(real_path).resolve()
+            if layer_path.is_relative_to(imported_layer_root):
+                editable_spec = spec
+                break
+        if editable_spec is None:
+            raise RuntimeError(
+                "Cannot configure imported instance-proxy collision mesh without "
+                "an importer-owned writable physics:approximation property: "
+                f"{source}:{prim.GetPath()}"
+            )
+        key = (str(editable_spec.layer.identifier), str(editable_spec.path))
+        proxy_specs[key] = editable_spec
+        proxy_paths.setdefault(key, []).append(str(prim.GetPath()))
+
+    count = len(direct_prims) + sum(len(paths) for paths in proxy_paths.values())
+    if count == 0:
+        if require_collision_meshes:
+            raise RuntimeError(
+                f"Imported USD has no collision meshes under {source}:{root_path}"
+            )
+        return 0
+
+    dirty_layers: dict[str, object] = {}
+    for prim in direct_prims:
         mesh_collision = (
             UsdPhysics.MeshCollisionAPI(prim)
             if prim.HasAPI(UsdPhysics.MeshCollisionAPI)
             else UsdPhysics.MeshCollisionAPI.Apply(prim)
         )
-        mesh_collision.CreateApproximationAttr().Set(token)
-        count += 1
+        if not mesh_collision.CreateApproximationAttr().Set(token):
+            raise RuntimeError(
+                "Failed to configure imported collision mesh approximation: "
+                f"{source}:{prim.GetPath()}"
+            )
+    if direct_prims:
+        root_layer = stage.GetRootLayer()
+        dirty_layers[str(root_layer.identifier)] = root_layer
+
+    for key, spec in proxy_specs.items():
+        spec.default = token
+        dirty_layers[key[0]] = spec.layer
+
+    for layer in dirty_layers.values():
+        if not layer.Save():
+            raise RuntimeError(
+                f"Failed to save imported collision approximation layer: {layer.identifier}"
+            )
     return count
 
 

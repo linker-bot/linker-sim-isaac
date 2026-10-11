@@ -91,6 +91,12 @@ Import from `linkerbot_sim.kaleidoscope`:
 | `TorchKaleidoscopeEnv` | Native CUDA tensor vector environment. |
 | `KaleidoscopeTrainingPort` | Minimal runtime-checkable protocol consumed by trainers. |
 | `KaleidoscopeEpisodeSnapshot` | Owned GPU episode snapshot. |
+| `KaleidoscopeResetSceneDescription` | Backend-neutral typed description of one fresh episode state. |
+| `ArticulatedCollisionQuerySpec` | Immutable runtime command names, width, and limits for one queryable robot. |
+| `ArticulatedCollisionQueryResult` | Owned CUDA mask and first-hit tensors for a discrete articulated path. |
+| `CollisionQueryTarget` | Stable table, dynamic-object, and other-robot target selectors. |
+| `CollisionHitCategory` | Stable integer codes returned for each row's first hit. |
+| `CollisionQueryUnavailableError` | The selected backend has no articulated collision-query capability. |
 | `ControlModeState` | Immutable initial/active mode, generation, supported modes, and scope. |
 | `ControlModeChange` | Result of an idempotent or real mode change. |
 | `ControlModeGenerationConflict` | Optimistic generation precondition failed. |
@@ -99,13 +105,18 @@ Import from `linkerbot_sim.kaleidoscope`:
 | `ControlModeSwitchError` | Forward mode transaction failed and rolled back. |
 | `ControlModeRollbackError` | Rollback failed and the runtime entered permanent fail-stop. |
 | `GymnasiumKaleidoscopeAdapter` | Explicit NumPy `VectorEnv` boundary. |
+| `load_reset_scene_description(path)` | Load and validate one portable reset JSON document. |
 | `make_torch_env(...)` | Production native environment composition. |
 | `make_viewport_env(..., viewport=None, viewport_profile="kaleidoscope")` | Explicit PhysX/Newton human viewport for one `selected_env`. |
 | `make_gymnasium_env(..., viewport_profile="kaleidoscope")` | Native environment plus NumPy adapter; the viewport profile is used only for human rendering. |
 | `register_gymnasium_envs()` | Idempotently register the maintained environment ID. |
+| `sample_reset_scene_description(config, *, seed, sample_id, reset_index=0)` | Pure deterministic reset sampling without Torch or a simulation runtime. |
+| `save_reset_scene_description(description, path, replace=False)` | Validate and atomically save canonical reset JSON. |
 
-`TorchKaleidoscopeEnv` supports `reset`, `reset_idx`, `step`, `get_control_mode`,
-`set_control_mode`, `get_state`, `set_state`,
+`TorchKaleidoscopeEnv` supports `reset`, `reset_idx`, `reset_from_description`, `step`,
+`supports_articulated_collision_queries`, `articulated_collision_query_specs`,
+`query_articulated_collisions`,
+`get_control_mode`, `set_control_mode`, `get_state`, `set_state`,
 `snapshot`, `restore_snapshot`, `clone_state`, `render`, `is_running`, and `close`.
 `render` is available only on an environment constructed by `make_viewport_env` and
 never runs implicitly inside a training step. It also implements the
@@ -113,6 +124,10 @@ same-decision token methods consumed by the training port; application code shou
 prefer the higher-level skrl adapter rather than managing tokens directly.
 Mode mutation is native-only and is deliberately absent from
 `KaleidoscopeTrainingPort`, Gymnasium, and skrl.
+The articulated collision query has the same native-only boundary and is currently
+available only for `physx_cuda`. See the
+[Kaleidoscope API](kaleidoscope-api.md) for its CUDA tensor contract and discrete-path
+semantics.
 
 The native bootstrap is independent of Gymnasium: importing it or calling
 `make_torch_env()` does not import Gymnasium. `GymnasiumKaleidoscopeAdapter` is imported

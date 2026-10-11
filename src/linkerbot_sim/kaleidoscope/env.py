@@ -5,14 +5,27 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from linkerbot_sim.kaleidoscope.runtime import KaleidoscopeRuntime, SameStepToken
-
 if TYPE_CHECKING:
     import torch
 
+    from linkerbot_sim.kaleidoscope.collision_query import (
+        ArticulatedCollisionQueryResult,
+        ArticulatedCollisionQuerySpec,
+        CollisionQueryTarget,
+    )
+    from linkerbot_sim.kaleidoscope.reset_description import (
+        KaleidoscopeResetSceneDescription,
+    )
+    from linkerbot_sim.kaleidoscope.runtime import (
+        KaleidoscopeRuntime,
+        SameStepToken,
+    )
 
-def _runtime_token(value: object) -> SameStepToken:
+
+def _runtime_token(value: object) -> "SameStepToken":
     """在产品内部恢复具体 token 类型，public training port 仍只看到 object。"""
+
+    from linkerbot_sim.kaleidoscope.runtime import SameStepToken
 
     if not isinstance(value, SameStepToken):
         raise TypeError("invalid Kaleidoscope SAME_STEP token")
@@ -38,6 +51,20 @@ class TorchKaleidoscopeEnv:
         self.render_every_n_steps = runtime.render_every_n_steps
         self._closed = False
 
+    @property
+    def supports_articulated_collision_queries(self) -> bool:
+        """Report whether the configured Runtime owns the PhysX query capability."""
+
+        return self.runtime.supports_articulated_collision_queries
+
+    @property
+    def articulated_collision_query_specs(
+        self,
+    ) -> Mapping[str, "ArticulatedCollisionQuerySpec"]:
+        """Expose immutable runtime command metadata without issuing a query."""
+
+        return self.runtime.articulated_collision_query_specs
+
     def reset(
         self,
         *,
@@ -59,6 +86,16 @@ class TorchKaleidoscopeEnv:
     ) -> tuple["torch.Tensor", Mapping[str, "torch.Tensor"]]:
         return self.runtime.reset_idx(env_ids)
 
+    def reset_from_description(
+        self,
+        description: "KaleidoscopeResetSceneDescription | Mapping[str, object]",
+        *,
+        env_id: int,
+    ) -> tuple["torch.Tensor", Mapping[str, "torch.Tensor"]]:
+        """用 portable description 重置一个环境。"""
+
+        return self.runtime.reset_from_description(description, env_id)
+
     def step(
         self, actions: "torch.Tensor"
     ) -> tuple[
@@ -75,6 +112,23 @@ class TorchKaleidoscopeEnv:
             result.terminated,
             result.truncated,
             result.info,
+        )
+
+    def query_articulated_collisions(
+        self,
+        *,
+        robot_label: str,
+        joint_positions: "torch.Tensor",
+        env_ids: "torch.Tensor",
+        targets: tuple["CollisionQueryTarget", ...],
+    ) -> "ArticulatedCollisionQueryResult":
+        """Synchronously forward one explicit candidate-path collision query."""
+
+        return self.runtime.query_articulated_collisions(
+            robot_label=robot_label,
+            joint_positions=joint_positions,
+            env_ids=env_ids,
+            targets=targets,
         )
 
     def get_state(self, *args: object, **kwargs: object):

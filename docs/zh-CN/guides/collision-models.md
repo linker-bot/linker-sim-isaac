@@ -2,15 +2,20 @@
 
 语言：[中文](collision-models.md) | [English](../../en/guides/collision-models.md)
 
-“Kaleidoscope 不做碰撞规划”不表示禁用物理接触。需要区分三类能力：
+“Kaleidoscope 不做碰撞规划”不表示禁用物理接触。需要区分四类能力：
 
 1. **物理碰撞**：所选 PhysX CUDA 或 Newton 后端的接触推动 T-block；
 2. **跨环境隔离**：PhysX builder 固定用 env IDs，Newton builder 固定用独立 worlds，均阻止不同 env 接触；
-3. **规划碰撞/避障**：cuRobo collision world、cache 和 obstacle sampling，只属于 Mirror。
+3. **候选诊断查询**：Kaleidoscope PhysX 可检查调用方给出的离散 arm+hand 关节 samples；
+4. **规划碰撞/避障**：cuRobo collision world、cache 和 obstacle sampling，只属于 Mirror。
 
 Mirror 可以从 robot sphere、object primitive/mesh 与 stage provider 构建 planning scene，并在 request
 边界刷新 fingerprint。Kaleidoscope config/runtime closure 禁止 import planning/collision backend，也不为
 每个 env 分配 collision cache。
+
+Kaleidoscope 的候选诊断查询只使用真实 PhysX collider 检查工作台、T-block 和同一 env 的另一台
+机器人。它不推进物理，不生成候选，不在 sample 之间插值，也不构造 cuRobo collision world。
+Newton 仍会计算训练中的物理接触，但当前不提供该查询能力。
 
 Mirror 的 `planning.request_defaults` 只决定默认避障与刷新策略；cuRobo planner 是否具备碰撞能力以及
 cache 容量由 `curobo.motion_planner` 独立声明。Kaleidoscope 的可选 cuRobo profile 必须省略整个

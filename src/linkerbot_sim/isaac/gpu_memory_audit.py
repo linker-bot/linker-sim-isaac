@@ -199,7 +199,7 @@ class CudaNvmlMemoryProbe:
                 raise RuntimeError(
                     f"selected cuda:{cuda_device} is outside device_count={device_count}"
                 )
-            torch_uuid = str(cuda.get_device_properties(cuda_device).uuid)
+            torch_uuid = str(cuda.get_device_properties(cuda_device).uuid).strip()
             if not torch_uuid:
                 raise RuntimeError("Torch did not expose a CUDA device UUID")
             return self._sample_initialized_nvml(
@@ -239,7 +239,7 @@ class CudaNvmlMemoryProbe:
                 ):
                     raise
 
-            handle = nvml.device_get_handle_by_uuid(torch_uuid)
+            handle = nvml.device_get_handle_by_uuid(_nvml_lookup_uuid(torch_uuid))
             device_uuid = str(nvml.device_get_uuid(handle))
             memory = nvml.device_get_memory_info_v2(handle)
             process_used, process_visible = _current_process_memory(
@@ -287,6 +287,14 @@ class CudaNvmlMemoryProbe:
 
             self._torch_module = torch
         return self._torch_module
+
+
+def _nvml_lookup_uuid(torch_uuid: str) -> str:
+    """Return the decorated UUID string expected by NVML lookup APIs."""
+
+    if torch_uuid.startswith(("GPU-", "MIG-")):
+        return torch_uuid
+    return f"GPU-{torch_uuid}"
 
 
 class GpuMemoryAuditor:

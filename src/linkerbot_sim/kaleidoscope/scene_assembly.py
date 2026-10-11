@@ -7,6 +7,9 @@ from dataclasses import replace
 import math
 import sys
 import traceback
+from typing import TYPE_CHECKING
+
+import numpy as np
 
 from linkerbot_sim.isaac.replicated_scene import (
     build_replicated_physx_scene,
@@ -34,6 +37,93 @@ from linkerbot_sim.kaleidoscope.physx_ports import (
 from linkerbot_sim.robots.mimic.runtime import resolve_mimic_follower_controls
 from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz
 
+if TYPE_CHECKING:
+    from linkerbot_sim.kaleidoscope.collision_factory import (
+        PhysxCollisionQueryResources,
+    )
+
+
+_NOMINAL_JOINT_POSITION_ATOL = 1.0e-6
+
+
+def _validated_configured_nominal_joint_positions(
+    *,
+    config: object,
+    replicated_robots: object,
+    robot_ports: object,
+    first_env: object,
+    device: object,
+):
+    """Return configured reset joints after checking the imported articulation.
+
+    The scene configuration is the pure sampler's source of truth. The imported
+    articulation is checked once at startup so an asset-default change cannot make
+    the normal GPU reset and offline sampler silently use different baselines.
+    """
+
+    import torch
+
+    runtime_robots = tuple(replicated_robots)
+    ports = tuple(robot_ports)
+    if len(runtime_robots) != len(ports):
+        raise RuntimeError("replicated robots and articulation ports must align")
+    configured_by_label = {robot.label: robot for robot in config.scene.robots}
+    if len(configured_by_label) != len(runtime_robots):
+        raise RuntimeError("configured and replicated robot counts differ")
+
+    configured_rows: list[torch.Tensor] = []
+    for runtime_robot, port in zip(runtime_robots, ports, strict=True):
+        label = str(runtime_robot.label)
+        configured = configured_by_label.get(label)
+        if configured is None:
+            raise RuntimeError(f"replicated robot {label!r} is not present in config")
+        positions = configured.reset_joint_positions
+        if positions is None:  # Strict Kaleidoscope config normally rejects this.
+            raise RuntimeError(
+                f"configured robot {label!r} has no reset_joint_positions"
+            )
+        command_names = tuple(str(name) for name in runtime_robot.command_joint_names)
+        missing = tuple(name for name in command_names if name not in positions)
+        if missing:
+            raise RuntimeError(
+                f"robot {label!r} command joints are absent from "
+                f"scene reset_joint_positions: {missing}"
+            )
+        expected = torch.tensor(
+            [positions[name] for name in command_names],
+            device=device,
+            dtype=torch.float32,
+        )
+        actual = port.read_joint_positions(first_env).reshape(-1)
+        if actual.shape != expected.shape:
+            raise RuntimeError(
+                f"robot {label!r} articulation reset width differs from config: "
+                f"actual={actual.shape[0]}, expected={expected.shape[0]}"
+            )
+        if not bool(torch.all(torch.isfinite(actual)).item()):
+            raise RuntimeError(
+                f"robot {label!r} articulation reset positions must be finite"
+            )
+        if not bool(
+            torch.allclose(
+                actual,
+                expected,
+                rtol=0.0,
+                atol=_NOMINAL_JOINT_POSITION_ATOL,
+            )
+        ):
+            max_abs_error = float(torch.max(torch.abs(actual - expected)).item())
+            raise RuntimeError(
+                f"robot {label!r} articulation defaults differ from configured "
+                "reset_joint_positions: "
+                f"max_abs_error={max_abs_error:.9g}, "
+                f"atol={_NOMINAL_JOINT_POSITION_ATOL:.9g}"
+            )
+        configured_rows.append(expected)
+    if not configured_rows:
+        raise RuntimeError("Kaleidoscope scene must contain at least one robot")
+    return torch.cat(configured_rows).contiguous()
+
 
 def build_kaleidoscope_scene_assembly(
     *,
@@ -44,12 +134,14 @@ def build_kaleidoscope_scene_assembly(
     replicated_scene_builder: Callable[..., object] = build_replicated_physx_scene,
     newton_scene_builder: Callable[..., object] | None = None,
     ik_solver_factory: Callable[..., object] | None = None,
+    collision_resources_factory: Callable[..., "PhysxCollisionQueryResources"]
+    | None = None,
 ):
     """构造默认的 Session → replicated scene → raw CUDA ports。
 
     这是生产 composition 的重型边界；普通 ``linkerbot_sim.kaleidoscope`` facade 不会导入
-    本模块。任一阶段失败都会按 solver → port/view → Session 逆序清理，原始构造异常
-    保持为主异常，清理异常只作为 ``note`` 附加。
+    本模块。任一阶段失败都会按 solver → collision query → port/view → Session
+    逆序清理，原始构造异常保持为主异常，清理异常只作为 ``note`` 附加。
     """
 
     import torch
@@ -76,6 +168,8 @@ def build_kaleidoscope_scene_assembly(
     viewport_reconfigure: Callable[[], None] | None = None
     raw_views: list[object] = []
     solvers: dict[str, object] = {}
+    collision_limit_rows: dict[str, tuple[object, object]] = {}
+    collision_query_resources: PhysxCollisionQueryResources | None = None
     try:
         session = session_factory(spec=session_spec)
         physics_runtime = getattr(session, "physics_runtime", None)
@@ -248,8 +342,12 @@ def build_kaleidoscope_scene_assembly(
                         components=components,
                     )
                 )
-            lower_rows.append(lower.clone())
-            upper_rows.append(upper.clone())
+            lower_copy = lower.clone()
+            upper_copy = upper.clone()
+            lower_rows.append(lower_copy)
+            upper_rows.append(upper_copy)
+            if physics_engine == "physx":
+                collision_limit_rows[robot.label] = (lower_copy, upper_copy)
         if physics_engine == "physx":
             object_port = IsaacRigidObjectTensorPort(
                 label=str(config.task.dynamic_object),
@@ -273,15 +371,56 @@ def build_kaleidoscope_scene_assembly(
                 device=device,
             )
         physics_runtime.forward()
+        if physics_engine == "physx":
+            from linkerbot_sim.kaleidoscope.collision_factory import (
+                RobotCommandJointLimits,
+                build_physx_collision_query_resources,
+            )
+
+            factory = (
+                collision_resources_factory or build_physx_collision_query_resources
+            )
+            command_limits = {
+                robot.label: RobotCommandJointLimits(
+                    robot_label=robot.label,
+                    command_joint_names=tuple(robot.command_joint_names),
+                    lower=_copy_startup_metadata_to_host(
+                        collision_limit_rows[robot.label][0]
+                    ),
+                    upper=_copy_startup_metadata_to_host(
+                        collision_limit_rows[robot.label][1]
+                    ),
+                )
+                for robot in replicated.robots
+            }
+            collision_query_resources = factory(
+                stage=session.stage,
+                replicated_scene=replicated,
+                robot_profiles={
+                    robot.label: robot.profile for robot in replicated.robots
+                },
+                command_limits=command_limits,
+                dynamic_object_name=str(config.task.dynamic_object),
+                table_object_name=str(_static_table_instance(config).name),
+                device=device,
+            )
+            if not callable(getattr(collision_query_resources, "close", None)):
+                raise TypeError(
+                    "collision resources factory result must implement close()"
+                )
         first_env = torch.zeros(1, device=device, dtype=torch.int64)
         if physics_engine == "physx":
             for port in robot_ports:
                 port.prepare_full_dof_reset(
                     port.read_all_joint_positions(first_env).reshape(-1)
                 )
-        nominal_joint_positions = torch.cat(
-            [port.read_joint_positions(first_env).reshape(-1) for port in robot_ports]
-        ).clone()
+        nominal_joint_positions = _validated_configured_nominal_joint_positions(
+            config=config,
+            replicated_robots=replicated.robots,
+            robot_ports=robot_ports,
+            first_env=first_env,
+            device=device,
+        )
         joint_lower = torch.cat(lower_rows).contiguous()
         joint_upper = torch.cat(upper_rows).contiguous()
         torch._assert_async(
@@ -334,6 +473,7 @@ def build_kaleidoscope_scene_assembly(
             joint_upper=joint_upper,
             ik_solvers=solvers,
             fixed_orientations_wxyz=fixed_orientations,
+            collision_query_resources=collision_query_resources,
             control_bindings=tuple(control_bindings),
             physics_state_port=physics_state_port,
             viewport_reconfigure=viewport_reconfigure,
@@ -342,6 +482,7 @@ def build_kaleidoscope_scene_assembly(
         _rollback_partial_assembly(
             exc,
             solvers=solvers,
+            collision_query_resources=collision_query_resources,
             robot_ports=robot_ports,
             object_port=object_port,
             physics_state_port=physics_state_port,
@@ -369,7 +510,7 @@ def session_spec_from_config(
     selection = (str(physics_source.engine), str(physics_source.execution))
     if selection == ("physx", "cuda"):
         physics = IsaacPhysxCudaSpec(
-            enable_scene_query_support=False,
+            enable_scene_query_support=bool(physics_source.enable_scene_query_support),
         )
     elif selection == ("newton", "cuda"):
         physics = IsaacNewtonCudaSpec(
@@ -581,10 +722,28 @@ def _dynamic_object_instance(config: object) -> object:
     return matches[0]
 
 
+def _static_table_instance(config: object) -> object:
+    matches = tuple(
+        item
+        for item in config.scene.objects
+        if bool(
+            getattr(
+                getattr(getattr(item, "resolved_profile", None), "physics", None),
+                "static",
+                False,
+            )
+        )
+    )
+    if len(matches) != 1:
+        raise RuntimeError("collision query requires exactly one static table object")
+    return matches[0]
+
+
 def _rollback_partial_assembly(
     primary: BaseException,
     *,
     solvers: Mapping[str, object],
+    collision_query_resources: object | None,
     robot_ports: list[object],
     object_port: object | None,
     physics_state_port: object | None,
@@ -608,6 +767,10 @@ def _rollback_partial_assembly(
         close = getattr(solver, "close", None)
         if callable(close):
             attempt(f"IK solver {label}", close)
+    if collision_query_resources is not None:
+        close = getattr(collision_query_resources, "close", None)
+        if callable(close):
+            attempt("collision query resources", close)
     if physics_state_port is not None:
         attempt("physics state port", physics_state_port.close)
     if object_port is not None:
@@ -657,6 +820,21 @@ def _copy_startup_metadata_to_cuda(*, value: object, device: object):
     else:
         source = torch.as_tensor(value)
     return source.to(device=device, dtype=torch.float32).contiguous()
+
+
+def _copy_startup_metadata_to_host(value: object) -> np.ndarray:
+    """Copy one startup-only command-limit vector into owned float32 NumPy."""
+
+    import torch
+
+    if isinstance(value, torch.Tensor):
+        source = value.detach()
+    elif hasattr(value, "__dlpack__"):
+        source = torch.from_dlpack(value)
+    else:
+        source = torch.as_tensor(value)
+    host = source.to(device="cpu", dtype=torch.float32).contiguous().numpy()
+    return np.array(host, dtype=np.float32, copy=True, order="C")
 
 
 __all__ = ["build_kaleidoscope_scene_assembly", "session_spec_from_config"]

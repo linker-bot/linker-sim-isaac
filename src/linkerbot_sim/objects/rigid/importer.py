@@ -163,6 +163,9 @@ def _import_urdf_rigid_object(
         physics_backend=physics_backend,
         prepare_newton_render_topology=prepare_newton_render_topology,
         root_pose=config.root_pose,
+        # Box/capsule object colliders can be non-Mesh GPrims and need no mesh
+        # approximation. Articulated robot imports retain the strict default.
+        require_collision_meshes=False,
     )
     apply_root_pose_to_prim(
         stage,

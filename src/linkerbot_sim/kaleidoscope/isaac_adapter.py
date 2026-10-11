@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import sys
 import traceback
+from typing import TYPE_CHECKING
 
 import torch
 
@@ -31,12 +32,23 @@ from linkerbot_sim.kaleidoscope.isaac_views import (
     RigidObjectTensorPort,
     RobotTensorPort,
 )
+from linkerbot_sim.kaleidoscope.reset_projection import project_reset_description
+from linkerbot_sim.kaleidoscope.resets import tblock_reset_command_from_payload
 from linkerbot_sim.kaleidoscope.runtime import KaleidoscopeRuntime
 from linkerbot_sim.kaleidoscope.state_api import KaleidoscopeStateAPI
 from linkerbot_sim.kaleidoscope.tasks.tblock_push_v1 import (
     TBlockPushV1,
     TBlockPushV1Settings,
 )
+
+if TYPE_CHECKING:
+    from linkerbot_sim.configuration.modes.kaleidoscope import KaleidoscopeConfig
+    from linkerbot_sim.kaleidoscope.reset_description import (
+        KaleidoscopeResetSceneDescription,
+    )
+    from linkerbot_sim.kaleidoscope.collision_factory import (
+        PhysxCollisionQueryResources,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +66,7 @@ class KaleidoscopeSceneAssembly:
     joint_upper: torch.Tensor
     ik_solvers: Mapping[str, DeviceBatchIKSolver]
     fixed_orientations_wxyz: Mapping[str, torch.Tensor]
+    collision_query_resources: PhysxCollisionQueryResources | None = None
     control_bindings: tuple[KaleidoscopeControlBinding, ...] = ()
     physics_state_port: PhysicsStateTensorPort | None = None
     viewport_reconfigure: Callable[[], None] | None = None
@@ -64,7 +77,7 @@ SceneAssemblyFactory = Callable[..., KaleidoscopeSceneAssembly]
 
 def create_kaleidoscope_runtime(
     *,
-    config: object,
+    config: "KaleidoscopeConfig",
     num_envs: int | None = None,
     viewport: object | None = None,
     assembly_factory: SceneAssemblyFactory | None = None,
@@ -171,6 +184,19 @@ def create_kaleidoscope_runtime(
             compatibility_fingerprint=semantic_config_fingerprint(config),
         )
         state_api.bind_control_mode_provider(control_mode.get_mode)
+
+        def reset_description_factory(
+            description: "KaleidoscopeResetSceneDescription | Mapping[str, object]",
+            env_id: int,
+        ):
+            payload = project_reset_description(config, description)
+            return tblock_reset_command_from_payload(
+                payload,
+                env_id=env_id,
+                num_envs=count,
+                device=views.device,
+            )
+
         return KaleidoscopeRuntime(
             session=assembly.session,
             views=views,
@@ -178,7 +204,9 @@ def create_kaleidoscope_runtime(
             task=task,
             state_api=state_api,
             control_mode_coordinator=control_mode,
+            reset_description_factory=reset_description_factory,
             ik_failure_penalty=settings.ik_failure_penalty,
+            collision_query_resources=assembly.collision_query_resources,
             viewport=viewport,
             viewport_reconfigure=assembly.viewport_reconfigure,
         )
@@ -200,6 +228,11 @@ def create_kaleidoscope_runtime(
             attempt(
                 "assembly IK solvers",
                 lambda: _close_assembly_solvers(assembly.ik_solvers),
+            )
+        if assembly.collision_query_resources is not None:
+            attempt(
+                "collision query resources",
+                assembly.collision_query_resources.close,
             )
         if views is not None:
             attempt("Kaleidoscope views", views.close)

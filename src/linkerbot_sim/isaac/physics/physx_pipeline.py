@@ -157,6 +157,11 @@ def build_physx_world_kwargs(
         "use_gpu_pipeline": True,
         "use_fabric": True,
     }
+    if physics.enable_scene_query_support:
+        # The query-enabled replicated scene needs more aggregate pairs than
+        # Isaac Sim 6.1's 1024-pair default, even at two environments.
+        sim_params["gpu_found_lost_aggregate_pairs_capacity"] = 4096
+        sim_params["gpu_total_aggregate_pairs_capacity"] = 4096
     return {
         "backend": "torch",
         "device": device,

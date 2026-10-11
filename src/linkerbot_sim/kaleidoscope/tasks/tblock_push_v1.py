@@ -390,6 +390,78 @@ class TBlockPushV1:
         self.buffers.previous_action.index_copy_(0, ids, zeros_action)
         self.buffers.last_finite_observation.index_copy_(0, ids, metrics.observations)
 
+    def stage_reset_description(self, command: TBlockResetCommand) -> None:
+        """Commit one validated description's task goal and RNG continuation."""
+
+        import torch
+
+        ids = require_cuda_tensor(
+            command.env_ids,
+            name="reset description env ids",
+            ndim=1,
+            dtype=torch.int64,
+        )
+        if ids.device != self.device or ids.numel() != 1:
+            raise ValueError("reset description command must contain exactly one row")
+        env_id = int(ids.item())
+        if not 0 <= env_id < self.num_envs:
+            raise ValueError("reset description env id is out of range")
+
+        goal_position = require_cuda_tensor(
+            command.goal_position,
+            name="reset description goal position",
+            ndim=2,
+            leading_dim=1,
+            dtype=self.dtype,
+        )
+        if goal_position.device != self.device or goal_position.shape[1:] != (3,):
+            raise ValueError(
+                "reset description goal position must have shape (1,3) on task.device"
+            )
+        goal_yaw = require_cuda_tensor(
+            command.goal_yaw,
+            name="reset description goal yaw",
+            ndim=1,
+            leading_dim=1,
+            dtype=self.dtype,
+        )
+        if goal_yaw.device != self.device:
+            raise ValueError("reset description goal yaw must live on task.device")
+        if command.rng_key is None or command.rng_counter_after is None:
+            raise ValueError(
+                "reset description command must include RNG key and counter"
+            )
+        rng_key = require_cuda_tensor(
+            command.rng_key,
+            name="reset description RNG key",
+            ndim=1,
+            leading_dim=1,
+            dtype=torch.int64,
+        )
+        rng_counter = require_cuda_tensor(
+            command.rng_counter_after,
+            name="reset description RNG counter",
+            ndim=1,
+            leading_dim=1,
+            dtype=torch.int64,
+        )
+        if rng_key.device != self.device or rng_counter.device != self.device:
+            raise ValueError("reset description RNG state must live on task.device")
+        if not bool(
+            (
+                torch.all(torch.isfinite(goal_position))
+                & torch.all(torch.isfinite(goal_yaw))
+            ).item()
+        ):
+            raise ValueError("reset description goal must be finite")
+        if int(rng_counter.item()) < 0:
+            raise ValueError("reset description RNG counter must be non-negative")
+
+        self.buffers.goal_position.index_copy_(0, ids, goal_position)
+        self.buffers.goal_yaw.index_copy_(0, ids, goal_yaw)
+        self.buffers.rng_key.index_copy_(0, ids, rng_key)
+        self.buffers.rng_counter.index_copy_(0, ids, rng_counter)
+
     def initialize_after_masked_reset(
         self, reset_mask: "torch.Tensor", state: TBlockState
     ) -> None:

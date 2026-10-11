@@ -11,6 +11,11 @@ their Git commit.
 
 ## [Unreleased]
 
+### Added
+
+- Kaleidoscope can sample a reset scene description from a seed without starting physics, save and load a versioned JSON description, and restore it in another process with the same configuration and backend. The existing in-process snapshot path remains available.
+- Kaleidoscope PhysX CUDA exposes read-only articulated arm-and-hand collision queries against active table, object, and other-robot colliders. Newton reports the capability as unavailable; queries do not advance physics or change task state.
+
 - Added common L6/O6 flanges, optional Gemini 335L wrist assemblies and a top ZED module with named optical mounts and separate camera presets. Corrected USD pose readback and preserved live root rotation topology during snapshot restoration.
 
 ### Changed

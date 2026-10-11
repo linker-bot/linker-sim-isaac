@@ -10,8 +10,9 @@ physics:
   solver_type: PGS
   # Fabric 为 GPU 并行环境提供高吞吐 stage/state 访问；Kaleidoscope CUDA 分支强制为 true。
   use_fabric: true
-  # RL 不创建规划 collision-query manager；真实 PhysX 接触仍保持启用。
-  enable_scene_query_support: false
+  # 为 Kaleidoscope 的显式只读候选姿态查询准备 PhysX scene-query 数据结构。
+  # 这不会创建 planner，也不会改变正常 step 中的真实 PhysX 接触计算。
+  enable_scene_query_support: true
 
   # 这些是进程级门禁，不等同于仅统计 Torch allocator 的显存。
   memory:

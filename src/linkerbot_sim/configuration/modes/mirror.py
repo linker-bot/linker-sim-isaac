@@ -100,6 +100,10 @@ class MirrorConfig:
                 "Mirror physics-derived default controller bundle did not enter the resolved configuration graph: "
                 f"{self.default_controller_bundle!r}"
             )
+        if any(robot.reset_joint_positions is not None for robot in self.scene.robots):
+            raise ConfigurationError(
+                "Mirror scene robots must not define Kaleidoscope reset_joint_positions"
+            )
         planner = self.curobo.motion_planner
         if planner is None:
             raise ConfigurationError(

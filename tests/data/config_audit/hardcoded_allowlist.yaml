@@ -1,14 +1,14 @@
 inventory:
   source_root: src/linkerbot_sim
   source_python_glob: src/linkerbot_sim/**/*.py
-  source_python_count: 252
+  source_python_count: 269
   reviewed_on: 2026-07-15
   candidate_scan:
     engine: python_ast
     assignment_scope: module
     name_regex: ^_?[A-Z][A-Z0-9_]+$
-    reviewed_candidate_count: 117
-    reviewed_candidate_sha256: 03a1d5283b64af924f8587e3a6a142905c112b271b6cc4e73de9f66082da01a2
+    reviewed_candidate_count: 139
+    reviewed_candidate_sha256: bfd62b748f90f411b792515a5ea3a74cc4728384fb4676ca849475b4cb524c08
     review_dispositions:
       - yaml_or_request_owned
       - allowlisted_retained

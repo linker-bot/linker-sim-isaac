@@ -201,14 +201,23 @@ class KaleidoscopeConfig:
                 raise ConfigurationError(
                     "Kaleidoscope scene.robots must be bound to a strict robot profile by the catalog"
                 )
+            positions = robot.reset_joint_positions
+            if positions is None:
+                raise ConfigurationError(
+                    f"Kaleidoscope robot {robot.label!r} must define reset_joint_positions"
+                )
+            expected = set(robot.resolved_profile.joint_groups.command_joint_names)
+            actual = set(positions)
+            missing = sorted(expected - actual)
+            unknown = sorted(actual - expected)
+            if missing or unknown:
+                raise ConfigurationError(
+                    f"Kaleidoscope robot {robot.label!r} reset_joint_positions must exactly cover "
+                    f"command joints: missing={missing}, unknown={unknown}"
+                )
         if isinstance(self.physics, PhysxCudaSettings):
             if self.physics.use_fabric is not True:
                 raise ConfigurationError("Kaleidoscope PhysX must enable Fabric")
-            if self.physics.enable_scene_query_support:
-                raise ConfigurationError(
-                    "Kaleidoscope does not establish planner/collision-query paths, "
-                    "enable_scene_query_support must be false"
-                )
         dynamic_rigid_names: list[str] = []
         for item in self.scene.objects:
             profile = item.resolved_profile

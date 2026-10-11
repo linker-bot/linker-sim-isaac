@@ -2,9 +2,137 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import dataclass
+import math
+from numbers import Real
+from typing import Protocol
+
 import numpy as np
 
 from linkerbot_sim.utils.rotations import matrix_to_quat_wxyz
+
+
+@dataclass(frozen=True, slots=True)
+class PrimWorldTransform:
+    """One exact USD prim identity and its complete Gf world transform."""
+
+    prim_path: str
+    matrix_row_major: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        _absolute_prim_path(self.prim_path)
+        matrix = self.matrix_row_major
+        if not isinstance(matrix, tuple) or len(matrix) != 16:
+            raise ValueError("matrix_row_major must be a tuple of 16 values")
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, Real)
+            or not math.isfinite(float(value))
+            for value in matrix
+        ):
+            raise ValueError("matrix_row_major must contain finite numbers")
+        array = np.asarray(matrix, dtype=np.float64).reshape(4, 4)
+        has_zero_last_column = np.allclose(
+            array[:3, 3],
+            0.0,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        has_unit_bottom_right = math.isclose(
+            float(array[3, 3]),
+            1.0,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        )
+        if not has_zero_last_column or not has_unit_bottom_right:
+            raise ValueError("matrix_row_major must be an affine Gf matrix")
+        if np.linalg.det(array[:3, :3]) == 0.0:
+            raise ValueError("matrix_row_major linear transform must be invertible")
+
+
+class _PrimWorldTransformInspector(Protocol):
+    def inspect(self, prim_paths: tuple[str, ...]) -> Sequence[PrimWorldTransform]: ...
+
+
+def read_prim_world_transforms(
+    stage: object,
+    prim_paths: Sequence[str],
+    *,
+    inspector: _PrimWorldTransformInspector | None = None,
+) -> tuple[PrimWorldTransform, ...]:
+    """Read complete world matrices in requested path order on the Isaac thread."""
+
+    if isinstance(prim_paths, (str, bytes)):
+        raise TypeError("prim_paths must be a sequence of strings")
+    paths = tuple(prim_paths)
+    if not paths:
+        raise ValueError("prim_paths cannot be empty")
+    for path in paths:
+        _absolute_prim_path(path)
+    if len(set(paths)) != len(paths):
+        raise ValueError("prim_paths must not contain duplicates")
+
+    resolved_inspector = inspector or _UsdPrimWorldTransformInspector(stage)
+    values = tuple(resolved_inspector.inspect(paths))
+    by_path: dict[str, PrimWorldTransform] = {}
+    for value in values:
+        if not isinstance(value, PrimWorldTransform):
+            raise TypeError("world-transform inspector returned an invalid value")
+        if value.prim_path not in paths:
+            raise RuntimeError(
+                "world-transform inspector returned an unrequested path: "
+                f"{value.prim_path}"
+            )
+        if value.prim_path in by_path:
+            raise RuntimeError(
+                "world-transform inspector returned a duplicate path: "
+                f"{value.prim_path}"
+            )
+        by_path[value.prim_path] = value
+    missing = tuple(path for path in paths if path not in by_path)
+    if missing:
+        raise RuntimeError(f"world-transform inspector omitted paths: {missing!r}")
+    return tuple(by_path[path] for path in paths)
+
+
+class _UsdPrimWorldTransformInspector:
+    """Gf matrix reader loaded only inside an active Isaac USD runtime."""
+
+    def __init__(self, stage: object) -> None:
+        try:
+            from pxr import Sdf, UsdGeom
+        except ImportError as exc:
+            raise RuntimeError(
+                "world-transform inspection requires an active Isaac USD runtime"
+            ) from exc
+        if stage is None:
+            raise ValueError("stage is required")
+        self._stage = stage
+        self._Sdf = Sdf
+        self._UsdGeom = UsdGeom
+
+    def inspect(self, prim_paths: tuple[str, ...]) -> tuple[PrimWorldTransform, ...]:
+        cache = self._UsdGeom.XformCache()
+        values: list[PrimWorldTransform] = []
+        for path in prim_paths:
+            prim = self._stage.GetPrimAtPath(self._Sdf.Path(path))
+            if not prim.IsValid():
+                raise RuntimeError(f"world-transform prim does not exist: {path}")
+            if not bool(prim.IsA(self._UsdGeom.Xformable)):
+                raise RuntimeError(f"world-transform prim is not Xformable: {path}")
+            matrix = cache.GetLocalToWorldTransform(prim)
+            values.append(
+                PrimWorldTransform(
+                    prim_path=path,
+                    matrix_row_major=tuple(
+                        float(matrix[row][column])
+                        for row in range(4)
+                        for column in range(4)
+                    ),
+                )
+            )
+        return tuple(values)
 
 
 def read_prim_world_pose(
@@ -197,6 +325,18 @@ def _zero_rigid_body_velocities(root_prim: object) -> None:
                 attr.Set(Gf.Vec3f(0.0, 0.0, 0.0))
 
 
+def _absolute_prim_path(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or value == "/"
+        or value.endswith("/")
+        or "//" in value
+    ):
+        raise ValueError("prim path must be a canonical absolute USD prim path")
+    return value
+
+
 def _matrix3_to_numpy(matrix: object) -> np.ndarray:
     """把 USD/Gf 3x3 matrix 转成 numpy。"""
 
@@ -207,6 +347,8 @@ def _matrix3_to_numpy(matrix: object) -> np.ndarray:
 
 
 __all__ = [
+    "PrimWorldTransform",
     "apply_prim_local_pose_and_zero_velocity",
     "read_prim_world_pose",
+    "read_prim_world_transforms",
 ]

@@ -204,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends implementation owner for trajectory adapter | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends implementation owner for warp compat | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 
-### isaac (35)
+### isaac (38)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -215,6 +215,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.lifecycle` | isaac_infrastructure | isaac implementation owner for lifecycle | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics` | isaac_infrastructure | isaac implementation owner for physics | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.backend` | isaac_infrastructure | isaac implementation owner for backend | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.collision_shapes` | isaac_infrastructure | isaac implementation owner for collision shapes | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.core_api` | isaac_infrastructure | isaac implementation owner for core api | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.exclusivity` | isaac_infrastructure | isaac implementation owner for exclusivity | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.factory` | isaac_infrastructure | validated concrete runtime construction | Isaac main thread | owner path | [Architecture reference](../operations/constraints.md) |
@@ -229,7 +230,9 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.physics.physx` | isaac_infrastructure | PhysX runtime ownership adapter | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.physx_pipeline` | isaac_infrastructure | isaac implementation owner for physx pipeline | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.physx_task_space` | isaac_infrastructure | isaac implementation owner for physx task space | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.query_shadow` | isaac_infrastructure | isaac implementation owner for query shadow | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.runtime` | isaac_infrastructure | resource lifecycle and simulation-step orchestration | Isaac main thread | owner path | [Architecture reference](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.scene_query` | isaac_infrastructure | isaac implementation owner for scene query | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.provenance` | isaac_infrastructure | isaac implementation owner for provenance | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.replicated_scene` | isaac_infrastructure | isaac implementation owner for replicated scene | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.replicated_scene.assets` | isaac_infrastructure | typed asset profile contracts | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
@@ -344,7 +347,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.state` | product | Mirror state access and mutation | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.timing` | product | mirror implementation owner for timing | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 
-### kaleidoscope (32)
+### kaleidoscope (46)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -354,6 +357,16 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.adapters.gymnasium` | product | kaleidoscope implementation owner for gymnasium | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.bootstrap` | product | composition root and resource ownership transfer | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.checkpoint` | product | explicit cold persistent checkpoint boundary | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_catalog` | product | kaleidoscope implementation owner for collision catalog | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_factory` | product | transactional PhysX collision-query resource composition | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_hits` | product | exact-identity hit filtering and discrete-path aggregation | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_kinematics` | product | full arm-hand reference FK and candidate collider transform composition | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_overlap` | product | Isaac-thread candidate-shadow overlap execution and ownership | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_query` | product | kaleidoscope implementation owner for collision query | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_registry` | product | multi-robot collision service dispatch and lifecycle ownership | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_root_transforms` | product | Isaac-thread capture of exact robot-root world transforms | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_service` | product | validated single-robot articulated collision query orchestration | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_torch` | product | explicit synchronous CUDA-Torch collision query boundary | Isaac main thread | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_commands` | product | kaleidoscope implementation owner for control commands | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_mode` | product | kaleidoscope implementation owner for control mode | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_runtime` | product | kaleidoscope implementation owner for control runtime | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
@@ -367,6 +380,10 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.observations` | product | device-native observation assembly | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.physx_ports` | product | PhysX CUDA tensor port contracts | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.registration` | product | explicit Gymnasium registration | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_description` | product | kaleidoscope implementation owner for reset description | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_persistence` | product | kaleidoscope implementation owner for reset persistence | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_projection` | product | kaleidoscope implementation owner for reset projection | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_sampling` | product | kaleidoscope implementation owner for reset sampling | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.resets` | product | batched reset and autoreset semantics | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.rewards` | product | device-native reward computation | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.runtime` | product | resource lifecycle and simulation-step orchestration | cuRobo/CUDA | owner path | [Architecture reference](../getting-started/choose-runtime-and-api.md) |

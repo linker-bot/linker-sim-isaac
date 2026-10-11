@@ -21,6 +21,21 @@ scene:
     # 左臂实例。robot_profile 绑定组合机器人资产和 joint group；root_pose 为 env-local 位姿。
     - label: ar5_08_l6_0
       robot_profile: ar5_08_l6_l
+      # 纯配置 nominal reset 基准；键必须完整覆盖 robot profile 的 command joints。
+      reset_joint_positions:
+        arm_AR5_5_08L_W4C4A6_joint_1: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_2: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_3: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_4: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_5: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_6: 0.0
+        arm_AR5_5_08L_W4C4A6_joint_7: 0.0
+        hand_lh_index_mcp_pitch: 0.0
+        hand_lh_middle_mcp_pitch: 0.0
+        hand_lh_ring_mcp_pitch: 0.0
+        hand_lh_pinky_mcp_pitch: 0.0
+        hand_lh_thumb_cmc_roll: 0.0
+        hand_lh_thumb_cmc_pitch: 0.0
       root_pose:
         # env-local 平移 xyz，单位 m。
         xyz: [0.0, 0.09, 0.0]
@@ -29,6 +44,20 @@ scene:
     # 右臂实例，与左臂使用相反 Y 偏移/roll 形成相向工作空间。
     - label: ar5_08_l6_1
       robot_profile: ar5_08_l6_r
+      reset_joint_positions:
+        arm_AR5_5_08R_W4C4A6_joint_1: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_2: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_3: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_4: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_5: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_6: 0.0
+        arm_AR5_5_08R_W4C4A6_joint_7: 0.0
+        hand_rh_index_mcp_pitch: 0.0
+        hand_rh_middle_mcp_pitch: 0.0
+        hand_rh_ring_mcp_pitch: 0.0
+        hand_rh_pinky_mcp_pitch: 0.0
+        hand_rh_thumb_cmc_roll: 0.0
+        hand_rh_thumb_cmc_pitch: 0.0
       root_pose:
         xyz: [0.0, -0.09, 0.0]
         rpy: [1.5707, 0.0, 0.0]

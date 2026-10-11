@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import get_ident
 from types import SimpleNamespace
 
 import numpy as np
@@ -15,6 +16,7 @@ from linkerbot_sim.kaleidoscope.ik import (
     BatchIKTensorResult,
     EnvLocalDeviceBatchIKSolver,
 )
+from linkerbot_sim.kaleidoscope.isaac_adapter import create_kaleidoscope_runtime
 from linkerbot_sim.kaleidoscope.physx_ports import (
     IsaacArticulationTensorPort,
     IsaacRigidObjectTensorPort,
@@ -23,8 +25,14 @@ from linkerbot_sim.kaleidoscope.runtime import KaleidoscopeRuntime
 
 
 class _RawArticulation:
-    def __init__(self, *, rows: int, offset: float) -> None:
-        self.dof_names = ["j0", "j1"]
+    def __init__(
+        self,
+        *,
+        rows: int,
+        offset: float,
+        dof_names: tuple[str, ...] = ("j0", "j1"),
+    ) -> None:
+        self.dof_names = list(dof_names)
         self.q = torch.full((rows, 2), offset, device="cuda")
         self.qd = torch.zeros_like(self.q)
         self.target = self.q.clone()
@@ -131,6 +139,15 @@ class _Session:
         self.close_codes.append(exit_code)
 
 
+def test_static_table_instance_uses_resolved_object_profile() -> None:
+    config = load_kaleidoscope_config()
+
+    table = scene_assembly._static_table_instance(config)
+
+    assert table.name == "workstation"
+    assert table.resolved_profile.physics.static is True
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
 def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
     monkeypatch: pytest.MonkeyPatch,
@@ -138,14 +155,16 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
     config = load_kaleidoscope_config()
     session = _Session()
     origins = np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=np.float32)
-    left = _RawArticulation(rows=2, offset=0.1)
-    right = _RawArticulation(rows=2, offset=-0.1)
+    left_names = tuple(config.scene.robots[0].reset_joint_positions or ())[:2]
+    right_names = tuple(config.scene.robots[1].reset_joint_positions or ())[:2]
+    left = _RawArticulation(rows=2, offset=0.0, dof_names=left_names)
+    right = _RawArticulation(rows=2, offset=0.0, dof_names=right_names)
     robots = tuple(
         SimpleNamespace(
             label=label,
             articulation_view=view,
             command_joint_indices=np.asarray([0, 1], dtype=np.int64),
-            command_joint_names=("j0", "j1"),
+            command_joint_names=names,
             tcp_offset_xyz=(0.0, 0.0, 0.0),
             tcp_offset_rpy=(0.0, 0.0, 0.0),
             asset_path=None,
@@ -153,7 +172,10 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
             profile={},
             tcp_frame_name="tcp",
         )
-        for label, view in (("ar5_08_l6_0", left), ("ar5_08_l6_1", right))
+        for label, view, names in (
+            ("ar5_08_l6_0", left, left_names),
+            ("ar5_08_l6_1", right, right_names),
+        )
     )
     replicated = SimpleNamespace(robots=robots, env_origins=origins)
     tcp_views = {
@@ -168,6 +190,7 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
         + torch.tensor([0.15, 0.0, -0.4], device="cuda")
     )
     captured: dict[str, object] = {}
+    collision_resources = _CloseResource()
 
     def session_factory(*, spec):
         captured["spec"] = spec
@@ -176,6 +199,10 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
     def builder(**kwargs):
         captured["builder"] = kwargs
         return replicated
+
+    def collision_factory(**kwargs):
+        captured["collision"] = kwargs
+        return collision_resources
 
     monkeypatch.setattr(
         scene_assembly,
@@ -201,6 +228,7 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
         ik_solver_factory=lambda **_kwargs: pytest.fail(
             "joint_delta must not construct IK"
         ),
+        collision_resources_factory=collision_factory,
     )
 
     assert captured["spec"].experience_family == "kaleidoscope"
@@ -213,13 +241,35 @@ def test_default_assembly_uses_spec_replicated_scene_and_no_joint_only_ik(
     assert session.physics_runtime.forwards == 1
     torch.testing.assert_close(
         assembly.nominal_joint_positions,
-        torch.tensor([0.1, 0.1, -0.1, -0.1], device="cuda"),
+        torch.zeros(4, device="cuda"),
     )
     torch.testing.assert_close(
         assembly.joint_lower,
         torch.tensor([-1.0, -2.0, -1.0, -2.0], device="cuda"),
     )
     assert assembly.ik_solvers == {}
+    assert assembly.collision_query_resources is collision_resources
+    assert captured["collision"]["stage"] is session.stage
+    assert captured["collision"]["replicated_scene"] is replicated
+    assert captured["collision"]["dynamic_object_name"] == "Tblock"
+    assert captured["collision"]["table_object_name"] == "workstation"
+    assert captured["collision"]["device"] == torch.device("cuda:0")
+    assert captured["collision"]["robot_profiles"] == {
+        robot.label: robot.profile for robot in robots
+    }
+    expected_command_joint_names = {
+        robot.label: tuple(robot.command_joint_names) for robot in robots
+    }
+    for label, limits in captured["collision"]["command_limits"].items():
+        assert limits.robot_label == label
+        assert limits.command_joint_names == expected_command_joint_names[label]
+        assert limits.lower.dtype == np.dtype(np.float32)
+        assert limits.upper.dtype == np.dtype(np.float32)
+        assert limits.lower.tolist() == [-1.0, -2.0]
+        assert limits.upper.tolist() == [1.0, 2.0]
+        assert not limits.lower.flags.writeable
+        assert not limits.upper.flags.writeable
+    collision_resources.close()
     for port in (*assembly.robot_ports, assembly.object_port):
         port.close()
     session.close()
@@ -233,12 +283,44 @@ def test_session_spec_is_renderer_free_and_uses_engine_gpu_buffer_defaults() -> 
     assert spec.compute.cuda_device == config.cuda_device
     assert spec.compute_device == config.torch_device
     assert spec.physics_device == config.torch_device
-    assert spec.physics.enable_scene_query_support is False
+    assert spec.physics.enable_scene_query_support is True
     assert not hasattr(config.physics, "gpu_buffers")
     assert not hasattr(spec.physics, "gpu_buffers")
     assert spec.physics_dt == pytest.approx(1.0 / 240.0)
     assert spec.render.enabled is False
     assert spec.app.gui is False
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is required")
+def test_assembly_rejects_asset_defaults_that_drift_from_pure_reset_config() -> None:
+    config = load_kaleidoscope_config()
+    runtime_robots: list[object] = []
+    ports: list[object] = []
+    for index, configured in enumerate(config.scene.robots):
+        names = tuple(configured.reset_joint_positions or ())[:2]
+        runtime_robots.append(
+            SimpleNamespace(label=configured.label, command_joint_names=names)
+        )
+        values = torch.zeros((1, 2), device="cuda")
+        if index == 0:
+            values[0, 0] = 0.01
+        ports.append(
+            SimpleNamespace(
+                read_joint_positions=lambda _ids, values=values: values,
+            )
+        )
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"articulation defaults differ.*max_abs_error",
+    ):
+        scene_assembly._validated_configured_nominal_joint_positions(
+            config=config,
+            replicated_robots=runtime_robots,
+            robot_ports=ports,
+            first_env=torch.zeros(1, device="cuda", dtype=torch.int64),
+            device=torch.device("cuda:0"),
+        )
 
 
 def test_newton_session_spec_uses_final_override_as_world_count() -> None:
@@ -327,14 +409,16 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
     session.physics_runtime.kind = "newton_cuda"
     del session.physics_runtime.world
     origins = np.asarray([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0]], dtype=np.float32)
-    left = _RawArticulation(rows=2, offset=0.2)
-    right = _RawArticulation(rows=2, offset=-0.2)
+    left_names = tuple(config.scene.robots[0].reset_joint_positions or ())[:2]
+    right_names = tuple(config.scene.robots[1].reset_joint_positions or ())[:2]
+    left = _RawArticulation(rows=2, offset=0.0, dof_names=left_names)
+    right = _RawArticulation(rows=2, offset=0.0, dof_names=right_names)
     robots = tuple(
         SimpleNamespace(
             label=label,
             articulation_view=view,
             command_joint_indices=np.asarray([0, 1], dtype=np.int64),
-            command_joint_names=("j0", "j1"),
+            command_joint_names=names,
             tcp_offset_xyz=(0.0, 0.0, 0.0),
             tcp_offset_rpy=(0.0, 0.0, 0.0),
             asset_path=None,
@@ -342,7 +426,10 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
             profile={},
             tcp_frame_name="tcp",
         )
-        for label, view in (("ar5_08_l6_0", left), ("ar5_08_l6_1", right))
+        for label, view, names in (
+            ("ar5_08_l6_0", left, left_names),
+            ("ar5_08_l6_1", right, right_names),
+        )
     )
     replicated = SimpleNamespace(robots=robots, env_origins=origins)
     tcp_views = {
@@ -438,6 +525,9 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
         num_envs=2,
         session_factory=session_factory,
         newton_scene_builder=builder,
+        collision_resources_factory=lambda **_kwargs: pytest.fail(
+            "Newton must not construct PhysX collision query resources"
+        ),
     )
 
     assert captured["spec"].physics.kind == "newton_cuda"
@@ -453,7 +543,7 @@ def test_newton_assembly_uses_project_runtime_without_isaac_world(
     assert session.physics_runtime.forwards == 1
     torch.testing.assert_close(
         assembly.nominal_joint_positions,
-        torch.tensor([0.2, 0.2, -0.2, -0.2], device="cuda"),
+        torch.zeros(4, device="cuda"),
     )
     assert assembly.physics_state_port.field_name == "solver.persistent"
     for port in (*assembly.robot_ports, assembly.object_port):
@@ -478,6 +568,48 @@ def test_partial_assembly_failure_closes_session_with_failure_status() -> None:
     assert session.close_codes == [1]
 
 
+def test_runtime_construction_failure_closes_collision_resources_before_session() -> (
+    None
+):
+    config = load_kaleidoscope_config()
+    events: list[str] = []
+
+    class _Child:
+        def __init__(self, label: str) -> None:
+            self.label = label
+
+        def close(self) -> None:
+            events.append(f"close:{self.label}")
+
+    class _MismatchedSession:
+        physics_runtime = SimpleNamespace(kind="newton_cuda")
+
+        def close(self, *, exit_code: int = 0) -> None:
+            events.append(f"close:session:{exit_code}")
+
+    assembly = SimpleNamespace(
+        session=_MismatchedSession(),
+        robot_ports=(_Child("left"), _Child("right")),
+        object_port=_Child("object"),
+        ik_solvers={},
+        collision_query_resources=_Child("collision"),
+    )
+
+    with pytest.raises(RuntimeError, match="differs from strict config"):
+        create_kaleidoscope_runtime(
+            config=config,
+            assembly_factory=lambda **_kwargs: assembly,
+        )
+
+    assert events == [
+        "close:collision",
+        "close:left",
+        "close:right",
+        "close:object",
+        "close:session:1",
+    ]
+
+
 class _CloseResource:
     def __init__(self, *, fail_once: bool = False) -> None:
         self.calls = 0
@@ -494,24 +626,28 @@ def test_runtime_close_retries_failed_child_before_closing_session() -> None:
     action = _CloseResource(fail_once=True)
     views = _CloseResource()
     task = _CloseResource()
+    collision_resources = _CloseResource()
     session = _CloseResource()
     runtime.action_term = action
     runtime.views = views
     runtime.task = task
+    runtime.collision_query_resources = collision_resources
     runtime.session = session
     runtime._closed = False
     runtime._closing_started = False
     runtime._close_completed = set()
+    runtime._owner_thread_id = get_ident()
 
     with pytest.raises(RuntimeError, match="retry me"):
         runtime.close()
-    assert views.calls == task.calls == 1
+    assert views.calls == task.calls == collision_resources.calls == 1
     assert session.calls == 0
     assert runtime._closed is False
 
     runtime.close()
     assert action.calls == 2
     assert views.calls == task.calls == session.calls == 1
+    assert collision_resources.calls == 1
     assert runtime._closed is True
     runtime.close()
     assert session.calls == 1
