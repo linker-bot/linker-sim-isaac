@@ -432,7 +432,7 @@ generated_inventory:
   production_python:
     count: 269
     path_sha256: d18ac56151bd759d8ff30f8d067996d3c02a8686e184b90a7280a34f3476541b
-    path_content_sha256: 8b03aad66d73c17c5c584d9ecf6605c11ea34f812098376ae7e2cddf3a0e193f
+    path_content_sha256: 6174350b9895889eba0a474814ff1e5ed5e8d3b3eebc256c3bfdd703a372e338
     files:
     - path: src/linkerbot_sim/__init__.py
       sha256: 5402138b51e7cc80ea886c6f727345ffbc5476bdf5777d8961222d6f6479472f
@@ -1139,7 +1139,7 @@ generated_inventory:
       runtime: Isaac main thread
       classification: internal
     - path: src/linkerbot_sim/isaac/physics/physx_pipeline.py
-      sha256: 18b0b293ccab8532cd8a9961f2f02f23dfcb5a6d0aee800f21502d71dd792969
+      sha256: e34bfde9302f9ab8d2b2c048cad68fc103c2b27a014ef069730372a00684b768
       module: linkerbot_sim.isaac.physics.physx_pipeline
       group: isaac
       layer: isaac_infrastructure
@@ -1331,7 +1331,7 @@ generated_inventory:
       runtime: cuRobo/CUDA
       classification: internal
     - path: src/linkerbot_sim/kaleidoscope/collision_catalog.py
-      sha256: 0a31630a80b54ec30afe638dc1f6e418038f0a2b3bdbc566fb45f5a00b5ffe8b
+      sha256: abdd2acd2a6b1a394d50128fa743d0932badd7488d3464267f5a1eb2cec25a78
       module: linkerbot_sim.kaleidoscope.collision_catalog
       group: kaleidoscope
       layer: product
@@ -2589,7 +2589,7 @@ generated_inventory:
   test_python:
     count: 150
     path_sha256: 238486ca540d5505b5dd9c13ad1552485bb5cbc598a92d31ecc487db874d9525
-    path_content_sha256: 5f8d7217ec45627004b14fe85bf3dc2546f02da6c2fcfe62f8540e9928a9469a
+    path_content_sha256: 30c3e840273d4513448997b845d161bdf93f324035c3672b691743a51d1a7ff7
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2664,7 +2664,7 @@ generated_inventory:
     - path: tests/test_kaleidoscope_adapters.py
       sha256: 8c5b7d0d956eaaafaa872c082e7aa68fa01729c3817a9c9bdd98e1d383325e8e
     - path: tests/test_kaleidoscope_collision_catalog.py
-      sha256: 3a3211564b980bdf1334b0880c562017a817a0d7d4f862c7d703f9cf4f8be928
+      sha256: e3e7ab79cfc59c595dd561292dbeffc447bfff80b884173e9d652ed5a930732b
     - path: tests/test_kaleidoscope_collision_env.py
       sha256: d698223f5d85fb6ff6a181ef564bd69593f7675b631ed1dc774290aa1a088852
     - path: tests/test_kaleidoscope_collision_factory.py
@@ -2804,7 +2804,7 @@ generated_inventory:
     - path: tests/test_physx_gpu_memory_budget_smoke.py
       sha256: 2a06dd20c3f1398111bfe78c21a1fc8acd5d54396e85ed7b2e99d0c3921a8747
     - path: tests/test_physx_pipeline.py
-      sha256: 396581431b0510e516f5ed1d3a495fc3a3e000d454df8c4e2dfdb869e39ea04e
+      sha256: ae548297c1a333be8b5436cf78173b519189d6de082dffdf22f86690558c0084
     - path: tests/test_physx_query_shadow.py
       sha256: 50a8befed256d406f7c9741b4eb62b1d7d611547061968f16a946f23104063cf
     - path: tests/test_physx_query_shadow_smoke.py
@@ -3028,7 +3028,7 @@ generated_inventory:
   entry_scripts:
     count: 22
     path_sha256: 7609a6f7e3cb767b7d3332d1bb25f56f534e1e721c8a9df7e2ffc3081311c12c
-    path_content_sha256: 5ef50ccf44eedccbd9e5372a839836747885233dde7dcbb609867db71a02b53a
+    path_content_sha256: 780e481a6e45019b8f297487dc164dae602d581823b3c9ce2ff936f87c24a70d
     files:
     - path: scripts/check_curobo_runtime.py
       sha256: 76a7006c64b72b651d3e85d04762b5fd8917eae2cb2e42fb46414dd4f37b68f5
@@ -3051,7 +3051,7 @@ generated_inventory:
     - path: scripts/runtime_worker_supervisor.py
       sha256: e9b30fe612738b5846f6edcef6854c5dcec12cc9f2bfbb9de5165a2e4d7825b7
     - path: scripts/smoke_kaleidoscope_physics.py
-      sha256: 04f7044969e0247ee4d19f8129719ac121f1d6550f5f093aea3ab1e3868ecd6e
+      sha256: ca2e695be1879d382416b7d6be90d520f5f3f6614e01a7b6b01a75f15d7d6d47
     - path: scripts/smoke_kaleidoscope_portable_reset.py
       sha256: 3dffdbb56885544675aa4d6f0e7aa2bfafaf8e5374cbcd6ab5891539a6e20dd8
     - path: scripts/smoke_mirror_assemblies.py

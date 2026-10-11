@@ -66,15 +66,14 @@ class RobotCollisionShape:
             raise ValueError("rigid_body_suffix must be empty or start with '/'")
         if not isinstance(self.metadata, PhysxCollisionShapeMetadata):
             raise TypeError("metadata must be PhysxCollisionShapeMetadata")
-        if (
-            f"{self.articulation_path}{self.collision_suffix}"
-            != self.metadata.collision_path
-        ):
+        suffix_root = _robot_shape_suffix_root(
+            self.imported_root_path,
+            self.articulation_path,
+            self.metadata,
+        )
+        if f"{suffix_root}{self.collision_suffix}" != self.metadata.collision_path:
             raise ValueError("collision_suffix does not match metadata collision_path")
-        if (
-            f"{self.articulation_path}{self.rigid_body_suffix}"
-            != self.metadata.rigid_body_path
-        ):
+        if f"{suffix_root}{self.rigid_body_suffix}" != self.metadata.rigid_body_path:
             raise ValueError(
                 "rigid_body_suffix does not match metadata rigid_body_path"
             )
@@ -452,7 +451,10 @@ def build_robot_collision_catalog(
                 raise ValueError("robot imported root is outside its env root")
             if not _is_descendant_or_self(articulation_path, imported_root):
                 raise ValueError("articulation path is outside robot imported root")
-            metadata_values = tuple(scanner(stage, articulation_path))
+            # Isaac Sim 6.1 may place ArticulationRootAPI on a fixed joint.
+            # Colliders are then siblings of that joint, still within the
+            # robot's imported subtree.
+            metadata_values = tuple(scanner(stage, imported_root))
             if not metadata_values:
                 raise RuntimeError(
                     f"robot {robot_label!r} env {env_id} has no collision shapes"
@@ -463,13 +465,18 @@ def build_robot_collision_catalog(
                     raise TypeError(
                         "collision scanner must return PhysxCollisionShapeMetadata"
                     )
-                collision_suffix = _relative_suffix(
+                suffix_root = _robot_shape_suffix_root(
+                    imported_root,
                     articulation_path,
+                    metadata,
+                )
+                collision_suffix = _relative_suffix(
+                    suffix_root,
                     metadata.collision_path,
                     label="collision_path",
                 )
                 rigid_body_suffix = _relative_suffix(
-                    articulation_path,
+                    suffix_root,
                     metadata.rigid_body_path,
                     label="rigid_body_path",
                 )
@@ -734,6 +741,24 @@ def _absolute_prim_path(value: object, *, label: str) -> str:
 
 def _is_descendant_or_self(path: str, root: str) -> bool:
     return path == root or path.startswith(f"{root}/")
+
+
+def _robot_shape_suffix_root(
+    imported_root: str,
+    articulation_path: str,
+    metadata: PhysxCollisionShapeMetadata,
+) -> str:
+    for path in (metadata.collision_path, metadata.rigid_body_path):
+        if not _is_descendant_or_self(path, imported_root):
+            raise RuntimeError(
+                f"robot collision identity is outside imported root: {path}"
+            )
+    if all(
+        _is_descendant_or_self(path, articulation_path)
+        for path in (metadata.collision_path, metadata.rigid_body_path)
+    ):
+        return articulation_path
+    return imported_root
 
 
 def _relative_suffix(root: str, path: str, *, label: str) -> str:

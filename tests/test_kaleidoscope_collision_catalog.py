@@ -74,7 +74,8 @@ def _metadata(
     )
 
 
-def _scanner(_stage: object, articulation_path: str):
+def _scanner(_stage: object, imported_root: str):
+    articulation_path = f"{imported_root}/Robot"
     return (
         _metadata(articulation_path, "/palm/collision"),
         _metadata(articulation_path, "/finger/collision"),
@@ -158,6 +159,31 @@ def test_catalog_binds_exact_env_robot_and_articulation_identity() -> None:
     assert selected is left_env_1[0]
 
 
+def test_catalog_scans_imported_subtree_when_articulation_root_is_joint() -> None:
+    scene = _scene(num_envs=1)
+    for robot in scene.robots:
+        imported_root = robot.imported_root_paths[0]
+        robot.articulation_paths = (f"{imported_root}/Geometry/base/PhysicsFixedJoint",)
+    scanned: list[str] = []
+
+    def scanner(_stage: object, imported_root: str):
+        scanned.append(imported_root)
+        return (_metadata(imported_root, "/Geometry/palm/collision"),)
+
+    catalog = build_robot_collision_catalog(
+        stage=object(), replicated_scene=scene, scanner=scanner
+    )
+
+    assert scanned == [robot.imported_root_paths[0] for robot in scene.robots]
+    for robot in scene.robots:
+        shape = catalog.shapes_for(env_id=0, robot_label=robot.label)[0]
+        assert shape.articulation_path.endswith("/PhysicsFixedJoint")
+        assert shape.collision_suffix == "/Geometry/palm/collision"
+        assert shape.collision_path == (
+            f"{robot.imported_root_paths[0]}/Geometry/palm/collision"
+        )
+
+
 def test_catalog_uses_stable_env_then_scene_robot_then_path_order() -> None:
     catalog = build_robot_collision_catalog(
         stage=object(),
@@ -217,11 +243,11 @@ def test_catalog_rejects_articulation_outside_env_or_imported_root() -> None:
         )
 
 
-def test_catalog_rejects_collision_identity_outside_articulation() -> None:
+def test_catalog_rejects_collision_identity_outside_imported_root() -> None:
     def invalid_scanner(_stage: object, _articulation_path: str):
         return (_metadata("/World/other/Robot", "/palm/collision"),)
 
-    with pytest.raises(RuntimeError, match="outside articulation path"):
+    with pytest.raises(RuntimeError, match="outside imported root"):
         build_robot_collision_catalog(
             stage=object(),
             replicated_scene=_scene(num_envs=1),
@@ -230,8 +256,9 @@ def test_catalog_rejects_collision_identity_outside_articulation() -> None:
 
 
 def test_catalog_rejects_cloned_topology_difference() -> None:
-    def mismatched_scanner(_stage: object, articulation_path: str):
-        if "env_0" in articulation_path:
+    def mismatched_scanner(_stage: object, imported_root: str):
+        articulation_path = f"{imported_root}/Robot"
+        if "env_0" in imported_root:
             return (_metadata(articulation_path, "/palm/collision"),)
         return (_metadata(articulation_path, "/finger/collision"),)
 
@@ -246,8 +273,9 @@ def test_catalog_rejects_cloned_topology_difference() -> None:
 def test_catalog_rejects_cloned_local_transform_difference() -> None:
     changed = (2.0, *IDENTITY[1:])
 
-    def mismatched_scanner(_stage: object, articulation_path: str):
-        matrix = IDENTITY if "env_0" in articulation_path else changed
+    def mismatched_scanner(_stage: object, imported_root: str):
+        articulation_path = f"{imported_root}/Robot"
+        matrix = IDENTITY if "env_0" in imported_root else changed
         return (_metadata(articulation_path, "/palm/collision", matrix=matrix),)
 
     with pytest.raises(RuntimeError, match="metadata differs from env 0"):

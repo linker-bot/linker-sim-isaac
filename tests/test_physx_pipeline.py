@@ -58,11 +58,13 @@ def _cpu_spec(*, cuda_device: int = 2) -> IsaacSessionSpec:
     )
 
 
-def _cuda_spec(*, cuda_device: int = 2) -> IsaacSessionSpec:
+def _cuda_spec(
+    *, cuda_device: int = 2, scene_query_support: bool = False
+) -> IsaacSessionSpec:
     return IsaacSessionSpec(
         experience_family="kaleidoscope",
         compute=IsaacComputeSpec(cuda_device=cuda_device),
-        physics=IsaacPhysxCudaSpec(),
+        physics=IsaacPhysxCudaSpec(enable_scene_query_support=scene_query_support),
         physics_dt=1.0 / 240.0,
         rendering_dt=1.0 / 60.0,
         gravity_z=-9.81,
@@ -169,6 +171,16 @@ def test_cuda_pipeline_leaves_gpu_buffer_capacities_at_engine_defaults() -> None
         "use_fabric": True,
     }
     assert not any(name.startswith("gpu_") for name in sim_params)
+
+
+def test_scene_query_pipeline_reserves_aggregate_pair_capacity() -> None:
+    kwargs = build_physx_world_kwargs(_cuda_spec(scene_query_support=True))
+    sim_params = kwargs["sim_params"]
+
+    assert isinstance(sim_params, dict)
+    assert sim_params["enable_scene_query_support"] is True
+    assert sim_params["gpu_found_lost_aggregate_pairs_capacity"] == 4096
+    assert sim_params["gpu_total_aggregate_pairs_capacity"] == 4096
 
 
 @pytest.mark.parametrize(
