@@ -10,6 +10,26 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS = {
+    "ArticulatedCollisionQuerySpec": (
+        "linkerbot_sim.kaleidoscope.collision_query",
+        "ArticulatedCollisionQuerySpec",
+    ),
+    "ArticulatedCollisionQueryResult": (
+        "linkerbot_sim.kaleidoscope.collision_query",
+        "ArticulatedCollisionQueryResult",
+    ),
+    "CollisionHitCategory": (
+        "linkerbot_sim.kaleidoscope.collision_query",
+        "CollisionHitCategory",
+    ),
+    "CollisionQueryTarget": (
+        "linkerbot_sim.kaleidoscope.collision_query",
+        "CollisionQueryTarget",
+    ),
+    "CollisionQueryUnavailableError": (
+        "linkerbot_sim.kaleidoscope.collision_query",
+        "CollisionQueryUnavailableError",
+    ),
     "ControlModeChange": (
         "linkerbot_sim.controllers.control_mode",
         "ControlModeChange",
@@ -54,6 +74,10 @@ _EXPORTS = {
         "linkerbot_sim.kaleidoscope.snapshot",
         "KaleidoscopeEpisodeSnapshot",
     ),
+    "KaleidoscopeResetSceneDescription": (
+        "linkerbot_sim.kaleidoscope.reset_description",
+        "KaleidoscopeResetSceneDescription",
+    ),
     "TorchKaleidoscopeEnv": (
         "linkerbot_sim.kaleidoscope.env",
         "TorchKaleidoscopeEnv",
@@ -70,9 +94,21 @@ _EXPORTS = {
         "linkerbot_sim.kaleidoscope.bootstrap",
         "make_viewport_env",
     ),
+    "load_reset_scene_description": (
+        "linkerbot_sim.kaleidoscope.reset_persistence",
+        "load_reset_scene_description",
+    ),
     "register_gymnasium_envs": (
         "linkerbot_sim.kaleidoscope.registration",
         "register_gymnasium_envs",
+    ),
+    "sample_reset_scene_description": (
+        "linkerbot_sim.kaleidoscope.reset_sampling",
+        "sample_reset_scene_description",
+    ),
+    "save_reset_scene_description": (
+        "linkerbot_sim.kaleidoscope.reset_persistence",
+        "save_reset_scene_description",
     ),
 }
 

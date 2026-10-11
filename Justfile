@@ -78,6 +78,22 @@ smoke-kaleidoscope:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_physics.py --profile newton_cuda --num-envs 2 --steps 1 --action-mode ee_delta_position
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_physics.py --profile newton_cuda --num-envs 2 --steps 1 --action-mode ee_linear_path_position
 
+# Portable reset 必须在两个真实 physics owner 中各验证一次。每次 smoke 先监督一个不加载
+# Torch/Isaac 的 producer 进程写 JSON；producer 退出后再启动独立 Kit consumer 做单环境恢复，
+# 并证明普通 reset 从恢复后的 RNG counter 继续，不把手工服务器脚本当作发布门禁。
+smoke-kaleidoscope-portable-reset:
+    {{python}} -c 'import torch; assert torch.cuda.is_available(), "CUDA is required for the Kaleidoscope portable reset smoke"'
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_portable_reset.py --profile physx_cuda
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_portable_reset.py --profile newton_cuda
+
+# Issue #19 的独立技术验收。凹 U 形 mesh 的空腔用于拒绝 overlap_shape 静默退化为
+# convex hull；第二个独立 worker 再从真实 Kaleidoscope Env 公共 API 查询工作台、T-block
+# 和另一台机器人。两个 worker 都必须正常清理并退出，supervisor 才会打印成功标记。
+smoke-physx-query-shadow:
+    {{python}} -c 'import torch; assert torch.cuda.is_available(), "CUDA is required for the PhysX query-shadow smoke"'
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_physx_query_shadow.py --cuda-device 0
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_physx_query_shadow.py --cuda-device 0 --product-env --num-envs 2
+
 # 正式 Newton multi-world composition 的容量正确性门禁。它验证 256 worlds 的构造、推进与
 # state/snapshot/clone 事务，不替代下面独立的进程显存采样。
 smoke-kaleidoscope-newton-capacity:
@@ -160,7 +176,7 @@ smoke-mirror-task-flow:
 smoke-newton-contact:
     {{python}} -m pytest -q tests/test_newton_contact_dynamics.py tests/test_newton_manager.py
 
-test-simulation: smoke-newton-contact test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+test-simulation: smoke-newton-contact test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-portable-reset smoke-physx-query-shadow smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from types import SimpleNamespace
+from threading import get_ident, Thread
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -24,6 +25,17 @@ from linkerbot_sim.kaleidoscope.control_commands import (  # noqa: E402
     PositionControlTrajectory,
     VelocityControlTrajectory,
 )
+from linkerbot_sim.kaleidoscope.env import TorchKaleidoscopeEnv  # noqa: E402
+from linkerbot_sim.controllers.control_mode import (  # noqa: E402
+    ControlModeLockedError,
+)
+from linkerbot_sim.kaleidoscope.collision_query import (  # noqa: E402
+    ArticulatedCollisionQueryResult,
+    ArticulatedCollisionQuerySpec,
+    CollisionHitCategory,
+    CollisionQueryTarget,
+    CollisionQueryUnavailableError,
+)
 from linkerbot_sim.kaleidoscope.geometry import quaternion_slerp_wxyz  # noqa: E402
 from linkerbot_sim.kaleidoscope.ik import (  # noqa: E402
     BatchIKTensorResult,
@@ -33,6 +45,18 @@ from linkerbot_sim.kaleidoscope.linear_motion import solve_linear_motion_batch  
 from linkerbot_sim.kaleidoscope.observations import (  # noqa: E402
     TBlockState,
     tblock_heading,
+)
+from linkerbot_sim.kaleidoscope.reset_projection import (  # noqa: E402
+    project_reset_description,
+)
+from linkerbot_sim.kaleidoscope.reset_sampling import (  # noqa: E402
+    sample_reset_scene_description,
+)
+from linkerbot_sim.kaleidoscope.resets import (  # noqa: E402
+    DeviceCounterRNG,
+    TBlockResetCommand,
+    build_tblock_reset_command,
+    tblock_reset_command_from_payload,
 )
 from linkerbot_sim.kaleidoscope.runtime import (  # noqa: E402
     KaleidoscopeRuntime,
@@ -49,6 +73,7 @@ from linkerbot_sim.kaleidoscope.tasks.tblock_push_v1 import (  # noqa: E402
     TBlockPushV1,
     TBlockPushV1Settings,
 )
+from linkerbot_sim.utils.rotations import rpy_xyz_to_quat_wxyz  # noqa: E402
 
 
 pytestmark = pytest.mark.skipif(
@@ -63,17 +88,18 @@ def _device() -> torch.device:
 def _task(
     *,
     num_envs: int = 4,
+    command_dim: int = 6,
     settings: TBlockPushV1Settings | None = None,
 ) -> TBlockPushV1:
     device = _device()
     return TBlockPushV1(
         num_envs=num_envs,
-        command_dim=6,
-        action_dim=6,
+        command_dim=command_dim,
+        action_dim=command_dim,
         robot_count=2,
         device=device,
         dtype=torch.float32,
-        nominal_joint_positions=torch.zeros(6, device=device),
+        nominal_joint_positions=torch.zeros(command_dim, device=device),
         nominal_block_position=torch.tensor([0.0, 0.0, -0.38], device=device),
         nominal_block_orientation_wxyz=torch.tensor(
             [0.70714084, 0.0, 0.70707272, 0.0], device=device
@@ -511,6 +537,308 @@ def test_tblock_heading_is_relative_to_nominal_for_reset_goal_and_observation() 
     )
 
 
+@pytest.mark.parametrize(
+    ("seed", "sample_id", "reset_index"),
+    (
+        (0, 0, 0),
+        (7, 12, 4),
+        (-17, 2**31 + 5, 2),
+    ),
+)
+def test_pure_reset_description_matches_cuda_reset_command(
+    seed: int,
+    sample_id: int,
+    reset_index: int,
+) -> None:
+    config = load_kaleidoscope_config()
+    description = sample_reset_scene_description(
+        config,
+        seed=seed,
+        sample_id=sample_id,
+        reset_index=reset_index,
+    )
+    randomization = config.task.randomization
+    nominal_joint_positions = torch.tensor(
+        [
+            value
+            for robot in config.scene.robots
+            for value in robot.ordered_reset_joint_positions()
+        ],
+        device=_device(),
+        dtype=torch.float32,
+    )
+    dynamic_object = next(
+        item for item in config.scene.objects if item.name == config.task.dynamic_object
+    )
+    nominal_block_position = torch.tensor(
+        dynamic_object.root_pose.xyz,
+        device=_device(),
+        dtype=torch.float32,
+    )
+    nominal_block_orientation = torch.tensor(
+        rpy_xyz_to_quat_wxyz(dynamic_object.root_pose.rpy),
+        device=_device(),
+        dtype=torch.float32,
+    )
+    heading_axis = torch.tensor(
+        config.task.heading_axis,
+        device=_device(),
+        dtype=torch.float32,
+    )
+    nominal_heading, finite = tblock_heading(
+        nominal_block_orientation[None, :],
+        heading_axis=heading_axis,
+    )
+    assert torch.all(finite)
+
+    draw_count = nominal_joint_positions.numel() + 6
+    rng_counter = torch.tensor(
+        [reset_index * draw_count],
+        device=_device(),
+        dtype=torch.int64,
+    )
+    rng = DeviceCounterRNG(
+        torch.tensor(
+            [description.generator.rng_key],
+            device=_device(),
+            dtype=torch.int64,
+        ),
+        rng_counter,
+    )
+    command = build_tblock_reset_command(
+        env_ids=torch.zeros(1, device=_device(), dtype=torch.int64),
+        rng=rng,
+        nominal_joint_positions=nominal_joint_positions,
+        nominal_block_position=nominal_block_position,
+        nominal_block_orientation_wxyz=nominal_block_orientation,
+        heading_axis=heading_axis,
+        nominal_heading=nominal_heading[0],
+        joint_delta_range=randomization.robot_joint_delta_rad,
+        block_x_range=randomization.block_x_delta_m,
+        block_y_range=randomization.block_y_delta_m,
+        block_yaw_range=randomization.block_yaw_delta_rad,
+        goal_x_range=randomization.goal_x_delta_m,
+        goal_y_range=randomization.goal_y_delta_m,
+        goal_yaw_range=randomization.goal_yaw_delta_rad,
+    )
+
+    expected_joint_positions = torch.tensor(
+        [value for robot in description.robots for value in robot.joint_positions],
+        device=_device(),
+        dtype=torch.float32,
+    )[None, :]
+    expected_block_position = torch.tensor(
+        description.dynamic_object.position_xyz,
+        device=_device(),
+        dtype=torch.float32,
+    )[None, :]
+    expected_block_orientation = torch.tensor(
+        description.dynamic_object.orientation_wxyz,
+        device=_device(),
+        dtype=torch.float32,
+    )[None, :]
+    expected_goal_position = torch.tensor(
+        description.task.goal_position,
+        device=_device(),
+        dtype=torch.float32,
+    )[None, :]
+    expected_goal_yaw = torch.tensor(
+        [description.task.goal_yaw],
+        device=_device(),
+        dtype=torch.float32,
+    )
+
+    torch.cuda.synchronize()
+    assert rng_counter.item() == description.generator.rng_counter_after
+    torch.testing.assert_close(
+        command.joint_positions,
+        expected_joint_positions,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        command.joint_velocities, torch.zeros_like(command.joint_velocities)
+    )
+    torch.testing.assert_close(command.joint_targets, expected_joint_positions)
+    torch.testing.assert_close(
+        command.block_position,
+        expected_block_position,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        command.block_velocity, torch.zeros_like(command.block_velocity)
+    )
+    torch.testing.assert_close(
+        command.goal_position,
+        expected_goal_position,
+        rtol=0.0,
+        atol=0.0,
+    )
+    # CUDA trigonometric kernels can differ from Python libm by a few float32 ULPs.
+    torch.testing.assert_close(
+        command.block_orientation_wxyz,
+        expected_block_orientation,
+        rtol=0.0,
+        atol=1.0e-6,
+    )
+    torch.testing.assert_close(
+        command.goal_yaw,
+        expected_goal_yaw,
+        rtol=0.0,
+        atol=1.0e-6,
+    )
+
+
+def test_validated_reset_payload_copies_to_owned_one_row_cuda_command() -> None:
+    config = load_kaleidoscope_config()
+    description = sample_reset_scene_description(
+        config,
+        seed=7,
+        sample_id=12,
+        reset_index=4,
+    )
+    payload = project_reset_description(config, description)
+
+    command = tblock_reset_command_from_payload(
+        payload,
+        env_id=2,
+        num_envs=4,
+        device=_device(),
+    )
+
+    assert command.env_ids.tolist() == [2]
+    assert command.joint_positions.shape == (1, 26)
+    assert command.joint_velocities.shape == (1, 26)
+    assert command.joint_targets.shape == (1, 26)
+    assert command.block_position.shape == (1, 3)
+    assert command.block_orientation_wxyz.shape == (1, 4)
+    assert command.block_velocity.shape == (1, 6)
+    assert command.goal_position.shape == (1, 3)
+    assert command.goal_yaw.shape == (1,)
+    tensors = (
+        command.env_ids,
+        command.joint_positions,
+        command.joint_velocities,
+        command.joint_targets,
+        command.block_position,
+        command.block_orientation_wxyz,
+        command.block_velocity,
+        command.goal_position,
+        command.goal_yaw,
+        command.rng_key,
+        command.rng_counter_after,
+    )
+    assert all(value is not None and value.device == _device() for value in tensors)
+    assert all(value is not None and value.is_contiguous() for value in tensors)
+    assert command.rng_key is not None
+    assert command.rng_counter_after is not None
+    assert command.rng_key.item() == description.generator.rng_key
+    assert command.rng_counter_after.item() == description.generator.rng_counter_after
+    torch.testing.assert_close(
+        command.joint_positions,
+        torch.tensor(
+            [payload.joint_positions],
+            device=_device(),
+            dtype=torch.float32,
+        ),
+    )
+    torch.testing.assert_close(
+        command.goal_yaw,
+        torch.tensor([payload.goal_yaw], device=_device(), dtype=torch.float32),
+    )
+
+    with pytest.raises(ValueError, match="env_id"):
+        tblock_reset_command_from_payload(
+            payload,
+            env_id=4,
+            num_envs=4,
+            device=_device(),
+        )
+    with pytest.raises(ValueError, match="CUDA device"):
+        tblock_reset_command_from_payload(
+            payload,
+            env_id=0,
+            num_envs=4,
+            device=torch.device("cpu"),
+        )
+
+
+def test_task_stages_one_description_goal_and_rng_row_transactionally() -> None:
+    config = load_kaleidoscope_config()
+    description = sample_reset_scene_description(
+        config,
+        seed=7,
+        sample_id=12,
+        reset_index=4,
+    )
+    payload = project_reset_description(config, description)
+    command = tblock_reset_command_from_payload(
+        payload,
+        env_id=2,
+        num_envs=4,
+        device=_device(),
+    )
+    task = _task(num_envs=4, command_dim=26)
+    task.buffers.goal_position.fill_(-9.0)
+    task.buffers.goal_yaw.fill_(-9.0)
+    task.buffers.rng_key.fill_(-9)
+    task.buffers.rng_counter.fill_(99)
+
+    task.stage_reset_description(command)
+
+    torch.testing.assert_close(
+        task.buffers.goal_position[2],
+        command.goal_position[0],
+    )
+    torch.testing.assert_close(task.buffers.goal_yaw[2], command.goal_yaw[0])
+    assert command.rng_key is not None
+    assert command.rng_counter_after is not None
+    assert task.buffers.rng_key[2] == command.rng_key[0]
+    assert task.buffers.rng_counter[2] == command.rng_counter_after[0]
+    untouched = torch.tensor([0, 1, 3], device=_device(), dtype=torch.int64)
+    torch.testing.assert_close(
+        task.buffers.goal_position.index_select(0, untouched),
+        torch.full((3, 3), -9.0, device=_device()),
+    )
+    torch.testing.assert_close(
+        task.buffers.goal_yaw.index_select(0, untouched),
+        torch.full((3,), -9.0, device=_device()),
+    )
+    assert torch.all(task.buffers.rng_key.index_select(0, untouched) == -9)
+    assert torch.all(task.buffers.rng_counter.index_select(0, untouched) == 99)
+
+    before = {
+        "goal_position": task.buffers.goal_position.clone(),
+        "goal_yaw": task.buffers.goal_yaw.clone(),
+        "rng_key": task.buffers.rng_key.clone(),
+        "rng_counter": task.buffers.rng_counter.clone(),
+    }
+    invalid_goal = command.goal_position.clone()
+    invalid_goal[0, 0] = torch.nan
+    invalid_counter = torch.full((1,), -1, device=_device(), dtype=torch.int64)
+    invalid_commands = (
+        (replace(command, rng_key=None), "RNG key"),
+        (replace(command, goal_position=invalid_goal), "goal must be finite"),
+        (
+            replace(command, rng_counter_after=invalid_counter),
+            "counter must be non-negative",
+        ),
+        (
+            replace(
+                command,
+                env_ids=torch.tensor([4], device=_device(), dtype=torch.int64),
+            ),
+            "out of range",
+        ),
+    )
+    for invalid, expected in invalid_commands:
+        with pytest.raises(ValueError, match=expected):
+            task.stage_reset_description(invalid)
+        for name, previous in before.items():
+            torch.testing.assert_close(getattr(task.buffers, name), previous)
+
+
 def test_step_observation_previous_action_matches_same_step_buffer() -> None:
     task = _task(num_envs=2)
     ids = torch.arange(2, device=_device(), dtype=torch.int64)
@@ -863,6 +1191,206 @@ class _Views:
         self.closed = True
 
 
+def _description_command(*, env_id: int, command_dim: int = 6) -> TBlockResetCommand:
+    device = _device()
+    joint_positions = torch.linspace(
+        -0.12,
+        0.12,
+        command_dim,
+        device=device,
+        dtype=torch.float32,
+    )[None, :]
+    return TBlockResetCommand(
+        env_ids=torch.tensor([env_id], device=device, dtype=torch.int64),
+        joint_positions=joint_positions,
+        joint_velocities=torch.zeros_like(joint_positions),
+        joint_targets=joint_positions.clone(),
+        block_position=torch.tensor(
+            [[0.12, 0.01, -0.38]], device=device, dtype=torch.float32
+        ),
+        block_orientation_wxyz=torch.tensor(
+            [[0.70714084, 0.0, 0.70707272, 0.0]],
+            device=device,
+            dtype=torch.float32,
+        ),
+        block_velocity=torch.zeros((1, 6), device=device, dtype=torch.float32),
+        goal_position=torch.tensor(
+            [[0.22, -0.02, -0.38]], device=device, dtype=torch.float32
+        ),
+        goal_yaw=torch.tensor([0.25], device=device, dtype=torch.float32),
+        rng_key=torch.tensor([314159], device=device, dtype=torch.int64),
+        rng_counter_after=torch.tensor([96], device=device, dtype=torch.int64),
+    )
+
+
+def _description_runtime(*, factory):
+    num_envs = 3
+    task = _task(num_envs=num_envs)
+    views = _Views(num_envs, command_dim=6)
+    session = _Session()
+    controller = JointDeltaActionTerm(
+        lower=torch.full((6,), -1.0, device=_device()),
+        upper=torch.full((6,), 1.0, device=_device()),
+        scale=torch.full((6,), 0.05, device=_device()),
+        clip=1.0,
+        num_envs=num_envs,
+        target=views.target,
+    )
+    action = JointDeltaRuntimeAction(controller, physics_ticks_per_action=2)
+    state_api = SimpleNamespace(
+        num_envs=num_envs,
+        device=_device(),
+        poisoned=False,
+    )
+    runtime = KaleidoscopeRuntime(
+        session=session,
+        views=views,
+        action_term=action,
+        task=task,
+        state_api=state_api,
+        reset_description_factory=factory,
+    )
+    return runtime, task, views, session, action
+
+
+def test_runtime_reset_from_description_uses_existing_reset_transaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    received: list[tuple[object, int]] = []
+    description = object()
+    command = _description_command(env_id=1)
+
+    def factory(value: object, env_id: int) -> TBlockResetCommand:
+        events.append("factory")
+        received.append((value, env_id))
+        return command
+
+    runtime, task, views, session, action = _description_runtime(factory=factory)
+
+    def wrap(target: object, name: str, event: str) -> None:
+        original = getattr(target, name)
+
+        def recorded(*args, **kwargs):
+            events.append(event)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(target, name, recorded)
+
+    wrap(task, "stage_reset_description", "stage")
+    wrap(runtime.control_mode, "write_reset", "control_write")
+    wrap(action, "reset", "action_reset")
+    wrap(session.physics_runtime, "forward", "forward")
+    wrap(views, "refresh", "refresh")
+    wrap(task, "initialize_after_reset", "initialize")
+
+    observations, info = runtime.reset_from_description(description, 1)
+
+    assert received == [(description, 1)]
+    assert events == [
+        "factory",
+        "stage",
+        "control_write",
+        "action_reset",
+        "forward",
+        "refresh",
+        "initialize",
+    ]
+    torch.testing.assert_close(views.q[1], command.joint_positions[0])
+    torch.testing.assert_close(views.block_p[1], command.block_position[0])
+    torch.testing.assert_close(task.buffers.goal_position[1], command.goal_position[0])
+    torch.testing.assert_close(task.buffers.goal_yaw[1], command.goal_yaw[0])
+    assert int(task.buffers.rng_key[1].item()) == 314159
+    assert int(task.buffers.rng_counter[1].item()) == 96
+    torch.testing.assert_close(
+        observations,
+        task.buffers.last_finite_observation.index_select(0, command.env_ids),
+    )
+    torch.testing.assert_close(info["env_ids"], command.env_ids)
+    assert session.physics_runtime.steps == 0
+    runtime.close()
+
+
+def test_torch_env_exposes_single_description_reset() -> None:
+    description = {"schema": "test-only-sentinel"}
+    observations = object()
+    info = {"env_ids": object()}
+    calls: list[tuple[object, int]] = []
+
+    def reset_from_description(value: object, env_id: int):
+        calls.append((value, env_id))
+        return observations, info
+
+    runtime = SimpleNamespace(
+        num_envs=4,
+        device=_device(),
+        action_dim=3,
+        action_low=-1.0,
+        action_high=1.0,
+        observation_dim=7,
+        viewport_enabled=False,
+        render_every_n_steps=0,
+        reset_from_description=reset_from_description,
+    )
+    env = TorchKaleidoscopeEnv(runtime)
+
+    actual_observations, actual_info = env.reset_from_description(
+        description,
+        env_id=2,
+    )
+
+    assert calls == [(description, 2)]
+    assert actual_observations is observations
+    assert actual_info is info
+
+
+def test_runtime_reset_description_conversion_failure_precedes_device_writes() -> None:
+    description = object()
+    calls: list[tuple[object, int]] = []
+
+    def fail(value: object, env_id: int) -> TBlockResetCommand:
+        calls.append((value, env_id))
+        raise ValueError("description rejected")
+
+    runtime, task, views, session, _action = _description_runtime(factory=fail)
+    goal_before = task.buffers.goal_position.clone()
+
+    with pytest.raises(ValueError, match="description rejected"):
+        runtime.reset_from_description(description, 2)
+
+    assert calls == [(description, 2)]
+    assert views.reset_selectors == []
+    assert session.physics_runtime.forwards == 0
+    torch.testing.assert_close(task.buffers.goal_position, goal_before)
+    assert runtime._failed is True
+    with pytest.raises(RuntimeError, match="fail-stop"):
+        runtime.reset()
+
+
+def test_runtime_reset_description_failure_after_write_is_fail_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    command = _description_command(env_id=2)
+    runtime, _task_value, views, session, action = _description_runtime(
+        factory=lambda _description, _env_id: command
+    )
+
+    def fail_action_reset(*_args, **_kwargs) -> None:
+        raise RuntimeError("action reset failed")
+
+    monkeypatch.setattr(action, "reset", fail_action_reset)
+
+    with pytest.raises(RuntimeError, match="action reset failed"):
+        runtime.reset_from_description(object(), 2)
+
+    assert len(views.reset_selectors) == 1
+    torch.testing.assert_close(views.q[2], command.joint_positions[0])
+    assert session.physics_runtime.forwards == 0
+    assert runtime._failed is True
+    with pytest.raises(RuntimeError, match="fail-stop"):
+        runtime.reset_from_description(object(), 2)
+
+
 def test_runtime_owns_physx_cuda_flow_and_same_step_token() -> None:
     num_envs = 3
     task = _task(num_envs=num_envs)
@@ -956,6 +1484,321 @@ def test_runtime_owns_physx_cuda_flow_and_same_step_token() -> None:
     torch.testing.assert_close(controller.target[1], controller.target[0])
     runtime.close()
     assert views.closed and session.closed
+
+
+class _CollisionQueryAdapter:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.closed = False
+        self.fail_query = False
+
+    def query(self, **kwargs: object) -> ArticulatedCollisionQueryResult:
+        self.calls.append(kwargs)
+        positions = kwargs["joint_positions"]
+        env_ids = kwargs["env_ids"]
+        assert isinstance(positions, torch.Tensor)
+        assert isinstance(env_ids, torch.Tensor)
+        if self.fail_query:
+            raise RuntimeError("injected collision query failure")
+        return ArticulatedCollisionQueryResult(
+            collision_mask=torch.zeros(
+                (env_ids.numel(), positions.shape[1]),
+                device=positions.device,
+                dtype=torch.bool,
+            ),
+            first_hit_sample=torch.full(
+                (env_ids.numel(),),
+                -1,
+                device=positions.device,
+                dtype=torch.int64,
+            ),
+            first_hit_category=torch.full(
+                (env_ids.numel(),),
+                CollisionHitCategory.NONE,
+                device=positions.device,
+                dtype=torch.int64,
+            ),
+        )
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _collision_query_runtime(
+    *,
+    backend_kind: str = "physx_cuda",
+    adapter: _CollisionQueryAdapter | None = None,
+    query_specs: object | None = None,
+) -> KaleidoscopeRuntime:
+    runtime = object.__new__(KaleidoscopeRuntime)
+    runtime.session = SimpleNamespace(
+        physics_runtime=SimpleNamespace(kind=backend_kind)
+    )
+    runtime.collision_query_resources = None
+    if adapter is not None:
+        runtime.collision_query_resources = SimpleNamespace(
+            query_adapter=adapter,
+            query_specs=(MappingProxyType({}) if query_specs is None else query_specs),
+        )
+    runtime.state_api = SimpleNamespace(poisoned=False)
+    runtime._owner_thread_id = get_ident()
+    runtime._closed = False
+    runtime._closing_started = False
+    runtime._failed = False
+    runtime._fatal_error = None
+    runtime._phase = "idle"
+    runtime._outstanding_token = None
+    return runtime
+
+
+def test_runtime_collision_query_specs_are_cold_backend_metadata() -> None:
+    adapter = _CollisionQueryAdapter()
+    spec = ArticulatedCollisionQuerySpec(
+        robot_label="left",
+        command_joint_names=("joint",),
+        joint_lower=(-1.0,),
+        joint_upper=(1.0,),
+    )
+    specs = MappingProxyType({"left": spec})
+    runtime = _collision_query_runtime(adapter=adapter, query_specs=specs)
+
+    assert runtime.articulated_collision_query_specs is specs
+    assert adapter.calls == []
+    runtime._phase = "step"
+    assert runtime.articulated_collision_query_specs is specs
+    runtime._closed = True
+    assert runtime.articulated_collision_query_specs is specs
+
+    newton = _collision_query_runtime(
+        backend_kind="newton_cuda",
+        adapter=adapter,
+        query_specs=specs,
+    )
+    assert dict(newton.articulated_collision_query_specs) == {}
+    with pytest.raises(TypeError):
+        newton.articulated_collision_query_specs["left"] = spec  # type: ignore[index]
+
+
+def test_runtime_collision_query_dispatch_and_lifecycle_guards() -> None:
+    adapter = _CollisionQueryAdapter()
+    runtime = _collision_query_runtime(adapter=adapter)
+    positions = torch.zeros((1, 3, 2), device=_device())
+    env_ids = torch.tensor((1,), device=_device(), dtype=torch.int64)
+    targets = (
+        CollisionQueryTarget.TABLE,
+        CollisionQueryTarget.DYNAMIC_OBJECT,
+    )
+
+    assert runtime.supports_articulated_collision_queries is True
+
+    result = runtime.query_articulated_collisions(
+        robot_label="left",
+        joint_positions=positions,
+        env_ids=env_ids,
+        targets=targets,
+    )
+    assert result.collision_mask.shape == (1, 3)
+    assert adapter.calls == [
+        {
+            "robot_label": "left",
+            "joint_positions": positions,
+            "env_ids": env_ids,
+            "targets": targets,
+        }
+    ]
+    assert runtime._phase == "idle"
+
+    adapter.fail_query = True
+    with pytest.raises(RuntimeError, match="injected collision query failure"):
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=positions,
+            env_ids=env_ids,
+            targets=targets,
+        )
+    assert runtime._phase == "idle"
+    assert runtime._failed is False
+    adapter.fail_query = False
+
+    runtime._outstanding_token = object()
+    with pytest.raises(RuntimeError, match="active SAME_STEP transaction"):
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=positions,
+            env_ids=env_ids,
+            targets=targets,
+        )
+    runtime._outstanding_token = None
+
+    runtime._phase = "step"
+    with pytest.raises(ControlModeLockedError, match="collision_query"):
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=positions,
+            env_ids=env_ids,
+            targets=targets,
+        )
+    runtime._phase = "idle"
+
+    errors: list[BaseException] = []
+
+    def query_from_worker() -> None:
+        try:
+            runtime.query_articulated_collisions(
+                robot_label="left",
+                joint_positions=positions,
+                env_ids=env_ids,
+                targets=targets,
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    worker = Thread(target=query_from_worker)
+    worker.start()
+    worker.join()
+    assert len(errors) == 1
+    assert "owner thread" in str(errors[0])
+
+    runtime._failed = True
+    with pytest.raises(RuntimeError, match="fail-stop"):
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=positions,
+            env_ids=env_ids,
+            targets=targets,
+        )
+    runtime._failed = False
+    runtime._closed = True
+    with pytest.raises(RuntimeError, match="closed"):
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=positions,
+            env_ids=env_ids,
+            targets=targets,
+        )
+
+
+def test_description_reset_then_collision_query_is_read_only_and_closes_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    adapter = _CollisionQueryAdapter()
+    joint_names = tuple(f"joint_{index}" for index in range(6))
+    spec = ArticulatedCollisionQuerySpec(
+        robot_label="left",
+        command_joint_names=joint_names,
+        joint_lower=(-1.0,) * 6,
+        joint_upper=(1.0,) * 6,
+    )
+
+    def close_query_resources() -> None:
+        events.append("collision_query_resources")
+        adapter.close()
+
+    runtime, task, views, session, action = _description_runtime(
+        factory=lambda _description, _env_id: _description_command(env_id=1)
+    )
+    runtime.collision_query_resources = SimpleNamespace(
+        query_adapter=adapter,
+        query_specs=MappingProxyType({"left": spec}),
+        close=close_query_resources,
+    )
+    env = TorchKaleidoscopeEnv(runtime)
+
+    def record_close(target: object, name: str, event: str) -> None:
+        close = getattr(target, name)
+
+        def recorded(*args, **kwargs):
+            events.append(event)
+            return close(*args, **kwargs)
+
+        monkeypatch.setattr(target, name, recorded)
+
+    record_close(action, "close", "action_term")
+    record_close(views, "close", "views")
+    record_close(task, "close", "task")
+    record_close(session, "close", "session")
+
+    try:
+        env.reset_from_description(object(), env_id=1)
+        assert env.supports_articulated_collision_queries is True
+        assert env.articulated_collision_query_specs["left"] is spec
+
+        views_before = {
+            name: getattr(views, name).clone()
+            for name in ("q", "qd", "target", "block_p", "block_q", "block_v")
+        }
+        task_before = {
+            name: value.clone() for name, value in task.state_fields().items()
+        }
+        task_counters_before = {
+            name: getattr(task.buffers, name).clone()
+            for name in (
+                "rng_key",
+                "rng_counter",
+                "episode_length",
+                "episode_physics_steps",
+                "reward",
+                "goal_position",
+                "goal_yaw",
+            )
+        }
+        physics_clock_before = (
+            session.physics_runtime.steps,
+            session.physics_runtime.forwards,
+        )
+
+        result = env.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=torch.zeros((1, 2, 6), device=_device()),
+            env_ids=torch.tensor([1], device=_device(), dtype=torch.int64),
+            targets=(CollisionQueryTarget.TABLE,),
+        )
+
+        assert result.collision_mask.shape == (1, 2)
+        assert runtime._phase == "idle"
+        assert runtime._failed is False
+        assert (session.physics_runtime.steps, session.physics_runtime.forwards) == (
+            physics_clock_before
+        )
+        for name, before in views_before.items():
+            torch.testing.assert_close(getattr(views, name), before)
+        for name, before in task_before.items():
+            torch.testing.assert_close(task.state_fields()[name], before)
+        for name, before in task_counters_before.items():
+            torch.testing.assert_close(getattr(task.buffers, name), before)
+        assert len(adapter.calls) == 1
+    finally:
+        env.close()
+
+    env.close()
+    assert events == [
+        "action_term",
+        "collision_query_resources",
+        "views",
+        "task",
+        "session",
+    ]
+    assert adapter.closed is True
+
+
+@pytest.mark.parametrize("backend_kind", ("physx_cuda", "newton_cuda"))
+def test_runtime_collision_query_reports_backend_unavailable(
+    backend_kind: str,
+) -> None:
+    runtime = _collision_query_runtime(backend_kind=backend_kind)
+
+    assert runtime.supports_articulated_collision_queries is False
+
+    with pytest.raises(CollisionQueryUnavailableError) as captured:
+        runtime.query_articulated_collisions(
+            robot_label="left",
+            joint_positions=torch.zeros((1, 1, 2), device=_device()),
+            env_ids=torch.zeros(1, device=_device(), dtype=torch.int64),
+            targets=(CollisionQueryTarget.TABLE,),
+        )
+
+    assert captured.value.backend_kind == backend_kind
 
 
 @pytest.mark.parametrize(

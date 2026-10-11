@@ -294,7 +294,7 @@ def test_kaleidoscope_product_closure_has_no_planner_or_external_engine_import()
     imports = set().union(*(_imports(path) for path in _python_files("kaleidoscope")))
     forbidden_fragments = (
         ".planning",
-        ".collision",
+        ".mirror.collision",
         "mujoco_warp",
         ".telemetry",
         ".camera",
@@ -315,8 +315,26 @@ def test_kaleidoscope_facade_import_is_lazy_in_a_clean_interpreter() -> None:
     code = """
 import sys
 import linkerbot_sim.kaleidoscope
-from linkerbot_sim.kaleidoscope import KaleidoscopeTrainingPort
+from linkerbot_sim.kaleidoscope import (
+    ArticulatedCollisionQuerySpec,
+    CollisionQueryTarget,
+    CollisionQueryUnavailableError,
+    KaleidoscopeResetSceneDescription,
+    KaleidoscopeTrainingPort,
+    load_reset_scene_description,
+    sample_reset_scene_description,
+    save_reset_scene_description,
+)
 assert KaleidoscopeTrainingPort.__name__ == "KaleidoscopeTrainingPort"
+assert KaleidoscopeResetSceneDescription.__name__ == "KaleidoscopeResetSceneDescription"
+assert callable(load_reset_scene_description)
+assert callable(sample_reset_scene_description)
+assert callable(save_reset_scene_description)
+assert ArticulatedCollisionQuerySpec(
+    "left", ("joint",), (-1.0,), (1.0,)
+).command_dim == 1
+assert CollisionQueryTarget.TABLE.value == "table"
+assert CollisionQueryUnavailableError("newton_cuda").backend_kind == "newton_cuda"
 forbidden = ('torch', 'gymnasium', 'skrl', 'newton', 'mujoco_warp', 'omni', 'isaacsim')
 loaded = sorted(name for name in sys.modules if name.split('.', 1)[0] in forbidden)
 assert loaded == [], loaded
@@ -468,6 +486,37 @@ def test_generated_target_architecture_is_current_and_final() -> None:
         assert entry["layer"] in allowed_layers
         assert entry["owner"].startswith("linkerbot_sim")
         assert entry["module"].startswith("linkerbot_sim")
+
+
+def test_architecture_inventory_paths_use_posix_sort(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """不同主机的 Path 排序不能改变 inventory 顺序。"""
+
+    (tmp_path / "a.md").write_text("lowercase", encoding="utf-8")
+    (tmp_path / "B.md").write_text("uppercase", encoding="utf-8")
+    monkeypatch.setattr(inventory_generator, "REPO_ROOT", tmp_path)
+
+    paths = inventory_generator._relative_paths((tmp_path / "a.md", tmp_path / "B.md"))
+
+    assert [path.as_posix() for path in paths] == ["B.md", "a.md"]
+
+
+def test_architecture_inventory_hashes_normalize_crlf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generated SHA-256 values remain the same for LF and CRLF checkouts."""
+
+    monkeypatch.setattr(inventory_generator, "REPO_ROOT", tmp_path)
+    source = tmp_path / "sample.py"
+    source.write_bytes(b"first\nsecond\n")
+    relative = Path("sample.py")
+    lf_digest = inventory_generator._path_content_digest((relative,))
+
+    source.write_bytes(b"first\r\nsecond\r\n")
+
+    assert inventory_generator._normalized_content_bytes(source) == b"first\nsecond\n"
+    assert inventory_generator._path_content_digest((relative,)) == lf_digest
 
 
 def test_breaking_migration_leaves_no_legacy_product_or_physics_shim() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -40,6 +41,16 @@ class PoseSettings:
         )
 
 
+def _reset_joint_positions(value: object, *, label: str) -> Mapping[str, float]:
+    mapping = strict_mapping(value, label=label)
+    return MappingProxyType(
+        {
+            name: as_float(child, label=f"{label}.{name}")
+            for name, child in mapping.items()
+        }
+    )
+
+
 @dataclass(frozen=True)
 class RobotInstanceSettings:
     """场景内机器人身份、profile 引用与 catalog 绑定结果。"""
@@ -48,14 +59,36 @@ class RobotInstanceSettings:
     robot_profile: str
     root_pose: PoseSettings
     controller_profile: str | None = None
+    reset_joint_positions: Mapping[str, float] | None = None
     resolved_profile: "RobotProfileSettings | None" = None
 
+    def __post_init__(self) -> None:
+        if self.reset_joint_positions is None:
+            return
+        object.__setattr__(
+            self,
+            "reset_joint_positions",
+            _reset_joint_positions(
+                self.reset_joint_positions,
+                label="scene.robots[].reset_joint_positions",
+            ),
+        )
+
     @classmethod
-    def from_mapping(cls, value: object, *, label: str) -> "RobotInstanceSettings":
+    def from_mapping(
+        cls,
+        value: object,
+        *,
+        label: str,
+        reset_joint_positions_policy: Literal["forbidden", "required"] = "forbidden",
+    ) -> "RobotInstanceSettings":
         mapping = strict_mapping(value, label=label)
+        required = {"label", "robot_profile", "root_pose"}
+        if reset_joint_positions_policy == "required":
+            required.add("reset_joint_positions")
         require_keys(
             mapping,
-            required={"label", "robot_profile", "root_pose"},
+            required=required,
             optional={"controller_profile"},
             label=label,
         )
@@ -76,6 +109,30 @@ class RobotInstanceSettings:
                     label=f"{label}.controller_profile",
                 )
             ),
+            reset_joint_positions=(
+                _reset_joint_positions(
+                    mapping["reset_joint_positions"],
+                    label=f"{label}.reset_joint_positions",
+                )
+                if reset_joint_positions_policy == "required"
+                else None
+            ),
+        )
+
+    def ordered_reset_joint_positions(self) -> tuple[float, ...]:
+        """按 robot profile 的 command joint 顺序返回 reset 基准。"""
+
+        if self.resolved_profile is None:
+            raise ConfigurationError(
+                "robot instance must be bound to a resolved profile before ordering reset joints"
+            )
+        if self.reset_joint_positions is None:
+            raise ConfigurationError(
+                "robot instance does not define reset_joint_positions"
+            )
+        return tuple(
+            self.reset_joint_positions[name]
+            for name in self.resolved_profile.joint_groups.command_joint_names
         )
 
 
@@ -122,12 +179,19 @@ def _sequence(value: object, *, label: str) -> Sequence[object]:
 
 
 def _instances(
-    mapping: dict[str, object], *, label: str
+    mapping: dict[str, object],
+    *,
+    label: str,
+    reset_joint_positions_policy: Literal["forbidden", "required"] = "forbidden",
 ) -> tuple[tuple[RobotInstanceSettings, ...], tuple[ObjectInstanceSettings, ...]]:
     robot_values = _sequence(mapping["robots"], label=f"{label}.robots")
     object_values = _sequence(mapping["objects"], label=f"{label}.objects")
     robots = tuple(
-        RobotInstanceSettings.from_mapping(item, label=f"{label}.robots[{index}]")
+        RobotInstanceSettings.from_mapping(
+            item,
+            label=f"{label}.robots[{index}]",
+            reset_joint_positions_policy=reset_joint_positions_policy,
+        )
         for index, item in enumerate(robot_values)
     )
     objects = tuple(
@@ -706,7 +770,11 @@ class KaleidoscopeSceneSettings:
             "objects",
         }
         require_keys(mapping, required=required, label=label)
-        robots, objects = _instances(mapping, label=label)
+        robots, objects = _instances(
+            mapping,
+            label=label,
+            reset_joint_positions_policy="required",
+        )
         return cls(
             scene_id=as_string(mapping["id"], label=f"{label}.id"),
             description=as_string(mapping["description"], label=f"{label}.description"),

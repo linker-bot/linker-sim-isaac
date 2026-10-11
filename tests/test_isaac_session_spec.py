@@ -230,14 +230,14 @@ def test_spec_enforces_mode_render_query_and_world_count_boundaries() -> None:
             render=IsaacRenderSpec(enabled=True, visible_world_indices=(2,)),
             **fields,
         )
-    with pytest.raises(ValueError, match="scene-query"):
-        IsaacSessionSpec(
-            experience_family="kaleidoscope",
-            physics=IsaacPhysxCudaSpec(
-                enable_scene_query_support=True,
-            ),
-            **fields,
-        )
+    query_session = IsaacSessionSpec(
+        experience_family="kaleidoscope",
+        physics=IsaacPhysxCudaSpec(
+            enable_scene_query_support=True,
+        ),
+        **fields,
+    )
+    assert query_session.physics.enable_scene_query_support is True
     with pytest.raises(ValueError, match="world_count=1"):
         IsaacSessionSpec(
             experience_family="mirror",

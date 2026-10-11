@@ -40,6 +40,8 @@ Newton 专用 controller bundle。
 | `device` | mode root 的唯一 CUDA device |
 | `action_dim` | 每个 env 的 action 列数 A |
 | `observation_dim` | 每个 env 的 observation 列数 O |
+| `supports_articulated_collision_queries` | 当前构造的环境是否具备 PhysX 活动臂手查询能力 |
+| `articulated_collision_query_specs` | 可查询 robot label 到真实 runtime command 元数据的不可变映射 |
 | `reset()` | `(N,O)` observation 与 dense CUDA info |
 | `reset_idx(env_ids)` | K 行 reset；selector 为 CUDA int64 `(K,)` |
 | `step(actions)` | actions 为 float32 CUDA `(N,A)`；返回 observation/reward/terminated/truncated/info |
@@ -53,6 +55,147 @@ Native `step` 不自动 reset done 行。直接调用者必须先 `reset_idx`；
 主机 scalar，让这个可恢复的生命周期错误在推进 physics 前明确抛出。skrl adapter 使用
 `KaleidoscopeTrainingPort` 的 SAME_STEP token，不经过该检查，并在 reset 覆写 buffer 前复制 terminal
 transition；训练 action、observation、reset 与 rollout 数据仍常驻 CUDA。
+
+### Portable reset 场景描述
+
+reset 场景描述是一条不包含 PhysX/Newton 私有状态、可转换为 JSON 的新 episode 状态。它包含机器人
+关节位置、速度、目标，动态物体位姿和速度，任务目标以及后续 RNG 状态。生成和保存过程不需要
+Torch、CUDA、Isaac、PhysX 或 Newton：
+
+```python
+from linkerbot_sim.configuration import load_kaleidoscope_config
+from linkerbot_sim.kaleidoscope import (
+    load_reset_scene_description,
+    sample_reset_scene_description,
+    save_reset_scene_description,
+)
+
+config = load_kaleidoscope_config("physx_cuda")
+description = sample_reset_scene_description(
+    config,
+    seed=7,
+    sample_id=12,
+    reset_index=4,
+)
+path = save_reset_scene_description(description, "runs/reset-12-4.json")
+loaded = load_reset_scene_description(path)
+```
+
+`sample_id` 表示一条独立、确定的 RNG 序列。`reset_index` 直接定位该序列中的一次 reset，不需要先执行
+前面的 reset。当前纯采样器只支持 `tblock_push_v1`。保存函数原子写入 canonical UTF-8 JSON；目标文件
+已存在时默认拒绝覆盖，只有显式设置 `replace=True` 才覆盖。读取函数只检查 portable schema 和数值，
+不会启动仿真。
+
+“不包含后端私有状态”不表示可以跨物理后端恢复。兼容性指纹覆盖完整 Kaleidoscope 配置，其中包括
+`physx_cuda` 或 `newton_cuda` 选择；v1 只承诺在另一个进程使用同一语义配置恢复。跨后端恢复不属于
+Issue #20 的 v1 合同。
+
+读取后可把描述应用到 native Torch 环境的一行：
+
+```python
+env = make_torch_env(config=config, num_envs=4)
+observations, info = env.reset_from_description(loaded, env_id=2)
+```
+
+在写控制或物理状态之前，runtime 会检查语义配置指纹、scene/task ID、机器人顺序和 profile、受控关节名、
+动态物体身份以及派生 RNG 信息。检查通过后，依次写 task goal/RNG、机器人和物体状态、action 状态，
+执行 physics forward、刷新目标行，并初始化该行的 episode observation。该环境下一次普通 reset 会从描述
+保存的 RNG key/counter 继续，不会重复多采样一次。
+
+这是显式 CPU 到 CUDA 冷路径，不属于训练 step API，也不加入 `KaleidoscopeTrainingPort` 或 Gymnasium
+reset options。必须先显式读取 JSON；该方法不接受文件路径。应用过程任一步失败都会使 runtime 进入
+fail-stop，即使兼容性错误发生在物理写入之前也是如此。错误后应关闭并重建环境。
+
+### 活动机械臂与手碰撞查询
+
+这是显式诊断接口。它只检查调用方给出的候选关节 sample，不推进物理，也不移动真实机器人：
+
+```python
+import torch
+
+from linkerbot_sim.configuration import load_kaleidoscope_config
+from linkerbot_sim.kaleidoscope import (
+    CollisionHitCategory,
+    CollisionQueryTarget,
+    make_torch_env,
+)
+
+config = load_kaleidoscope_config("physx_cuda")
+
+env = make_torch_env(config=config, num_envs=2)
+try:
+    env.reset(seed=123)
+    if not env.supports_articulated_collision_queries:
+        raise RuntimeError("articulated collision query is unavailable")
+    robot_label, query_spec = next(
+        iter(env.articulated_collision_query_specs.items())
+    )
+
+    def check_candidates(candidate_q: torch.Tensor):
+        # candidate_q 由 policy、IK、采样器或外部 planner 生成，形状为
+        # [选中的环境, 离散 samples, command joints]。
+        if candidate_q.shape[-1] != query_spec.command_dim:
+            raise ValueError("候选 command 宽度与 query spec 不一致")
+        env_ids = torch.arange(
+            candidate_q.shape[0],
+            device=env.device,
+            dtype=torch.int64,
+        )
+        return env.query_articulated_collisions(
+            robot_label=robot_label,
+            joint_positions=candidate_q,
+            env_ids=env_ids,
+            targets=(
+                CollisionQueryTarget.TABLE,
+                CollisionQueryTarget.DYNAMIC_OBJECT,
+                CollisionQueryTarget.OTHER_ROBOT,
+            ),
+        )
+finally:
+    env.close()
+```
+
+候选 tensor 合同：
+
+- `joint_positions` 必须是 `env.device` 上有限的 CUDA `float32 [K,S,J]`；
+- `S >= 1`，单个姿态也必须保留 sample 维，使用 `S=1`；
+- `K` 必须等于 `env_ids` 的长度；
+- `J == query_spec.command_dim`，每列严格按照
+  `query_spec.command_joint_names` 排列；
+- 每个值必须在真实 articulation command limits 内；
+- `env_ids` 必须是无重复、未越界的 CUDA `int64 [K]`。
+
+每个 `ArticulatedCollisionQuerySpec` 公开查询实际使用的导入后
+`command_joint_names`、`command_dim`、`joint_lower` 和 `joint_upper`。mapping、dataclass 和内部 tuple
+均不可变。读取属性不会执行查询、同步 CUDA 或推进物理。`newton_cuda` 或没有该能力的环境返回不可变
+空 mapping。查询仍按位置消费各列，不会按名称重排输入。
+
+`targets` 必须是非空且无重复的 tuple。`TABLE` 表示固定工作台，`DYNAMIC_OBJECT`
+表示 task 唯一动态物体（canonical scene 中是 T-block），`OTHER_ROBOT` 表示同一 env 的另一台
+机器人。查询会排除当前机器人的 active shapes、query-only shadows 和其它 env。第一版不检查
+被查询 articulation 内部的自碰撞。
+
+返回值拥有三个连续 CUDA tensor：
+
+| 字段 | 形状 | 含义 |
+| --- | --- | --- |
+| `collision_mask` | bool `[K,S]` | 每个离散 sample 是否和所选目标重叠 |
+| `first_hit_sample` | int64 `[K]` | 每行首个 true 的 sample；无命中为 `-1` |
+| `first_hit_category` | int64 `[K]` | 首次命中的 `CollisionHitCategory`；无命中为 `NONE` |
+
+稳定类别编码为 `NONE=0`、`TABLE=1`、`DYNAMIC_OBJECT=2`、`OTHER_ROBOT=3`。首个碰撞
+sample 同时命中多类时返回数值最小的类别；完整的逐 sample 结果仍在 `collision_mask` 中。
+
+各 sample 独立检查，接口不会在 sample 之间插值，所以不是连续碰撞检测。它也不会生成候选、
+执行动作或调用 cuRobo；候选动作或 path 必须由调用方提供。
+
+目前只有 `physx_cuda` 支持该能力。`newton_cuda` 的 capability 为 false，调用会抛出
+`CollisionQueryUnavailableError`。capability 为 true 也不代表任何时刻都能调用：Runtime 必须处于
+idle、调用必须在 owner thread，并且不能位于未完成的 SAME_STEP transaction 中。
+
+该方法是同步慢路径：候选值会显式复制到 CPU，随后计算完整 arm+hand FK、移动私有 query-only
+PhysX shadows、执行 overlap，再把 owned 结果放回 CUDA。不要在每个 skrl step 中隐式调用；
+`KaleidoscopeTrainingPort`、Gymnasium 和 skrl 都不暴露该方法。
 
 ### Runtime 控制模式
 

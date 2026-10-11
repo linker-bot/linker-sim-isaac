@@ -204,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends 层 trajectory adapter 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends 层 warp compat 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 
-### isaac (35)
+### isaac (38)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -215,6 +215,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.lifecycle` | isaac_infrastructure | isaac 层 lifecycle 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics` | isaac_infrastructure | isaac 层 physics 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.backend` | isaac_infrastructure | isaac 层 backend 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.collision_shapes` | isaac_infrastructure | isaac 层 collision shapes 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.core_api` | isaac_infrastructure | isaac 层 core api 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.exclusivity` | isaac_infrastructure | isaac 层 exclusivity 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.factory` | isaac_infrastructure | 验收后的具体 runtime 构造 | Isaac main thread | owner path | [架构参考](../operations/constraints.md) |
@@ -229,7 +230,9 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.physics.physx` | isaac_infrastructure | PhysX runtime 所有权 adapter | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.physx_pipeline` | isaac_infrastructure | isaac 层 physx pipeline 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.physx_task_space` | isaac_infrastructure | isaac 层 physx task space 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.query_shadow` | isaac_infrastructure | isaac 层 query shadow 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.runtime` | isaac_infrastructure | 资源生命周期与仿真步进编排 | Isaac main thread | owner path | [架构参考](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.scene_query` | isaac_infrastructure | isaac 层 scene query 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.provenance` | isaac_infrastructure | isaac 层 provenance 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.replicated_scene` | isaac_infrastructure | isaac 层 replicated scene 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.replicated_scene.assets` | isaac_infrastructure | 强类型资产 profile 合同 | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
@@ -344,7 +347,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.state` | product | Mirror state 读取与写入 | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.timing` | product | mirror 层 timing 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 
-### kaleidoscope (32)
+### kaleidoscope (46)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -354,6 +357,16 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.adapters.gymnasium` | product | kaleidoscope 层 gymnasium 实现 owner | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.bootstrap` | product | 组合根与资源所有权移交 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.checkpoint` | product | 显式冷持久化 checkpoint 边界 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_catalog` | product | kaleidoscope 层 collision catalog 实现 owner | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_factory` | product | 事务式 PhysX 碰撞查询资源组合 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_hits` | product | 精确身份命中过滤与离散 path 聚合 | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_kinematics` | product | 完整臂手参考 FK 与候选 collider 变换组合 | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_overlap` | product | Isaac 主线程候选 shadow overlap 执行与所有权 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_query` | product | kaleidoscope 层 collision query 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_registry` | product | 多机器人碰撞 service 分发与生命周期所有权 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_root_transforms` | product | Isaac 主线程精确机器人根世界变换读取 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_service` | product | 已校验的单机器人关节碰撞查询编排 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.collision_torch` | product | 显式同步 CUDA-Torch 碰撞查询边界 | Isaac main thread | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_commands` | product | kaleidoscope 层 control commands 实现 owner | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_mode` | product | kaleidoscope 层 control mode 实现 owner | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.control_runtime` | product | kaleidoscope 层 control runtime 实现 owner | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
@@ -367,6 +380,10 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.observations` | product | 设备原生 observation 组装 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.physx_ports` | product | PhysX CUDA tensor port 合同 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.registration` | product | 显式 Gymnasium 注册 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_description` | product | kaleidoscope 层 reset description 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_persistence` | product | kaleidoscope 层 reset persistence 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_projection` | product | kaleidoscope 层 reset projection 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_sampling` | product | kaleidoscope 层 reset sampling 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.resets` | product | 批量 reset 与 autoreset 语义 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.rewards` | product | 设备原生 reward 计算 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.runtime` | product | 资源生命周期与仿真步进编排 | cuRobo/CUDA | owner path | [架构参考](../getting-started/choose-runtime-and-api.md) |

@@ -75,7 +75,13 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 | `TorchKaleidoscopeEnv` | 原生 CUDA tensor 环境 |
 | `GymnasiumKaleidoscopeAdapter` | 显式 NumPy VectorEnv 边界 |
 | `KaleidoscopeEpisodeSnapshot` | owned CUDA episode snapshot |
+| `KaleidoscopeResetSceneDescription` | 一条新 episode 状态的后端无关 typed 描述 |
 | `KaleidoscopeTrainingPort` | training 唯一允许依赖的结构化 port |
+| `ArticulatedCollisionQuerySpec` | 一台可查询机器人的不可变 runtime command 名称、宽度和上下限 |
+| `ArticulatedCollisionQueryResult` | 离散臂手 path 的 owned CUDA mask 与首次命中结果 |
+| `CollisionQueryTarget` | table、dynamic object、other robot 三类稳定目标选择器 |
+| `CollisionHitCategory` | 每个 env 首次命中的稳定整数类别 |
+| `CollisionQueryUnavailableError` | 当前 backend 不具备活动臂手查询能力 |
 | `ControlModeState` | immutable initial/active mode、generation、支持集和 scope |
 | `ControlModeChange` | 幂等或真实模式变化的结果 |
 | `ControlModeGenerationConflict` | optimistic generation 前置条件冲突 |
@@ -83,17 +89,25 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 | `ControlModeLockedError` | runtime phase 或 SAME_STEP transaction 禁止切换 |
 | `ControlModeSwitchError` | 前向切换失败且已成功 rollback |
 | `ControlModeRollbackError` | rollback 失败并触发 runtime 永久 fail-stop |
+| `load_reset_scene_description(path)` | 读取并校验一份 portable reset JSON |
 | `make_torch_env(...)` | 构造 native env |
 | `make_viewport_env(..., viewport=None, viewport_profile="kaleidoscope")` | 为 PhysX/Newton 构造只显示 `selected_env` 的显式 human viewport env |
 | `make_gymnasium_env(..., viewport_profile="kaleidoscope")` | 构造 Gymnasium adapter；仅 human render 使用 viewport profile |
 | `register_gymnasium_envs()` | 幂等注册项目 env ID |
+| `sample_reset_scene_description(config, *, seed, sample_id, reset_index=0)` | 不依赖 Torch 或仿真 runtime 的纯确定性 reset 采样 |
+| `save_reset_scene_description(description, path, replace=False)` | 校验并原子保存 canonical reset JSON |
 
 State/clone 的方法合同见 [Kaleidoscope API](kaleidoscope-api.md)。`make_torch_env()` 的训练 step
 始终无渲染；`make_viewport_env()` 也只在调用方显式执行 `env.render()` 时更新一帧，不提供 camera、
 SyntheticData、Replicator 或录制。
 
-`TorchKaleidoscopeEnv` 原生提供 `get_control_mode()` / `set_control_mode()`；setter 不进入
-`KaleidoscopeTrainingPort`、Gymnasium 或 skrl，训练始终保持初始 position 模式。
+`TorchKaleidoscopeEnv` 原生提供 `reset_from_description()`、`get_control_mode()` / `set_control_mode()`；
+控制模式 setter 不进入 `KaleidoscopeTrainingPort`、Gymnasium 或 skrl，训练始终保持初始 position 模式。
+
+`TorchKaleidoscopeEnv` 还原生提供 `supports_articulated_collision_queries`、
+`articulated_collision_query_specs` 和 `query_articulated_collisions()`。该同步离散 path 查询目前只支持 `physx_cuda`，不进入
+`KaleidoscopeTrainingPort`、Gymnasium 或 skrl。输入输出合同见
+[Kaleidoscope API](kaleidoscope-api.md)。
 
 native bootstrap 和 `make_torch_env()` 不导入 Gymnasium；只有显式调用
 `make_gymnasium_env()` 时才在函数内延迟导入 `GymnasiumKaleidoscopeAdapter`。因此未安装 training extra

@@ -327,11 +327,6 @@ class IsaacSessionSpec:
                 raise ValueError(
                     "Kaleidoscope visible world index exceeds Newton world_count"
                 )
-            if (
-                isinstance(self.physics, IsaacPhysxCudaSpec)
-                and self.physics.enable_scene_query_support
-            ):
-                raise ValueError("Kaleidoscope disables PhysX scene-query support")
 
     @property
     def physics_kind(self) -> PhysicsKind:

@@ -49,6 +49,8 @@ Public environment attributes:
 | `device` | Canonical CUDA device shared by physics, task, state, and actions. |
 | `action_dim` | Fixed action width selected by the task profile. |
 | `observation_dim` | Fixed flattened observation width. |
+| `supports_articulated_collision_queries` | Whether this constructed environment has the PhysX articulated-query capability. |
+| `articulated_collision_query_specs` | Immutable mapping from queryable robot labels to their runtime command metadata. |
 
 ## Native Torch Environment
 
@@ -70,6 +72,64 @@ observations, info = env.reset_idx(env_ids)
 Resets selected rows. `env_ids` must be a one-dimensional CUDA `torch.int64` tensor on
 `env.device`, with unique in-range values.
 
+### Portable Reset Scene Descriptions
+
+A reset scene description is a JSON-compatible fresh-episode record with no
+PhysX- or Newton-private state. It contains robot joint positions, velocities and
+targets, the dynamic object pose and velocity, the task goal, and the RNG
+continuation. Generate and store it without Torch, CUDA, Isaac, PhysX, or Newton:
+
+```python
+from linkerbot_sim.configuration import load_kaleidoscope_config
+from linkerbot_sim.kaleidoscope import (
+    load_reset_scene_description,
+    sample_reset_scene_description,
+    save_reset_scene_description,
+)
+
+config = load_kaleidoscope_config("physx_cuda")
+description = sample_reset_scene_description(
+    config,
+    seed=7,
+    sample_id=12,
+    reset_index=4,
+)
+path = save_reset_scene_description(description, "runs/reset-12-4.json")
+loaded = load_reset_scene_description(path)
+```
+
+`sample_id` identifies an independent deterministic RNG stream. `reset_index`
+directly addresses one reset in that stream; it does not replay earlier resets. The
+current sampler supports `tblock_push_v1`. Saving writes canonical UTF-8 JSON
+atomically and rejects an existing destination unless `replace=True`. Loading checks
+the portable schema and numeric values but does not start a simulation.
+
+Not storing backend-private state does not promise cross-backend restore. The
+compatibility fingerprint covers the complete Kaleidoscope configuration, including
+the `physx_cuda` or `newton_cuda` selection. Version 1 promises restore in another
+process with the same semantic configuration; cross-backend restore is outside the
+Issue #20 v1 contract.
+
+Apply the loaded description to exactly one native Torch environment row:
+
+```python
+env = make_torch_env(config=config, num_envs=4)
+observations, info = env.reset_from_description(loaded, env_id=2)
+```
+
+Before any control or physics write, the runtime requires the semantic configuration
+fingerprint, scene/task IDs, ordered robot labels and profiles, command-joint names,
+dynamic-object identity, and derived RNG metadata to match. It then writes task
+goal/RNG state, robot/object state and action state, forwards physics, refreshes the
+selected row, and initializes its episode observation. The next ordinary reset of
+that row continues from the stored RNG key and counter rather than sampling twice.
+
+This method is an explicit CPU-to-CUDA cold path, not a training-step API. It is not
+available through `KaleidoscopeTrainingPort` or the Gymnasium reset options. Read the
+JSON before calling it; file paths are deliberately not accepted. Any apply failure
+makes the runtime fail-stop, even when compatibility rejection occurs before a
+physics write. Close and recreate the environment after such an error.
+
 ### `step`
 
 ```python
@@ -83,6 +143,108 @@ synchronous scalar readback so that this recoverable lifecycle error is raised b
 physics advances. The skrl adapter uses the tokenized SAME_STEP entry instead; that
 training path does not execute this guard and keeps observations, actions, resets, and
 rollout data on CUDA.
+
+### Articulated Arm-and-Hand Collision Query
+
+This explicit diagnostic API checks caller-provided joint samples without advancing
+physics or moving the active robot:
+
+```python
+import torch
+
+from linkerbot_sim.configuration import load_kaleidoscope_config
+from linkerbot_sim.kaleidoscope import (
+    CollisionHitCategory,
+    CollisionQueryTarget,
+    make_torch_env,
+)
+
+config = load_kaleidoscope_config("physx_cuda")
+
+env = make_torch_env(config=config, num_envs=2)
+try:
+    env.reset(seed=123)
+    if not env.supports_articulated_collision_queries:
+        raise RuntimeError("articulated collision query is unavailable")
+    robot_label, query_spec = next(
+        iter(env.articulated_collision_query_specs.items())
+    )
+
+    def check_candidates(candidate_q: torch.Tensor):
+        # candidate_q comes from a policy, IK solver, sampler, or external
+        # planner and has shape [selected_envs, samples, command_joints].
+        if candidate_q.shape[-1] != query_spec.command_dim:
+            raise ValueError("candidate command width does not match query spec")
+        env_ids = torch.arange(
+            candidate_q.shape[0],
+            device=env.device,
+            dtype=torch.int64,
+        )
+        return env.query_articulated_collisions(
+            robot_label=robot_label,
+            joint_positions=candidate_q,
+            env_ids=env_ids,
+            targets=(
+                CollisionQueryTarget.TABLE,
+                CollisionQueryTarget.DYNAMIC_OBJECT,
+                CollisionQueryTarget.OTHER_ROBOT,
+            ),
+        )
+finally:
+    env.close()
+```
+
+The candidate tensor contract is strict:
+
+- `joint_positions` is finite CUDA `float32` with shape `[K, S, J]` on
+  `env.device`; `S >= 1` and a single pose uses `S = 1`;
+- `K` equals the length of `env_ids`;
+- `J == query_spec.command_dim` and columns follow
+  `query_spec.command_joint_names` exactly;
+- every value must be inside the real articulation command limits; and
+- `env_ids` is unique, in-range CUDA `int64` with shape `[K]`.
+
+Each `ArticulatedCollisionQuerySpec` publishes the exact post-import
+`command_joint_names`, `command_dim`, `joint_lower`, and `joint_upper` used by the
+query. The mapping, dataclass, and nested tuples are immutable. Reading it does not
+run a query, synchronize CUDA, or advance physics. For `newton_cuda` or an
+environment without this capability, the property is an immutable empty mapping.
+The query consumes positional columns and does not reorder named values.
+
+`targets` must be a non-empty tuple without duplicates. `TABLE` selects the static
+workstation, `DYNAMIC_OBJECT` selects the task's unique dynamic object (the T-block in
+the canonical scene), and `OTHER_ROBOT` selects the other robot in the same
+environment. The current robot, query-only shadows, and other environments are
+filtered out. This first API does not check collisions within the queried
+articulation itself.
+
+The result owns three contiguous CUDA tensors:
+
+| Field | Shape | Meaning |
+| --- | --- | --- |
+| `collision_mask` | `[K, S]` bool | Whether each discrete sample overlaps a selected target. |
+| `first_hit_sample` | `[K]` int64 | First true sample index in each row; `-1` means no hit. |
+| `first_hit_category` | `[K]` int64 | `CollisionHitCategory`; `NONE` is used when the sample index is `-1`. |
+
+The stable category codes are `NONE=0`, `TABLE=1`, `DYNAMIC_OBJECT=2`, and
+`OTHER_ROBOT=3`. If several categories hit at the first colliding sample, the lowest
+code is reported. `collision_mask` remains the complete per-sample Boolean result.
+
+Samples are checked independently. The API does not interpolate between them and is
+not continuous collision detection. It also does not generate candidates, execute an
+action, or call cuRobo. Candidate samples come from the caller.
+
+Only `physx_cuda` currently supplies this capability. `newton_cuda` reports
+`supports_articulated_collision_queries == False` and raises
+`CollisionQueryUnavailableError` if called. Capability discovery does not bypass
+lifecycle rules: a query is accepted only while the Runtime is idle, on its owner
+thread, and outside an outstanding SAME_STEP transaction.
+
+The call is a synchronous slow path. It deliberately copies the selected candidate
+values to the host, evaluates the full articulated arm-and-hand FK, updates private
+query-only PhysX shadows, performs scene overlaps, and returns owned CUDA results.
+Do not call it implicitly from every skrl step. `KaleidoscopeTrainingPort`, Gymnasium,
+and skrl do not expose this method.
 
 ### Runtime Control Mode
 

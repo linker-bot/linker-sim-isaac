@@ -141,6 +141,22 @@ def test_composition_consumes_strict_config_and_constructs_gpu_runtime(
         return state_api_type(*args, **kwargs)
 
     monkeypatch.setattr(isaac_adapter, "KaleidoscopeStateAPI", capture_state_api)
+    description = object()
+    payload = object()
+    converted_command = object()
+    projection_calls: list[tuple[object, object]] = []
+    conversion_calls: list[tuple[object, dict[str, object]]] = []
+
+    def project(config_value: object, description_value: object) -> object:
+        projection_calls.append((config_value, description_value))
+        return payload
+
+    def convert(payload_value: object, **kwargs: object) -> object:
+        conversion_calls.append((payload_value, dict(kwargs)))
+        return converted_command
+
+    monkeypatch.setattr(isaac_adapter, "project_reset_description", project)
+    monkeypatch.setattr(isaac_adapter, "tblock_reset_command_from_payload", convert)
 
     viewport = SimpleNamespace(render_every_n_steps=2)
 
@@ -176,6 +192,14 @@ def test_composition_consumes_strict_config_and_constructs_gpu_runtime(
         assembly_factory=assemble,
     )
     assert state_api_fingerprints == [semantic_config_fingerprint(config)]
+    assert runtime._reset_description_factory(description, 1) is converted_command
+    assert projection_calls == [(config, description)]
+    assert conversion_calls == [
+        (
+            payload,
+            {"env_id": 1, "num_envs": 2, "device": torch.device("cuda:0")},
+        )
+    ]
     assert runtime.viewport_enabled is True
     assert runtime.render_every_n_steps == 2
     observation, _ = runtime.reset()

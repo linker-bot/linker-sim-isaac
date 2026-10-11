@@ -268,6 +268,100 @@ def test_canonical_kaleidoscope_profiles_build_strict_gpu_backend_union() -> Non
     _assert_controller_projection_reuses_profile_cache(newton)
 
 
+def test_kaleidoscope_robot_reset_positions_are_pure_complete_profile_facts() -> None:
+    config = load_kaleidoscope_config()
+
+    for robot in config.scene.robots:
+        assert robot.resolved_profile is not None
+        expected = robot.resolved_profile.joint_groups.command_joint_names
+        assert tuple(robot.reset_joint_positions or ()) == expected
+        assert robot.ordered_reset_joint_positions() == (0.0,) * len(expected)
+        with pytest.raises(TypeError):
+            robot.reset_joint_positions[expected[0]] = 1.0  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        pytest.param(
+            "        hand_lh_thumb_cmc_pitch: 0.0\n",
+            "",
+            id="missing-command-joint",
+        ),
+        pytest.param(
+            "        hand_lh_thumb_cmc_pitch: 0.0",
+            "        unknown_joint: 0.0",
+            id="unknown-command-joint",
+        ),
+    ],
+)
+def test_kaleidoscope_robot_reset_positions_require_exact_joint_coverage(
+    tmp_path: Path,
+    old: str,
+    new: str,
+) -> None:
+    root = _isolated_configs(tmp_path)
+    scene_path = root / "scenes" / "kaleidoscope" / "tblock_push.yaml"
+    _replace(scene_path, old, new)
+
+    with pytest.raises(
+        ConfigurationError,
+        match=r"reset_joint_positions.*missing=.*unknown=",
+    ):
+        load_kaleidoscope_config(configs_root=root)
+
+
+@pytest.mark.parametrize("invalid", (".nan", "true"))
+def test_kaleidoscope_robot_reset_positions_reject_non_finite_or_boolean_values(
+    tmp_path: Path,
+    invalid: str,
+) -> None:
+    root = _isolated_configs(tmp_path)
+    scene_path = root / "scenes" / "kaleidoscope" / "tblock_push.yaml"
+    _replace(
+        scene_path,
+        "        arm_AR5_5_08L_W4C4A6_joint_1: 0.0",
+        f"        arm_AR5_5_08L_W4C4A6_joint_1: {invalid}",
+    )
+
+    with pytest.raises(ConfigurationError, match=r"reset_joint_positions.*finite"):
+        load_kaleidoscope_config(configs_root=root)
+
+
+def test_kaleidoscope_robot_reset_positions_enter_semantic_fingerprint(
+    tmp_path: Path,
+) -> None:
+    root = _isolated_configs(tmp_path)
+    baseline = load_kaleidoscope_config(configs_root=root)
+    scene_path = root / "scenes" / "kaleidoscope" / "tblock_push.yaml"
+    _replace(
+        scene_path,
+        "        arm_AR5_5_08L_W4C4A6_joint_1: 0.0",
+        "        arm_AR5_5_08L_W4C4A6_joint_1: 0.25",
+    )
+
+    changed = load_kaleidoscope_config(configs_root=root)
+
+    assert semantic_config_fingerprint(changed) != semantic_config_fingerprint(baseline)
+
+
+def test_mirror_scene_rejects_kaleidoscope_reset_joint_positions(
+    tmp_path: Path,
+) -> None:
+    root = _isolated_configs(tmp_path)
+    scene_path = root / "scenes" / "mirror" / "scene3.yaml"
+    _replace(
+        scene_path,
+        "      robot_profile: ar5_08_l6_l\n",
+        "      robot_profile: ar5_08_l6_l\n"
+        "      reset_joint_positions:\n"
+        "        arm_AR5_5_08L_W4C4A6_joint_1: 0.0\n",
+    )
+
+    with pytest.raises(ConfigurationError, match="reset_joint_positions"):
+        load_mirror_config(configs_root=root)
+
+
 @pytest.mark.parametrize("num_envs", (0, -1, True))
 def test_kaleidoscope_environment_direct_construction_rejects_invalid_count(
     num_envs: object,
@@ -1036,17 +1130,12 @@ def test_kaleidoscope_rejects_non_boolean_fabric_flag(tmp_path: Path) -> None:
         load_kaleidoscope_config("physx_cuda", configs_root=root)
 
 
-def test_kaleidoscope_rejects_scene_query_manager(tmp_path: Path) -> None:
+def test_kaleidoscope_accepts_physx_scene_query_support(tmp_path: Path) -> None:
     root = _isolated_configs(tmp_path)
-    physics_path = root / "physics" / "physx" / "cuda.yaml"
-    _replace(
-        physics_path,
-        "  enable_scene_query_support: false",
-        "  enable_scene_query_support: true",
-    )
 
-    with pytest.raises(ConfigurationError, match="collision-query"):
-        load_kaleidoscope_config("physx_cuda", configs_root=root)
+    config = load_kaleidoscope_config("physx_cuda", configs_root=root)
+
+    assert config.physics.enable_scene_query_support is True
 
 
 def test_mirror_rejects_rl_profile_slot(tmp_path: Path) -> None:

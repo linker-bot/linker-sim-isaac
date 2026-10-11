@@ -2,8 +2,8 @@
 
 Language: [English](collision-models.md) | [中文](../../zh-CN/guides/collision-models.md)
 
-Three collision concepts must remain separate: physical contact, replicated-world
-isolation, and planner avoidance.
+Four collision concepts must remain separate: physical contact, replicated-world
+isolation, explicit candidate diagnostics, and planner avoidance.
 
 ## Physical Contact
 
@@ -34,6 +34,17 @@ path queries.
 Validate isolation after scene assembly and inspect representative environments at
 the beginning, middle, and end of the index range in GPU smoke tests.
 
+## Kaleidoscope Candidate Diagnostics
+
+The native Torch environment can explicitly check caller-provided arm-and-hand joint
+samples against the real PhysX colliders. This PhysX-only synchronous query checks the
+workstation, dynamic task object, and other robot in the same environment. It neither
+advances physics nor constructs a cuRobo collision world.
+
+It is a discrete diagnostic query, not a planner: it does not create candidates,
+interpolate between samples, or change the action selected by a policy. Newton still
+resolves physical task contacts but does not implement this query capability.
+
 ## Planner Collision World
 
 Mirror owns collision geometry providers and per-robot planning contexts. They build
@@ -49,7 +60,8 @@ must be explicit. See [Collision Approximation](../development/collision-approxi
 | --- | --- | --- |
 | Physical contacts | Yes | Yes |
 | Cross-environment isolation | Not applicable | Required |
-| Scene queries for planning | Yes | Disabled |
+| Explicit articulated candidate query | No matching public API | PhysX only |
+| Scene queries for planning | Yes | No |
 | cuRobo collision world | Yes | No |
 | Per-request `avoid_collisions` | Yes | No |
 | Collision-aware batch IK | Optional Mirror path | No |

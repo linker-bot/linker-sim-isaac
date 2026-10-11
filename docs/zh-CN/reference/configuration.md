@@ -156,6 +156,24 @@ Scene 有三个相关但不能混用的名称：mode root 保存带产品命名�
 两份 scene 必须保持独立。前者包含相机/viewport/60 Hz 现实映像；后者是无视觉、240 Hz 的任务
 prototype。环境数量与命名事实只在 Kaleidoscope mode root 声明，training 不能内联进 mode。
 
+Kaleidoscope 的每个 `robots[]` 实例还必须按关节名声明 nominal reset 基准：
+
+```yaml
+reset_joint_positions:
+  arm_AR5_5_08L_W4C4A6_joint_1: 0.0
+  hand_lh_index_mcp_pitch: 0.0
+  # 其余 command joint 也必须全部声明
+```
+
+键集合必须与所选 robot profile 的 `command_joint_names` 完全相同：缺少关节或多出未知关节都会报错，
+值必须是有限数。catalog 会在启动 Isaac、Torch 或 CUDA 前完成校验并冻结 mapping，使用方可按 profile
+中的标准关节顺序取值。它是 env-local reset 采样的静态基准，task randomization 另行叠加。Mirror
+scene 不接受该字段。
+
+该映射也是普通 GPU reset 的唯一 command-joint 基准。场景装配完成后，启动流程会把它与真实
+articulation 的默认 command-joint 位置逐项比较；误差超过 `1e-6 rad` 时拒绝启动。这样资产默认值变化
+不会让离线描述和运行时 reset 静默分叉。
+
 Mirror scene 必须声明 `planning_startup: lazy|prewarm`。`lazy` 把 context 与 planner 创建推迟到首次
 规划请求；`prewarm` 则在 `MIRROR_INTERACTIVE_READY` 前按 robot ID 顺序创建每个支持规划机器人的
 `interactive` slot 0 context、同步同一个初始 collision snapshot，并 materialize MotionPlanner。
@@ -179,7 +197,7 @@ configs/physics/
 | Mirror | `physx` | `cpu` | 物理在 CPU；根 `compute` 供 cuRobo/RTX；完整 scene query 能力按 profile |
 | Mirror | `newton` | `cpu` | MuJoCo CPU integration；一个 product world；无 CUDA stream/graph；根 `compute` 仍供 cuRobo/RTX |
 | Mirror | `newton` | `cuda` | project-owned Newton runtime；一个 product world；可选 render sync |
-| Kaleidoscope | `physx` | `cuda` | GPU pipeline、Fabric、scene query off；训练 Kit headless，可选 viewport Kit |
+| Kaleidoscope | `physx` | `cuda` | GPU pipeline、Fabric、显式臂手诊断 scene query；训练 Kit headless，可选 viewport Kit |
 | Kaleidoscope | `newton` | `cuda` | project-owned multi-world Newton runtime；每个 env 一个独立 world；训练 Kit headless，可选 viewport Kit |
 
 公开 physics leaf 使用正交字段，不使用 backend `kind`：
@@ -376,7 +394,8 @@ Kaleidoscope mode root 的 `environments` 只负责 `num_envs`、`base_env_path`
 multi-world、零间距和彼此独立的 worlds。Newton `world_count` 只在 session projection 中从最终
 `num_envs` 派生，physics leaf 不声明第二份 world 数。这里的隔离是物理上阻止不同 env 互相接触，
 不是关闭环境内部的物理接触。
-机器人与任务对象仍由 PhysX/Newton contact pipeline 计算真实接触，但不建立规划碰撞查询或避障。
+机器人与任务对象仍由 PhysX/Newton contact pipeline 计算真实接触。PhysX 额外提供显式臂手候选
+诊断查询，但它不建立规划碰撞 world 或避障能力，也不进入训练 step；Newton 当前不提供该查询。
 
 EE/直线 action 对应的 mode 必须用 `profiles.curobo` 选择 `kaleidoscope_batch_ik` 一类 kinematics-only
 profile。其 `kinematics.max_batch_size` 必须覆盖最终有效 `num_envs`，并保持 collision check 关闭、cache

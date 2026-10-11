@@ -14,6 +14,7 @@ from linkerbot_sim.isaac.gpu_memory_audit import (
     GpuMemoryProbeError,
     GpuMemorySample,
     MIB_BYTES,
+    _nvml_lookup_uuid,
 )
 
 
@@ -333,9 +334,27 @@ def test_cuda_nvml_probe_maps_uuid_and_deduplicates_process_tables() -> None:
     assert sample.torch_reserved_bytes == 3 * _GIB
     assert nvml.events == [
         "init",
-        ("uuid_lookup", "00000000-1111-2222-3333-444444444444"),
+        ("uuid_lookup", "GPU-00000000-1111-2222-3333-444444444444"),
         "shutdown",
     ]
+
+
+@pytest.mark.parametrize(
+    ("torch_uuid", "expected"),
+    (
+        ("00000000-1111-2222-3333-444444444444", _UUID),
+        (_UUID, _UUID),
+        (
+            "MIG-00000000-1111-2222-3333-444444444444",
+            "MIG-00000000-1111-2222-3333-444444444444",
+        ),
+    ),
+)
+def test_nvml_lookup_uuid_preserves_decorated_device_kinds(
+    torch_uuid: str,
+    expected: str,
+) -> None:
+    assert _nvml_lookup_uuid(torch_uuid) == expected
 
 
 def test_cuda_nvml_probe_rejects_unavailable_process_memory() -> None:
