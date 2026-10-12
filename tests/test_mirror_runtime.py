@@ -349,7 +349,7 @@ def test_no_output_consumers_skip_automatic_camera_capture() -> None:
     assert events == []
 
 
-def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> None:
+def test_render_coordinator_shares_direct_camera_history_updates() -> None:
     events: list[str] = []
     physics = _DirectPhysics(events)
 
@@ -377,10 +377,6 @@ def test_render_coordinator_rotates_multiple_direct_cameras_before_capture() -> 
         "active:first:False",
         "active:second:False",
         "active:first:True",
-        "active:second:False",
-        "render",
-        "render",
-        "active:first:False",
         "active:second:True",
         "render",
         "render",
@@ -792,7 +788,7 @@ def test_render_coordinator_fails_bounded_stale_frame_wait() -> None:
     )
     with pytest.raises(RuntimeError, match="fresh-frame timeout.*stale"):
         coordinator.render_frame()
-    assert len(ticks) == 50
+    assert len(ticks) == 150
 
 
 def test_render_coordinator_rejects_physics_advance_during_capture() -> None:
@@ -868,27 +864,36 @@ def test_partial_camera_failure_invalidates_entire_selected_transaction() -> Non
     assert not any(active.values())
 
 
-def test_serial_capture_does_not_expose_metadata_until_all_products_complete() -> None:
+def test_shared_capture_waits_for_slowest_product_before_publishing_metadata() -> None:
     published = {}
+    active = {}
+    updates = []
     cameras = tuple(
         SimpleNamespace(
             name=name,
             render_update_count=4,
-            set_render_active=lambda _: None,
+            set_render_active=lambda value, name=name: active.__setitem__(name, value),
+            render_capture_ready=lambda ready_after=ready_after: (
+                len(updates) >= ready_after
+            ),
             finish_render_capture=lambda name=name, **kw: published.__setitem__(
                 name, kw
             ),
         )
-        for name in ("a", "b")
+        for name, ready_after in (("a", 4), ("b", 57))
     )
 
     def render():
+        assert all(active.values())
         assert published == {}
+        updates.append(1)
 
     coordinator = RenderCoordinator(
         physics_runtime=SimpleNamespace(render=render),
         cameras=CameraBundle(cameras=cameras),
     )
     coordinator.render_frame()
+    assert len(updates) == 57
+    assert not any(active.values())
     assert set(published) == {"a", "b"}
     assert published["a"]["snapshot_index"] == published["b"]["snapshot_index"]

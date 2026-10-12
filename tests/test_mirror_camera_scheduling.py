@@ -76,13 +76,18 @@ def _setup(frequencies=(60, 30, 10), *, gui_hz=None):
     return coordinator, physics, cameras, observer, frames
 
 
-def test_one_simulation_second_samples_mixed_rates_without_duplicate_readback():
+@pytest.mark.parametrize("render_updates", (1, 4))
+def test_one_simulation_second_samples_mixed_rates_without_duplicate_readback(
+    render_updates,
+):
     coordinator, physics, cameras, observer, frames = _setup()
+    for camera in cameras:
+        camera.camera = SimpleNamespace(render_update_count=render_updates)
     for step in range(120):
         physics.simulation_time = (step + 1) / 120
         coordinator.after_physics_step()
         observer.observe(physics, step=step)
-    assert physics.renders == 60
+    assert physics.renders == 60 * render_updates
     for camera, expected in zip(cameras, (60, 30, 10), strict=True):
         recorded = [frame for frame in frames if frame.camera_name == camera.name]
         assert len(recorded) == expected
@@ -91,7 +96,7 @@ def test_one_simulation_second_samples_mixed_rates_without_duplicate_readback():
         assert np.diff([f.time_s for f in recorded]) == pytest.approx(1 / expected)
         assert all(f.capture_metadata["physics_time_s"] == f.time_s for f in recorded)
     assert physics.selected[0] == tuple(c.name for c in cameras)
-    assert physics.selected[1] == (cameras[0].name,)
+    assert physics.selected[render_updates] == (cameras[0].name,)
     assert not any(camera.active for camera in cameras)
 
 

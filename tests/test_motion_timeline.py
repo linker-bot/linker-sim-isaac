@@ -276,7 +276,7 @@ def test_multi_robot_executor_applies_all_targets_before_one_world_step() -> Non
     np.testing.assert_allclose(second.execution.articulation.positions, [0.0, 2.0])
 
 
-def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> None:
+def test_timeline_uses_one_newton_snapshot_and_shared_camera_updates() -> None:
     runtime = _runtime(1)
     events: list[str] = []
 
@@ -352,10 +352,6 @@ def test_timeline_uses_one_newton_snapshot_and_each_camera_render_budget() -> No
         "step:False",
         "pre_render",
         "active:first:True",
-        "active:second:False",
-        "render_update",
-        "render_update",
-        "active:first:False",
         "active:second:True",
         "render_update",
         "render_update",

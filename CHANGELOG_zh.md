@@ -28,6 +28,8 @@ Git commit 标识。
 
 ### 修复
 
+- Mirror Newton 的选中相机共享渲染更新，保留逐产品新帧校验、物理冻结、录制频率及闲置/失败清理，避免多相机逐路重复等待 history；预热上限对齐 SyntheticData 的 150 次渲染时钟等待，允许多个产品同时初始化。
+
 - 保证配置的 Newton 接触默认值在 Isaac 6.1 MJCF 转换后实际生效：在自有临时源副本中补全缺失默认值，保留显式或继承的 `solref`，不修改源资产或 PhysX 导入。
 
 - 修正 Isaac 6.1 的 PhysX 导入：保留 MJCF 分层后丢失的原生 mimic 目标和系数，将 MJCF/URDF 的 articulation root 元数据放在已有世界固定关节上，使固定相机装配在积分中保持固定；任务空间绑定通过精确 body 关系处理关节型 root。

@@ -33,6 +33,8 @@ their Git commit.
 
 ### Fixed
 
+- Share renderer updates across selected Mirror Newton cameras while preserving per-product fresh-frame checks, frozen physics, recording cadence and idle/failure cleanup. Multi-camera capture no longer repeats the history wait for each product; bounded warmup follows SyntheticData’s 150-update render-simulation budget to allow simultaneous product initialization.
+
 - Preserve the configured Newton contact fallback through Isaac 6.1 MJCF conversion. Prepare an owned temporary source with the missing default, retaining explicitly authored and inherited `solref` values; source assets and PhysX imports are unchanged.
 
 - Repair Isaac 6.1 PhysX imports so MJCF mimic targets and coefficients survive physics-variant routing, and existing MJCF/URDF world anchors carry the articulation-root metadata. Fixed camera assemblies stay fixed during integration. Task-space binding follows exact body relationships when the root is a joint.
