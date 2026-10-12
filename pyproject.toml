@@ -61,7 +61,7 @@ simulation = [
 
   # Runtime libraries used outside the Kit-managed Python path as well.
   # Isaac Sim 6.1's Newton 1.5 dependency requires Warp 1.16.x.
-  "warp-lang==1.16.0",
+  "warp-lang==1.18.0",
 ]
 
 [tool.uv]
