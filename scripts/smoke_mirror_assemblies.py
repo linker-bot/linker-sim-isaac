@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 import traceback
+import xml.etree.ElementTree as ET
 
 import numpy as np
 
@@ -266,24 +267,58 @@ def run(args):
             "mounts": {c.name: c.get_capture_metadata() for c in cameras},
         }
         if args.profile.startswith("newton"):
-            # These canonical L6/O6 sources omit solref. Check the actual solver
-            # model so converter-authored defaults cannot mask the configured one.
+            # PR #18 authored O6 contacts explicitly; scene defaults still own
+            # unspecified arm/attachment contacts. Verify both in the solver.
             model = runtime.physics_runtime.solver.mj_model
-            values = np.asarray(
-                [
-                    model.geom_solref[index]
-                    for index in range(model.ngeom)
-                    if "Robots" in model.geom(index).name
-                ]
-            )
-            expected = (
+            indices = [i for i in range(model.ngeom) if "Robots" in model.geom(i).name]
+            values = np.asarray([model.geom_solref[i] for i in indices])
+            default = (
                 runtime.physics_runtime.physics_spec.default_contact_time_constant_s
             )
-            assert len(values) > 0 and np.allclose(values, [expected, 1]), values
+            expected = np.tile([default, 1], (len(indices), 1))
+            if args.hand == "o6":
+                component = (
+                    REPO_ROOT
+                    / "packages/linker-robot-assets/src/linker_robot_assets/assets/components/hands/linkerhand_o6"
+                )
+                source = ET.parse(component / "linkerhand_o6_right.xml").getroot()
+                authored = {
+                    tuple(float(v) for v in geom.get("solref").split())
+                    for geom in source.findall(".//geom")
+                    if geom.get("solref") is not None
+                }
+                assert len(authored) == 1, authored
+                hand_contacts = np.asarray(
+                    [
+                        any(
+                            tag in model.geom(i).name
+                            for tag in ("hand_lh_", "hand_rh_")
+                        )
+                        for i in indices
+                    ]
+                )
+                assert hand_contacts.any()
+                expected[hand_contacts] = next(iter(authored))
+            assert len(values) > 0 and np.allclose(values, expected), (values, expected)
             report["robot_contact_defaults"] = {
                 "count": len(values),
                 "solref": np.unique(values, axis=0).tolist(),
             }
+            import mujoco
+
+            report["imported_robot_mass_kg"] = {}
+            for robot in resources.robots_by_id.values():
+                unit = Path(robot.imported.asset_path)
+                reference = mujoco.MjModel.from_xml_path(str(unit))
+                actual = sum(
+                    model.body_mass[i]
+                    for i in range(model.nbody)
+                    if f"Robots_{robot.label}_" in model.body(i).name
+                )
+                assert np.isclose(
+                    actual, reference.body_mass.sum(), atol=1e-5, rtol=0
+                ), (robot.label, actual, reference.body_mass.sum())
+                report["imported_robot_mass_kg"][robot.label] = float(actual)
         moved = {}
         for robot in resources.robots_by_id.values():
             articulation = robot.execution.articulation
