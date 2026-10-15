@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Integrate O6 1014_v4 mirrored structure, 369.98 g/hand and corrected left inertia, simplified colliders, symmetric 20.5 mm AR5_08 mounting, and the upstream passive-coupling fix. Revalidate camera-clearance paths; controller gains remain unchanged.
+
 - Added common L6/O6 flanges, optional Gemini 335L wrist assemblies and a top ZED module with named optical mounts and separate camera presets. Corrected USD pose readback and preserved live root rotation topology during snapshot restoration.
 
 ### Changed

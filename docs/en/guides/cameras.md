@@ -225,8 +225,10 @@ Development recording is a virtual camera specification and is not upscaled sens
 output. Hz denotes distinct simulation-time samples, not guaranteed wall-clock FPS.
 
 With the current O6 + Gemini mounting, some straight-thumb sideways sweeps hit the
-camera. This matches the hardware: retain the collision and coordinate bending with
-sideways motion. Bending does not make every angle safe, especially on the left.
+camera. Retain the collision and coordinate bending with sideways motion. The
+1014_v4 hand geometry is mirrored; the previous wide right-thumb route no longer
+clears the camera. This new geometry has not been revalidated on physical hardware.
+Bending does not make every angle safe.
 Validate the task's complete trajectory; the L6 assembly has a different hand shape.
 
 The assembly regression is `scripts/smoke_mirror_assemblies.py`; select `--hand`,
@@ -241,3 +243,7 @@ the same catalog leaves; they do not upscale captured images. With `--record-roo
 the supervisor decodes the drained image/depth files after native shutdown and
 checks dimensions, configured sample cadence, increasing native frame IDs and
 matching capture/physics times.
+
+O6 1014_v4 uses 369.98 g/hand with correctly mirrored inertia and a 20.5 mm
+AR5_08 hand-root offset on both sides. Controller gains remain unchanged; revalidate
+contact and tracking behavior before tuning. Older tasks should pin their prior asset revision.

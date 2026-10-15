@@ -176,10 +176,10 @@ def main():
             )
         safe = []
         for t in np.linspace(0, 1, 16):
-            pose((0, 0), (0.5 * t, 0.57 * t))
+            pose((0, 0), (0.57 * t, 0.57 * t))
             safe += wrist_pairs(contacts())
         for t in np.linspace(0, 1, 25):
-            pose((0.26 * t, 1.2 * t), (0.5, 0.57))
+            pose((0.45 * t, 0.45 * t), (0.57, 0.57))
             safe += wrist_pairs(contacts())
         assert not safe
         # Move a real dynamic object into a camera/hand collider, then release it.
