@@ -1331,7 +1331,7 @@ requires-dist = [
     { name = "torchaudio", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "extra == 'simulation'", specifier = "==0.26.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "usd-core", marker = "extra == 'dev'", specifier = "==26.8" },
-    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.16.0" },
+    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.18.0" },
     { name = "websockets", specifier = "==12.0" },
 ]
 provides-extras = ["test", "dev", "visualization", "training", "simulation"]
@@ -2785,13 +2785,13 @@ wheels = [
 
 [[package]]
 name = "warp-lang"
-version = "1.16.0"
+version = "1.18.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.16.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:96449fc1e3b354185e2f09434fb794b5953ab2e8673b104d7e7f48d5d418bb35" },
+    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.18.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:090962bfae7dd22ade0d8e0258f41635e0e58980f15bcc9e7a7d312819dfe440" },
 ]
 
 [[package]]
