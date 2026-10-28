@@ -68,7 +68,7 @@ def create_physics_runtime(
             rendering_required=spec.render.enabled
         )
     world = world_builder(spec=spec, fabric_outputs=fabric_outputs)
-    return PhysxRuntime(world, kind=physics.kind)
+    return PhysxRuntime(world, kind=physics.kind, substeps=physics.substeps)
 
 
 __all__ = ["create_physics_runtime"]

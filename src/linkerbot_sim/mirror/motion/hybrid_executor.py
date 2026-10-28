@@ -387,7 +387,7 @@ class MirrorHybridExecutor:
                 },
             )
 
-        dt = self._physics_dt(step=step)
+        dt = self._control_dt(step=step)
         duration_ticks = max(1, int(math.ceil(request.duration_s / dt - 1.0e-12)))
         if request.duration_s > float(settings.max_duration_s):
             raise ValueError(
@@ -577,6 +577,9 @@ class MirrorHybridExecutor:
             ),
             "active": bool(self._latest_diagnostics.get("active", False)),
             "parameter_generation": parameter_generation,
+            "feedback_frequency_hz": (
+                None if self._settings is None else self._settings.feedback_frequency_hz
+            ),
             "tare": [
                 {
                     "robot_id": record.robot_id,
@@ -679,7 +682,9 @@ class MirrorHybridExecutor:
             "robot_label": str(robot.label),
             "step": int(step),
             "tick": int(tick),
-            "time_s": (int(step) + 1) * float(dt),
+            # Observation precedes this feedback update's physical advance.
+            "time_s": float(self._resources.physics.simulation_time),
+            "feedback_frequency_hz": 1.0 / dt,
             "phase": request.phase,
             "tare_generation": int(tare_generation),
             "hybrid_parameter_generation": int(parameter_generation),
@@ -831,7 +836,7 @@ class MirrorHybridExecutor:
             raise HybridTaskSpaceUnavailableError(
                 f"robot {robot_id} has no PhysX task-space port", step=step
             )
-        self._physics_dt(step=step)
+        self._control_dt(step=step)
         return robot, port
 
     def _require_position_mode(self, *, step: int) -> None:
@@ -852,31 +857,33 @@ class MirrorHybridExecutor:
             )
         return self._settings
 
-    def _physics_dt(self, *, step: int) -> float:
+    def _control_dt(self, *, step: int) -> float:
         physics = getattr(self._resources, "physics", None)
         if physics is None:
             physics = getattr(self._resources, "simulation_world", None)
-        getter = None if physics is None else getattr(physics, "get_physics_dt", None)
-        if not callable(getter):
-            raise HybridFrequencyUnsupportedError(
-                "hybrid runtime does not expose physics dt", step=step
-            )
-        dt = float(getter())
-        if not math.isfinite(dt) or dt <= 0.0:
-            raise HybridFrequencyUnsupportedError(
-                "hybrid runtime returned invalid physics dt", step=step
-            )
         settings = self._require_settings(step=step)
-        frequency = 1.0 / dt
-        if frequency + 1.0e-9 < float(settings.minimum_physics_frequency_hz):
+        frequency = float(settings.feedback_frequency_hz)
+        if (
+            not math.isfinite(frequency)
+            or frequency < settings.minimum_feedback_frequency_hz
+        ):
             raise HybridFrequencyUnsupportedError(
-                "hybrid physics frequency is below the configured minimum",
+                "hybrid feedback frequency is below the configured minimum or invalid",
                 step=step,
-                details={
-                    "actual_hz": frequency,
-                    "minimum_hz": settings.minimum_physics_frequency_hz,
-                },
             )
+        command_dt = float(physics.get_physics_dt())
+        native_dt = float(physics.get_native_physics_dt())
+        dt = 1.0 / frequency
+        for ratio in (command_dt / dt, dt / native_dt):
+            if (
+                not math.isfinite(ratio)
+                or ratio < 1
+                or not math.isclose(ratio, round(ratio), rel_tol=0.0, abs_tol=1e-9)
+            ):
+                raise HybridFrequencyUnsupportedError(
+                    "hybrid command/feedback/physics periods must have positive integer ratios",
+                    step=step,
+                )
         return dt
 
     def _observe_port(self, port: object, *, step: int) -> TaskSpaceObservation:
@@ -891,13 +898,13 @@ class MirrorHybridExecutor:
         return observation
 
     def _advance(self, step: int, *, phase: str) -> int:
-        dt = self._physics_dt(step=step)
+        dt = self._control_dt(step=step)
         physics = getattr(self._resources, "physics", None)
         if physics is None:
             physics = getattr(self._resources, "simulation_world", None)
         if self._before_step is not None:
             self._before_step(dt)
-        physics.step(render=False)
+        physics.step_for_duration(dt, render=False)
         committed = int(step) + 1
         claim = getattr(self._resources, "claim_completed_step", None)
         sample_step = int(claim()) if callable(claim) else int(step)

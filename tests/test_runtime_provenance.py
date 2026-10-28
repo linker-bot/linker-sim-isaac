@@ -35,20 +35,22 @@ def _target_provenance(**overrides: object) -> RuntimeProvenance:
         ),
         "warp": ModuleProvenance(
             "warp-lang",
-            "1.16.0",
+            "1.17.0",
             "warp",
-            "/isaac/extscache/omni.warp.core-1.16.0/warp/__init__.py",
-            "1.16.0",
+            "/site-packages/warp/__init__.py",
+            "1.17.0",
         ),
+        "warp_distribution_path": "/site-packages/warp",
+        "newton_commit": "55caec0e05718c33f0fe29e80a55af1be69baf07",
         "newton": ModuleProvenance(
-            "newton", "1.5.0", "newton", "/newton/__init__.py", "1.5.0"
+            "newton", "1.8.0.dev0", "newton", "/newton/__init__.py", "1.8.0.dev0"
         ),
         "mujoco_warp": ModuleProvenance(
             "mujoco-warp",
-            "3.11.0",
+            "3.15.0",
             "mujoco_warp",
             "/mujoco_warp/__init__.py",
-            "3.11.0",
+            "3.15.0",
         ),
         "pxr": ModuleProvenance("isaacsim-kernel", "6.1.0.0", "pxr.Usd", "/pxr/Usd.so"),
         "torch_cuda": "12.8",
@@ -472,7 +474,7 @@ def test_validate_target_runtime_rejects_shadow_warp_module() -> None:
     provenance = _target_provenance(
         warp=ModuleProvenance(
             "warp-lang",
-            "1.16.0",
+            "1.17.0",
             "warp",
             "/shadow/warp/__init__.py",
             "1.16.0",
@@ -482,7 +484,7 @@ def test_validate_target_runtime_rejects_shadow_warp_module() -> None:
     try:
         validate_target_runtime(provenance)
     except RuntimeError as exc:
-        assert "warp module path is outside enabled omni.warp.core extension" in str(
+        assert "warp module path is outside the locked warp-lang distribution" in str(
             exc
         )
     else:
@@ -505,7 +507,7 @@ def test_validate_target_runtime_rejects_newton_module_version_mismatch() -> Non
             }
         ),
         newton=ModuleProvenance(
-            "newton", "1.5.0", "newton", "/newton/__init__.py", "1.3.0"
+            "newton", "1.8.0.dev0", "newton", "/newton/__init__.py", "1.3.0"
         ),
     )
 
@@ -516,7 +518,7 @@ def test_validate_target_runtime_rejects_newton_module_version_mismatch() -> Non
             physics_execution="cuda",
         )
     except RuntimeError as exc:
-        assert "newton.__version__='1.3.0' expected '1.5.0'" in str(exc)
+        assert "newton.__version__='1.3.0' expected '1.8.0.dev0'" in str(exc)
     else:
         raise AssertionError("Newton module/distribution mismatch was accepted")
 
@@ -625,7 +627,7 @@ def test_collect_physx_provenance_never_imports_newton_modules(monkeypatch) -> N
         ),
         "warp": SimpleNamespace(
             __file__="/warp/__init__.py",
-            __version__="1.16.0",
+            __version__="1.17.0",
         ),
         "pxr.Usd": SimpleNamespace(__file__="/isaac/pxr/Usd.so"),
         "isaacsim": SimpleNamespace(__file__="/isaac/isaacsim/__init__.py"),
@@ -650,12 +652,17 @@ def test_collect_physx_provenance_never_imports_newton_modules(monkeypatch) -> N
         "version",
         lambda distribution: {
             "torch": "2.11.0",
-            "warp-lang": "1.16.0",
+            "warp-lang": "1.17.0",
             "isaacsim": "6.1.0.0",
             "isaacsim-kernel": "6.1.0.0",
         }[distribution],
     )
 
+    monkeypatch.setattr(
+        provenance_module.importlib.metadata,
+        "distribution",
+        lambda name: SimpleNamespace(locate_file=lambda path: f"/site-packages/{path}"),
+    )
     result = collect_runtime_provenance(
         cuda_device=3,
         include_curobo=False,
@@ -750,15 +757,25 @@ def test_module_provenance_records_distribution_and_module_versions(
     module = type(
         "FakeModule",
         (),
-        {"__version__": "1.5.0", "__file__": "/runtime/newton/__init__.py"},
+        {"__version__": "1.8.0.dev0", "__file__": "/runtime/newton/__init__.py"},
     )()
     monkeypatch.setattr(
         "linkerbot_sim.isaac.provenance.importlib.metadata.version",
-        lambda distribution: "1.5.0" if distribution == "newton" else "unexpected",
+        lambda distribution: "1.8.0.dev0" if distribution == "newton" else "unexpected",
     )
 
     result = _module_provenance("newton", "newton", module)
 
-    assert result.version == "1.5.0"
-    assert result.module_version == "1.5.0"
+    assert result.version == "1.8.0.dev0"
+    assert result.module_version == "1.8.0.dev0"
     assert result.path == "/runtime/newton/__init__.py"
+
+
+@pytest.mark.parametrize("commit", [None, "0" * 40])
+def test_newton_requires_pinned_source_revision(commit):
+    with pytest.raises(RuntimeError, match="newton_commit="):
+        validate_target_runtime(
+            _target_provenance(physics_backend="newton", newton_commit=commit),
+            expected_physics_backend="newton",
+            physics_execution="cuda",
+        )

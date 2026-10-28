@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+import math
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -581,6 +582,7 @@ class MirrorSceneSettings:
     gravity_z: float
     add_ground: bool
     ground_height: float
+    control_frequency_hz: float
     physics_frequency_hz: float
     render_frequency_hz: float
     robots: tuple[RobotInstanceSettings, ...]
@@ -590,6 +592,25 @@ class MirrorSceneSettings:
     lights: tuple[LightSettings, ...]
     planning_startup: Literal["lazy", "prewarm"] = "lazy"
     planning_contacts: tuple[PlanningContactSettings, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in ("control_frequency_hz", "physics_frequency_hz"):
+            as_float(getattr(self, name), label=f"scene.{name}", strictly_positive=True)
+        ratio = self.physics_frequency_hz / self.control_frequency_hz
+        if (
+            not math.isfinite(ratio)
+            or ratio < 1.0
+            or not math.isclose(ratio, round(ratio), rel_tol=0.0, abs_tol=1e-9)
+        ):
+            raise ConfigurationError(
+                "scene.physics_frequency_hz must be an integer multiple of "
+                "scene.control_frequency_hz"
+            )
+
+    @property
+    def physics_substeps(self) -> int:
+        """Exact native steps per target update; no automatic timestep cap."""
+        return round(self.physics_frequency_hz / self.control_frequency_hz)
 
     @classmethod
     def from_mapping(
@@ -602,6 +623,7 @@ class MirrorSceneSettings:
             "gravity_z",
             "add_ground",
             "ground_height",
+            "control_frequency_hz",
             "physics_frequency_hz",
             "render_frequency_hz",
             "robots",
@@ -636,6 +658,11 @@ class MirrorSceneSettings:
             add_ground=as_bool(mapping["add_ground"], label=f"{label}.add_ground"),
             ground_height=as_float(
                 mapping["ground_height"], label=f"{label}.ground_height"
+            ),
+            control_frequency_hz=as_float(
+                mapping["control_frequency_hz"],
+                label=f"{label}.control_frequency_hz",
+                strictly_positive=True,
             ),
             physics_frequency_hz=as_float(
                 mapping["physics_frequency_hz"],

@@ -5,7 +5,8 @@ scene:
   gravity_z: -9.81
   add_ground: false
   ground_height: 0.0
-  physics_frequency_hz: 120.0
+  control_frequency_hz: 60.0
+  physics_frequency_hz: 480.0
   render_frequency_hz: 60.0
   planning_startup: lazy
   # Only the fixed robot base may overlap its installation geometry in the coarse planning model.

@@ -15,12 +15,19 @@
   NVIDIA 驱动和 GPU；
 - 足以容纳 Isaac Sim wheel 与 extension cache 的本地空间。
 
-仓库当前锁定 Python 3.12、Isaac Sim 6.1.0、PyTorch 2.11/cu128、Warp 1.16.0 和
-Newton 1.5.0、MuJoCo/MuJoCo-Warp 3.11.0、cuRobo 0.8.0。准确版本以 `pyproject.toml` 与 `uv.lock` 为准。
+仓库锁定Python 3.12、Isaac Sim 6.1.0、PyTorch 2.11/cu128、Newton 1.8.0.dev0
+提交 `55caec0e05718c33f0fe29e80a55af1be69baf07`、MuJoCo/MuJoCo-Warp 3.15.0、
+Warp wheel 1.17.0及cuRobo 0.8.0。以 `pyproject.toml` 和 `uv.lock` 为准。
+MuJoCo要求websockets >=13；应用固定13.1以保留当前transport API。
 
-6.1 源码必须使用这套配套环境，不支持沿用 6.0.1 环境。旧任务修订请保留独立的 checkout
-和环境。资产 pin 和配置的物理参数未变，但求解器升级可能改变接触轨迹；采用新基线前应
-重新验收任务策略。
+项目自己拥有Newton求解器并排除Isaac Newton extension，因此使用窄范围uv依赖覆盖替代
+Isaac的Newton 1.5/MuJoCo 3.11固定版本。PhysX和Newton均在Kit启动前加载同一个Warp 1.17 wheel。
+Kit集成扩展仍使用随附版本，但不加载其中的旧Python Warp。运行时核验实际模块版本、wheel路径及Newton提交号。
+这属于项目验证组合，不是Isaac原生绑定的Newton栈；直接执行 `pip check` 会报告被有意覆盖的
+Isaac约束，应使用锁定uv环境及实际Kit smoke验证。
+
+旧任务保留独立checkout和环境。本准备步骤不改变资产引用、控制器或接触默认，
+普通启动改为可自定义的60 Hz控制/480 Hz物理；SDK和步长变化仍可能改变接触轨迹，需复验任务。
 
 ## 2. 获取工作区
 

@@ -125,7 +125,11 @@ def execute_robot_timeline(
                         targets,
                         step=sample_step,
                         phase=phase,
-                        physics_dt=runtime_dt,
+                        time_s=float(
+                            getattr(
+                                world, "simulation_time", (sample_step + 1) * runtime_dt
+                            )
+                        ),
                     )
                 _observe_once(
                     runtime,
@@ -269,7 +273,7 @@ def _write_log(
     *,
     step: int,
     phase: str,
-    physics_dt: float,
+    time_s: float,
 ) -> None:
     """按 logger decimation 采集实际/目标状态，并写入当前 timeline phase。"""
 
@@ -282,7 +286,7 @@ def _write_log(
     )
     logger.write(
         step=step,
-        time_s=(step + 1) * physics_dt,
+        time_s=time_s,
         phase=phase,
         drive_update=True,
         **values,

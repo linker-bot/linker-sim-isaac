@@ -1,5 +1,5 @@
 # scene3 的现实映像版本。该文件保留 warehouse、相机和 GUI 视觉事实；
-# 与无相机、240 Hz 的 Kaleidoscope tblock_push 不是同一场景，禁止互相覆盖合并。
+# 与无相机的 Kaleidoscope tblock_push 不是同一场景，禁止互相覆盖合并。
 # 所有 xyz 使用 m，rpy 使用绕固定 XYZ 轴的 rad；profile 路径相对对应 configs 分组解析。
 scene:
   # 场景稳定标识，必须与文件 stem scene3 一致，用于配置来源和外部状态标识。
@@ -12,8 +12,9 @@ scene:
   add_ground: false
   # add_ground=true 时默认 Plane 的世界 Z 高度，单位 m；关闭时保留该完整 schema 字段。
   ground_height: 0.0
-  # 物理 step 频率，单位 Hz；60 Hz 对应 physics_dt = 1/60 s。
-  physics_frequency_hz: 60.0
+  # 目标更新与实际物理频率；后者必须是前者的整数倍。
+  control_frequency_hz: 60.0
+  physics_frequency_hz: 480.0
   # 主 viewport 的目标渲染频率，单位 Hz；相机使用各自 frequency_hz，不继承此值。
   render_frequency_hz: 60.0
   # 在 interactive ready 前顺序创建两臂 planner；cuRobo 数值 warmup 仍由

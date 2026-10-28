@@ -41,7 +41,7 @@ PYTHONPATH=src .venv/bin/python scripts/mirror.py \
   --profile newton_cuda
 ```
 
-240 Hz PhysX CPU hybrid-control composition:
+60 Hz commands / 240 Hz feedback / 480 Hz physics PhysX CPU hybrid-control composition:
 
 ```bash
 PYTHONPATH=src .venv/bin/python scripts/mirror.py \

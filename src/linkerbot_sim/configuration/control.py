@@ -438,7 +438,9 @@ class HybridTuningLimits:
 
 @dataclass(frozen=True)
 class HybridForcePositionSettings:
-    minimum_physics_frequency_hz: float
+    # Independent feedback rate; neither the command rate nor the native solver rate.
+    feedback_frequency_hz: float
+    minimum_feedback_frequency_hz: float
     max_duration_s: float
     supported_reference_frames: tuple[str, ...]
     allowed_force_axes: tuple[bool, ...]
@@ -459,7 +461,8 @@ class HybridForcePositionSettings:
     ) -> "HybridForcePositionSettings":
         mapping = strict_mapping(value, label=label)
         required = {
-            "minimum_physics_frequency_hz",
+            "feedback_frequency_hz",
+            "minimum_feedback_frequency_hz",
             "max_duration_s",
             "supported_reference_frames",
             "allowed_force_axes",
@@ -528,9 +531,14 @@ class HybridForcePositionSettings:
                 f"{label}.posture.damping exceeds the tuning limit"
             )
         return cls(
-            minimum_physics_frequency_hz=as_float(
-                mapping["minimum_physics_frequency_hz"],
-                label=f"{label}.minimum_physics_frequency_hz",
+            feedback_frequency_hz=as_float(
+                mapping["feedback_frequency_hz"],
+                label=f"{label}.feedback_frequency_hz",
+                strictly_positive=True,
+            ),
+            minimum_feedback_frequency_hz=as_float(
+                mapping["minimum_feedback_frequency_hz"],
+                label=f"{label}.minimum_feedback_frequency_hz",
                 strictly_positive=True,
             ),
             max_duration_s=as_float(

@@ -58,7 +58,7 @@ Newton 当前没有 projected effort 读回，measured 数组保持无效，原�
 或外力估计公式。新增附件影响惯性，本次遥测不改变重力或增益。
 
 `just smoke-mirror-efforts` 在 PhysX/Newton 中验证正/负/零命令、取消、reset 和来源有效性。
-既有笛卡尔混合力位控制继续遵守 physical TCP、tare、有效反馈、后端和 240 Hz 局部控制要求；
+既有笛卡尔混合力位控制继续遵守 physical TCP、tare、有效反馈、后端和配置的控制频率要求；
 开放关节力矩不等于给后端增加 measured wrench 支持。
 
 ## 安全与资源

@@ -16,7 +16,7 @@ from linkerbot_sim.sensors import SceneSensorSettings
 class MirrorSceneRuntimeSettings:
     """动作脚本共享的 World 时间步和世界重力设置。
 
-    ``physics_frequency`` 决定物理步长和轨迹采样节奏；``render_frequency`` 在 GUI 或
+    ``physics_frequency`` 表示原生物理步频；轨迹采样使用runtime控制周期。``render_frequency`` 在 GUI 或
     headless camera output 模式下决定渲染步长。纯物理 headless 仍直接使用物理步长。
     """
 

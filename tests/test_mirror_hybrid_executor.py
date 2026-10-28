@@ -143,15 +143,24 @@ class _Physics:
     def __init__(self) -> None:
         self.steps = 0
         self.fail_at: int | None = None
+        self.simulation_time = 0.0
+        self.native_steps = 0
+        self.command_hz = 60.0
+        self.physics_hz = 480.0
 
     def get_physics_dt(self):
-        return 1.0 / 240.0
+        return 1.0 / self.command_hz
 
-    def step(self, *, render: bool):
+    def get_native_physics_dt(self):
+        return 1.0 / self.physics_hz
+
+    def step_for_duration(self, duration_s, *, render: bool):
         assert render is False
         if self.fail_at is not None and self.steps >= self.fail_at:
             raise RuntimeError("physics injected failure")
         self.steps += 1
+        self.simulation_time += duration_s
+        self.native_steps += round(duration_s * self.physics_hz)
 
 
 class _Resources:
@@ -298,6 +307,8 @@ def test_tare_then_hybrid_restores_position_and_leaves_other_robot_untouched() -
     assert np.allclose(controller._targets.efforts, 0.0)
     assert other.execution.joint_controller.writes == []
     assert resources.physics.steps == final_step
+    assert resources.physics.native_steps == final_step * 2
+    assert resources.physics.simulation_time == pytest.approx(final_step / 240)
 
 
 def test_consecutive_motions_freeze_new_gains_and_independent_force_axes() -> None:
@@ -417,3 +428,43 @@ def test_hybrid_parser_rejects_invalid_axis_selection(force_axes) -> None:
 
     with pytest.raises(ValueError, match="force_axes"):
         parse_hybrid_motion_request(arguments)
+
+
+@pytest.mark.parametrize("command_hz,physics_hz", [(60, 480), (120, 720), (240, 960)])
+def test_hybrid_refreshes_feedback_without_interpolating_targets(
+    command_hz, physics_hz
+):
+    executor, resources, _robot, _other, port, _parameters, _runtime = _fixture()
+    resources.physics.command_hz = command_hz
+    resources.physics.physics_hz = physics_hz
+    _result, step = _tare(executor)
+    rows = []
+    resources.hybrid_control_logger = SimpleNamespace(
+        write=lambda payload: rows.append(dict(payload))
+    )
+    original_observe = port.observe
+    observed_times = []
+
+    def observe():
+        observed_times.append(resources.physics.simulation_time)
+        port.external[2] = 2 + 0.1 * len(observed_times)
+        return original_observe()
+
+    port.observe = observe
+    started = resources.physics.simulation_time
+    result, _ = executor.execute(
+        {**_motion(), "duration_s": 1 / 60},
+        start_step=step,
+        should_cancel=lambda: False,
+    )
+    assert result["executed_ticks"] == 4
+    assert len(rows) == 4
+    assert np.diff(observed_times) == pytest.approx([1 / 240] * 3)
+    assert [row["target_position"] for row in rows] == [[0, 0, 0]] * 4
+    assert rows[-1]["commanded_arm_effort"] != rows[0]["commanded_arm_effort"]
+    assert [row["time_s"] for row in rows] == pytest.approx(
+        [started + i / 240 for i in range(4)]
+    )
+    assert resources.physics.simulation_time - started == pytest.approx(
+        1 / 60 + 36 / 240
+    )

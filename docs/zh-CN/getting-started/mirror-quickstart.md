@@ -4,7 +4,7 @@
 
 Mirror 将 selector `mirror/scene3`（文件 `configs/scenes/mirror/scene3.yaml`，内部
 `scene.id: scene3`）映射为一个交互仿真 World。CLI 默认的 `physx_cpu` 使用 PhysX CPU；
-`physx_cpu_hybrid` 使用 240 Hz PhysX CPU 专用 hybrid composition；`newton_cpu` 与 `newton_cuda`
+`physx_cpu_hybrid` 使用 60 Hz 指令 / 240 Hz 反馈 / 480 Hz 物理的 PhysX CPU 专用 hybrid composition；`newton_cpu` 与 `newton_cuda`
 分别选择 Newton CPU/CUDA，四者都由 Mirror 派生一个 world。首次使用新的 checkout 时，
 请先完成[安装与环境准备](installation.md)。
 

@@ -87,7 +87,7 @@ telemetry does not change gravity or gains.
 
 `just smoke-mirror-efforts` verifies real positive/negative/zero commands,
 cancellation, reset and source validity on PhysX and Newton. Cartesian hybrid
-force/position control retains its physical-TCP, tare, feedback, backend and 240 Hz
+force/position control retains its physical-TCP, tare, feedback, backend and configured control-rate
 requirements. Exposing joint torque does not add measured-wrench support to a backend.
 
 ## Bounded Handoff

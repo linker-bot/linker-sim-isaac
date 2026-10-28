@@ -134,6 +134,7 @@ def _install_fake_isaacsim(monkeypatch) -> None:
     simulation_app.SimulationApp = FakeSimulationApp
     simulation_manager = ModuleType("isaacsim.core.simulation_manager")
     simulation_manager.SimulationManager = FakeSimulationManager
+    monkeypatch.setitem(sys.modules, "warp", ModuleType("warp"))
     monkeypatch.setitem(sys.modules, "isaacsim", ModuleType("isaacsim"))
     monkeypatch.setitem(sys.modules, "isaacsim.core", ModuleType("isaacsim.core"))
     monkeypatch.setitem(sys.modules, "isaacsim.simulation_app", simulation_app)

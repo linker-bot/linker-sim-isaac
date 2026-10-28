@@ -586,14 +586,13 @@ class NewtonArticulationTensorPort:
             for name in ("joint_q", "joint_qd", "joint_q_full", "joint_qd_full")
         }
         all_columns = tuple(range(self.state_dim))
-        self._q = _MappedScalarIO(
-            _device_index_matrix(
-                binding.q_indices,
-                columns=columns,
-                device=self.device,
-                name="Newton command q indices",
-            )
+        q_indices = _device_index_matrix(
+            binding.q_indices,
+            columns=columns,
+            device=self.device,
+            name="Newton command q indices",
         )
+        self._q = _MappedScalarIO(q_indices)
         qd_indices = _device_index_matrix(
             binding.qd_indices,
             columns=columns,
@@ -601,7 +600,8 @@ class NewtonArticulationTensorPort:
             name="Newton command qd indices",
         )
         self._qd = _MappedScalarIO(qd_indices)
-        self._position_target = _MappedScalarIO(qd_indices.clone())
+        # Position targets follow coordinates; velocity/effort targets use DOFs.
+        self._position_target = _MappedScalarIO(q_indices.clone())
         self._velocity_target = _MappedScalarIO(qd_indices.clone())
         self._effort_target = _MappedScalarIO(qd_indices.clone())
         self._all_q = _MappedScalarIO(

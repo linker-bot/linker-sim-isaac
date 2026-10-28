@@ -13,8 +13,8 @@ scene:
   add_ground: false
   # add_ground=true 时 Plane 的 env-local Z 高度，单位 m。
   ground_height: 0.0
-  # 物理频率，单位 Hz；240 Hz 对应单步 1/240 s，action 可跨多个 physics tick。
-  physics_frequency_hz: 240.0
+  # 物理频率，单位 Hz；480 Hz 对应单步 1/480 s，action 可跨多个 physics tick。
+  physics_frequency_hz: 480.0
 
   # 单环境内机器人模板；列表顺序和 label 在所有复制环境中保持一致。
   robots:

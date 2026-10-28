@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from linkerbot_sim.isaac.physics.runtime import PhysicsCapabilities
 
 
@@ -21,9 +23,12 @@ class PhysxRuntime:
         cuda_graph=False,
     )
 
-    def __init__(self, world: object, *, kind: str) -> None:
+    def __init__(self, world: object, *, kind: str, substeps: int = 1) -> None:
         if kind not in {"physx_cpu", "physx_cuda"}:
             raise ValueError("PhysxRuntime.kind must be 'physx_cpu' or 'physx_cuda'")
+        if type(substeps) is not int or substeps < 1:
+            raise ValueError("PhysxRuntime.substeps must be a positive integer")
+        self.substeps = substeps
         self.world = world
         self.kind = kind
         self.execution = "cpu" if kind == "physx_cpu" else "cuda"
@@ -55,7 +60,29 @@ class PhysxRuntime:
 
     def step(self, *, render: bool = False) -> None:
         self._require_open()
-        self.world.step(render=bool(render))
+        self._step_native(self.substeps, render=render)
+
+    def step_for_duration(self, duration_s: float, *, render: bool = False) -> None:
+        """Advance an exact duration on the same owner, without changing its clocks."""
+        self._require_open()
+        if isinstance(duration_s, bool):
+            raise ValueError("duration must be a positive number of seconds")
+        ratio = duration_s / self.get_native_physics_dt()
+        if (
+            not math.isfinite(ratio)
+            or ratio < 1
+            or not math.isclose(ratio, round(ratio), rel_tol=0.0, abs_tol=1e-9)
+        ):
+            raise ValueError(
+                "duration must be a positive integer number of PhysX steps"
+            )
+        self._step_native(round(ratio), render=render)
+
+    def _step_native(self, count: int, *, render: bool) -> None:
+        for _ in range(count):
+            self.world.step(render=False)
+        if render:
+            self.render()
 
     def render(self) -> None:
         self.pre_render()
@@ -98,7 +125,7 @@ class PhysxRuntime:
     @property
     def current_time_step_index(self) -> int:
         self._require_open()
-        return int(self.world.current_time_step_index)
+        return int(self.world.current_time_step_index) // self.substeps
 
     def close(self) -> None:
         """幂等关闭 Python 入口；native World 最终由 SimulationApp 销毁。"""
@@ -106,6 +133,9 @@ class PhysxRuntime:
         self.closed = True
 
     def get_physics_dt(self) -> float:
+        return self.get_native_physics_dt() * self.substeps
+
+    def get_native_physics_dt(self) -> float:
         self._require_open()
         return float(self.world.get_physics_dt())
 

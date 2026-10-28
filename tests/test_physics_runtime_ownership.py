@@ -248,7 +248,8 @@ def test_physx_runtime_owns_and_delegates_to_world() -> None:
     assert calls == [
         "reset",
         "forward",
-        ("step", {"render": True}),
+        ("step", {"render": False}),
+        "render",
         "render",
     ]
     with pytest.raises(RuntimeError, match="closed"):
@@ -309,3 +310,67 @@ def test_physx_cpu_publishes_paused_poses_and_exposes_real_clock(monkeypatch) ->
     assert calls == [(False, True, False), "render"]
     assert runtime.simulation_time == 0.5
     assert runtime.current_time_step_index == 60
+
+
+@pytest.mark.parametrize("control_hz,physical_hz", [(60, 480), (120, 600), (20, 240)])
+def test_physx_exact_native_steps_and_render_does_not_advance_clock(
+    control_hz, physical_hz
+):
+    world = SimpleNamespace(current_time=0.0, current_time_step_index=0)
+    renders = []
+
+    def step(*, render):
+        assert not render
+        world.current_time += 1 / physical_hz
+        world.current_time_step_index += 1
+
+    world.step = step
+    world.render = lambda: renders.append(world.current_time)
+    world.get_physics_dt = lambda: 1 / physical_hz
+    runtime = PhysxRuntime(world, kind="physx_cuda", substeps=physical_hz // control_hz)
+    for _ in range(control_hz):
+        runtime.step(render=True)
+    assert world.current_time_step_index == physical_hz
+    assert runtime.current_time_step_index == control_hz
+    assert runtime.simulation_time == pytest.approx(1)
+    assert runtime.get_physics_dt() == pytest.approx(1 / control_hz)
+    assert len(renders) == control_hz
+    runtime.render()
+    assert world.current_time_step_index == physical_hz
+
+
+@pytest.mark.parametrize("substeps", [0, -1, True, 1.5])
+def test_physx_rejects_invalid_substeps(substeps):
+    with pytest.raises(ValueError, match="substeps"):
+        PhysxRuntime(object(), kind="physx_cpu", substeps=substeps)
+
+
+@pytest.mark.parametrize(
+    "command_hz,feedback_hz,physics_hz",
+    [(60, 240, 480), (120, 240, 720), (480, 480, 960)],
+)
+def test_physx_feedback_and_command_steps_share_one_clock(
+    command_hz, feedback_hz, physics_hz
+):
+    world = SimpleNamespace(current_time=0.0, current_time_step_index=0)
+
+    def step(*, render):
+        assert render is False
+        world.current_time += 1 / physics_hz
+        world.current_time_step_index += 1
+
+    world.step = step
+    world.get_physics_dt = lambda: 1 / physics_hz
+    runtime = PhysxRuntime(world, kind="physx_cpu", substeps=physics_hz // command_hz)
+    runtime.step()
+    for _ in range(feedback_hz):
+        runtime.step_for_duration(1 / feedback_hz)
+    runtime.step()
+    assert world.current_time_step_index == physics_hz + 2 * physics_hz // command_hz
+    assert runtime.simulation_time == pytest.approx(1 + 2 / command_hz)
+    assert runtime.get_physics_dt() == pytest.approx(1 / command_hz)
+    before = world.current_time_step_index
+    for duration in (False, True, 0, -1, float("nan"), 1 / (physics_hz + 1)):
+        with pytest.raises(ValueError):
+            runtime.step_for_duration(duration)
+        assert world.current_time_step_index == before

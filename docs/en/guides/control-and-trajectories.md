@@ -83,7 +83,7 @@ mode usable. Failed compensation makes the runtime fail-stop; close and recreate
 
 ## Hybrid Force/Position Control
 
-The dedicated `physx_cpu_hybrid` Mirror profile runs at 240 Hz. During one
+The dedicated `physx_cpu_hybrid` Mirror profile defaults to 60 Hz commands / 240 Hz feedback / 480 Hz physics. During one
 `motion.hybrid_force_position` request, the selected robot arm temporarily uses
 direct effort drives for every arm joint. Cartesian axes with `force_axes=false` use
 explicit pose impedance (`Kp/Kd`); axes with `force_axes=true` use explicit force PI

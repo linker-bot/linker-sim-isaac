@@ -62,7 +62,11 @@ def _box_runtime(
     wp.init()
     if execution == "cuda" and not wp.is_cuda_available():
         pytest.skip("CUDA is required")
-    spec = IsaacNewtonCpuSpec() if execution == "cpu" else IsaacNewtonCudaSpec()
+    spec = (
+        IsaacNewtonCpuSpec(substeps=8)
+        if execution == "cpu"
+        else IsaacNewtonCudaSpec(substeps=8)
+    )
     if contact_time_constant_s is not None:
         spec = replace(spec, default_contact_time_constant_s=contact_time_constant_s)
     device = "cpu" if execution == "cpu" else "cuda:0"
@@ -134,7 +138,7 @@ def test_contact_resolves_ten_centimeter_drop(execution, contact_time_constant_s
     runtime.solver.step = observed_step
     for _ in range(120):
         runtime._simulate()
-    assert len(bottoms) == 120 * runtime._effective_substeps
+    assert len(bottoms) == 120 * runtime.physics_spec.substeps
     assert np.isfinite(bottoms).all()
     # The 10 ms default permits transient soft-contact compression, but the
     # box center must stay above the support surface and then settle. Keep the
@@ -160,7 +164,7 @@ def test_new_contact_is_detected_inside_the_outer_step():
 
     runtime._collision_pipeline.collide = observed_collide
     runtime._simulate()
-    assert len(calls) == runtime._effective_substeps
+    assert len(calls) == runtime.physics_spec.substeps
     assert calls[0] == 0
     assert any(count > 0 for count in calls[1:])
     assert float(runtime.state.body_q.numpy()[0, 2]) > 0.018
@@ -176,10 +180,20 @@ def test_upstream_usd_contact_defaults_preserve_authored_values():
             self.values = values
 
         def GetPath(self):
-            return "/test"
+            return f"/test_{id(self)}"
 
         def GetAuthoredPropertiesInNamespace(self, namespace):
             return []
+
+        def GetAuthoredAttributes(self):
+            return [
+                SimpleNamespace(
+                    GetName=lambda name=name: name,
+                    Get=lambda value=value: value,
+                    HasAuthoredValue=lambda: True,
+                )
+                for name, value in self.values.items()
+            ]
 
         def GetAttribute(self, name):
             if name not in self.values:
@@ -210,3 +224,35 @@ def test_upstream_usd_contact_defaults_preserve_authored_values():
     )
     ordinary = SchemaResolverManager(_new_schema_resolvers(dependencies))
     assert ordinary.get_value(Prim({}), PrimType.SHAPE, "ke") is None
+
+
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+def test_explicit_60_480_native_clock_with_cuda_graph(execution):
+    runtime = _box_runtime(execution, height=10.0)
+    import warp as wp
+
+    runtime.physics_spec = replace(runtime.physics_spec, substeps=8)
+    runtime._simulate()  # Compile before capture, excluded from the measured second.
+    graph = None
+    if execution == "cuda":
+        with runtime._owner_stream_scope():
+            with wp.ScopedCapture(device="cuda:0") as capture:
+                runtime._simulate()
+            graph = capture.graph
+
+    def native_time():
+        if execution == "cpu":
+            return float(runtime.solver.mj_data.time)
+        runtime._synchronize_owner_stream()
+        return float(runtime.solver.mjw_data.time.numpy()[0])
+
+    before = native_time()
+    for _ in range(60):
+        if graph is None:
+            runtime._simulate()
+        else:
+            with runtime._owner_stream_scope():
+                wp.capture_launch(graph)
+    assert native_time() - before == pytest.approx(1.0, abs=1e-5)
+    assert runtime.physics_spec.substeps == 8
+    assert np.all(np.isfinite(runtime.state.joint_q.numpy()))

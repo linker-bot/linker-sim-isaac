@@ -9,7 +9,7 @@ control:
   # hold_step 模式下每轮空闲推进覆盖的仿真时长，单位 s，必须大于 0。
   idle_step_duration_s: 0.05
   # 是否按墙钟限制 physics tick 速率。true 时 idle 与 motion 共用同一时钟，以 scene 的
-  # physics_frequency_hz 实时推进；机器负载过高时允许仿真变慢，不会突发补跑落后的 tick。
+  # control_frequency_hz 实时推进；机器负载过高时允许仿真变慢，不会突发补跑落后的 tick。
   # false 时不等待墙钟，仿真会按当前机器能够达到的最快速度推进，但 physics dt 保持不变。
   sync_simulation_to_wall_clock: true
   # 下面三项是 Mirror v1 运动请求省略字段时唯一采用的默认值。

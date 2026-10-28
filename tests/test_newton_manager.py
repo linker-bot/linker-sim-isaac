@@ -314,7 +314,7 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
 
     class _Model:
         world_count = 1
-        use_coord_layout_targets = False
+        use_coord_layout_targets = True
         articulation_world = object()
 
         def __init__(self, device: object) -> None:
@@ -668,7 +668,7 @@ def test_simulate_refreshes_contacts_after_each_internal_motion(
     manager._collision_pipeline = _CollisionPipeline()
     manager._contacts = contacts
     manager.physics_dt = 0.03
-    manager.physics_spec = SimpleNamespace(substeps=3, max_substep_dt_s=0.01)
+    manager.physics_spec = SimpleNamespace(substeps=3)
 
     manager._simulate()
 
@@ -748,7 +748,7 @@ def test_cpu_step_runs_eager_without_owner_stream_and_captures_persistent_state(
     manager._collision_pipeline = None
     manager._contacts = None
     manager.physics_dt = 0.02
-    manager.physics_spec = IsaacNewtonCpuSpec(substeps=2, max_substep_dt_s=0.01)
+    manager.physics_spec = IsaacNewtonCpuSpec(substeps=2)
     manager._solver_integration_store = _Store()
     manager._graph_state = "disabled"
     manager._sim_time = 0.0
@@ -1906,15 +1906,22 @@ def test_multi_world_executor_metadata_reads_only_prototype_usd(
     assert metadata.follower_actuator_labels == ()
 
 
-@pytest.mark.parametrize(
-    "hz, minimum, expected",
-    [(60, 1, 9), (120, 1, 5), (240, 1, 3), (1000, 1, 1), (60, 20, 20)],
-)
-def test_internal_step_bound_preserves_outer_duration(hz, minimum, expected):
+@pytest.mark.parametrize("spec_type", [IsaacNewtonCpuSpec, IsaacNewtonCudaSpec])
+@pytest.mark.parametrize("outer_hz, substeps", [(60, 8), (480, 1)])
+def test_explicit_substeps_advance_exactly_480_steps_per_second(
+    spec_type, outer_hz, substeps
+):
     manager = NewtonRuntime.__new__(NewtonRuntime)
-    manager.physics_dt = 1.0 / hz
-    manager.physics_spec = IsaacNewtonCpuSpec(substeps=minimum)
-    assert manager._effective_substeps == expected
-    dt = manager.physics_dt / manager._effective_substeps
-    assert dt <= manager.physics_spec.max_substep_dt_s
-    assert dt * manager._effective_substeps == pytest.approx(1.0 / hz)
+    manager.physics_dt = 1.0 / outer_hz
+    manager.physics_spec = spec_type(substeps=substeps)
+    manager.stream = None
+    manager.state = SimpleNamespace(clear_forces=lambda: None)
+    manager.control = object()
+    manager._collision_pipeline = None
+    durations = []
+    manager.solver = SimpleNamespace(step=lambda *args: durations.append(args[-1]))
+    for _ in range(outer_hz):
+        manager._simulate()
+    assert len(durations) == 480
+    np.testing.assert_allclose(durations, 1.0 / 480.0)
+    assert sum(durations) == pytest.approx(1.0)

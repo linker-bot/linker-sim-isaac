@@ -17,7 +17,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 import logging
-import math
 from pathlib import Path
 from typing import Any
 import weakref
@@ -369,12 +368,13 @@ class NewtonRuntime:
 
         with wp.ScopedDevice(wp_device), self._owner_stream_scope():
             model = self.replication.builder.finalize(device=wp_device)
-        # Newton 1.5 permits coord-shaped targets (FREE joints have 7 coordinates
-        # but 6 DOFs). Our views and GPU ports intentionally use DOF slots for
-        # both target arrays; reject an externally changed global layout before
-        # any target writes instead of silently addressing a different joint.
-        if model.use_coord_layout_targets:
-            raise RuntimeError("Newton runtime requires DOF-layout joint targets")
+        # Newton 1.8 positions use coordinates (FREE: 7); velocities/efforts
+        # use DOFs (FREE: 6). Reject a process that changed the global layout
+        # before our views and device ports bind their respective index maps.
+        if not model.use_coord_layout_targets:
+            raise RuntimeError(
+                "Newton runtime requires coordinate-layout position targets"
+            )
         if int(getattr(model, "world_count", -1)) != len(roots):
             raise RuntimeError(
                 "finalized Newton world count mismatch: "
@@ -1038,9 +1038,8 @@ class NewtonRuntime:
             "njmax_per_world": int(self.physics_spec.njmax_per_world),
             "physics_dt_s": self.physics_dt,
             "configured_substeps": self.physics_spec.substeps,
-            "effective_substeps": self._effective_substeps,
-            "substep_dt_s": self.physics_dt / self._effective_substeps,
-            "max_substep_dt_s": self.physics_spec.max_substep_dt_s,
+            "effective_substeps": self.physics_spec.substeps,
+            "substep_dt_s": self.physics_dt / self.physics_spec.substeps,
             "default_contact_time_constant_s": self.physics_spec.default_contact_time_constant_s,
             "constraint_solver": self._constraint_solver,
             "contact_pipeline": self._contact_pipeline_kind,
@@ -1172,18 +1171,11 @@ class NewtonRuntime:
 
         wp.synchronize_stream(stream)
 
-    @property
-    def _effective_substeps(self) -> int:
-        return max(
-            int(self.physics_spec.substeps),
-            math.ceil(self.physics_dt / self.physics_spec.max_substep_dt_s),
-        )
-
     def _simulate(self) -> None:
         assert self.solver is not None
         assert self.state is not None
         assert self.control is not None
-        substeps = self._effective_substeps
+        substeps = self.physics_spec.substeps
         substep_dt = self.physics_dt / substeps
         with self._owner_stream_scope():
             # contacts buffer 与 solver/state 都归 owner。CUDA 可捕获整段 DAG；CPU 在同一

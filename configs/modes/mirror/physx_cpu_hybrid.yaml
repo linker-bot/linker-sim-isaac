@@ -1,4 +1,4 @@
-# Mirror PhysX CPU composition with the dedicated 240 Hz hybrid controller profile.
+# Mirror PhysX CPU composition with the hybrid controller at 60 Hz commands / 240 Hz feedback / 480 Hz physics.
 mode: mirror
 compute:
   cuda_device: 0

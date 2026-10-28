@@ -89,7 +89,7 @@ def build_physx_world(
 
     world_kwargs: dict[str, object] = {
         "stage_units_in_meters": 1.0,
-        "physics_dt": spec.physics_dt,
+        "physics_dt": spec.physics_dt / physics.substeps,
         "rendering_dt": spec.rendering_dt,
     }
     world_kwargs.update(build_physx_world_kwargs(spec))

@@ -97,7 +97,7 @@ def camera_config(args):
         config,
         scene=replace(
             config.scene,
-            physics_frequency_hz=120.0,
+            control_frequency_hz=120.0,
             render_frequency_hz=60.0,
             cameras=cameras,
             planning_startup="lazy",

@@ -169,6 +169,12 @@ class MirrorPhysicsAdapter:
     def step(self, *, render: bool = False) -> None:
         self.runtime.step(render=render)
 
+    def step_for_duration(self, duration_s: float, *, render: bool = False) -> None:
+        self.runtime.step_for_duration(duration_s, render=render)
+
+    def get_native_physics_dt(self) -> float:
+        return float(self.runtime.get_native_physics_dt())
+
     def render(self) -> None:
         self.runtime.render()
 
@@ -236,7 +242,7 @@ class MirrorSceneResources:
         return self.robot_registry.robot_by_label(label)
 
     def claim_completed_step(self) -> int:
-        """为刚完成的唯一 physics tick 分配全局、单调递增的零基序号。"""
+        """分配完成推进后的采样序号；hybrid与普通推进时长不同，时间以物理时钟为准。"""
 
         step = self._completed_physics_steps
         self._completed_physics_steps += 1
@@ -285,7 +291,6 @@ class MirrorSceneResources:
     def _write_idle_logs(self, *, step: int, phase: str) -> None:
         """按 logger decimation 记录无新 drive update 的空闲物理步。"""
 
-        physics_dt = float(self.physics.get_physics_dt())
         for robot in self.robots_by_id.values():
             execution = robot.execution
             logger = getattr(execution, "drive_logger", None)
@@ -303,7 +308,7 @@ class MirrorSceneResources:
             )
             logger.write(
                 step=step,
-                time_s=(step + 1) * physics_dt,
+                time_s=self.physics.simulation_time,
                 phase=phase,
                 drive_update=False,
                 **values,
@@ -753,7 +758,11 @@ def create_mirror_scene_resources(
             hybrid_control_logger = HybridControlLogger(
                 hybrid_log_path,
                 settings=logging_settings,
-                physics_dt=physics.get_physics_dt(),
+                physics_dt=(
+                    physics.get_physics_dt()
+                    if hybrid_control is None
+                    else 1.0 / hybrid_control.feedback_frequency_hz
+                ),
                 timestamped_run_name=csv_run_name,
                 output_plan=hybrid_csv_output_plan,
                 paths_applied=True,
@@ -1221,7 +1230,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
     render = config.outputs.render
     physics: IsaacPhysxCpuSpec | IsaacNewtonCpuSpec | IsaacNewtonCudaSpec
     if isinstance(config.physics, PhysxCpuSettings):
-        physics = IsaacPhysxCpuSpec()
+        physics = IsaacPhysxCpuSpec(substeps=config.scene.physics_substeps)
     elif isinstance(config.physics, NewtonCpuSettings):
         source = config.physics
         physics = IsaacNewtonCpuSpec(
@@ -1229,8 +1238,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             world_count=1,
             nconmax_per_world=source.nconmax_per_world,
             njmax_per_world=source.njmax_per_world,
-            substeps=source.substeps,
-            max_substep_dt_s=source.max_substep_dt_s,
+            substeps=config.scene.physics_substeps,
             default_contact_time_constant_s=source.default_contact_time_constant_s,
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
@@ -1246,8 +1254,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             nconmax_per_world=source.nconmax_per_world,
             njmax_per_world=source.njmax_per_world,
             use_cuda_graph=source.use_cuda_graph,
-            substeps=source.substeps,
-            max_substep_dt_s=source.max_substep_dt_s,
+            substeps=config.scene.physics_substeps,
             default_contact_time_constant_s=source.default_contact_time_constant_s,
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
@@ -1264,7 +1271,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
         experience_family="mirror",
         compute=IsaacComputeSpec(cuda_device=config.compute.cuda_device),
         physics=physics,
-        physics_dt=1.0 / config.scene.physics_frequency_hz,
+        physics_dt=1.0 / config.scene.control_frequency_hz,
         rendering_dt=1.0 / config.scene.render_frequency_hz,
         gravity_z=config.scene.gravity_z,
         add_ground=config.scene.add_ground,

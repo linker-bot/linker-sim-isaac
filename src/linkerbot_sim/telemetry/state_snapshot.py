@@ -12,6 +12,7 @@ from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 from threading import Condition
 
 import numpy as np
@@ -105,7 +106,7 @@ class ObjectPoseSnapshot:
 class StateSnapshot:
     """交互实时模式的一帧完整、可跨线程传递的状态快照。
 
-    ``step`` 是完成本次 physics step 前使用的零基序号，``time_s`` 是该 step 完成后的
+    ``step`` 是完成推进后的零基采样序号（不同控制模式的间隔可不同），``time_s`` 是完成后的
     仿真时间。``phase`` 用于区分 motion/hold 等执行阶段，不存在时不写入 JSON。
     """
 
@@ -291,22 +292,32 @@ class SceneRobotStateSampler:
         self.include_hybrid_control = bool(include_hybrid_control)
         self.hybrid_diagnostics_provider = hybrid_diagnostics_provider
         self._previous_velocities: dict[int, tuple[float, np.ndarray]] = {}
+        self._last_sample_time_s: float | None = None
+        self._next_sample_time_s: float | None = None
 
-    def should_sample(self, *, step: int, physics_dt: float) -> bool:
-        """把目标 Hz 量化为整数 physics-step 间隔并判断当前全局 step。
-
-        采样频率高于 physics 频率时钳制为每步一次；非正 ``rate_hz`` 表示禁用采样。
-        """
-
+    def should_sample(self, *, time_s: float) -> bool:
+        """Sample by simulation time, including changes between command and feedback ticks."""
         if self.rate_hz <= 0:
             return False
-        interval = max(1, int(round(1.0 / (physics_dt * self.rate_hz))))
-        return int(step) % interval == 0
+        previous = self._last_sample_time_s
+        deadline = self._next_sample_time_s
+        if deadline is None or (previous is not None and time_s < previous):
+            deadline = time_s
+        if time_s + 1e-9 < deadline:
+            return False
+        # Anchor deadlines to the sampling clock. Re-anchoring on every actual
+        # sample can halve the rate when float32 time falls just short of dt.
+        periods = max(1, math.floor((time_s + 1e-9 - deadline) * self.rate_hz) + 1)
+        self._next_sample_time_s = deadline + periods / self.rate_hz
+        self._last_sample_time_s = time_s
+        return True
 
     def reset(self) -> None:
         """清除 velocity history，使 reset 后第一帧 acceleration 返回 NaN。"""
 
         self._previous_velocities.clear()
+        self._last_sample_time_s = None
+        self._next_sample_time_s = None
 
     def sample(
         self,
@@ -427,7 +438,8 @@ class SceneRobotStateObserver:
         """命中 sampling interval 时冻结 snapshot 并写入 ``StateStream``。"""
 
         dt = _runtime_physics_dt(runtime)
-        if self.sampler.should_sample(step=step, physics_dt=dt):
+        time_s = _runtime_physics_time(runtime, fallback=(int(step) + 1) * dt)
+        if self.sampler.should_sample(time_s=time_s):
             self.stream.publish(self.sampler.sample(runtime, step=step, phase=phase))
 
     def reset(self) -> None:

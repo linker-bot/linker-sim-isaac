@@ -656,7 +656,9 @@ def test_scene_outputs_share_one_global_step_and_idle_log_is_not_duplicated() ->
     )
     resources = object.__new__(MirrorSceneResources)
     resources._completed_physics_steps = 0
-    resources.physics = SimpleNamespace(get_physics_dt=lambda: 0.01)
+    resources.physics = SimpleNamespace(
+        get_physics_dt=lambda: 0.01, simulation_time=0.01
+    )
     resources.robot_registry = SimpleNamespace(
         robots_by_id={0: SimpleNamespace(execution=execution)}
     )

@@ -34,7 +34,7 @@ These constraints are product contracts, not temporary tuning advice.
 - A mode-switch rollback failure is permanent fail-stop state. Reset cannot clear it;
   close and recreate the runtime.
 - Hybrid force/position control is limited to Mirror PhysX CPU at the configured
-  minimum 200 Hz (the maintained profile uses 240 Hz), one selected robot per request,
+  minimum 200 Hz feedback (the maintained profile uses 60 Hz commands / 240 Hz feedback / 480 Hz physics), one selected robot per request,
   a physical TCP binding, and `reference_frame: world`. The selected arm uses explicit
   effort control on every joint; its position axes are explicit Cartesian impedance,
   not implicit per-axis joint drives. Hand position drives and other robots are not

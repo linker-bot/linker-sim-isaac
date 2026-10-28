@@ -243,7 +243,7 @@ def test_canonical_kaleidoscope_profiles_build_strict_gpu_backend_union() -> Non
     assert not hasattr(config.profiles, "replication")
     assert "replication" not in config.sources
     assert isinstance(config.task.action, JointControlActionSettings)
-    assert config.task.action.physics_ticks_per_action == 2
+    assert config.task.action.physics_ticks_per_action == 8
     assert config.profiles.curobo is None
     assert config.curobo is None
     assert "curobo" not in config.sources
@@ -381,8 +381,8 @@ def test_mirror_scene3_and_kaleidoscope_tblock_push_are_distinct_facts() -> None
     kaleidoscope = load_kaleidoscope_config()
 
     assert mirror.scene.scene_id != kaleidoscope.scene.scene_id
-    assert mirror.scene.physics_frequency_hz == 60.0
-    assert kaleidoscope.scene.physics_frequency_hz == 240.0
+    assert mirror.scene.physics_frequency_hz == 480.0
+    assert kaleidoscope.scene.physics_frequency_hz == 480.0
     assert {item.label for item in mirror.scene.robots} == {"left_arm", "right_arm"}
     assert {item.label for item in kaleidoscope.scene.robots} == {
         "ar5_08_l6_0",
@@ -1455,9 +1455,7 @@ def test_configuration_facade_has_no_runtime_dependencies() -> None:
 
 
 @pytest.mark.parametrize("profile", ["newton_cpu", "newton_cuda"])
-@pytest.mark.parametrize(
-    "name", ["max_substep_dt_s", "default_contact_time_constant_s"]
-)
+@pytest.mark.parametrize("name", ["default_contact_time_constant_s"])
 @pytest.mark.parametrize("value", [0.0, -0.1, float("nan"), float("inf"), True])
 def test_newton_contact_time_fields_reject_invalid_values(profile, name, value):
     from dataclasses import asdict
@@ -1466,3 +1464,134 @@ def test_newton_contact_time_fields_reject_invalid_values(profile, name, value):
     config[name] = value
     with pytest.raises((ConfigurationError, ValueError)):
         physics_settings_from_mapping(config)
+
+
+@pytest.mark.parametrize("profile", ["newton_cpu", "newton_cuda"])
+def test_newton_rejects_removed_timestep_controls(profile):
+    from dataclasses import asdict
+
+    config = asdict(load_mirror_config(profile).physics)
+    for name, value in (("substeps", 8), ("max_substep_dt_s", None)):
+        with pytest.raises(ConfigurationError, match="unknown"):
+            physics_settings_from_mapping({**config, name: value})
+
+
+@pytest.mark.parametrize(
+    "profile", ["physx_cpu", "newton_cpu", "newton_cuda", "camera_workstation"]
+)
+def test_mirror_default_and_custom_exact_clock(profile):
+    from dataclasses import replace
+    from linkerbot_sim.mirror.scene_assembly import _mirror_session_spec
+
+    config = load_mirror_config(profile)
+    assert config.scene.control_frequency_hz == 60
+    assert config.scene.physics_frequency_hz == 480
+    for control_hz, physics_hz in (
+        (60, 480),
+        (60, 720),
+        (60, 960),
+        (120, 600),
+        (20, 240),
+    ):
+        scene = replace(
+            config.scene,
+            control_frequency_hz=control_hz,
+            physics_frequency_hz=physics_hz,
+        )
+        spec = _mirror_session_spec(replace(config, scene=scene))
+        assert spec.physics_dt == pytest.approx(1 / control_hz)
+        assert spec.physics_dt / spec.physics.substeps == pytest.approx(1 / physics_hz)
+
+
+def test_hybrid_default_and_custom_feedback_clock():
+    from dataclasses import asdict, replace
+    from linkerbot_sim.configuration.control import HybridForcePositionSettings
+    from linkerbot_sim.mirror.scene_assembly import _mirror_session_spec
+
+    config = load_mirror_config("physx_cpu_hybrid")
+    assert config.hybrid_control is not None
+    assert config.scene.control_frequency_hz == 60
+    assert config.scene.physics_frequency_hz == 480
+    assert config.hybrid_control.feedback_frequency_hz == 240
+    assert config.hybrid_control.minimum_feedback_frequency_hz == 200
+    for command_hz in (60, 120, 240):
+        for physics_hz in (480, 720, 960):
+            changed = replace(
+                config,
+                scene=replace(
+                    config.scene,
+                    control_frequency_hz=command_hz,
+                    physics_frequency_hz=physics_hz,
+                ),
+            )
+            spec = _mirror_session_spec(changed)
+            assert changed.hybrid_control.feedback_frequency_hz == 240
+            assert spec.physics_dt == pytest.approx(1 / command_hz)
+            assert spec.physics_dt / spec.physics.substeps == pytest.approx(
+                1 / physics_hz
+            )
+    for command_hz, feedback_hz, physics_hz in (
+        (480, 240, 480),
+        (60, 240, 600),
+        (100, 240, 600),
+        (60, 120, 480),
+        (60, float("nan"), 480),
+        (60, True, 480),
+    ):
+        with pytest.raises(ConfigurationError):
+            replace(
+                config,
+                scene=replace(
+                    config.scene,
+                    control_frequency_hz=command_hz,
+                    physics_frequency_hz=physics_hz,
+                ),
+                hybrid_control=replace(
+                    config.hybrid_control, feedback_frequency_hz=feedback_hz
+                ),
+            )
+    with pytest.raises(ConfigurationError, match="Nyquist"):
+        replace(
+            config,
+            hybrid_control=replace(
+                config.hybrid_control,
+                force=replace(config.hybrid_control.force, wrench_lpf_cutoff_hz=120),
+            ),
+        )
+    with pytest.raises(ConfigurationError, match="ramp_down_ticks"):
+        replace(
+            config,
+            hybrid_control=replace(config.hybrid_control, feedback_frequency_hz=480),
+        )
+    # Feedback changes are explicit, including the count-based unload duration.
+    higher = replace(
+        config,
+        scene=replace(config.scene, control_frequency_hz=480, physics_frequency_hz=960),
+        hybrid_control=replace(
+            config.hybrid_control,
+            feedback_frequency_hz=480,
+            limits=replace(config.hybrid_control.limits, ramp_down_ticks=72),
+        ),
+    )
+    assert higher.hybrid_control.feedback_frequency_hz == 480
+    settings = asdict(config.hybrid_control)
+    settings["minimum_physics_frequency_hz"] = settings.pop(
+        "minimum_feedback_frequency_hz"
+    )
+    with pytest.raises(ConfigurationError):
+        HybridForcePositionSettings.from_mapping(settings)
+
+
+@pytest.mark.parametrize(
+    "control_hz,physics_hz",
+    [(60, 500), (600, 480), (0, 480), (60, float("nan")), (True, 480), (1e-308, 1e308)],
+)
+def test_mirror_rejects_invalid_clock_ratio(control_hz, physics_hz):
+    from dataclasses import replace
+
+    with pytest.raises(ConfigurationError):
+        replace(
+            load_mirror_config("physx_cpu").scene,
+            control_frequency_hz=control_hz,
+            physics_frequency_hz=physics_hz,
+        )
