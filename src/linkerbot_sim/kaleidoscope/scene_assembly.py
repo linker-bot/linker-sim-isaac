@@ -385,7 +385,10 @@ def session_spec_from_config(
             iterations=int(physics_source.iterations),
             line_search_iterations=int(physics_source.line_search_iterations),
             constraint_solver=str(physics_source.constraint_solver),
-            contact_pipeline=str(physics_source.contact_pipeline),
+            default_contact_gap_m=physics_source.default_contact_gap_m,
+            solver_deterministic=physics_source.solver_deterministic,
+            collision_deterministic=physics_source.collision_deterministic,
+            contact_matching=physics_source.contact_matching,
         )
     else:
         raise ValueError(

@@ -150,14 +150,9 @@ class JointGroupLayout:
     def indices(self, group: str) -> np.ndarray:
         """返回 group joints 在完整 command-space 中的列索引。"""
 
-        selected = set(self.names(group))
+        index_by_name = {name: i for i, name in enumerate(self.command_joint_names)}
         return np.asarray(
-            [
-                index
-                for index, name in enumerate(self.command_joint_names)
-                if name in selected
-            ],
-            dtype=int,
+            [index_by_name[name] for name in self.names(group)], dtype=int
         )
 
 

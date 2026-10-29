@@ -25,6 +25,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 import math
 from numbers import Real
+from pathlib import Path
 import re
 from types import MappingProxyType
 from typing import Any, cast
@@ -87,6 +88,15 @@ class ControllerProfiles:
     compliant_drive: CompliantDriveSettings | None = None
 
 
+def select_controller_bundle(name: str, asset_path: str | Path) -> str:
+    """Resolve the engine default to the supported robot's drive bundle."""
+    if name == "newton" and Path(asset_path).parent.name.startswith(
+        ("ar5_08_o6_", "ar5_o6_")
+    ):
+        return "newton_compliant"
+    return name
+
+
 def validate_compliant_drive_selection(
     profiles: ControllerProfiles,
     *,
@@ -95,11 +105,14 @@ def validate_compliant_drive_selection(
     mode: str = "position",
 ) -> None:
     """Reject unsupported use before starting Kit or importing a physical asset."""
-    if profiles.compliant_drive is None:
-        return
-    from pathlib import Path
-
     unit = Path(asset_path).parent.name
+    if profiles.compliant_drive is None:
+        if (
+            engine == "newton"
+            and select_controller_bundle("newton", asset_path) == "newton_compliant"
+        ):
+            raise ValueError("Newton AR5/O6 requires the compliant drive bundle")
+        return
     if engine != "newton" or mode != "position":
         raise ValueError("Compliant drive requires Newton position control")
     if not unit.startswith(("ar5_08_o6_", "ar5_o6_")):
@@ -574,17 +587,14 @@ def compliant_drive_from_mapping(
     )
 
 
-def bind_compliant_drive_joints(
+def bind_controller_joints(
     profiles: ControllerProfiles, joint_groups
 ) -> ControllerProfiles:
-    """Bind the opt-in profile's vectors to declared arm/hand names before import.
+    """Bind profile vectors to declared group names before USD/runtime reordering.
 
-    O6 USD traversal and articulation orders differ. Declared group order is the
-    new profile's explicit configuration order; exact name maps survive both.
-    Ordinary bundles retain their existing runtime-order semantics.
+    All bundles use joint_groups order for arrays. Scalars retain broadcast
+    semantics; exact maps survive importer and articulation traversal changes.
     """
-    if profiles.compliant_drive is None:
-        return profiles
     components = {}
     for group in ("arm", "hand"):
         names = tuple(getattr(joint_groups, group))
@@ -595,7 +605,7 @@ def bind_compliant_drive_joints(
             values = {}
             for field in ("stiffness", "damping", "max_force", "effort_limit"):
                 value = getattr(settings, field)
-                if value is not None:
+                if isinstance(value, (tuple, Mapping)):
                     resolved = resolve_joint_parameter(
                         value, names, label=f"{group}.{mode}.{field}"
                     )

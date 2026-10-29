@@ -8,7 +8,10 @@ from dataclasses import dataclass
 
 from linkerbot_sim.assets.robot_config import RobotAssetConfig
 from linkerbot_sim.assets.root_pose import RootPoseConfig
-from linkerbot_sim.configuration.controllers import normalize_controller_bundle_name
+from linkerbot_sim.configuration.controllers import (
+    normalize_controller_bundle_name,
+    select_controller_bundle,
+)
 from linkerbot_sim.configuration.robots import RobotProfileSettings
 from linkerbot_sim.configuration.scenes import RobotInstanceSettings
 
@@ -125,7 +128,7 @@ def resolve_controller_profile(
         or runtime_default
     )
     return normalize_controller_bundle_name(
-        selected,
+        select_controller_bundle(selected, robot_asset.asset_path),
         label=f"controller profile for robot {scene_instance.label!r}",
     )
 

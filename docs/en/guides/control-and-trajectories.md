@@ -213,19 +213,24 @@ boundary.
 See [Mirror JSON And Motion Examples](../reference/mirror-json.md) and
 [Kaleidoscope API](../reference/kaleidoscope-api.md).
 
-## Opt-in Newton AR5/O6 compliant drive
+## Newton AR5/O6 compliant drive
 
-For an AR5/O6 robot instance, including Gemini camera assemblies, select
-`controller_profile: newton_compliant` in its scene entry. This intermediate
-profile supports **position control only**, on Newton CPU and CUDA. Other
-assemblies, PhysX, and runtime velocity/effort switching are rejected. Existing
-scene defaults remain unchanged until the final integration step of #53.
+Newton automatically selects the compliant drive for AR5/O6, including Gemini
+camera assemblies. The bundle is named `newton_compliant`; no scene override is
+required and the old direct-PD path is not selectable for these assemblies.
+It supports **position control only** on CPU and CUDA. Other robot combinations
+retain their existing drive settings; PhysX is unchanged.
 
 The bundle has ordinary `arm_controller.yaml` / `hand_controller.yaml` native
 output settings and a `newton_drive.yaml` leaf for virtual motors and drive
 dynamics. Its parameter vectors follow the robot profile's declared arm/hand
 joint-group order and are bound to exact joint names before import; USD traversal
-and articulation ordering cannot swap thumb and finger gains.
+and articulation ordering cannot swap thumb and finger gains. This name binding
+applies to every controller bundle. O6 hand arrays use: `thumb_cmc_pitch`,
+`thumb_cmc_yaw`, `index_mcp_pitch`, `middle_mcp_pitch`, `ring_mcp_pitch`,
+`pinky_mcp_pitch`, prefixed with `hand_lh_` or `hand_rh_`. Default complete command
+vectors concatenate declared arm then hand names; native solver indices are mapped,
+not reordered.
 
 | Joint group | Native Kp / Kd | Native cap (N·m) | Passive damping (N·m·s/rad) |
 | --- | --- | --- | --- |
@@ -267,7 +272,12 @@ gravity. Arm/hand armature is 0.01/0.001, joint Coulomb friction is zero, and na
 follower equality uses `solref=(0.002,1)`,
 `solimp=(0.999,0.999,0.001,0.5,2)`. These drive-profile overrides apply only to
 selected robot roots. Geometry, mass/inertia, joint limits, contact/friction
-parameters, and solver selection remain unchanged in this step.
+parameters remain unchanged in this step. CPU/CUDA pipeline, gap fallback and
+solver defaults are documented in the [shared Newton settings](../reference/configuration.md#shared-newton-pipeline-defaults).
+
+Run `just smoke-newton-drive` to verify public Mirror motion commands on CPU and
+CUDA: declared hand order, arm velocity forwarding, eight physics substeps per
+command, hand-reference interpolation, native simulation time and history restore.
 
 Controller history, including the command substep phase, participates in reset,
 snapshot, restore and selected-world clone. Cold position resets initialize the

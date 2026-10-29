@@ -20,7 +20,7 @@ def finalize_replicated_robot_views(
 
     原生 URDF/MJCF mimic follower 由 PhysX 约束执行，不能再作为独立 action 列；否则
     上层 target 与约束会同时驱动同一自由度。这里沿用资产声明计算 follower 集合，最终
-    command order 始终是 raw articulation ``dof_names`` 的稳定子序列。
+    command order 来自 robot profile 的声明顺序，索引按 raw articulation 名称映射。
     """
 
     robots = []

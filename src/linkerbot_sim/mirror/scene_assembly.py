@@ -548,11 +548,11 @@ def create_mirror_scene_resources(
 
     from linkerbot_sim.configuration.controllers import (
         validate_compliant_drive_selection,
-        bind_compliant_drive_joints,
+        bind_controller_joints,
     )
 
     controller_profiles = tuple(
-        bind_compliant_drive_joints(bundle, profile.joint_groups)
+        bind_controller_joints(bundle, profile.joint_groups)
         for bundle, profile in zip(
             controller_profiles, resolved_robot_profiles, strict=True
         )
@@ -1273,7 +1273,10 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
             constraint_solver=source.constraint_solver,
-            contact_pipeline=source.contact_pipeline,
+            default_contact_gap_m=source.default_contact_gap_m,
+            solver_deterministic=source.solver_deterministic,
+            collision_deterministic=source.collision_deterministic,
+            contact_matching=source.contact_matching,
         )
     else:
         source = config.physics
@@ -1289,7 +1292,10 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
             constraint_solver=source.constraint_solver,
-            contact_pipeline=source.contact_pipeline,
+            default_contact_gap_m=source.default_contact_gap_m,
+            solver_deterministic=source.solver_deterministic,
+            collision_deterministic=source.collision_deterministic,
+            contact_matching=source.contact_matching,
         )
     render_resources = bool(
         render.enabled

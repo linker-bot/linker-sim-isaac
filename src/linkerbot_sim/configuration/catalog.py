@@ -26,6 +26,7 @@ from .controllers import (
     ControllerProfiles,
     controller_profiles_from_mappings,
     normalize_controller_bundle_name,
+    select_controller_bundle,
     validate_compliant_drive_selection,
 )
 from .modes.kaleidoscope import (
@@ -478,7 +479,10 @@ def _validate_compliant_selections(
 ) -> None:
     for instance in scene.robots:
         profile = instance.resolved_profile
-        name = instance.controller_profile or profile.controller_profile or engine
+        name = select_controller_bundle(
+            instance.controller_profile or profile.controller_profile or engine,
+            profile.asset_path,
+        )
         validate_compliant_drive_selection(
             controller_bundles[name],
             engine=engine,
@@ -510,7 +514,7 @@ def _effective_controller_bundle_names(
             raise ConfigurationError(
                 f"robot instance {instance.label!r} controller profile must be a string"
             )
-        result.append(selected)
+        result.append(select_controller_bundle(selected, profile.asset_path))
     return tuple(result)
 
 

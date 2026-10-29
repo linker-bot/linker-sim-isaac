@@ -41,7 +41,7 @@ def test_selected_native_and_virtual_limits_remain_distinct():
         == settings.finger_flexion.advancing_torque
         == 5
     )
-    assert bundle.hand.position_control.max_force == (10, 60, 60, 60, 60, 60)
+    assert bundle.hand.position_control.max_force == (60, 10, 60, 60, 60, 60)
     assert settings.arm_force_guard < bundle.arm.position_control.max_force
     assert settings.follower_damping == 0.4
     assert bundle.hand.position_control.follower_stiffness == (0.0,)
@@ -114,7 +114,7 @@ def test_missing_unknown_and_reversed_motor_limits_rejected():
 @pytest.mark.parametrize("side", ["lh", "rh"])
 def test_named_binding_survives_reordered_import_and_runtime(side):
     from types import SimpleNamespace
-    from linkerbot_sim.configuration.controllers import bind_compliant_drive_joints
+    from linkerbot_sim.configuration.controllers import bind_controller_joints
     from linkerbot_sim.controllers.types import resolve_joint_parameter
 
     source = profiles()
@@ -122,15 +122,15 @@ def test_named_binding_survives_reordered_import_and_runtime(side):
     hand = tuple(
         f"hand_{side}_{suffix}"
         for suffix in (
-            "thumb_cmc_yaw",
             "thumb_cmc_pitch",
+            "thumb_cmc_yaw",
             "index_mcp_pitch",
             "middle_mcp_pitch",
             "ring_mcp_pitch",
             "pinky_mcp_pitch",
         )
     )
-    bound = bind_compliant_drive_joints(source, SimpleNamespace(arm=arm, hand=hand))
+    bound = bind_controller_joints(source, SimpleNamespace(arm=arm, hand=hand))
     settings = bound.hand.position_control
     order = tuple(sorted(hand))
     gains = dict(
@@ -152,7 +152,5 @@ def test_named_binding_survives_reordered_import_and_runtime(side):
     assert gains[f"hand_{side}_index_mcp_pitch"] == 1250
     assert caps[f"hand_{side}_thumb_cmc_yaw"] == 10
     assert caps[f"hand_{side}_index_mcp_pitch"] == 60
-    assert source.hand.position_control.max_force == (10, 60, 60, 60, 60, 60)
-    assert (
-        bind_compliant_drive_joints(bound, SimpleNamespace(arm=arm, hand=hand)) == bound
-    )
+    assert source.hand.position_control.max_force == (60, 10, 60, 60, 60, 60)
+    assert bind_controller_joints(bound, SimpleNamespace(arm=arm, hand=hand)) == bound

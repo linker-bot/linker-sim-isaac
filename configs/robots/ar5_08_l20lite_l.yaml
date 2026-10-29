@@ -132,7 +132,7 @@ curobo:
 
 joint_groups:
   # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
-  # 默认 controlled_joints=[all] 时，命令/轨迹向量顺序来自 articulation.dof_names。
+  # 默认命令/轨迹顺序为声明的 arm + hand；按名称映射到引擎内部 DOF。
   # hand 仅列出可直接接收命令的 master 关节。MJCF equality 中的 DIP 等 follower
   # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
   arm:

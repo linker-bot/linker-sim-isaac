@@ -29,7 +29,7 @@ from linkerbot_sim.assets.usd_overrides import (
 from linkerbot_sim.assets.instance_paths import validate_disjoint_instance_prim_paths
 from linkerbot_sim.configuration.controllers import (
     ControllerProfiles,
-    bind_compliant_drive_joints,
+    bind_controller_joints,
 )
 from linkerbot_sim.controllers.projection import robot_usd_override_configs
 from linkerbot_sim.configuration.objects import (
@@ -241,7 +241,7 @@ def import_source_robots(
             raise TypeError(
                 f"resolved controller bundle {controller_name!r} has invalid type"
             )
-        controllers = bind_compliant_drive_joints(controllers, profile.joint_groups)
+        controllers = bind_controller_joints(controllers, profile.joint_groups)
         execution = replace(
             execution,
             robot=replace(

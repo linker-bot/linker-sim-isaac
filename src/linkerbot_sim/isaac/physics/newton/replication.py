@@ -156,6 +156,7 @@ def _new_registered_builder(
     *,
     up_axis: str,
     default_contact_time_constant_s: float | None = None,
+    default_contact_gap_m: float = 0.0001,
 ):
     """创建 builder，并在 USD 解析前注册 MuJoCo 自定义列。
 
@@ -164,6 +165,8 @@ def _new_registered_builder(
     """
 
     builder = dependencies.model_builder_type(up_axis=up_axis)
+    # Only fill unauthored gaps; explicit asset values, including zero, win.
+    builder.rigid_gap = default_contact_gap_m
     if default_contact_time_constant_s is not None:
         # Importer-authored per-shape ke/kd (including mjc:solref) take precedence.
         # This only changes the fallback; no USD material or joint gain is rewritten.
@@ -535,6 +538,7 @@ def build_replicated_newton_builder(
     skip_mesh_approximation: bool = True,
     joint_drive_gains_scaling: float = _USD_RADIAN_DRIVE_GAIN_SCALING,
     default_contact_time_constant_s: float | None = None,
+    default_contact_gap_m: float = 0.0001,
 ) -> NewtonReplicationResult:
     """只解析一次已配置 USD prototype，并复制进多个 Newton world。
 
@@ -617,11 +621,13 @@ def build_replicated_newton_builder(
         dependencies,
         up_axis=up_axis,
         default_contact_time_constant_s=default_contact_time_constant_s,
+        default_contact_gap_m=default_contact_gap_m,
     )
     prototype_builder = _new_registered_builder(
         dependencies,
         up_axis=up_axis,
         default_contact_time_constant_s=default_contact_time_constant_s,
+        default_contact_gap_m=default_contact_gap_m,
     )
     # fixed joint 不折叠，才能让 prototype/final model 的 joint label、equality endpoint
     # 与资产审计保持可追踪。视觉 shape 可关闭，但 collision topology 默认原样保留。

@@ -79,7 +79,10 @@ class IsaacNewtonCudaSpec:
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"
-    contact_pipeline: Literal["auto", "mujoco", "newton"] = "auto"
+    default_contact_gap_m: float = 0.0001
+    solver_deterministic: bool = False
+    collision_deterministic: bool = True
+    contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
     kind: Literal["newton_cuda"] = "newton_cuda"
 
     def __post_init__(self) -> None:
@@ -107,17 +110,27 @@ class IsaacNewtonCudaSpec:
                 raise ValueError(f"physics.{name} must be finite and positive")
         if self.constraint_solver not in {"auto", "cg", "newton"}:
             raise ValueError("physics.constraint_solver is invalid")
-        if self.contact_pipeline not in {"auto", "mujoco", "newton"}:
-            raise ValueError("physics.contact_pipeline is invalid")
+        if self.contact_matching not in {"disabled", "latest", "sticky"}:
+            raise ValueError("physics.contact_matching is invalid")
+        for name in ("solver_deterministic", "collision_deterministic"):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"physics.{name} must be boolean")
+        gap = self.default_contact_gap_m
+        if (
+            isinstance(gap, bool)
+            or not isinstance(gap, (int, float))
+            or not isfinite(gap)
+            or gap < 0
+        ):
+            raise ValueError("physics.default_contact_gap_m must be finite and >= 0")
 
 
 @dataclass(frozen=True)
 class IsaacNewtonCpuSpec:
     """Mirror 单 world Newton CPU runtime 的装配参数。
 
-    CPU execution 永远 eager 执行，因此该规格故意没有 ``use_cuda_graph``。上游 CPU
-    ``SolverMuJoCo`` 不提供项目所需的 independent multi-world，也不消费 Newton contacts；
-    这两个限制在纯规格边界收紧，避免无效组合进入 Kit/runtime 初始化。
+    CPU 使用与 CUDA 相同的 Newton 碰撞和 MuJoCo Warp，实现 eager 执行。
+    本产品仍限定 Mirror 单 world，不提供 CUDA graph。
     """
 
     world_count: int = 1
@@ -128,7 +141,10 @@ class IsaacNewtonCpuSpec:
     iterations: int = 100
     line_search_iterations: int = 50
     constraint_solver: Literal["auto", "cg", "newton"] = "auto"
-    contact_pipeline: Literal["auto", "mujoco"] = "auto"
+    default_contact_gap_m: float = 0.0001
+    solver_deterministic: bool = False
+    collision_deterministic: bool = True
+    contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
     kind: Literal["newton_cpu"] = "newton_cpu"
 
     def __post_init__(self) -> None:
@@ -156,8 +172,19 @@ class IsaacNewtonCpuSpec:
                 raise ValueError(f"physics.{name} must be finite and positive")
         if self.constraint_solver not in {"auto", "cg", "newton"}:
             raise ValueError("physics.constraint_solver is invalid")
-        if self.contact_pipeline not in {"auto", "mujoco"}:
-            raise ValueError("Newton CPU contact_pipeline must be auto or mujoco")
+        if self.contact_matching not in {"disabled", "latest", "sticky"}:
+            raise ValueError("physics.contact_matching is invalid")
+        for name in ("solver_deterministic", "collision_deterministic"):
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"physics.{name} must be boolean")
+        gap = self.default_contact_gap_m
+        if (
+            isinstance(gap, bool)
+            or not isinstance(gap, (int, float))
+            or not isfinite(gap)
+            or gap < 0
+        ):
+            raise ValueError("physics.default_contact_gap_m must be finite and >= 0")
 
 
 IsaacPhysicsSpec: TypeAlias = (

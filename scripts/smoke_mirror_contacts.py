@@ -120,16 +120,6 @@ def main():
                 return list(seen)
             solver = runtime.physics_runtime.solver
             model = solver.mj_model
-            if profile == "newton_cpu":
-                data = solver.mj_data
-                return [
-                    (
-                        [model.body(int(model.geom_bodyid[g])).name for g in c.geom],
-                        float(c.dist),
-                    )
-                    for c in data.contact[: data.ncon]
-                    if c.dist < -1e-5
-                ]
             runtime.physics_runtime._synchronize_owner_stream()
             data = solver.mjw_data
             n = int(data.nacon.numpy()[0])

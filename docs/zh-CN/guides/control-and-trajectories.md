@@ -99,17 +99,20 @@ Mirror `motion.hold` 保持当前 target，`runtime.reset` 可清 queue 并在 r
 继续阅读：[Mirror JSON 与运动示例](../reference/mirror-json.md)及
 [运动规划](motion-planning.md)。
 
-## 显式选择 Newton AR5/O6 柔顺驱动
+## Newton AR5/O6 柔顺驱动
 
-在 AR5/O6（含 Gemini 相机附件组合）的 scene 机器人条目设置
-`controller_profile: newton_compliant`。本阶段仅支持 Newton CPU/CUDA 的
-**位置控制**；其他组合、PhysX 和运行时速度/力矩模式切换会明确拒绝。
-现有场景默认不变，最终默认启用留待 #53 的集成步骤。
+Newton 对 AR5/O6（含 Gemini 相机附件组合）自动选择 `newton_compliant` 驱动，
+无需 scene 覆盖，该组合不再选择旧直接 PD 路径。仅支持 CPU/CUDA **位置控制**；
+其他机器人组合保留原驱动配置，PhysX 不变。
 
 该 bundle 的 `arm_controller.yaml` / `hand_controller.yaml` 设置原生输出，
 `newton_drive.yaml` 设置虚拟电机及驱动动力学。参数数组按 robot profile 显式声明的
 arm/hand 关节组顺序解释，导入前绑定为精确关节名映射；USD 遍历和 articulation 顺序
-变化不会把拇指与四指增益错配。
+变化不会把拇指与四指增益错配。所有控制器 bundle 都采用此名称绑定。
+O6 六维顺序为：拇指弯曲 `thumb_cmc_pitch`、拇指侧摆 `thumb_cmc_yaw`、
+食指 `index_mcp_pitch`、中指 `middle_mcp_pitch`、无名指 `ring_mcp_pitch`、
+小指 `pinky_mcp_pitch`，完整名称加 `hand_lh_` / `hand_rh_` 前缀。
+默认完整命令向量按声明的 arm + hand 排列，通过索引映射到原生引擎。
 
 | 关节组 | 原生 Kp / Kd | 原生限矩（N·m） | 被动阻尼（N·m·s/rad） |
 | --- | --- | --- | --- |
@@ -138,7 +141,11 @@ PCHIP/重定时策略。每个原生物理步前将估计 PD 输出保护在 199
 选定机器人本体及附件启用重力补偿，物体保留重力。臂/手 armature 为 0.01/0.001，
 关节库仑摩擦为零，主从 equality 使用 `solref=(0.002,1)`、
 `solimp=(0.999,0.999,0.001,0.5,2)`。这些驱动设置只覆盖选定机器人根节点；
-本步不修改几何、质量惯量、关节限角、接触摩擦参数及求解器选型。
+本步不修改几何、质量惯量、关节限角和接触摩擦参数。CPU/CUDA 管线、gap 回退值及
+求解器默认值见[Newton 共用设置](../reference/configuration.md)。
+
+运行 `just smoke-newton-drive` 验证 CPU/CUDA 的正式 Mirror 运动入口：手部声明顺序、
+机械臂速度传递、每条指令八个物理子步、手部目标插值、原生仿真时间及历史状态恢复。
 
 控制历史（包括指令内子步相位）参与 reset、snapshot、restore 及选定环境 clone。
 冷位置重置从实际关节位置初始化虚拟轴。CPU/CUDA 使用同一公式和 float64 历史；

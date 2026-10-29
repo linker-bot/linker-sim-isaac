@@ -875,10 +875,10 @@ def _controlled_joint_names(
     *,
     layout: JointGroupLayout,
 ) -> tuple[str, ...]:
-    """返回校验后的主动关节 selector；缺省使用唯一 ``all`` sentinel。"""
+    """返回声明顺序的关节名；缺省或 all 按 joint_groups 顺序展开。"""
 
     if "controlled_joints" not in data:
-        return ("all",)
+        return layout.command_joint_names
     value = data["controlled_joints"]
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("controlled_joints must be a sequence")
@@ -893,7 +893,7 @@ def _controlled_joint_names(
     if "all" in {name.lower() for name in names}:
         if len(names) != 1 or names[0].lower() != "all":
             raise ValueError("controlled_joints 'all' must be the only selector")
-        return ("all",)
+        return layout.command_joint_names
     command_names = set(layout.arm) | set(layout.hand)
     unknown = sorted(set(names) - command_names)
     if unknown:

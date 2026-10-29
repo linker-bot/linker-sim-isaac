@@ -123,7 +123,7 @@ history/counter/RNG 字段：
 | `object.pose_local_wxyz` | `(N, 7)`；env-local XYZ 位置与 `wxyz` 四元数。 |
 | `object.com_velocity` | `(N, 6)`；物体质心的线速度和角速度。 |
 
-显式选择 AR5/O6 `newton_compliant` 时另有 float64 状态矩阵
+Newton 自动选择 AR5/O6 `newton_compliant` 时另有 float64 状态矩阵
 `controller.virtual_shaft`，保存虚拟参考、速度历史、区间端点及指令内子步相位。
 传递状态时须保持 dtype；该字段参与 snapshot、restore、clone 及选定环境 reset。
 

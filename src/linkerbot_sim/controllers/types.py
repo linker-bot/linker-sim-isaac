@@ -2,7 +2,7 @@
 
 这些类型描述项目层面的控制意图，而不是 Isaac runtime 对象本身。配置解析、执行器和控制器
 都可以导入它们，不需要依赖具体 controller 实现文件。主动关节支持 position、velocity 和
-effort 三类模式；mimic follower 始终使用独立的 position drive 配置。
+effort 三类模式；原生 mimic follower 仅由约束执行，软件 follower 使用 position drive。
 """
 
 from __future__ import annotations
@@ -31,7 +31,8 @@ def resolve_joint_parameter(
 
     标量广播为 ``(joint_count,)``；序列必须恰好提供相同数量的值；name-map 必须与目标
     名称集合完全一致，并按 ``joint_names`` 顺序重排。返回数组只包含有限 float，调用方
-    因而可以直接逐列应用到 articulation，不会发生配置值与 DOF 顺序错位。
+    可以逐列应用到 articulation。配置数组应先按声明的 joint_groups 绑定为名称映射，
+    单独检查长度不能识别不同来源的关节顺序。
     """
 
     names = tuple(str(name) for name in joint_names)

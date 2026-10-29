@@ -329,51 +329,16 @@ def test_solver_successor_tolerance_only_applies_to_warmstart() -> None:
 
 def test_newton_contact_probe_requires_active_contacts_in_every_world() -> None:
     synchronized: list[bool] = []
-    counts = SimpleNamespace(numpy=lambda: np.array([2], dtype=np.int32))
-    world_ids = SimpleNamespace(numpy=lambda: np.array([0, 1, -1, -1], dtype=np.int32))
+
+    def host(values):
+        return SimpleNamespace(numpy=lambda: np.asarray(values, dtype=np.int32))
+
     runtime = SimpleNamespace(
         _synchronize_owner_stream=lambda: synchronized.append(True),
-        diagnostics=lambda: {
-            "contact_pipeline": "mujoco",
-            "nconmax_per_world": 200,
-        },
-        solver=SimpleNamespace(
-            mjw_data=SimpleNamespace(
-                nacon=counts,
-                naconmax=4,
-                contact=SimpleNamespace(worldid=world_ids),
-            )
-        ),
+        diagnostics=lambda: {"contact_pipeline": "newton", "nconmax_per_world": 200},
     )
-    env = SimpleNamespace(
-        num_envs=2,
-        runtime=SimpleNamespace(physics_runtime=runtime),
-    )
+    env = SimpleNamespace(num_envs=2, runtime=SimpleNamespace(physics_runtime=runtime))
     contract = smoke.PROFILE_CONTRACTS["newton_cuda"]
-
-    report = smoke._newton_contact_probe(env, contract)
-
-    assert synchronized == [True]
-    assert report == {
-        "performed": True,
-        "pipeline": "mujoco",
-        "active_worlds": 2,
-        "total_contacts": 2,
-        "min_contacts": 1,
-        "max_contacts": 1,
-        "contact_capacity": 4,
-    }
-    world_ids.numpy = lambda: np.array([0, 0, -1, -1], dtype=np.int32)
-    with pytest.raises(RuntimeError, match="no physical contacts in 1 world"):
-        smoke._newton_contact_probe(env, contract)
-
-    host = lambda values: SimpleNamespace(  # noqa: E731
-        numpy=lambda: np.asarray(values, dtype=np.int32)
-    )
-    runtime.diagnostics = lambda: {
-        "contact_pipeline": "newton",
-        "nconmax_per_world": 200,
-    }
     runtime._contacts = SimpleNamespace(
         rigid_contact_count=host([2]),
         rigid_contact_max=8,
@@ -393,6 +358,9 @@ def test_newton_contact_probe_requires_active_contacts_in_every_world() -> None:
         "max_contacts": 1,
         "raw_contact_capacity": 8,
     }
+    runtime._contacts.rigid_contact_shape1 = host([1, 1, -1, -1, -1, -1, -1, -1])
+    with pytest.raises(RuntimeError, match="no physical contacts in 1 world"):
+        smoke._newton_contact_probe(env, contract)
 
 
 @pytest.mark.parametrize(

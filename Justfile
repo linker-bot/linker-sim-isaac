@@ -160,7 +160,12 @@ smoke-mirror-task-flow:
 smoke-newton-contact:
     {{python}} -m pytest -q tests/test_newton_contact_dynamics.py tests/test_newton_manager.py
 
-test-simulation: smoke-newton-contact test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+# Public motion commands, velocity forwarding, interpolation and clocks on both devices.
+smoke-newton-drive:
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_newton_drive.py --profile newton_cpu --output logs/newton-cpu-drive-entry.json
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_newton_drive.py --profile newton_cuda --output logs/newton-cuda-drive-entry.json
+
+test-simulation: smoke-newton-contact smoke-newton-drive test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

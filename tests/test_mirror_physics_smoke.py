@@ -1046,9 +1046,9 @@ def test_newton_runtime_contact_probe_uses_manager_without_legacy_extension() ->
     }
 
 
-def test_newton_cpu_contact_probe_reads_single_mujoco_world() -> None:
+def test_newton_cpu_contact_probe_reads_single_warp_world() -> None:
     solver = SimpleNamespace(
-        mj_data=SimpleNamespace(ncon=2),
+        mjw_data=SimpleNamespace(nacon=np.array([2])),
         mj_model=SimpleNamespace(nu=5),
     )
     manager = SimpleNamespace(

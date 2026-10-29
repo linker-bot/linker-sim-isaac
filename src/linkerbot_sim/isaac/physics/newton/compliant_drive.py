@@ -76,8 +76,8 @@ def configure_compliant_drives(builder, robots, profiles) -> DriveLayout | None:
                 key=lambda n: int(n[-1]),
             )
             suffixes = (
-                "thumb_cmc_yaw",
                 "thumb_cmc_pitch",
+                "thumb_cmc_yaw",
                 "index_mcp_pitch",
                 "middle_mcp_pitch",
                 "ring_mcp_pitch",

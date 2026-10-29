@@ -97,6 +97,7 @@ def _box_runtime(
     state.joint_qd.assign(qd)
     newton.eval_fk(model, state.joint_q, state.joint_qd, state)
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager.compliant_drive = None
     manager.physics_spec = spec
     manager.physics_dt = 1.0 / 60.0
     manager.stream = wp.Stream(device) if execution == "cuda" else None
@@ -105,14 +106,14 @@ def _box_runtime(
     manager.control = model.control()
     manager.solver = newton.solvers.SolverMuJoCo(
         model,
-        use_mujoco_cpu=execution == "cpu",
-        use_mujoco_contacts=execution == "cpu",
+        use_mujoco_cpu=False,
+        use_mujoco_contacts=False,
         iterations=100,
         ls_iterations=50,
         solver="newton",
     )
-    manager._collision_pipeline = (
-        newton.CollisionPipeline(model) if execution == "cuda" else None
+    manager._collision_pipeline = newton.CollisionPipeline(
+        model, deterministic=True, contact_matching="disabled"
     )
     manager._contacts = (
         manager._collision_pipeline.contacts()
@@ -222,6 +223,20 @@ def test_upstream_usd_contact_defaults_preserve_authored_values():
         dependencies.schema_resolver_mjc_type.mapping[PrimType.SHAPE]["ke"].default
         == original
     )
+    assert manager.get_value(Prim({}), PrimType.SHAPE, "gap") == float("-inf")
+    for authored_gap in (0.0, 0.002):
+        assert (
+            manager.get_value(Prim({"mjc:gap": authored_gap}), PrimType.SHAPE, "gap")
+            == authored_gap
+        )
+    builder = _new_registered_builder(
+        dependencies, up_axis="Z", default_contact_gap_m=0.0001
+    )
+    for gap in (None, 0.0, 0.002):
+        cfg = builder.default_shape_cfg.copy()
+        cfg.gap = gap
+        builder.add_shape_sphere(body=-1, radius=0.01, cfg=cfg)
+    assert builder.shape_gap == [0.0001, 0.0, 0.002]
     ordinary = SchemaResolverManager(_new_schema_resolvers(dependencies))
     assert ordinary.get_value(Prim({}), PrimType.SHAPE, "ke") is None
 
@@ -241,8 +256,6 @@ def test_explicit_60_480_native_clock_with_cuda_graph(execution):
             graph = capture.graph
 
     def native_time():
-        if execution == "cpu":
-            return float(runtime.solver.mj_data.time)
         runtime._synchronize_owner_stream()
         return float(runtime.solver.mjw_data.time.numpy()[0])
 

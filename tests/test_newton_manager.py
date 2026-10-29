@@ -37,32 +37,6 @@ class _HostArray:
         return self._values.copy()
 
 
-def _planar_mesh_model() -> SimpleNamespace:
-    planar = SimpleNamespace(
-        vertices=np.asarray([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
-    )
-    nonplanar = SimpleNamespace(
-        vertices=np.asarray(
-            [
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0],
-                [0.0, 0.0, 1.0],
-            ]
-        )
-    )
-    return SimpleNamespace(
-        shape_type=_HostArray([8, 10, 8]),
-        shape_flags=_HostArray([2, 2, 0]),
-        shape_collision_group=_HostArray([1, 1, 1]),
-        shape_scale=_HostArray(np.ones((3, 3))),
-        shape_source=(planar, nonplanar, planar),
-        shape_label=("/floor", "/solid", "/visual"),
-        custom_frequency_counts={},
-        mujoco=None,
-    )
-
-
 @pytest.mark.parametrize(
     ("configured", "kinds", "expected"),
     (
@@ -98,73 +72,6 @@ def test_explicit_newton_constraint_solver_rejects_dynamic_chain() -> None:
             "newton",
             object_handles=(SimpleNamespace(kind="dynamic_chain"),),
         )
-
-
-@pytest.mark.parametrize(
-    ("configured", "labels", "expected"),
-    (
-        ("auto", (), "mujoco"),
-        ("auto", ("/floor",), "newton"),
-        ("newton", (), "newton"),
-        ("newton", ("/floor",), "newton"),
-        ("mujoco", (), "mujoco"),
-    ),
-)
-def test_contact_pipeline_resolution(
-    configured: str,
-    labels: tuple[str, ...],
-    expected: str,
-) -> None:
-    assert (
-        newton_manager._resolve_contact_pipeline(
-            configured,
-            trigger_labels=labels,
-            execution="cuda",
-        )
-        == expected
-    )
-
-
-def test_explicit_mujoco_contact_pipeline_rejects_planar_mesh() -> None:
-    with pytest.raises(RuntimeError, match=r"contact_pipeline='mujoco'.*/floor"):
-        newton_manager._resolve_contact_pipeline(
-            "mujoco",
-            trigger_labels=("/floor",),
-            execution="cuda",
-        )
-
-
-@pytest.mark.parametrize("configured", ("auto", "mujoco"))
-def test_cpu_contact_pipeline_always_uses_mujoco(configured: str) -> None:
-    assert (
-        newton_manager._resolve_contact_pipeline(
-            configured,
-            trigger_labels=(),
-            execution="cpu",
-        )
-        == "mujoco"
-    )
-
-
-@pytest.mark.parametrize("configured", ("auto", "mujoco"))
-def test_cpu_contact_pipeline_rejects_colliding_planar_mesh(
-    configured: str,
-) -> None:
-    with pytest.raises(
-        RuntimeError,
-        match=r"CPU cannot simulate.*planar mesh.*/floor",
-    ):
-        newton_manager._resolve_contact_pipeline(
-            configured,
-            trigger_labels=("/floor",),
-            execution="cpu",
-        )
-
-
-def test_planar_mesh_detection_ignores_solid_and_noncolliding_meshes() -> None:
-    assert newton_manager._colliding_planar_mesh_labels(_planar_mesh_model()) == (
-        "/floor",
-    )
 
 
 def test_initialize_rechecks_extension_and_stage_owner_before_newton_import(
@@ -298,7 +205,7 @@ def test_newton_render_world_root_is_canonical_when_stage_is_configured() -> Non
     assert xform.GetResetXformStack()
 
 
-def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
+def test_cpu_manager_initializes_one_world_with_warp_and_newton_contacts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pytest.importorskip("warp")
@@ -358,6 +265,9 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
         return solver
 
     fake_newton.solvers = SimpleNamespace(SolverMuJoCo=_solver_factory)
+    fake_newton.CollisionPipeline = lambda *a, **k: SimpleNamespace(
+        contacts=lambda: object()
+    )
     monkeypatch.setitem(sys.modules, "newton", fake_newton)
     monkeypatch.setattr(
         newton_manager, "_configure_newton_stage", lambda *_a, **_k: None
@@ -382,7 +292,6 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
             ("prototype_equalities", expected_relation_count)
         ),
     )
-    monkeypatch.setattr(newton_manager, "_colliding_planar_mesh_labels", lambda _m: ())
     expectations = tuple(object() for _ in range(5))
     monkeypatch.setattr(
         newton_manager,
@@ -457,8 +366,7 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
     assert manager.model is holder["model"]
     assert manager.solver is holder["solver"]
     assert manager.native_master_follower_audit is audit
-    assert manager._contact_pipeline_kind == "mujoco"
-    assert manager._collision_pipeline is None
+    assert manager._collision_pipeline is not None
     assert manager._initialized is True
     assert ("prototype_equalities", 5) in events
     solver_kwargs = next(
@@ -466,8 +374,8 @@ def test_cpu_manager_initializes_one_world_with_mujoco_cpu_solver(
         for event in events
         if isinstance(event, tuple) and event[0] == "solver"
     )
-    assert solver_kwargs["use_mujoco_cpu"] is True
-    assert solver_kwargs["use_mujoco_contacts"] is True
+    assert solver_kwargs["use_mujoco_cpu"] is False
+    assert solver_kwargs["use_mujoco_contacts"] is False
     assert solver_kwargs["separate_worlds"] is False
     integration = next(
         event
@@ -525,14 +433,12 @@ def test_initialize_rejects_render_selection_outside_final_world_count(
 
 
 @pytest.mark.parametrize(
-    ("world_count", "separate_worlds", "contact_pipeline", "native_contacts"),
-    ((1, False, "newton", False), (2, True, "mujoco", True)),
+    ("world_count", "separate_worlds"),
+    ((1, False), (2, True)),
 )
 def test_solver_constructor_kwargs_include_effective_constraint_solver(
     world_count: int,
     separate_worlds: bool,
-    contact_pipeline: str,
-    native_contacts: bool,
 ) -> None:
     settings = IsaacNewtonCudaSpec(
         nconmax_per_world=200,
@@ -545,7 +451,6 @@ def test_solver_constructor_kwargs_include_effective_constraint_solver(
         settings,
         world_count=world_count,
         constraint_solver="cg",
-        contact_pipeline=contact_pipeline,
     ) == {
         "separate_worlds": separate_worlds,
         "njmax": 1200,
@@ -554,12 +459,12 @@ def test_solver_constructor_kwargs_include_effective_constraint_solver(
         "ls_iterations": 50,
         "solver": "cg",
         "use_mujoco_cpu": False,
-        "use_mujoco_contacts": native_contacts,
+        "use_mujoco_contacts": False,
         "update_data_interval": 1,
     }
 
 
-def test_cpu_solver_constructor_kwargs_select_mujoco_cpu() -> None:
+def test_cpu_solver_constructor_kwargs_select_shared_warp_pipeline() -> None:
     settings = IsaacNewtonCpuSpec(
         nconmax_per_world=200,
         njmax_per_world=1200,
@@ -571,7 +476,6 @@ def test_cpu_solver_constructor_kwargs_select_mujoco_cpu() -> None:
         settings,
         world_count=1,
         constraint_solver="cg",
-        contact_pipeline="mujoco",
     ) == {
         "separate_worlds": False,
         "njmax": 1200,
@@ -579,8 +483,8 @@ def test_cpu_solver_constructor_kwargs_select_mujoco_cpu() -> None:
         "iterations": 100,
         "ls_iterations": 50,
         "solver": "cg",
-        "use_mujoco_cpu": True,
-        "use_mujoco_contacts": True,
+        "use_mujoco_cpu": False,
+        "use_mujoco_contacts": False,
         "update_data_interval": 1,
     }
 
@@ -594,8 +498,6 @@ def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     manager.device = "cuda:0"
     manager._num_worlds = 1
     manager._constraint_solver = "cg"
-    manager._contact_pipeline_kind = "newton"
-    manager._contact_pipeline_trigger_labels = ("/floor",)
     manager.native_master_follower_audit = None
     manager._graph_state = "disabled"
     manager._graph_error = None
@@ -606,7 +508,11 @@ def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     diagnostics = manager.diagnostics()
     assert diagnostics["constraint_solver"] == "cg"
     assert diagnostics["contact_pipeline"] == "newton"
-    assert diagnostics["contact_pipeline_trigger_labels"] == ["/floor"]
+    assert diagnostics["solver_implementation"] == "mujoco_warp"
+    assert diagnostics["solver_deterministic"] is False
+    assert diagnostics["collision_deterministic"] is True
+    assert diagnostics["contact_matching"] == "disabled"
+    assert diagnostics["default_contact_gap_m"] == 0.0001
 
 
 def _scoped_stream_recorder(monkeypatch: pytest.MonkeyPatch):
@@ -1104,6 +1010,8 @@ def test_solver_integration_state_round_trip_restores_selected_time_and_warmstar
 
 
 def test_cpu_solver_integration_host_payload_round_trip_is_owned() -> None:
+    pytest.importorskip("warp")
+
     class _Store:
         execution = "cpu"
         width = 3
@@ -1119,7 +1027,7 @@ def test_cpu_solver_integration_host_payload_round_trip_is_owned() -> None:
             self.capture_count += 1
 
         def borrow(self) -> np.ndarray:
-            return self.values
+            return SimpleNamespace(numpy=lambda: self.values.copy())
 
         def restore(
             self,
@@ -1128,7 +1036,7 @@ def test_cpu_solver_integration_host_payload_round_trip_is_owned() -> None:
             active_world_mask: object | None = None,
         ) -> None:
             assert active_world_mask is None
-            np.copyto(self.values, np.asarray(values, dtype=np.float64))
+            np.copyto(self.values, np.asarray(values.numpy(), dtype=np.float64))
 
         def reset(self, active_world_mask: object | None = None) -> None:
             assert active_world_mask is None

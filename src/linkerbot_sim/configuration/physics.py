@@ -208,7 +208,10 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
         "iterations",
         "line_search_iterations",
         "constraint_solver",
-        "contact_pipeline",
+        "default_contact_gap_m",
+        "solver_deterministic",
+        "collision_deterministic",
+        "contact_matching",
     }
 )
 _NEWTON_POSITIVE_INT_FIELDS = (
@@ -218,7 +221,7 @@ _NEWTON_POSITIVE_INT_FIELDS = (
     "line_search_iterations",
 )
 _NEWTON_CONSTRAINT_SOLVERS = frozenset({"auto", "cg", "newton"})
-_NEWTON_CONTACT_PIPELINES = frozenset({"auto", "mujoco", "newton"})
+_NEWTON_CONTACT_MATCHING = frozenset({"disabled", "latest", "sticky"})
 
 
 class _NewtonCommonValues(TypedDict):
@@ -230,7 +233,10 @@ class _NewtonCommonValues(TypedDict):
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
-    contact_pipeline: Literal["auto", "mujoco", "newton"]
+    default_contact_gap_m: float
+    solver_deterministic: bool
+    collision_deterministic: bool
+    contact_matching: Literal["disabled", "latest", "sticky"]
 
 
 def _newton_common_from_mapping(
@@ -270,12 +276,23 @@ def _newton_common_from_mapping(
                 choices=set(_NEWTON_CONSTRAINT_SOLVERS),
             ),
         ),
-        contact_pipeline=cast(
-            Literal["auto", "mujoco", "newton"],
+        default_contact_gap_m=as_float(
+            mapping["default_contact_gap_m"],
+            label=f"{label}.default_contact_gap_m",
+            minimum=0.0,
+        ),
+        solver_deterministic=as_bool(
+            mapping["solver_deterministic"], label=f"{label}.solver_deterministic"
+        ),
+        collision_deterministic=as_bool(
+            mapping["collision_deterministic"], label=f"{label}.collision_deterministic"
+        ),
+        contact_matching=cast(
+            Literal["disabled", "latest", "sticky"],
             as_string(
-                mapping["contact_pipeline"],
-                label=f"{label}.contact_pipeline",
-                choices=set(_NEWTON_CONTACT_PIPELINES),
+                mapping["contact_matching"],
+                label=f"{label}.contact_matching",
+                choices=set(_NEWTON_CONTACT_MATCHING),
             ),
         ),
     )
@@ -286,8 +303,21 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
 
     if getattr(value, "constraint_solver") not in _NEWTON_CONSTRAINT_SOLVERS:
         raise ConfigurationError(f"{owner}.constraint_solver is invalid")
-    if getattr(value, "contact_pipeline") not in _NEWTON_CONTACT_PIPELINES:
-        raise ConfigurationError(f"{owner}.contact_pipeline is invalid")
+    if getattr(value, "contact_matching") not in _NEWTON_CONTACT_MATCHING:
+        raise ConfigurationError(f"{owner}.contact_matching is invalid")
+    for name in ("solver_deterministic", "collision_deterministic"):
+        if type(getattr(value, name)) is not bool:
+            raise ConfigurationError(f"physics.{name} must be a boolean")
+    gap = getattr(value, "default_contact_gap_m")
+    if (
+        isinstance(gap, bool)
+        or not isinstance(gap, (int, float))
+        or not math.isfinite(gap)
+        or gap < 0
+    ):
+        raise ConfigurationError(
+            "physics.default_contact_gap_m must be finite and >= 0"
+        )
     for name in ("default_contact_time_constant_s",):
         value_s = getattr(value, name)
         if (
@@ -320,7 +350,10 @@ class NewtonCudaSettings:
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
-    contact_pipeline: Literal["auto", "mujoco", "newton"]
+    default_contact_gap_m: float
+    solver_deterministic: bool
+    collision_deterministic: bool
+    contact_matching: Literal["disabled", "latest", "sticky"]
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cuda":
@@ -357,13 +390,7 @@ class NewtonCudaSettings:
 
 @dataclass(frozen=True)
 class NewtonCpuSettings:
-    """Mirror Newton CPU 的严格求解配置。
-
-    CPU leaf 不声明只对 CUDA 有意义的 ``use_cuda_graph``。Newton 1.2.1 的 CPU
-    ``SolverMuJoCo`` 也不会消费项目的 Newton contact pipeline，因此显式选择
-    ``contact_pipeline=newton`` 会在配置边界直接失败；``auto`` 由 runtime 收敛为 MuJoCo
-    contacts。
-    """
+    """Mirror 单 world Newton 碰撞 + MuJoCo Warp CPU；不使用 CUDA graph。"""
 
     engine: Literal["newton"]
     execution: Literal["cpu"]
@@ -373,7 +400,10 @@ class NewtonCpuSettings:
     iterations: int
     line_search_iterations: int
     constraint_solver: Literal["auto", "cg", "newton"]
-    contact_pipeline: Literal["auto", "mujoco"]
+    default_contact_gap_m: float
+    solver_deterministic: bool
+    collision_deterministic: bool
+    contact_matching: Literal["disabled", "latest", "sticky"]
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cpu":
@@ -381,10 +411,6 @@ class NewtonCpuSettings:
                 "NewtonCpuSettings must use engine=newton, execution=cpu"
             )
         _validate_newton_common(self, owner="NewtonCpuSettings")
-        if self.contact_pipeline == "newton":
-            raise ConfigurationError(
-                "Newton CPU does not support contact_pipeline=newton; use auto or mujoco"
-            )
 
     @classmethod
     def from_mapping(
@@ -393,10 +419,6 @@ class NewtonCpuSettings:
         required = _NEWTON_COMMON_REQUIRED_KEYS | {"engine", "execution"}
         require_keys(mapping, required=required, label=label)
         common = _newton_common_from_mapping(mapping, label=label)
-        if common["contact_pipeline"] == "newton":
-            raise ConfigurationError(
-                "Newton CPU does not support contact_pipeline=newton; use auto or mujoco"
-            )
         return cls(
             engine=as_string(
                 mapping["engine"], label=f"{label}.engine", choices={"newton"}
@@ -404,13 +426,7 @@ class NewtonCpuSettings:
             execution=as_string(
                 mapping["execution"], label=f"{label}.execution", choices={"cpu"}
             ),  # type: ignore[arg-type]
-            nconmax_per_world=common["nconmax_per_world"],
-            njmax_per_world=common["njmax_per_world"],
-            default_contact_time_constant_s=common["default_contact_time_constant_s"],
-            iterations=common["iterations"],
-            line_search_iterations=common["line_search_iterations"],
-            constraint_solver=common["constraint_solver"],
-            contact_pipeline=common["contact_pipeline"],
+            **common,
         )
 
 

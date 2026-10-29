@@ -115,7 +115,7 @@ class JointController:
         # 上层配置可以用 ``all`` 或显式关节名描述命令空间。这里先转成 Isaac DOF index，
         # 后续所有目标数组都按 articulation 的 dof_names 顺序写入，避免依赖外部列表顺序。
         requested_indices = resolve_joint_indices(self.dof_names, joint_names)
-        # MJCF equality 中的 dependent joint 是 follower。它们需要被驱动，但不能作为独立
+        # MJCF equality 中的 dependent joint 是 follower。原生约束是唯一执行者，不能作为独立
         # 命令输入，否则用户给 master 和 follower 同时下目标时会破坏 mimic 关系。
         self.follower_joint_names = mimic_follower_joint_names(mimic_path)
         self.follower_indices = np.asarray(

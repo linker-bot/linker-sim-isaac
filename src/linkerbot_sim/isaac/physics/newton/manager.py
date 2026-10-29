@@ -54,13 +54,6 @@ logger = logging.getLogger(__name__)
 
 _SOLVER_INTEGRATION_SNAPSHOT_SCHEMA = "linkerbot.newton-solver-integration-state.v1"
 
-# Newton 1.2.1 的公开枚举 ABI：GeoType.MESH=8、CONVEX_MESH=10，
-# ShapeFlags.COLLIDE_SHAPES=2。把这些冷路径分类常量固定在项目内，可让纯配置/单元测试
-# 在没有安装可选 ``newton`` wheel 时审计 mesh metadata；真实 model finalize 仍由 Newton
-# 自身创建这些数值，不会由本模块伪造运行时对象。
-_NEWTON_MESH_GEO_TYPES = frozenset({8, 10})
-_NEWTON_COLLIDE_SHAPES_FLAG = 2
-
 
 class _NewtonSceneRegistry:
     """仅提供兼容 ``World.scene`` 的对象保活容器，不参与物理所有权。"""
@@ -110,8 +103,7 @@ class NewtonRuntime:
         elif not _is_canonical_cuda_device(device):
             raise ValueError("Newton CUDA runtime requires a canonical cuda:N device")
         self.capabilities = PhysicsCapabilities(
-            # Newton 1.2.1 的 MuJoCo C 路径不能按本项目合同提供 independent worlds；
-            # CUDA runtime 保留 Kaleidoscope 使用的底层 multi-world 能力。
+            # CPU 产品范围仍为 Mirror 单 world；Kaleidoscope 使用 CUDA multi-world。
             supports_multiple_worlds=self.execution == "cuda",
             rendering=True,
             dynamic_chain=True,
@@ -203,8 +195,6 @@ class NewtonRuntime:
         )
         self._graph_error: str | None = None
         self._constraint_solver: str | None = None
-        self._contact_pipeline_kind: str | None = None
-        self._contact_pipeline_trigger_labels: tuple[str, ...] = ()
         self._collision_pipeline: object | None = None
         self._contacts: object | None = None
         self._initialized = False
@@ -346,6 +336,7 @@ class NewtonRuntime:
             load_visual_shapes=False,
             skip_mesh_approximation=True,
             default_contact_time_constant_s=self.physics_spec.default_contact_time_constant_s,
+            default_contact_gap_m=self.physics_spec.default_contact_gap_m,
         )
         relation_counts = {
             name: len(parse_mjcf_joint_equalities(getattr(robot, "asset_path", None)))
@@ -402,13 +393,6 @@ class NewtonRuntime:
         # CUDA finalize 与后续分配必须留在 owner stream；CPU 使用同一结构但 scope 是空
         # context，因此不会构造非法的 ``wp.Stream(cpu)``。
         with self._owner_stream_scope():
-            trigger_labels = _colliding_planar_mesh_labels(model)
-            self._contact_pipeline_trigger_labels = trigger_labels
-            self._contact_pipeline_kind = _resolve_contact_pipeline(
-                self.physics_spec.contact_pipeline,
-                trigger_labels=trigger_labels,
-                execution=self.execution,
-            )
             model.set_gravity(self.gravity)
             expectations = _asset_expectations(
                 model=model,
@@ -452,20 +436,25 @@ class NewtonRuntime:
             self._project_all_worlds()
             newton.eval_fk(model, state.joint_q, state.joint_qd, state, None)
 
-            if self._contact_pipeline_kind == "newton":
-                self._collision_pipeline = newton.CollisionPipeline(
-                    model,
-                    broad_phase="explicit",
-                )
-                self._contacts = self._collision_pipeline.contacts()
+            self._collision_pipeline = newton.CollisionPipeline(
+                model,
+                broad_phase="explicit",
+                deterministic=self.physics_spec.collision_deterministic,
+                contact_matching=self.physics_spec.contact_matching,
+            )
+            self._contacts = self._collision_pipeline.contacts()
 
             solver = newton.solvers.SolverMuJoCo(
                 model,
+                deterministic=(
+                    wp.DeterministicMode.RUN_TO_RUN
+                    if self.physics_spec.solver_deterministic
+                    else wp.DeterministicMode.NOT_GUARANTEED
+                ),
                 **_solver_constructor_kwargs(
                     self.physics_spec,
                     world_count=self._num_worlds,
                     constraint_solver=self._constraint_solver,
-                    contact_pipeline=self._contact_pipeline_kind,
                 ),
             )
             self.solver = solver
@@ -614,26 +603,14 @@ class NewtonRuntime:
         """在显式冷边界把 solver persistent state 复制为 JSON-compatible payload。
 
         该接口只供 Mirror snapshot 使用，不属于 Kaleidoscope 热路径。CUDA capture 先在
-        owner stream 上更新 canonical buffer，再做一次显式同步与 D2H；CPU 则复制
-        MuJoCo C API 所有的 float64 buffer。返回值不共享 manager-owned storage。
+        owner stream 上更新 canonical buffer，再做一次显式同步与 D2H；CPU 同步复制
+        Warp float32 buffer。返回值不共享 manager-owned storage。
         """
 
         self._require_initialized()
         self._capture_solver_integration_state()
-        if self.execution == "cuda":
-            self._synchronize_owner_stream()
-            borrowed = self._solver_integration_store.borrow()
-            to_numpy = getattr(borrowed, "numpy", None)
-            if not callable(to_numpy):
-                raise RuntimeError(
-                    "Newton CUDA solver integration state does not expose a host copy"
-                )
-            values = np.asarray(to_numpy(), dtype=np.float32)
-        else:
-            values = np.asarray(
-                self._solver_integration_store.borrow(),
-                dtype=np.float64,
-            )
+        self._synchronize_owner_stream()
+        values = self._solver_integration_store.borrow().numpy()
         payload = {
             "schema": _SOLVER_INTEGRATION_SNAPSHOT_SCHEMA,
             "source_execution": self.execution,
@@ -670,21 +647,16 @@ class NewtonRuntime:
 
         self._require_initialized()
         values, simulation_time = self._solver_integration_host_values(payload)
-        if self.execution == "cuda":
-            import warp as wp
+        import warp as wp
 
-            with self._owner_stream_scope():
-                device_values = wp.array(
-                    values.astype(np.float32, copy=False),
-                    dtype=wp.float32,
-                    device=self.device,
-                )
-                self._solver_integration_store.restore(device_values)
-            self._synchronize_owner_stream()
-        else:
-            self._solver_integration_store.restore(
-                values.astype(np.float64, copy=False)
+        with self._owner_stream_scope():
+            device_values = wp.array(
+                values.astype(np.float32, copy=False),
+                dtype=wp.float32,
+                device=self.device,
             )
+            self._solver_integration_store.restore(device_values)
+        self._synchronize_owner_stream()
         drive = getattr(self, "compliant_drive", None)
         if drive is not None:
             import warp as wp
@@ -878,8 +850,7 @@ class NewtonRuntime:
                 self._simulate()
         else:
             self._simulate()
-        # CUDA packing kernel 不进入 graph capture；CPU 则在 eager step 后调用 MuJoCo C
-        # API。store 在各自 execution 下负责正确的顺序与数据驻留。
+        # 在推进后捕获共享 Warp 积分状态；CUDA packing 不进入 physics graph。
         self._capture_solver_integration_state()
         self._sim_time += self.physics_dt
         for callback in tuple(self._step_callbacks):
@@ -1102,10 +1073,14 @@ class NewtonRuntime:
             "substep_dt_s": self.physics_dt / self.physics_spec.substeps,
             "default_contact_time_constant_s": self.physics_spec.default_contact_time_constant_s,
             "constraint_solver": self._constraint_solver,
-            "contact_pipeline": self._contact_pipeline_kind,
-            "contact_pipeline_trigger_labels": list(
-                self._contact_pipeline_trigger_labels
-            ),
+            "contact_pipeline": "newton",
+            "solver_implementation": "mujoco_warp",
+            "iterations": self.physics_spec.iterations,
+            "line_search_iterations": self.physics_spec.line_search_iterations,
+            "solver_deterministic": self.physics_spec.solver_deterministic,
+            "collision_deterministic": self.physics_spec.collision_deterministic,
+            "contact_matching": self.physics_spec.contact_matching,
+            "default_contact_gap_m": self.physics_spec.default_contact_gap_m,
             "native_joint_equalities": 0 if audit is None else audit.relation_count,
             "native_joint_equalities_per_world": (
                 0 if audit is None else audit.relations_per_world
@@ -1417,173 +1392,11 @@ def _resolve_constraint_solver(
     return "cg"
 
 
-def _resolve_contact_pipeline(
-    configured: str,
-    *,
-    trigger_labels: Sequence[str],
-    execution: str,
-) -> str:
-    """在 model finalize 冷路径选择 MuJoCo 或 Newton 接触检测。
-
-    这里选择的是真实物理接触 pipeline，不是规划碰撞查询；Kaleidoscope 禁用避障并不
-    允许跳过该判定。
-    """
-
-    if configured not in {"auto", "mujoco", "newton"}:
-        raise ValueError(
-            "Newton contact_pipeline must be 'auto', 'mujoco', or "
-            f"'newton', got {configured!r}"
-        )
-    labels = tuple(str(label) for label in trigger_labels)
-    if execution == "cpu":
-        if configured == "newton":
-            raise RuntimeError(
-                "Newton CPU requires contact_pipeline='mujoco' or 'auto'; "
-                "the upstream CPU solver ignores Newton contact buffers"
-            )
-        if labels:
-            raise RuntimeError(
-                "Newton CPU cannot simulate colliding planar mesh geometry because "
-                "MuJoCo C rejects that collider and the CPU solver cannot consume the "
-                f"Newton contact pipeline: labels={list(labels)!r}"
-            )
-        return "mujoco"
-    if execution != "cuda":
-        raise ValueError(f"unsupported Newton execution {execution!r}")
-    if labels and configured == "mujoco":
-        raise RuntimeError(
-            "Newton contact_pipeline='mujoco' does not support colliding "
-            "planar mesh colliders; use 'auto' or 'newton': "
-            f"labels={list(labels)!r}"
-        )
-    if configured == "auto":
-        return "newton" if labels else "mujoco"
-    return configured
-
-
-def _colliding_planar_mesh_labels(model: object) -> tuple[str, ...]:
-    """按 Newton 1.2.1 容差返回参与接触的平面 mesh 标签。"""
-
-    shape_type = _host_array(getattr(model, "shape_type"), dtype=np.int32).reshape(-1)
-    shape_flags = _host_array(getattr(model, "shape_flags"), dtype=np.int32).reshape(-1)
-    shape_group = _host_array(
-        getattr(model, "shape_collision_group"), dtype=np.int32
-    ).reshape(-1)
-    shape_scale = _host_array(getattr(model, "shape_scale"), dtype=np.float64).reshape(
-        -1, 3
-    )
-    shape_sources = tuple(getattr(model, "shape_source"))
-    shape_labels = tuple(str(label) for label in getattr(model, "shape_label"))
-    count = len(shape_type)
-    if not all(
-        len(values) == count
-        for values in (
-            shape_flags,
-            shape_group,
-            shape_scale,
-            shape_sources,
-            shape_labels,
-        )
-    ):
-        raise RuntimeError("Newton shape metadata lengths are inconsistent")
-
-    explicit_pair_shapes = _mujoco_pair_shape_indices(model)
-    labels: list[str] = []
-    for index in range(count):
-        if int(shape_type[index]) not in _NEWTON_MESH_GEO_TYPES:
-            continue
-        uses_contacts = (
-            bool(int(shape_flags[index]) & _NEWTON_COLLIDE_SHAPES_FLAG)
-            and int(shape_group[index]) != 0
-        ) or index in explicit_pair_shapes
-        if not uses_contacts:
-            continue
-        source = shape_sources[index]
-        vertices = np.asarray(getattr(source, "vertices", ()), dtype=np.float64)
-        if vertices.ndim != 2 or vertices.shape[1:] != (3,):
-            raise RuntimeError(
-                "Newton colliding mesh has invalid vertices: "
-                f"label={shape_labels[index]!r}, shape={vertices.shape}"
-            )
-        vertices = vertices * shape_scale[index]
-        extent_axis = vertices.max(axis=0) - vertices.min(axis=0)
-        if _mujoco_mesh_vertices_are_planar(vertices, extent_axis):
-            labels.append(shape_labels[index])
-    return tuple(labels)
-
-
-def _mujoco_pair_shape_indices(model: object) -> set[int]:
-    """收集显式 MuJoCo contact pair 引用的 shape 索引。"""
-
-    counts = getattr(model, "custom_frequency_counts", {})
-    pair_count = int(counts.get("mujoco:pair", 0))
-    attrs = getattr(model, "mujoco", None)
-    if attrs is None or pair_count <= 0:
-        return set()
-    geom1 = getattr(attrs, "pair_geom1", None)
-    geom2 = getattr(attrs, "pair_geom2", None)
-    if geom1 is None or geom2 is None:
-        return set()
-    geom1_values = _host_array(geom1, dtype=np.int32).reshape(-1)
-    geom2_values = _host_array(geom2, dtype=np.int32).reshape(-1)
-    pair_count = min(pair_count, len(geom1_values), len(geom2_values))
-    return {
-        int(shape)
-        for shape in np.concatenate(
-            (geom1_values[:pair_count], geom2_values[:pair_count])
-        )
-        if int(shape) >= 0
-    }
-
-
-def _mujoco_mesh_vertices_are_planar(
-    vertices: np.ndarray,
-    extent_axis: np.ndarray | None = None,
-    eps: float = 1.0e-6,
-) -> bool:
-    """复现 Newton 1.2.1 的 MuJoCo mesh 共面判定，保持 pipeline 选择一致。"""
-
-    if len(vertices) < 3:
-        return False
-    vertices = np.asarray(vertices)
-    if extent_axis is None:
-        extent_axis = vertices.max(axis=0) - vertices.min(axis=0)
-    extent_axis = np.asarray(extent_axis)
-    tolerance = eps * max(float(np.linalg.norm(extent_axis)), eps)
-    if np.all(extent_axis <= tolerance) or np.any(extent_axis <= tolerance):
-        return True
-    if len(vertices) > 64:
-        sample_indices = np.linspace(0, len(vertices) - 1, 64, dtype=np.int32)
-        if not _points_are_planar(vertices[sample_indices], tolerance):
-            return False
-    return _points_are_planar(vertices, tolerance)
-
-
-def _points_are_planar(points: np.ndarray, tolerance: float) -> bool:
-    p0 = points[0]
-    offsets = points - p0
-    distances_from_p0 = np.linalg.norm(offsets, axis=1)
-    p1 = int(np.argmax(distances_from_p0))
-    line_length = distances_from_p0[p1]
-    if line_length <= tolerance:
-        return True
-    line = points[p1] - p0
-    cross = np.cross(offsets, line)
-    cross_lengths = np.linalg.norm(cross, axis=1)
-    p2 = int(np.argmax(cross_lengths))
-    normal_length = cross_lengths[p2]
-    if normal_length <= tolerance * line_length:
-        return True
-    normal = cross[p2] / normal_length
-    return bool(np.all(np.abs(offsets @ normal) <= tolerance))
-
-
 def _solver_constructor_kwargs(
     settings: IsaacNewtonCpuSpec | IsaacNewtonCudaSpec,
     *,
     world_count: int,
     constraint_solver: str,
-    contact_pipeline: str,
 ) -> dict[str, object]:
     """不导入 Newton 即构造生产 ``SolverMuJoCo`` 参数。
 
@@ -1598,26 +1411,16 @@ def _solver_constructor_kwargs(
             "effective Newton constraint solver must be 'newton' or 'cg', "
             f"got {constraint_solver!r}"
         )
-    if contact_pipeline not in {"mujoco", "newton"}:
-        raise ValueError(
-            "effective Newton contact pipeline must be 'mujoco' or "
-            f"'newton', got {contact_pipeline!r}"
-        )
-    cpu_execution = isinstance(settings, IsaacNewtonCpuSpec)
-    if cpu_execution and world_count != 1:
-        raise ValueError("Newton CPU solver requires world_count=1")
-    if cpu_execution and contact_pipeline != "mujoco":
-        raise ValueError("Newton CPU solver requires the MuJoCo contact pipeline")
     return {
-        # CPU 使用一个 MuJoCo C Data；CUDA replicated model 为每个环境保留独立 world。
-        "separate_worlds": False if cpu_execution else world_count > 1,
+        # CPU/CUDA use the same Warp model and independent-world representation.
+        "separate_worlds": world_count > 1,
         "njmax": int(settings.njmax_per_world),
         "nconmax": int(settings.nconmax_per_world),
         "iterations": int(settings.iterations),
         "ls_iterations": int(settings.line_search_iterations),
         "solver": constraint_solver,
-        "use_mujoco_cpu": cpu_execution,
-        "use_mujoco_contacts": contact_pipeline == "mujoco",
+        "use_mujoco_cpu": False,
+        "use_mujoco_contacts": False,
         # 每一拍都先用 Newton generalized state 刷新 MJWarp qpos/qvel。这样完整
         # mjSTATE_INTEGRATION 可以跨 world clone，同时 target world 的绝对 origin 仍由
         # Newton state 决定；Python-side solver step counter 也不进入 snapshot 合同。

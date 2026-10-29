@@ -82,7 +82,7 @@ collision/query world and avoidance service.
 | Product | Engine | Execution | Important consequence |
 | --- | --- | --- | --- |
 | Mirror | PhysX | CPU | Isaac World-backed physics; root CUDA device remains available to RTX and cuRobo |
-| Mirror | Newton | CPU | MuJoCo CPU integration; exactly one product world; root CUDA remains available to RTX/cuRobo |
+| Mirror | Newton | CPU | Newton collision + MuJoCo Warp on CPU; exactly one product world; root CUDA remains available to RTX/cuRobo |
 | Mirror | Newton | CUDA | CUDA stream/graph integration; exactly one product world |
 | Kaleidoscope | PhysX | CUDA | CUDA tensor pipeline and Fabric; headless vector execution |
 | Kaleidoscope | Newton | CUDA | Project-owned Model/State/Control/Solver; one isolated world per environment |

@@ -155,10 +155,6 @@ def test_compute_and_physics_resolve_devices_as_strict_single_facts() -> None:
         )
     with pytest.raises(ValueError, match="world_count=1"):
         IsaacNewtonCpuSpec(world_count=2)
-    with pytest.raises(ValueError, match="contact_pipeline.*auto or mujoco"):
-        IsaacNewtonCpuSpec(
-            contact_pipeline="newton",  # type: ignore[arg-type]
-        )
 
     cpu = IsaacPhysxCpuSpec()
     cuda = IsaacPhysxCudaSpec()
@@ -298,7 +294,7 @@ def test_mirror_newton_spec_reaches_runtime_factory_without_loss(
             iterations=42,
             line_search_iterations=17,
             constraint_solver="cg",
-            contact_pipeline="newton",
+            contact_matching="sticky",
         ),
         app=IsaacAppSpec(
             gui=False,
@@ -338,7 +334,7 @@ def test_mirror_newton_spec_reaches_runtime_factory_without_loss(
     assert solver.iterations == 42
     assert solver.line_search_iterations == 17
     assert solver.constraint_solver == "cg"
-    assert solver.contact_pipeline == "newton"
+    assert solver.contact_matching == "sticky"
     call = result.runtime_calls[0]
     assert call["spec"] is spec
 
@@ -355,7 +351,7 @@ def test_mirror_newton_cpu_spec_reaches_runtime_factory_without_cuda_fields(
             iterations=31,
             line_search_iterations=7,
             constraint_solver="cg",
-            contact_pipeline="mujoco",
+            contact_matching="latest",
         ),
         **_base_session_fields(cuda_device=5),
     )

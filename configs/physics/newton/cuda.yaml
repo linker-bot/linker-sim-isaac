@@ -13,7 +13,6 @@ physics:
   njmax_per_world: 1200
   # 捕获固定 world batch 的 CUDA graph，降低重复 physics step 的 kernel launch 开销。
   use_cuda_graph: true
-  # 每个 physics step 的最少内部子步数，必须 >= 1；增加会按比例提高求解成本。
   # 未显式作者化的接触采用临界阻尼的响应时间（秒），不是关节驱动增益。
   # Newton ke=1/t²、kd=2/t；MuJoCo 正值 solref 仍受 >=2*内部 dt 的 refsafe 约束。
   default_contact_time_constant_s: 0.01
@@ -23,5 +22,9 @@ physics:
   line_search_iterations: 50
   # 约束求解器：auto/cg/newton；auto 由 runtime 选择当前 CUDA 支持的实现。
   constraint_solver: auto
-  # 接触流水线：auto/mujoco/newton；auto 根据 execution 与可用实现选择。
-  contact_pipeline: auto
+  # Newton 碰撞 + MuJoCo Warp，CPU/CUDA 共用。资产显式 gap（含0）优先。
+  default_contact_gap_m: 0.0001
+  # 采用已选候选；后续在相同任务成功率下单独评估性能。
+  solver_deterministic: false
+  collision_deterministic: true
+  contact_matching: disabled

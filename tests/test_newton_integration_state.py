@@ -8,8 +8,7 @@ import numpy as np
 import pytest
 
 from linkerbot_sim.isaac.physics.newton.integration_state import (
-    CpuSolverIntegrationStateStore,
-    CudaSolverIntegrationStateStore,
+    WarpSolverIntegrationStateStore,
     SolverIntegrationStateStore,
     create_solver_integration_state_store,
 )
@@ -61,6 +60,7 @@ def _install_fake_cuda_dependencies(
     warp.bool = bool_dtype
     warp.array = _FakeWarpArray
     warp.ScopedStream = _FakeScopedStream
+    warp.ScopedDevice = _FakeScopedStream
     warp.zeros = lambda shape, *, dtype, device: _FakeWarpArray(
         np.zeros(shape), dtype=dtype, device=device
     )
@@ -119,81 +119,27 @@ def _install_fake_cuda_dependencies(
     return warp, float32, bool_dtype
 
 
-def _install_fake_cpu_mujoco(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    mujoco = ModuleType("mujoco")
-    mujoco.mjtState = SimpleNamespace(
-        mjSTATE_TIME=_StateBits.TIME,
-        mjSTATE_ACT=_StateBits.ACT,
-        mjSTATE_WARMSTART=_StateBits.WARMSTART,
-    )
-    mujoco.mj_stateSize = lambda model, signature: (
-        1 + model.na + model.nv if signature == 41 else 0
-    )
-
-    def get_state(
-        model: object, data: object, values: np.ndarray, signature: int
-    ) -> None:
-        assert signature == 41
-        values[:] = np.concatenate(
-            (
-                np.asarray([data.time], dtype=np.float64),
-                np.asarray(data.act, dtype=np.float64),
-                np.asarray(data.qacc_warmstart, dtype=np.float64),
-            )
-        )
-        assert values.size == 1 + model.na + model.nv
-
-    def set_state(
-        model: object, data: object, values: np.ndarray, signature: int
-    ) -> None:
-        assert signature == 41
-        data.time = float(values[0])
-        data.act[:] = values[1 : 1 + model.na]
-        data.qacc_warmstart[:] = values[1 + model.na :]
-
-    mujoco.mj_getState = get_state
-    mujoco.mj_setState = set_state
-    monkeypatch.setitem(sys.modules, "mujoco", mujoco)
-    return mujoco
-
-
-def _fake_cpu_solver() -> SimpleNamespace:
-    model = SimpleNamespace(na=2, nv=3)
-    data = SimpleNamespace(
-        time=0.0,
-        act=np.zeros(model.na, dtype=np.float64),
-        qacc_warmstart=np.zeros(model.nv, dtype=np.float64),
-        qpos=np.zeros(4, dtype=np.float64),
-        qvel=np.zeros(model.nv, dtype=np.float64),
-        ctrl=np.zeros(2, dtype=np.float64),
-    )
-    return SimpleNamespace(
-        use_mujoco_cpu=True,
-        update_data_interval=1,
-        model=SimpleNamespace(world_count=1),
-        mj_model=model,
-        mj_data=data,
-    )
-
-
 def test_factory_exposes_one_device_neutral_protocol() -> None:
     cpu = create_solver_integration_state_store("cpu")
     cuda = create_solver_integration_state_store("cuda")
 
-    assert isinstance(cpu, CpuSolverIntegrationStateStore)
-    assert isinstance(cuda, CudaSolverIntegrationStateStore)
+    assert isinstance(cpu, WarpSolverIntegrationStateStore)
+    assert isinstance(cuda, WarpSolverIntegrationStateStore)
     assert isinstance(cpu, SolverIntegrationStateStore)
     assert isinstance(cuda, SolverIntegrationStateStore)
     assert cpu.execution == "cpu"
     assert cuda.execution == "cuda"
-    with pytest.raises(ValueError, match="'cpu' or 'cuda'"):
+    with pytest.raises(ValueError, match="cpu or cuda"):
         create_solver_integration_state_store("metal")  # type: ignore[arg-type]
 
 
-def test_cuda_store_keeps_state_device_resident_and_restores_selected_rows(
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+def test_warp_store_keeps_state_device_resident_and_restores_selected_rows(
     monkeypatch: pytest.MonkeyPatch,
+    execution: str,
 ) -> None:
     warp, float32, bool_dtype = _install_fake_cuda_dependencies(monkeypatch)
+    device = "cpu" if execution == "cpu" else "cuda:0"
     width = 6
     data = SimpleNamespace(
         nworld=2,
@@ -209,21 +155,21 @@ def test_cuda_store_keeps_state_device_resident_and_restores_selected_rows(
         mjw_model=object(),
         mjw_data=data,
     )
-    store = CudaSolverIntegrationStateStore()
-    owner_stream = object()
+    store = WarpSolverIntegrationStateStore(execution=execution)
+    owner_stream = object() if execution == "cuda" else None
     store.initialize(
         solver,
         world_count=2,
-        device="cuda:0",
+        device=device,
         stream=owner_stream,
     )
 
     assert store.signature == 41
     assert store.width == width
     assert store.activation_width == 2
-    saved = _FakeWarpArray(data.persistent, dtype=float32, device="cuda:0")
+    saved = _FakeWarpArray(data.persistent, dtype=float32, device=device)
     data.persistent.fill(0.0)
-    selected = _FakeWarpArray([False, True], dtype=bool_dtype, device="cuda:0")
+    selected = _FakeWarpArray([False, True], dtype=bool_dtype, device=device)
     store.restore(saved, active_world_mask=selected)
 
     np.testing.assert_array_equal(data.persistent[0], np.zeros(width))
@@ -257,7 +203,7 @@ def test_cuda_store_rejects_host_or_wrong_device_payloads(
             persistent=np.zeros((1, 2), dtype=np.float32),
         ),
     )
-    store = CudaSolverIntegrationStateStore()
+    store = WarpSolverIntegrationStateStore(execution="cuda")
     store.initialize(solver, world_count=1, device="cuda:0", stream=object())
 
     with pytest.raises(TypeError, match="Warp float32"):
@@ -270,149 +216,46 @@ def test_cuda_store_rejects_host_or_wrong_device_payloads(
         store.validate(store.borrow(), active_world_mask=wrong_mask)
 
 
-def test_cpu_store_restores_only_persistent_fields_and_commits_baseline(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _install_fake_cpu_mujoco(monkeypatch)
-    solver = _fake_cpu_solver()
-    store = CpuSolverIntegrationStateStore()
-    store.initialize(solver, world_count=1, device="cpu", stream=None)
-
-    solver.mj_data.time = 1.25
-    solver.mj_data.act[:] = [2.0, 3.0]
-    solver.mj_data.qacc_warmstart[:] = [4.0, 5.0, 6.0]
-    store.capture()
-    saved = np.asarray(store.borrow()).copy()
-
-    solver.mj_data.time = -1.0
-    solver.mj_data.act.fill(-2.0)
-    solver.mj_data.qacc_warmstart.fill(-3.0)
-    # 这些字段由 Newton State/Control 拥有，persistent restore 绝不能触碰。
-    solver.mj_data.qpos[:] = [10.0, 11.0, 12.0, 13.0]
-    solver.mj_data.qvel[:] = [20.0, 21.0, 22.0]
-    solver.mj_data.ctrl[:] = [30.0, 31.0]
-    store.restore(saved, active_world_mask=np.asarray([True]))
-
-    assert solver.mj_data.time == pytest.approx(1.25)
-    np.testing.assert_array_equal(solver.mj_data.act, [2.0, 3.0])
-    np.testing.assert_array_equal(solver.mj_data.qacc_warmstart, [4.0, 5.0, 6.0])
-    np.testing.assert_array_equal(solver.mj_data.qpos, [10.0, 11.0, 12.0, 13.0])
-    np.testing.assert_array_equal(solver.mj_data.qvel, [20.0, 21.0, 22.0])
-    np.testing.assert_array_equal(solver.mj_data.ctrl, [30.0, 31.0])
-
-    store.commit()
-    solver.mj_data.time = 99.0
-    solver.mj_data.act.fill(99.0)
-    solver.mj_data.qacc_warmstart.fill(99.0)
-    store.reset()
-    np.testing.assert_array_equal(np.asarray(store.borrow()), saved)
-
-
-def test_cpu_false_selector_is_a_valid_noop(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _install_fake_cpu_mujoco(monkeypatch)
-    solver = _fake_cpu_solver()
-    store = CpuSolverIntegrationStateStore()
-    store.initialize(solver, world_count=1, device="cpu")
-    values = np.asarray(store.borrow()).copy()
-    solver.mj_data.time = 7.0
-
-    store.restore(values, active_world_mask=False)
-    assert solver.mj_data.time == pytest.approx(7.0)
-    store.restore(values, active_world_mask=np.asarray([False]))
-    assert solver.mj_data.time == pytest.approx(7.0)
-
-
-def test_cpu_accepts_only_single_world_host_selectors(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _install_fake_cpu_mujoco(monkeypatch)
-    solver = _fake_cpu_solver()
-    store = CpuSolverIntegrationStateStore()
-    store.initialize(solver, world_count=1, device="cpu")
-    state = store.borrow()
-
-    with pytest.raises(ValueError, match=r"shape \(1,\)"):
-        store.validate(state, active_world_mask=np.asarray([True, False]))
-    with pytest.raises(TypeError, match="NumPy bool"):
-        store.validate(state, active_world_mask=np.asarray([1], dtype=np.int64))
-    with pytest.raises(TypeError, match="float64"):
-        store.validate(np.zeros((1, store.width), dtype=np.float32))
-
-    # Warp CPU selector 可以在 CPU 边界读取；CUDA selector 必须被明确拒绝，不能隐式下载。
-    bool_dtype = object()
-    warp = ModuleType("warp")
-    warp.array = _FakeWarpArray
-    warp.bool = bool_dtype
-    monkeypatch.setitem(sys.modules, "warp", warp)
-    store.validate(
-        state,
-        active_world_mask=_FakeWarpArray([True], dtype=bool_dtype, device="cpu"),
-    )
-    with pytest.raises(ValueError, match="cannot reside on CUDA"):
-        store.validate(
-            state,
-            active_world_mask=_FakeWarpArray([True], dtype=bool_dtype, device="cuda:0"),
-        )
-
-
-@pytest.mark.parametrize(
-    ("world_count", "device", "stream", "message"),
-    (
-        (2, "cpu", None, "exactly one world"),
-        (1, "cuda:0", None, "device='cpu'"),
-        (1, "cpu", object(), "stream=None"),
-    ),
-)
-def test_cpu_store_fails_closed_before_allocating_invalid_runtime(
-    world_count: int,
-    device: str,
-    stream: object | None,
-    message: str,
-) -> None:
-    store = CpuSolverIntegrationStateStore()
-
-    with pytest.raises(ValueError, match=message):
-        store.initialize(
-            _fake_cpu_solver(),
-            world_count=world_count,
-            device=device,
-            stream=stream,
-        )
-
-
-def test_real_mujoco_cpu_state_round_trip_excludes_newton_owned_fields() -> None:
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+def test_real_warp_state_round_trip_excludes_newton_owned_fields(execution):
+    wp = pytest.importorskip("warp")
     mujoco = pytest.importorskip("mujoco")
+    mjw = pytest.importorskip("mujoco_warp")
+    if execution == "cuda" and not wp.is_cuda_available():
+        pytest.skip("CUDA unavailable")
+    device = "cpu" if execution == "cpu" else "cuda:0"
+    stream = wp.Stream(device) if execution == "cuda" else None
     model = mujoco.MjModel.from_xml_string(
-        "<mujoco><worldbody><body><joint name='joint' type='hinge'/>"
-        "<geom type='sphere' size='0.1' mass='1'/></body></worldbody>"
-        "<actuator><motor joint='joint'/></actuator></mujoco>"
+        "<mujoco><worldbody><body><joint name='j'/><geom type='sphere' size='.1' mass='1'/>"
+        "</body></worldbody><actuator><motor joint='j'/></actuator></mujoco>"
     )
-    data = mujoco.MjData(model)
+    with wp.ScopedDevice(device):
+        wm = mjw.put_model(model)
+        wd = mjw.make_data(model, nworld=1, nconmax=4, njmax=8)
     solver = SimpleNamespace(
-        use_mujoco_cpu=True,
+        use_mujoco_cpu=False,
         update_data_interval=1,
-        model=SimpleNamespace(world_count=1),
         mj_model=model,
-        mj_data=data,
+        mjw_model=wm,
+        mjw_data=wd,
     )
-    store = CpuSolverIntegrationStateStore()
-    store.initialize(solver, world_count=1, device="cpu")
-
-    data.time = 2.5
-    data.qacc_warmstart[:] = 4.0
-    store.capture()
-    saved = np.asarray(store.borrow()).copy()
-    data.time = 0.0
-    data.qacc_warmstart[:] = 0.0
-    data.qpos[:] = 7.0
-    data.qvel[:] = 8.0
-    data.ctrl[:] = 9.0
-    store.restore(saved)
-
-    assert data.time == pytest.approx(2.5)
-    np.testing.assert_array_equal(data.qacc_warmstart, [4.0])
-    np.testing.assert_array_equal(data.qpos, [7.0])
-    np.testing.assert_array_equal(data.qvel, [8.0])
-    np.testing.assert_array_equal(data.ctrl, [9.0])
+    store = create_solver_integration_state_store(execution)
+    store.initialize(solver, world_count=1, device=device, stream=stream)
+    with store._scope():
+        wd.time.fill_(2.5)
+        wd.qacc_warmstart.fill_(4.0)
+        store.capture()
+        saved = wp.clone(store.borrow())
+        wd.time.zero_()
+        wd.qacc_warmstart.zero_()
+        wd.qpos.fill_(7.0)
+        wd.qvel.fill_(8.0)
+        wd.ctrl.fill_(9.0)
+        store.restore(saved)
+    if stream is not None:
+        wp.synchronize_stream(stream)
+    assert wd.time.numpy()[0] == pytest.approx(2.5)
+    np.testing.assert_array_equal(wd.qacc_warmstart.numpy(), [[4.0]])
+    np.testing.assert_array_equal(wd.qpos.numpy(), [[7.0]])
+    np.testing.assert_array_equal(wd.qvel.numpy(), [[8.0]])
+    np.testing.assert_array_equal(wd.ctrl.numpy(), [[9.0]])

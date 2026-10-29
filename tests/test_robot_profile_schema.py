@@ -56,7 +56,7 @@ def test_all_bundled_robot_yaml_loads_strictly() -> None:
         kind = profile.kind
         binding = profile.curobo.binding
         assert asset.asset_path == execution.robot.asset_path
-        assert execution.controlled_joints == ("all",)
+        assert execution.controlled_joints == profile.joint_groups.command_joint_names
         assert binding.enabled is (kind.value != "hand")
 
 
