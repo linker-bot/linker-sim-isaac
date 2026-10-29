@@ -28,3 +28,24 @@ physics:
   solver_deterministic: false
   collision_deterministic: true
   contact_matching: disabled
+  # Any AR5/O6 assembly activates this policy. Cone/impratio affect the whole scene;
+  # other robot materials remain authored. No AR5/O6 means no contact override.
+  ar5_o6_contact:
+    cone: elliptic
+    impratio: 100.0
+    solref: [0.004, 1.0]
+    friction_gain: 1000.0
+    margin_m: 0.0
+    restitution: 0.0
+    hand:
+      friction: [4.0, 0.0, 0.0]
+      solimp: [0.95, 0.95, 0.001, 0.5, 2.0]
+      condim: 4
+    object:
+      friction: [1.0, 0.005, 0.0]
+      solimp: [0.9, 0.95, 0.001, 0.5, 2.0]
+      condim: 4
+    station:
+      friction: [1.0, 0.0, 0.0]
+      solimp: [0.9, 0.95, 0.001, 0.5, 2.0]
+      condim: 4

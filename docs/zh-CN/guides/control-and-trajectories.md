@@ -157,7 +157,8 @@ PCHIP/重定时策略。每个原生物理步前将估计 PD 输出保护在 199
 选定机器人本体及附件启用重力补偿，物体保留重力。臂/手 armature 为 0.01/0.001，
 关节库仑摩擦为零，主从 equality 使用 `solref=(0.002,1)`、
 `solimp=(0.999,0.999,0.001,0.5,2)`。这些驱动设置只覆盖选定机器人根节点；
-本步不修改几何、质量惯量、关节限角和接触摩擦参数。CPU/CUDA 管线、gap 回退值及
+几何、质量惯量和关节限角继续由资产定义。独立的 [AR5/O6 接触配置](../reference/configuration.md#ar5o6-接触配置)
+设置场景求解参数和按部件区分的碰撞材质。CPU/CUDA 管线、gap 回退值及
 求解器默认值见[Newton 共用设置](../reference/configuration.md)。
 
 运行 `just smoke-newton-drive` 验证 CPU/CUDA 的正式 Mirror 运动入口：手部声明顺序、

@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Enable the selected contact policy on Newton CPU/CUDA whenever an AR5/O6 assembly is present: scene-wide elliptic cone/impratio 100, role-scoped friction/impedance, and condim 4 for every covered material. Other robots keep their materials; shared objects/table and global solver settings still affect mixed scenes. Preserve asset-explicit gap, original geometry, drive settings and 100/50 iteration limits. See the configuration reference for mixing and override scope.
+
 - Make virtual motors and compliant output the Newton default for AR5/O6 and camera assemblies. Bind controller vectors by declared names and standardize L6/O6 command order to thumb flexion, thumb lateral motion, then index/middle/ring/pinky flexion. Preserve actual names (L6 `thumb_cmc_roll`, O6 `thumb_cmc_yaw`); existing L6 flat arrays must be reordered. L6 drive settings and PhysX dynamics remain unchanged.
 - Unify Newton CPU/CUDA on Newton collisions + MuJoCo Warp, removing the native MuJoCo CPU path and `contact_pipeline` selector. Use shared Warp integration-state storage. Keep iteration limits 100/50, solver determinism off, collision determinism on, contact matching disabled; default unauthored gap to 0.0001 m while preserving explicit asset values (including zero). Revalidate CPU performance and task outcomes; friction/impedance and asset corrections follow separately.
 

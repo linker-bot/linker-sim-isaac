@@ -497,6 +497,7 @@ def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     manager.execution = "cuda"
     manager.device = "cuda:0"
     manager._num_worlds = 1
+    manager._contact_material_counts = {}
     manager._constraint_solver = "cg"
     manager.native_master_follower_audit = None
     manager._graph_state = "disabled"

@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- Newton CPU/CUDA 场景只要包含 AR5/O6 即启用已选接触配置：全场景 elliptic/impratio=100，按部件配置摩擦/阻抗，覆盖材质的 condim 统一为4。其他机器人自身材质保留，但混合场景仍受共享物体/桌面材质及全局参数影响。保留资产显式gap、原始几何、驱动参数和100/50迭代上限；混合与覆盖范围见配置参考。
+
 - AR5/O6及相机组合的Newton默认采用虚拟电机和柔顺输出。所有控制器参数数组按声明名称绑定，L6/O6命令顺序统一为拇指弯曲、拇指侧摆、食指/中指/无名指/小指弯曲。保留真实名称（L6 `thumb_cmc_roll`、O6 `thumb_cmc_yaw`），旧L6数组需重排；L6驱动设置及PhysX动力学不变。
 - Newton CPU/CUDA统一为Newton碰撞+MuJoCo Warp，删除原生MuJoCo CPU及contact_pipeline选择，积分状态共用Warp实现。迭代上限100/50、求解器确定性关闭、碰撞确定性开启、接触匹配disabled；未指定gap默认0.0001m，资产显式值（含0）优先。需复验CPU耗时及任务效果，摩擦/阻抗和资产修正另行处理。
 

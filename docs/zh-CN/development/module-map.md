@@ -204,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends 层 trajectory adapter 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends 层 warp compat 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/motion-planning.md) |
 
-### isaac (36)
+### isaac (37)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -222,6 +222,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.physics.newton` | isaac_infrastructure | isaac 层 newton 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.compliant_drive` | isaac_infrastructure | isaac 层 compliant drive 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.constraints` | isaac_infrastructure | isaac 层 constraints 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.newton.contacts` | isaac_infrastructure | isaac 层 contacts 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.integration_state` | isaac_infrastructure | isaac 层 integration state 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.manager` | isaac_infrastructure | 物理 owner 注册与生命周期协调 | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.render` | isaac_infrastructure | isaac 层 render 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |

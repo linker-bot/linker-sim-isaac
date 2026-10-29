@@ -194,6 +194,7 @@ class NewtonRuntime:
             else "disabled"
         )
         self._graph_error: str | None = None
+        self._contact_material_counts: dict[str, int] = {}
         self._constraint_solver: str | None = None
         self._collision_pipeline: object | None = None
         self._contacts: object | None = None
@@ -365,6 +366,17 @@ class NewtonRuntime:
             configure_compliant_drives,
         )
 
+        from linkerbot_sim.isaac.physics.newton.contacts import configure_contacts
+
+        contact = self.physics_spec.ar5_o6_contact
+        self._contact_material_counts = configure_contacts(
+            self.replication.builder, robots, object_handles, roots, contact
+        )
+        contact_options = (
+            {"cone": contact.cone, "impratio": contact.impratio}
+            if self._contact_material_counts and contact is not None
+            else {}
+        )
         drive_layout = configure_compliant_drives(
             self.replication.builder, robots, drive_profiles or {}
         )
@@ -451,6 +463,7 @@ class NewtonRuntime:
                     if self.physics_spec.solver_deterministic
                     else wp.DeterministicMode.NOT_GUARANTEED
                 ),
+                **contact_options,
                 **_solver_constructor_kwargs(
                     self.physics_spec,
                     world_count=self._num_worlds,
@@ -1081,6 +1094,15 @@ class NewtonRuntime:
             "collision_deterministic": self.physics_spec.collision_deterministic,
             "contact_matching": self.physics_spec.contact_matching,
             "default_contact_gap_m": self.physics_spec.default_contact_gap_m,
+            "ar5_o6_contact": (
+                {
+                    "material_shape_counts": dict(self._contact_material_counts),
+                    "cone": str(self.solver.mj_model.opt.cone),
+                    "impratio": float(self.solver.mj_model.opt.impratio),
+                }
+                if self._contact_material_counts
+                else None
+            ),
             "native_joint_equalities": 0 if audit is None else audit.relation_count,
             "native_joint_equalities_per_world": (
                 0 if audit is None else audit.relations_per_world

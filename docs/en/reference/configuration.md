@@ -440,7 +440,54 @@ Explicit asset gap values, **including zero**, take precedence over the fallback
 The default is applied before import; shapes are not overwritten after import.
 Read back the resulting native `geom_gap` when validating an asset. These are the
 selected starting settings; performance tuning must be evaluated alongside task
-outcomes. This step does not change friction/impedance or asset geometry/limits.
+outcomes. Asset geometry and joint limits are unchanged by these runtime settings.
+
+### AR5/O6 contact policy
+
+Both Newton leaves include `ar5_o6_contact`. The policy is applied once before
+model finalization when **any AR5/O6 assembly**, including camera variants, is
+present. It also applies to mixed O6/L6 scenes and every replicated world.
+Without a supported O6 assembly the policy is inactive. PhysX is unaffected.
+Set `ar5_o6_contact: null` in a custom physics leaf to disable this override.
+
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `cone` / `impratio` | `elliptic` / `100` | Entire solver scene, including other robots and object/table contacts |
+| `condim` | `4` for all three roles below | Each configured collider; normal, two sliding and one torsional constraint; no rolling constraints |
+| `solref` | `(0.004, 1)` | Normal contact reference on configured colliders |
+| `friction_gain` | `1000` | Newton tangential gain `kf` on configured colliders; used to generate the friction reference |
+| `margin_m` / `restitution` | `0` / `0` | Configured colliders |
+| `geom_priority` / `geom_solmix` | `0` / `1` | Equal material priority and equal impedance mixing weights |
+| `gap` | Existing asset value, otherwise `0.0001 m` | Separate import policy; this material override does not rewrite it |
+
+| Role | Colliders | Sliding / torsional / rolling friction | `solimp` |
+| --- | --- | --- | --- |
+| `hand` | All links of the selected O6 hands, including palms | `(4, 0, 0)` | `(0.95, 0.95, 0.001, 0.5, 2)` |
+| `object` | Dynamic scene objects and dynamic chains | `(1, 0.005, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+| `station` | Selected AR5 arms/accessories, static objects, table and remaining scene colliders | `(1, 0, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+
+Other robots retain their own collider material values. They still use the global
+cone/impratio, and contacts with a configured object use both sides' materials.
+This is a scene material policy, not an override limited to O6–object contact pairs:
+object/table contacts also change. Covered material values override the imported
+values; geometry, inertia, collision filtering and explicit asset **gap** are preserved.
+
+With equal priority, the Newton bridge takes the componentwise maximum friction
+and maximum dimension, and blends impedance using `geom_solmix`. O6–object contact
+therefore has sliding friction **4**, torsional friction **0.005 m**, `condim=4`, and
+`solimp=(0.925,0.95,0.001,0.5,2)`. Zero authored torsional friction is bounded by the
+upstream numerical floor (`1e-5 m`) when it is needed; it is not a calibrated pad radius.
+The raw normal reference is `(0.004,1)`, subject to the solver's timestep safety
+bound (at 480 Hz the time constant is at least `2/480 s`). Friction reference is
+computed separately from `kf`, body weights and `impratio`; it is not copied from
+normal `solref`. A larger `impratio` does not guarantee zero slip.
+
+Newton collisions remain in use on CPU/CUDA. No MuJoCo `MULTICCD` switch, contact
+matching, iteration budget, drive gain, geometry or asset file is changed by this
+policy. Older experiments that forced every gap to 0.0001 m are not an exact
+reproduction of assets with explicit gap zero. Runtime diagnostics expose activation,
+material shape counts and the solver cone/impratio. `just smoke-newton-contact`
+checks actual CPU/CUDA material mixing in addition to contact integration.
 
 ### Newton contact integration
 

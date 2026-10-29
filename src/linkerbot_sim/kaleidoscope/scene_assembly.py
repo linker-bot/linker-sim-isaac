@@ -389,6 +389,7 @@ def session_spec_from_config(
             solver_deterministic=physics_source.solver_deterministic,
             collision_deterministic=physics_source.collision_deterministic,
             contact_matching=physics_source.contact_matching,
+            ar5_o6_contact=physics_source.ar5_o6_contact,
         )
     else:
         raise ValueError(

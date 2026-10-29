@@ -1277,6 +1277,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             solver_deterministic=source.solver_deterministic,
             collision_deterministic=source.collision_deterministic,
             contact_matching=source.contact_matching,
+            ar5_o6_contact=source.ar5_o6_contact,
         )
     else:
         source = config.physics
@@ -1296,6 +1297,7 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             solver_deterministic=source.solver_deterministic,
             collision_deterministic=source.collision_deterministic,
             contact_matching=source.contact_matching,
+            ar5_o6_contact=source.ar5_o6_contact,
         )
     render_resources = bool(
         render.enabled
