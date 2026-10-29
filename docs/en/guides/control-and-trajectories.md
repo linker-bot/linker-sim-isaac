@@ -289,9 +289,10 @@ Robot bodies and mounted accessories have gravity compensation; objects retain
 gravity. Arm/hand armature is 0.01/0.001, joint Coulomb friction is zero, and native
 follower equality uses `solref=(0.002,1)`,
 `solimp=(0.999,0.999,0.001,0.5,2)`. These drive-profile overrides apply only to
-selected robot roots. Geometry, mass/inertia, joint limits, contact/friction
-parameters remain unchanged in this step. CPU/CUDA pipeline, gap fallback and
-solver defaults are documented in the [shared Newton settings](../reference/configuration.md#shared-newton-pipeline-defaults).
+selected robot roots. Geometry, mass/inertia and joint limits remain asset facts.
+The separate [AR5/O6 contact policy](../reference/configuration.md#ar5o6-contact-policy)
+sets scene solver options and role-specific collider materials. CPU/CUDA pipeline,
+gap fallback and solver defaults are documented in the [shared Newton settings](../reference/configuration.md#shared-newton-pipeline-defaults).
 
 Run `just smoke-newton-drive` to verify public Mirror motion commands on CPU and
 CUDA: declared hand order, arm velocity forwarding, eight physics substeps per

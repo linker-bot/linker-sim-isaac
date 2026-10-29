@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import isfinite
-from typing import Literal, TypeAlias
+from typing import TYPE_CHECKING, Literal, TypeAlias
+
+
+if TYPE_CHECKING:
+    from linkerbot_sim.configuration.physics import NewtonContactSettings
 
 
 PhysicsKind: TypeAlias = Literal[
@@ -83,6 +87,7 @@ class IsaacNewtonCudaSpec:
     solver_deterministic: bool = False
     collision_deterministic: bool = True
     contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
+    ar5_o6_contact: NewtonContactSettings | None = None
     kind: Literal["newton_cuda"] = "newton_cuda"
 
     def __post_init__(self) -> None:
@@ -145,6 +150,7 @@ class IsaacNewtonCpuSpec:
     solver_deterministic: bool = False
     collision_deterministic: bool = True
     contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
+    ar5_o6_contact: NewtonContactSettings | None = None
     kind: Literal["newton_cpu"] = "newton_cpu"
 
     def __post_init__(self) -> None:

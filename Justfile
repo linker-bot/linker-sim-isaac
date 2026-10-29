@@ -158,7 +158,7 @@ smoke-mirror-task-flow:
 
 # Native drop and within-step contact creation, using the pinned Newton runtime.
 smoke-newton-contact:
-    {{python}} -m pytest -q tests/test_newton_contact_dynamics.py tests/test_newton_manager.py
+    {{python}} -m pytest -q tests/test_newton_contact_dynamics.py tests/test_newton_contact_materials.py tests/test_newton_manager.py
 
 # Public motion commands, velocity forwarding, interpolation and clocks on both devices.
 smoke-newton-drive:

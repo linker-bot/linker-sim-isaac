@@ -16,6 +16,7 @@ from .common import (
     ConfigurationError,
     as_bool,
     as_float,
+    as_float_tuple,
     as_int,
     as_string,
     require_keys,
@@ -200,6 +201,99 @@ class PhysxCudaSettings:
         )
 
 
+@dataclass(frozen=True)
+class NewtonContactMaterial:
+    """One collision role; MuJoCo mixes the two colliding materials."""
+
+    friction: tuple[float, ...]
+    solimp: tuple[float, ...]
+    condim: int
+
+    @classmethod
+    def from_mapping(cls, value: object, *, label: str) -> NewtonContactMaterial:
+        data = strict_mapping(value, label=label)
+        require_keys(data, required={"friction", "solimp", "condim"}, label=label)
+        friction = as_float_tuple(data["friction"], label=f"{label}.friction", length=3)
+        solimp = as_float_tuple(data["solimp"], label=f"{label}.solimp", length=5)
+        condim = as_int(data["condim"], label=f"{label}.condim")
+        if any(v < 0 for v in friction):
+            raise ConfigurationError(f"{label}.friction must be non-negative")
+        if not (
+            0 < solimp[0] <= solimp[1] < 1
+            and solimp[2] > 0
+            and 0 < solimp[3] < 1
+            and solimp[4] >= 1
+        ):
+            raise ConfigurationError(f"{label}.solimp is outside the supported range")
+        if condim not in {1, 3, 4, 6}:
+            raise ConfigurationError(f"{label}.condim must be 1, 3, 4 or 6")
+        return cls(friction=friction, solimp=solimp, condim=condim)
+
+
+@dataclass(frozen=True)
+class NewtonContactSettings:
+    """AR5/O6-scoped material policy and scene-wide friction solver options."""
+
+    cone: str
+    impratio: float
+    solref: tuple[float, ...]
+    friction_gain: float
+    margin_m: float
+    restitution: float
+    hand: NewtonContactMaterial
+    object: NewtonContactMaterial
+    station: NewtonContactMaterial
+
+    @classmethod
+    def from_mapping(cls, value: object, *, label: str) -> NewtonContactSettings:
+        data = strict_mapping(value, label=label)
+        require_keys(
+            data,
+            required={
+                "cone",
+                "impratio",
+                "solref",
+                "friction_gain",
+                "margin_m",
+                "restitution",
+                "hand",
+                "object",
+                "station",
+            },
+            label=label,
+        )
+        solref = as_float_tuple(data["solref"], label=f"{label}.solref", length=2)
+        if any(v <= 0 for v in solref):
+            raise ConfigurationError(
+                f"{label}.solref requires positive time constant and damping ratio"
+            )
+        return cls(
+            cone=as_string(
+                data["cone"], label=f"{label}.cone", choices={"elliptic", "pyramidal"}
+            ),
+            impratio=as_float(
+                data["impratio"], label=f"{label}.impratio", strictly_positive=True
+            ),
+            solref=solref,
+            friction_gain=as_float(
+                data["friction_gain"], label=f"{label}.friction_gain", minimum=0
+            ),
+            margin_m=as_float(data["margin_m"], label=f"{label}.margin_m", minimum=0),
+            restitution=as_float(
+                data["restitution"], label=f"{label}.restitution", minimum=0, maximum=1
+            ),
+            hand=NewtonContactMaterial.from_mapping(
+                data["hand"], label=f"{label}.hand"
+            ),
+            object=NewtonContactMaterial.from_mapping(
+                data["object"], label=f"{label}.object"
+            ),
+            station=NewtonContactMaterial.from_mapping(
+                data["station"], label=f"{label}.station"
+            ),
+        )
+
+
 _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
     {
         "nconmax_per_world",
@@ -237,6 +331,7 @@ class _NewtonCommonValues(TypedDict):
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    ar5_o6_contact: NewtonContactSettings | None
 
 
 def _newton_common_from_mapping(
@@ -245,6 +340,13 @@ def _newton_common_from_mapping(
     """只解析两种 execution 共有的容量与求解器字段。"""
 
     return _NewtonCommonValues(
+        ar5_o6_contact=(
+            NewtonContactSettings.from_mapping(
+                mapping["ar5_o6_contact"], label=f"{label}.ar5_o6_contact"
+            )
+            if mapping.get("ar5_o6_contact") is not None
+            else None
+        ),
         nconmax_per_world=as_int(
             mapping["nconmax_per_world"],
             label=f"{label}.nconmax_per_world",
@@ -354,6 +456,7 @@ class NewtonCudaSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cuda":
@@ -373,7 +476,9 @@ class NewtonCudaSettings:
             "execution",
             "use_cuda_graph",
         }
-        require_keys(mapping, required=required, label=label)
+        require_keys(
+            mapping, required=required, optional={"ar5_o6_contact"}, label=label
+        )
         return cls(
             engine=as_string(
                 mapping["engine"], label=f"{label}.engine", choices={"newton"}
@@ -404,6 +509,7 @@ class NewtonCpuSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cpu":
@@ -417,7 +523,9 @@ class NewtonCpuSettings:
         cls, mapping: Mapping[str, object], *, label: str
     ) -> "NewtonCpuSettings":
         required = _NEWTON_COMMON_REQUIRED_KEYS | {"engine", "execution"}
-        require_keys(mapping, required=required, label=label)
+        require_keys(
+            mapping, required=required, optional={"ar5_o6_contact"}, label=label
+        )
         common = _newton_common_from_mapping(mapping, label=label)
         return cls(
             engine=as_string(
