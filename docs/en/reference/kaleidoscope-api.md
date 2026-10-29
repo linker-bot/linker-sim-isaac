@@ -152,6 +152,11 @@ then appended by the assembled task:
 | `object.pose_local_wxyz` | `(N, 7)`, environment-local XYZ position followed by a `wxyz` quaternion. |
 | `object.com_velocity` | `(N, 6)`, object center-of-mass linear and angular velocity. |
 
+The default Newton AR5/O6 `newton_compliant` profile additionally binds the float64
+`controller.virtual_shaft` matrix (virtual references, velocity history, interval
+endpoints and command substep phase). Preserve its dtype in state transfers; it
+participates in snapshot, restore, clone and selected reset.
+
 Newton also binds the backend-private `solver.persistent` matrix. It stores
 per-world SolverMuJoCo TIME, ACT, and WARMSTART state on CUDA and participates in
 default get/set, snapshot/restore, reset, and clone operations. PhysX has no matching

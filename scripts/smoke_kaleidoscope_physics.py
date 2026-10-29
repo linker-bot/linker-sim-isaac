@@ -925,93 +925,51 @@ def _read_newton_contact_report(env: object) -> dict[str, object]:
     synchronize()
     diagnostics = dict(runtime.diagnostics())
     pipeline = str(diagnostics["contact_pipeline"])
-    if pipeline == "newton":
-        contacts = getattr(runtime, "_contacts", None)
-        model = getattr(runtime, "model", None)
-        count_values = _numpy_int_vector(
-            getattr(contacts, "rigid_contact_count", None),
-            label="Newton rigid contact count",
-        )
-        if count_values.shape != (1,):
-            raise RuntimeError("Newton rigid contact count must be scalar")
-        contact_count = int(count_values[0])
-        capacity = int(getattr(contacts, "rigid_contact_max", 0))
-        if contact_count <= 0:
-            raise RuntimeError("Newton collision pipeline produced no contacts")
-        if capacity <= 0 or contact_count >= capacity:
-            raise RuntimeError(
-                "Newton raw contact capacity exhausted: "
-                f"count={contact_count}, capacity={capacity}"
-            )
-        shape0 = _numpy_int_vector(
-            getattr(contacts, "rigid_contact_shape0", None),
-            label="Newton contact shape0",
-            allow_negative_one=True,
-        )[:contact_count]
-        shape1 = _numpy_int_vector(
-            getattr(contacts, "rigid_contact_shape1", None),
-            label="Newton contact shape1",
-            allow_negative_one=True,
-        )[:contact_count]
-        shape_world = _numpy_int_vector(
-            getattr(model, "shape_world", None),
-            label="Newton shape worlds",
-            allow_negative_one=True,
-        )
-        if np.any(shape0 < 0) or np.any(shape1 < 0):
-            raise RuntimeError("active Newton contacts contain invalid shape ids")
-        if np.any(shape0 >= shape_world.size) or np.any(shape1 >= shape_world.size):
-            raise RuntimeError("active Newton contact shape id exceeds model metadata")
-        world0 = shape_world[shape0]
-        world1 = shape_world[shape1]
-        cross_world = (world0 >= 0) & (world1 >= 0) & (world0 != world1)
-        if np.any(cross_world):
-            raise RuntimeError("Newton produced a cross-world physical contact")
-        contact_world = np.where(world0 >= 0, world0, world1)
-        if np.any(contact_world < 0) or np.any(contact_world >= env.num_envs):
-            raise RuntimeError("Newton contact cannot be assigned to an env world")
-        per_world = np.bincount(contact_world, minlength=env.num_envs)[: env.num_envs]
-        if not np.all(per_world > 0):
-            inactive = int(np.count_nonzero(per_world == 0))
-            raise RuntimeError(
-                f"Newton found no physical contacts in {inactive} world(s)"
-            )
-        return {
-            "performed": True,
-            "pipeline": pipeline,
-            "active_worlds": int(np.count_nonzero(per_world)),
-            "total_contacts": contact_count,
-            "min_contacts": int(per_world.min()),
-            "max_contacts": int(per_world.max()),
-            "raw_contact_capacity": capacity,
-        }
-    if pipeline != "mujoco":
-        raise RuntimeError(f"unsupported Newton contact pipeline {pipeline!r}")
-    solver = getattr(runtime, "solver", None)
+    contacts = getattr(runtime, "_contacts", None)
+    model = getattr(runtime, "model", None)
     count_values = _numpy_int_vector(
-        getattr(getattr(solver, "mjw_data", None), "nacon", None),
-        label="MuJoCo-Warp contact count",
+        getattr(contacts, "rigid_contact_count", None),
+        label="Newton rigid contact count",
     )
     if count_values.shape != (1,):
-        raise RuntimeError("MuJoCo-Warp contact count must be scalar")
+        raise RuntimeError("Newton rigid contact count must be scalar")
     contact_count = int(count_values[0])
-    data = getattr(solver, "mjw_data", None)
-    capacity = int(getattr(data, "naconmax", 0))
+    capacity = int(getattr(contacts, "rigid_contact_max", 0))
     if contact_count <= 0:
-        raise RuntimeError("MuJoCo-Warp collision pipeline produced no contacts")
+        raise RuntimeError("Newton collision pipeline produced no contacts")
     if capacity <= 0 or contact_count >= capacity:
         raise RuntimeError(
-            "MuJoCo-Warp contact capacity exhausted: "
+            "Newton raw contact capacity exhausted: "
             f"count={contact_count}, capacity={capacity}"
         )
-    world_ids = _numpy_int_vector(
-        getattr(getattr(data, "contact", None), "worldid", None),
-        label="MuJoCo-Warp contact world ids",
+    shape0 = _numpy_int_vector(
+        getattr(contacts, "rigid_contact_shape0", None),
+        label="Newton contact shape0",
         allow_negative_one=True,
     )[:contact_count]
-    if np.any(world_ids < 0) or np.any(world_ids >= env.num_envs):
-        raise RuntimeError("MuJoCo-Warp active contact has an invalid world id")
-    per_world = np.bincount(world_ids, minlength=env.num_envs)[: env.num_envs]
+    shape1 = _numpy_int_vector(
+        getattr(contacts, "rigid_contact_shape1", None),
+        label="Newton contact shape1",
+        allow_negative_one=True,
+    )[:contact_count]
+    shape_world = _numpy_int_vector(
+        getattr(model, "shape_world", None),
+        label="Newton shape worlds",
+        allow_negative_one=True,
+    )
+    if np.any(shape0 < 0) or np.any(shape1 < 0):
+        raise RuntimeError("active Newton contacts contain invalid shape ids")
+    if np.any(shape0 >= shape_world.size) or np.any(shape1 >= shape_world.size):
+        raise RuntimeError("active Newton contact shape id exceeds model metadata")
+    world0 = shape_world[shape0]
+    world1 = shape_world[shape1]
+    cross_world = (world0 >= 0) & (world1 >= 0) & (world0 != world1)
+    if np.any(cross_world):
+        raise RuntimeError("Newton produced a cross-world physical contact")
+    contact_world = np.where(world0 >= 0, world0, world1)
+    if np.any(contact_world < 0) or np.any(contact_world >= env.num_envs):
+        raise RuntimeError("Newton contact cannot be assigned to an env world")
+    per_world = np.bincount(contact_world, minlength=env.num_envs)[: env.num_envs]
     if not np.all(per_world > 0):
         inactive = int(np.count_nonzero(per_world == 0))
         raise RuntimeError(f"Newton found no physical contacts in {inactive} world(s)")
@@ -1022,7 +980,7 @@ def _read_newton_contact_report(env: object) -> dict[str, object]:
         "total_contacts": contact_count,
         "min_contacts": int(per_world.min()),
         "max_contacts": int(per_world.max()),
-        "contact_capacity": capacity,
+        "raw_contact_capacity": capacity,
     }
 
 

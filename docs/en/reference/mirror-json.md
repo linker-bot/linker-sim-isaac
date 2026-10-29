@@ -336,19 +336,22 @@ The scene3 arm array orders are:
 
 ```text
 left_arm/arm:
-  AR5V2_L_arm_joint_1, AR5V2_L_arm_joint_2, AR5V2_L_arm_joint_3,
-  AR5V2_L_arm_joint_4, AR5V2_L_arm_joint_5, AR5V2_L_arm_joint_6,
-  AR5V2_L_arm_joint_7
+  arm_AR5_5_08L_W4C4A6_joint_1, arm_AR5_5_08L_W4C4A6_joint_2, arm_AR5_5_08L_W4C4A6_joint_3,
+  arm_AR5_5_08L_W4C4A6_joint_4, arm_AR5_5_08L_W4C4A6_joint_5, arm_AR5_5_08L_W4C4A6_joint_6,
+  arm_AR5_5_08L_W4C4A6_joint_7
 
 right_arm/arm:
-  AR5V2_R_arm_joint_1, AR5V2_R_arm_joint_2, AR5V2_R_arm_joint_3,
-  AR5V2_R_arm_joint_4, AR5V2_R_arm_joint_5, AR5V2_R_arm_joint_6,
-  AR5V2_R_arm_joint_7
+  arm_AR5_5_08R_W4C4A6_joint_1, arm_AR5_5_08R_W4C4A6_joint_2, arm_AR5_5_08R_W4C4A6_joint_3,
+  arm_AR5_5_08R_W4C4A6_joint_4, arm_AR5_5_08R_W4C4A6_joint_5, arm_AR5_5_08R_W4C4A6_joint_6,
+  arm_AR5_5_08R_W4C4A6_joint_7
 ```
 
-The left and right `hand` arrays both use index, middle, ring, pinky, thumb roll,
-then thumb pitch; their full names use the `L6V1_L_` or `L6V1_R_` prefix. These are
-profile-defined orders, never incidental USD articulation DOF orders.
+The L6 `hand` arrays use `thumb_cmc_pitch`, `thumb_cmc_roll`,
+`index_mcp_pitch`, `middle_mcp_pitch`, `ring_mcp_pitch`, `pinky_mcp_pitch`;
+prefix each with `hand_lh_` or `hand_rh_`. O6 uses the same semantic order, with
+`thumb_cmc_yaw` for lateral motion. See the [L6/O6 name mapping](../guides/control-and-trajectories.md#l6o6-hand-command-order).
+These are profile-defined orders, never incidental USD articulation DOF orders.
+Existing L6 flat arrays must be reordered; name mappings retain their meaning.
 
 For `motion.joint_trajectory`, a name mapping maps each joint to an equal-length
 sample array. A matrix uses `[sample][group_joint]`, so every row must cover the full
@@ -442,8 +445,8 @@ Only joints 1 and 4 change; omitted arm commands remain unchanged:
     "group": "arm",
     "duration_s": 1.0,
     "joint_deltas": {
-      "AR5V2_L_arm_joint_1": 0.1,
-      "AR5V2_L_arm_joint_4": -0.1
+      "arm_AR5_5_08L_W4C4A6_joint_1": 0.1,
+      "arm_AR5_5_08L_W4C4A6_joint_4": -0.1
     },
     "interpolation": "smoothstep"
   }
@@ -465,8 +468,8 @@ Each named joint has three samples, and omitted joints hold their current comman
     "group": "arm",
     "duration_s": 1.5,
     "joint_positions": {
-      "AR5V2_L_arm_joint_1": [0.1, 0.2, 0.0],
-      "AR5V2_L_arm_joint_2": [-0.1, -0.2, 0.0]
+      "arm_AR5_5_08L_W4C4A6_joint_1": [0.1, 0.2, 0.0],
+      "arm_AR5_5_08L_W4C4A6_joint_2": [-0.1, -0.2, 0.0]
     },
     "times_s": [0.5, 1.0, 1.5]
   }
@@ -489,8 +492,8 @@ profile limits, avoids planner/collision access, and writes zero effort at compl
     "group": "arm",
     "duration_s": 0.2,
     "joint_efforts": {
-      "AR5V2_L_arm_joint_1": 2.5,
-      "AR5V2_L_arm_joint_2": -1.0
+      "arm_AR5_5_08L_W4C4A6_joint_1": 2.5,
+      "arm_AR5_5_08L_W4C4A6_joint_2": -1.0
     },
     "phase": "contact_push"
   }
@@ -549,13 +552,13 @@ Unlike direct joint interpolation, this operation uses the MotionPlanner.
     "duration_s": 2.0,
     "sample_dt_s": 0.02,
     "joint_positions": {
-      "AR5V2_L_arm_joint_1": 0.0,
-      "AR5V2_L_arm_joint_2": 0.0,
-      "AR5V2_L_arm_joint_3": 0.0,
-      "AR5V2_L_arm_joint_4": 0.0,
-      "AR5V2_L_arm_joint_5": 0.0,
-      "AR5V2_L_arm_joint_6": 0.0,
-      "AR5V2_L_arm_joint_7": 0.0
+      "arm_AR5_5_08L_W4C4A6_joint_1": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_2": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_3": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_4": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_5": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_6": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_7": 0.0
     },
     "avoid_collisions": true,
     "force_collision_refresh": true
@@ -577,8 +580,8 @@ Omitted duration and sample period come from the planning profile:
     "robot_label": "left_arm",
     "group": "arm",
     "joint_deltas": {
-      "AR5V2_L_arm_joint_2": 0.05,
-      "AR5V2_L_arm_joint_4": -0.05
+      "arm_AR5_5_08L_W4C4A6_joint_2": 0.05,
+      "arm_AR5_5_08L_W4C4A6_joint_4": -0.05
     },
     "avoid_collisions": false
   }

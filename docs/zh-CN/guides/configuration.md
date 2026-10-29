@@ -143,3 +143,5 @@ snapshot/clone 静默漏掉动态状态。
 
 字段全集见[配置参考](../reference/configuration.md)，源码 owner 见
 [模块图](../development/module-map.md)。
+
+AR5/O6 Newton 默认驱动及原生/虚拟限矩的区别见[控制与轨迹](control-and-trajectories.md#newton-ar5o6-柔顺驱动)。

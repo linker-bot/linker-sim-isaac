@@ -59,6 +59,11 @@ EXPECTED_CANONICAL_CONFIGURATION_PROFILES = {
         "configs/physics/newton/cpu.yaml",
         "configs/physics/newton/cuda.yaml",
     },
+    "configs/controllers/newton_compliant": {
+        "configs/controllers/newton_compliant/arm_controller.yaml",
+        "configs/controllers/newton_compliant/hand_controller.yaml",
+        "configs/controllers/newton_compliant/newton_drive.yaml",
+    },
     "configs/control": {
         "configs/control/hybrid_force_position.yaml",
         "configs/control/mirror.yaml",
@@ -71,7 +76,7 @@ EXPECTED_CANONICAL_CONFIGURATION_PROFILES = {
     "configs/visualization": {"configs/visualization/kaleidoscope.yaml"},
 }
 EXPECTED_CANONICAL_CONFIGURATION_DIRECTORIES = {
-    "configs/controllers": {"newton", "physx"},
+    "configs/controllers": {"newton", "newton_compliant", "physx"},
     "configs/physics": {"newton", "physx"},
     "configs/scenes": {"kaleidoscope", "mirror"},
 }

@@ -33,6 +33,8 @@ def joint_control_settings(
 ) -> JointControlSettings:
     """投影 arm/hand profile，并让缺省组显式继承 arm。"""
 
+    if profiles.compliant_drive is not None and mode != "position":
+        raise ValueError("Compliant drive requires position control")
     arm = _component_settings(profiles.arm, mode)
     default = (
         arm if profiles.default is None else _component_settings(profiles.default, mode)

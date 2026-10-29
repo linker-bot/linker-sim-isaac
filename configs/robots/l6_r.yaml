@@ -78,16 +78,17 @@ curobo:
   enabled: false
 
 joint_groups:
+  # 六维顺序：拇指弯曲、拇指侧摆、食指、中指、无名指、小指弯曲。
   # kind=hand 要求 arm 为空、hand 非空；名称必须匹配 articulation DOF。
-  # hand 列表只声明六个可直接接收命令的 master 关节；默认 controlled_joints=[all]
-  # 时命令/轨迹向量顺序来自 articulation.dof_names。
+  # hand 列表只声明六个可直接接收命令的 master 关节；默认命令/轨迹向量
+  # 使用此 hand 列表顺序，再按名称映射到引擎内部 DOF。
   # MJCF equality 中的 DIP 等 follower 会被自动发现并从主动命令空间剔除，再按 master
   # 实际位置通过 follower position drive 执行，因此不要把 follower 重复写入此列表。
   arm: []
   hand:
+    - hand_rh_thumb_cmc_pitch
+    - hand_rh_thumb_cmc_roll
     - hand_rh_index_mcp_pitch
     - hand_rh_middle_mcp_pitch
     - hand_rh_ring_mcp_pitch
     - hand_rh_pinky_mcp_pitch
-    - hand_rh_thumb_cmc_roll
-    - hand_rh_thumb_cmc_pitch

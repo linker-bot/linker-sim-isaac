@@ -9,7 +9,6 @@ physics:
   nconmax_per_world: 200
   # 每个 world 的约束 Jacobian/求解工作区容量；不足会限制复杂关节与接触约束。
   njmax_per_world: 1200
-  # 每个 physics step 拆分的最少内部子步数，必须 >= 1；增加可改善快速接触稳定性但更慢。
   # 未显式作者化的接触采用临界阻尼的响应时间（秒），不是关节驱动增益。
   # Newton ke=1/t²、kd=2/t；MuJoCo 正值 solref 仍受 >=2*内部 dt 的 refsafe 约束。
   default_contact_time_constant_s: 0.01
@@ -19,5 +18,9 @@ physics:
   line_search_iterations: 50
   # 约束求解器：auto/cg/newton；auto 由 runtime 按 execution 和能力选择。
   constraint_solver: auto
-  # 接触生成流水线：CPU 支持 auto/mujoco；auto 会收敛到 MuJoCo contacts。
-  contact_pipeline: auto
+  # Newton 碰撞 + MuJoCo Warp，CPU/CUDA 共用。资产显式 gap（含0）优先。
+  default_contact_gap_m: 0.0001
+  # 采用已选候选；后续在相同任务成功率下单独评估性能。
+  solver_deterministic: false
+  collision_deterministic: true
+  contact_matching: disabled

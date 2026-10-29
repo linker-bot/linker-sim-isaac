@@ -122,7 +122,7 @@ curobo:
 
 joint_groups:
   # 名称必须与导入后 articulation 的 DOF 名精确一致。
-  # 列表定义 arm 成员；默认 controlled_joints=[all] 时命令顺序来自 articulation.dof_names。
+  # 列表定义 arm 成员及默认命令顺序；按名称映射到引擎内部 DOF。
   # 启用 cuRobo 时，arm 名称集合必须与其 active joints 一致。
   arm:
     - arm_AR5_5_08L_W4C4A6_joint_1

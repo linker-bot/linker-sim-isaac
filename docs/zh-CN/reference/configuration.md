@@ -177,10 +177,27 @@ configs/physics/
 | 产品 | engine | execution | 关键约束 |
 | --- | --- | --- | --- |
 | Mirror | `physx` | `cpu` | 物理在 CPU；根 `compute` 供 cuRobo/RTX；完整 scene query 能力按 profile |
-| Mirror | `newton` | `cpu` | MuJoCo CPU integration；一个 product world；无 CUDA stream/graph；根 `compute` 仍供 cuRobo/RTX |
+| Mirror | `newton` | `cpu` | Newton 碰撞 + MuJoCo Warp CPU；一个 product world；无 CUDA stream/graph；根 `compute` 仍供 cuRobo/RTX |
 | Mirror | `newton` | `cuda` | project-owned Newton runtime；一个 product world；可选 render sync |
 | Kaleidoscope | `physx` | `cuda` | GPU pipeline、Fabric、scene query off；训练 Kit headless，可选 viewport Kit |
 | Kaleidoscope | `newton` | `cuda` | project-owned multi-world Newton runtime；每个 env 一个独立 world；训练 Kit headless，可选 viewport Kit |
+
+CPU/CUDA 共用 Newton 碰撞检测和 MuJoCo Warp 动力学；删除旧原生 MuJoCo CPU
+实现及 `contact_pipeline: auto/mujoco/newton` 切换项，旧字段会明确报错，不作兼容映射。
+CPU 仍限定 Mirror 单 world、同步执行；CUDA 另支持图捕获和 Kaleidoscope 多 world。
+求解器持久状态统一使用 Warp float32；控制器历史仍使用 float64。
+
+| 两种 Newton leaf 的设置 | 默认值 | 含义 |
+| --- | --- | --- |
+| `iterations` / `line_search_iterations` | 100 / 50 | 主迭代/线搜索上限，并非每步固定执行次数 |
+| `solver_deterministic` | false | 关闭 MuJoCo Warp 求解器确定性 |
+| `collision_deterministic` | true | 开启 Newton 碰撞确定性 |
+| `contact_matching` | disabled | 不保持跨步接触匹配；可显式选择 latest/sticky |
+| `default_contact_gap_m` | 0.0001 | 缺省检测 gap，0.1 mm，并非允许穿透量 |
+
+资产明确指定的 gap（**包括0**）优先，默认值在导入前设置，不在导入后覆盖所有 shape。
+资产验收需读回实际 `geom_gap`。这些是当前候选设置，后续在任务成功率和性能共同约束下
+另行测试；本步未修改摩擦/阻抗、碰撞几何及资产限角。
 
 公开 physics leaf 使用正交字段，不使用 backend `kind`：
 
@@ -319,7 +336,7 @@ Newton leaf仍要求 `default_contact_time_constant_s` 为有限正秒数，接�
 仍优先。源资产和 PhysX 导入不变。配置默认值为 10 ms；任务也可选择其他默认值，
 临时源副本仍保证其在 Isaac 6.1 转换后生效，避免被 MuJoCo 隐含默认值静默覆盖。
 这是数值接触响应，不是关节驱动增益或已经标定的力学材料模型；
-当前 CPU/native MuJoCo 路径使用旧转换。MuJoCo `refsafe` 仍将正值响应时间限制为至少两倍实际内部步长。
+CPU/CUDA 共用上述转换。MuJoCo `refsafe` 仍将正值响应时间限制为至少两倍实际内部步长。
 
 `diagnostics()` 报告外部/内部步长、配置/实际子步数和默认接触响应。有限时间步与柔性接触仍可能在冲击时
 出现侵入，需针对任务速度、质量和接触几何验证所选配置；改变后也需复验已有策略。

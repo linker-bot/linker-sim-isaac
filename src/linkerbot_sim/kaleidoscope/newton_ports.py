@@ -1332,6 +1332,11 @@ class NewtonSolverIntegrationTensorPort:
     _staged_warp: object = field(init=False, repr=False)
     _active_warp: object = field(init=False, repr=False)
     _closed: bool = field(init=False, default=False, repr=False)
+    _drive_tensor: torch.Tensor | None = field(init=False, default=None, repr=False)
+    _drive_staged: torch.Tensor | None = field(init=False, default=None, repr=False)
+    _drive_staged_warp: object | None = field(init=False, default=None, repr=False)
+    _drive_reset_mask: torch.Tensor | None = field(init=False, default=None, repr=False)
+    _drive_reset_warp: object | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         import warp as wp
@@ -1370,6 +1375,62 @@ class NewtonSolverIntegrationTensorPort:
         # 不会为了 partial RPC/reset 重分配 Warp array 或做 H2D。
         self._staged_warp = wp.from_torch(self._staged, dtype=wp.float32)
         self._active_warp = wp.from_torch(self._active, dtype=wp.bool)
+        drive = getattr(self.runtime, "compliant_drive", None)
+        if drive is not None:
+            self._drive_tensor = wp.to_torch(drive.history)
+            self._drive_staged = torch.empty_like(self._drive_tensor)
+            self._drive_staged_warp = wp.from_torch(
+                self._drive_staged, dtype=wp.float64
+            )
+            self._drive_reset_mask = torch.zeros(
+                self.num_envs, dtype=torch.int32, device=self.device
+            )
+            self._drive_reset_warp = wp.from_torch(
+                self._drive_reset_mask, dtype=wp.int32
+            )
+
+    def state_bindings(self):
+        from linkerbot_sim.kaleidoscope.state_api import StateBinding
+
+        result = {self.field_name: StateBinding(self.tensor, self.write)}
+        if self._drive_tensor is not None:
+            result["controller.virtual_shaft"] = StateBinding(
+                self._drive_tensor, self._write_drive
+            )
+        return result
+
+    def _write_drive(self, env_ids: torch.Tensor, values: torch.Tensor) -> None:
+        ids = self._env_ids(env_ids)
+        data = require_cuda_tensor(
+            values,
+            name="virtual shaft history",
+            ndim=2,
+            leading_dim=ids.numel(),
+            dtype=torch.float64,
+        )
+        assert self._drive_tensor is not None and self._drive_staged is not None
+        if data.device != self.device or data.shape[1:] != self._drive_tensor.shape[1:]:
+            raise ValueError("Virtual shaft history has the wrong device or width")
+        assert_finite_async(data, name="virtual shaft history")
+        phases = data[:, 8::9]
+        torch._assert_async(
+            torch.all(
+                (phases == torch.floor(phases))
+                & (phases >= 0)
+                & (phases < self.runtime.compliant_drive.substeps)
+            ),
+            "Invalid virtual shaft command phase",
+        )
+        with _owner_stream_scope(self.runtime, device=self.device):
+            # Finish pending cold position resets before restoring exact history.
+            self.runtime.forward()
+            self._drive_staged.copy_(self._drive_tensor)
+            self._drive_staged.index_copy_(0, ids, data)
+            self._active.zero_()
+            self._active.index_fill_(0, ids, True)
+            self.runtime.compliant_drive.restore(
+                self._drive_staged_warp, self._active_warp
+            )
 
     def write(self, env_ids: torch.Tensor, values: torch.Tensor) -> None:
         """把 K 行 state payload 恢复到 selected solver worlds。"""
@@ -1426,6 +1487,12 @@ class NewtonSolverIntegrationTensorPort:
             else:
                 self._active.index_copy_(0, ids, mask)
             self.runtime.reset_solver_integration_state(self._active_warp)
+            if self._drive_reset_mask is not None:
+                self.runtime.forward()
+                self._drive_reset_mask.copy_(self._active)
+                self.runtime.compliant_drive.reset_from_positions(
+                    self.runtime.state.joint_q, self._drive_reset_warp
+                )
 
     def close(self) -> None:
         """断开 staging；manager canonical buffer 仍由 Session 负责最终销毁。"""
@@ -1436,6 +1503,11 @@ class NewtonSolverIntegrationTensorPort:
         self._active_warp = None
         self._staged = torch.empty((0, 0), device=self.device)
         self._active = torch.empty(0, device=self.device, dtype=torch.bool)
+        self._drive_tensor = None
+        self._drive_staged = None
+        self._drive_staged_warp = None
+        self._drive_reset_mask = None
+        self._drive_reset_warp = None
         self.runtime = None
         self._closed = True
 

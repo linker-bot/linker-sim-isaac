@@ -53,8 +53,8 @@ def test_o6_profiles_use_matching_runtime_and_planning_units(side, camera):
     assert profile["joint_groups"]["hand"] == [
         prefix + joint
         for joint in (
-            "thumb_cmc_yaw",
             "thumb_cmc_pitch",
+            "thumb_cmc_yaw",
             "index_mcp_pitch",
             "middle_mcp_pitch",
             "ring_mcp_pitch",

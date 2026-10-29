@@ -131,6 +131,9 @@ def build_kaleidoscope_scene_assembly(
                 controller_bundle=config.default_controller_bundle,
                 controller_bundles=config.controller_bundles,
                 prepare_newton_render_topology=viewport is not None,
+                drive_steps_per_command=int(
+                    config.task.action.physics_ticks_per_action
+                ),
             )
             raw_views.extend(robot.articulation_view for robot in replicated.robots)
             if viewport is not None:
@@ -382,7 +385,10 @@ def session_spec_from_config(
             iterations=int(physics_source.iterations),
             line_search_iterations=int(physics_source.line_search_iterations),
             constraint_solver=str(physics_source.constraint_solver),
-            contact_pipeline=str(physics_source.contact_pipeline),
+            default_contact_gap_m=physics_source.default_contact_gap_m,
+            solver_deterministic=physics_source.solver_deterministic,
+            collision_deterministic=physics_source.collision_deterministic,
+            contact_matching=physics_source.contact_matching,
         )
     else:
         raise ValueError(

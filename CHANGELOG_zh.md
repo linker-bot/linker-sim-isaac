@@ -10,6 +10,9 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- AR5/O6及相机组合的Newton默认采用虚拟电机和柔顺输出。所有控制器参数数组按声明名称绑定，L6/O6命令顺序统一为拇指弯曲、拇指侧摆、食指/中指/无名指/小指弯曲。保留真实名称（L6 `thumb_cmc_roll`、O6 `thumb_cmc_yaw`），旧L6数组需重排；L6驱动设置及PhysX动力学不变。
+- Newton CPU/CUDA统一为Newton碰撞+MuJoCo Warp，删除原生MuJoCo CPU及contact_pipeline选择，积分状态共用Warp实现。迭代上限100/50、求解器确定性关闭、碰撞确定性开启、接触匹配disabled；未指定gap默认0.0001m，资产显式值（含0）优先。需复验CPU耗时及任务效果，摩擦/阻抗和资产修正另行处理。
+
 - Newton锁定已验证1.8开发提交和MuJoCo 3.15；PhysX与Newton统一加载Warp 1.17 wheel。普通入口默认可自定义的60Hz控制/480Hz物理，专用混合力控独立配置60Hz指令/240Hz反馈/480Hz物理。Mirror场景新增 `control_frequency_hz`；Newton leaf删除 `substeps` / `max_substep_dt_s` 和自动拆步逻辑。混合力控最低频率字段改为 `minimum_feedback_frequency_hz`，保留最低200Hz；hybrid增益、滤波、计数及反馈时序均不变。本步接触、资产默认不变；需重建锁定环境并复验任务行为。
 
 - 接入O6 1014_v4镜像结构、369.98g/手及修正的左惯性、简化碰撞体、两侧20.5mm AR5_08安装和上游从动耦合修复。相机避让路径需重新验证，控制增益保持不变。

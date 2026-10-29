@@ -546,6 +546,30 @@ def create_mirror_scene_resources(
         loader=controller_bundles.__getitem__,
     )
 
+    from linkerbot_sim.configuration.controllers import (
+        validate_compliant_drive_selection,
+        bind_controller_joints,
+    )
+
+    controller_profiles = tuple(
+        bind_controller_joints(bundle, profile.joint_groups)
+        for bundle, profile in zip(
+            controller_profiles, resolved_robot_profiles, strict=True
+        )
+    )
+    profiles_by_label = dict(
+        zip((i.label for i in instances), controller_profiles, strict=True)
+    )
+    for execution, profiles in zip(execution_configs, controller_profiles, strict=True):
+        validate_compliant_drive_selection(
+            profiles,
+            engine="newton"
+            if session_spec.physics.kind.startswith("newton_")
+            else "physx",
+            asset_path=str(execution.robot.asset_path),
+            mode=control_mode,
+        )
+
     session = session_factory(spec=session_spec)
     physics = MirrorPhysicsAdapter(session.physics_runtime)
     newton_runtime = session_spec.physics.kind in {"newton_cpu", "newton_cuda"}
@@ -628,6 +652,7 @@ def create_mirror_scene_resources(
                 instances=instances,
                 imported=imported,
                 execution_configs=execution_configs,
+                controller_profiles=controller_profiles,
                 object_handles=object_handles,
             )
 
@@ -833,7 +858,7 @@ def create_mirror_scene_resources(
                     joint_groups=groups,
                     planning_capability=capability,
                     curobo_config=curobo_config,
-                    controller_profiles=controller_bundles[controller_profile_name],
+                    controller_profiles=profiles_by_label[instance.label],
                     physical_tcp_binding=physical_tcp_binding,
                     task_space_port=(
                         None
@@ -930,6 +955,7 @@ def _initialize_newton_runtime_mirror(
     instances: Sequence[object],
     imported: Sequence[object],
     execution_configs: Sequence[RobotExecutionConfig],
+    controller_profiles: Sequence[ControllerProfiles],
     object_handles: Sequence[RuntimeObjectHandle],
 ) -> tuple[object, ...]:
     """先 finalize 唯一 ``/World`` model，再绑定全部 Newton articulation view。
@@ -957,6 +983,10 @@ def _initialize_newton_runtime_mirror(
         env_origins=((0.0, 0.0, 0.0),),
         robots=robots,
         object_handles=object_handles,
+        drive_profiles={
+            str(instance.label): profile
+            for instance, profile in zip(instances, controller_profiles, strict=True)
+        },
     )
     if int(getattr(manager, "world_count", -1)) != 1:
         raise RuntimeError(
@@ -1243,7 +1273,10 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
             constraint_solver=source.constraint_solver,
-            contact_pipeline=source.contact_pipeline,
+            default_contact_gap_m=source.default_contact_gap_m,
+            solver_deterministic=source.solver_deterministic,
+            collision_deterministic=source.collision_deterministic,
+            contact_matching=source.contact_matching,
         )
     else:
         source = config.physics
@@ -1259,7 +1292,10 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             iterations=source.iterations,
             line_search_iterations=source.line_search_iterations,
             constraint_solver=source.constraint_solver,
-            contact_pipeline=source.contact_pipeline,
+            default_contact_gap_m=source.default_contact_gap_m,
+            solver_deterministic=source.solver_deterministic,
+            collision_deterministic=source.collision_deterministic,
+            contact_matching=source.contact_matching,
         )
     render_resources = bool(
         render.enabled

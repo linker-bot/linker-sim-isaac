@@ -204,7 +204,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | backends | `linkerbot_sim.backends.curobo.trajectory_adapter` | numerical_backend | backends implementation owner for trajectory adapter | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 | backends | `linkerbot_sim.backends.curobo.warp_compat` | numerical_backend | backends implementation owner for warp compat | cuRobo/CUDA | internal | [Architecture reference](../guides/motion-planning.md) |
 
-### isaac (35)
+### isaac (36)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -220,6 +220,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.physics.factory` | isaac_infrastructure | validated concrete runtime construction | Isaac main thread | owner path | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.manager` | isaac_infrastructure | physics owner registry and lifecycle coordination | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton` | isaac_infrastructure | isaac implementation owner for newton | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
+| isaac | `linkerbot_sim.isaac.physics.newton.compliant_drive` | isaac_infrastructure | isaac implementation owner for compliant drive | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.constraints` | isaac_infrastructure | isaac implementation owner for constraints | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.integration_state` | isaac_infrastructure | isaac implementation owner for integration state | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.physics.newton.manager` | isaac_infrastructure | physics owner registry and lifecycle coordination | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |

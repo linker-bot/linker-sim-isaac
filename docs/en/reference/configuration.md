@@ -391,7 +391,7 @@ from these four fields.
 
 `configs/physics/newton/cpu.yaml` declares `engine: newton` and `execution: cpu` and
 is parsed as `NewtonCpuSettings`. Mirror's `newton_cpu` composition runs one world with
-MuJoCo CPU integration, no CUDA stream or graph, and a MuJoCo contact pipeline. The root
+Newton collision + MuJoCo Warp on CPU, no CUDA stream or graph, and the same Newton contact pipeline as CUDA. The root
 `compute.cuda_device` remains mandatory because cuRobo and optional RTX rendering still
 consume that GPU. Kaleidoscope rejects Newton CPU because its training contract is
 CUDA-resident.
@@ -410,14 +410,37 @@ physics:
 The `newton/cpu` and `newton/cuda` leaves declare separate executions. The latter declares `engine: newton`,
 `execution: cuda`, per-world
 contact/Jacobian capacities, CUDA graph use,
-solver iterations, line search, constraint solver, and contact
-pipeline. It inherits the device from the mode root. Mirror and Kaleidoscope share
+solver iterations, line search, constraint solver, contact gap and matching, and
+solver/collision determinism. It inherits the device from the mode root. Mirror and Kaleidoscope share
 `newton/cuda`; Mirror derives one world while Kaleidoscope derives the runtime world
 count from final `environments.num_envs`. Neither loads the Isaac Newton extension. Robot
 gravity policy is authored as `mjc:gravcomp` before model finalization; runtime
 per-link gravity changes are unsupported. `newton_cuda` is both an explicit Mirror or
 Kaleidoscope selector and the resolved CUDA runtime kind; the implementation module is
 simply `isaac.physics.newton`.
+
+### Shared Newton pipeline defaults
+
+CPU and CUDA both use Newton collision detection and MuJoCo Warp dynamics. The
+`contact_pipeline` selector (`auto` / `mujoco` / `newton`) and native MuJoCo CPU
+implementation are removed; old configuration keys are rejected, not aliased.
+CPU remains a single-world Mirror option and executes eagerly. CUDA additionally
+supports graph execution and Kaleidoscope independent worlds. Solver persistent
+state uses the same Warp float32 representation on both devices.
+
+| Setting in both Newton leaves | Default | Meaning |
+| --- | --- | --- |
+| `iterations` / `line_search_iterations` | 100 / 50 | Upper bounds, not a fixed number of iterations per step |
+| `solver_deterministic` | false | MuJoCo Warp solver determinism disabled |
+| `collision_deterministic` | true | Newton collision ordering deterministic |
+| `contact_matching` | disabled | No persistent matching; `latest` and `sticky` remain explicit choices |
+| `default_contact_gap_m` | 0.0001 | Fallback detection gap (0.1 mm), not allowed penetration |
+
+Explicit asset gap values, **including zero**, take precedence over the fallback.
+The default is applied before import; shapes are not overwritten after import.
+Read back the resulting native `geom_gap` when validating an asset. These are the
+selected starting settings; performance tuning must be evaluated alongside task
+outcomes. This step does not change friction/impedance or asset geometry/limits.
 
 ### Newton contact integration
 
@@ -498,8 +521,8 @@ unchanged. The temporary source preserves the configured 10 ms response, or a
 task-selected fallback, through Isaac 6.1 conversion instead of silently replacing
 it with MuJoCo's implicit 20 ms default.
 This is a numerical contact response, not a
-joint drive gain or a calibrated force-space material law: the pinned CPU/native
-MuJoCo path uses the legacy Newton conversion. MuJoCo's `refsafe` still limits a
+joint drive gain or a calibrated force-space material law. CPU and CUDA use the
+same conversion. MuJoCo's `refsafe` still limits a
 positive time constant to at least twice the actual internal timestep.
 
 `diagnostics()` reports the outer and internal timestep, configured and effective

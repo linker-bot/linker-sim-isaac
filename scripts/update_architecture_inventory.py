@@ -110,6 +110,13 @@ CANONICAL_CONFIGURATION_FILE_SETS = {
             "configs/controllers/physx/hand_controller.yaml",
         }
     ),
+    "configs/controllers/newton_compliant": frozenset(
+        {
+            "configs/controllers/newton_compliant/arm_controller.yaml",
+            "configs/controllers/newton_compliant/hand_controller.yaml",
+            "configs/controllers/newton_compliant/newton_drive.yaml",
+        }
+    ),
     "configs/controllers/newton": frozenset(
         {
             "configs/controllers/newton/arm_controller.yaml",
@@ -145,7 +152,7 @@ FORBIDDEN_PUBLIC_CONFIGURATION_PATHS = frozenset(
     }
 )
 CANONICAL_CONFIGURATION_DIRECTORY_SETS = {
-    "configs/controllers": frozenset({"newton", "physx"}),
+    "configs/controllers": frozenset({"newton", "newton_compliant", "physx"}),
     "configs/physics": frozenset({"newton", "physx"}),
     "configs/scenes": frozenset({"kaleidoscope", "mirror"}),
 }

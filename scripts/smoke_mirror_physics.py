@@ -1153,17 +1153,10 @@ def _newton_contact_probe(
     solver = getattr(manager, "solver", None)
     if solver is None:
         raise RuntimeError("Newton solver is unavailable during contact probe")
-    if execution == "cuda":
-        contact_counts = _tensor_int_vector(
-            getattr(getattr(solver, "mjw_data", None), "nacon", None),
-            label="Newton CUDA contact counts",
-        )
-    else:
-        mj_data = getattr(solver, "mj_data", None)
-        ncon = getattr(mj_data, "ncon", None)
-        if type(ncon) is not int or ncon < 0:
-            raise RuntimeError("Newton CPU contact count is unavailable")
-        contact_counts = np.asarray([ncon], dtype=np.int64)
+    contact_counts = _tensor_int_vector(
+        getattr(getattr(solver, "mjw_data", None), "nacon", None),
+        label="Newton Warp contact counts",
+    )
     nconmax = int(manager_diagnostics["nconmax_per_world"])
     max_contacts = int(np.max(contact_counts)) if contact_counts.size else 0
     if max_contacts >= nconmax:

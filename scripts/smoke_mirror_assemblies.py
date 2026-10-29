@@ -22,6 +22,7 @@ for path in (REPO_ROOT, REPO_ROOT / "src"):
 
 from linkerbot_sim.configuration import load_mirror_config  # noqa: E402
 from linkerbot_sim.configuration.scenes import CameraSettings  # noqa: E402
+from linkerbot_sim.configuration.controllers import controller_profiles_from_mappings
 from linkerbot_sim.configuration.robots import RobotProfileSettings  # noqa: E402
 from linkerbot_sim.configuration.catalog import load_yaml_mapping  # noqa: E402
 from linkerbot_sim.mirror import create_mirror_runtime  # noqa: E402
@@ -92,10 +93,23 @@ def assembly_config(args):
             CameraSettings.from_mapping(payload, label=f"camera {camera.camera_id}")
         )
     cameras = tuple(adjusted)
+    bundles = dict(backend.controller_bundles)
+    if args.hand == "o6" and backend.physics.engine == "newton":
+        root = REPO_ROOT / "configs/controllers/newton_compliant"
+        bundles["newton_compliant"] = controller_profiles_from_mappings(
+            {
+                name: load_yaml_mapping(root / filename)
+                for name, filename in (
+                    ("arm", "arm_controller.yaml"),
+                    ("hand", "hand_controller.yaml"),
+                    ("newton_drive", "newton_drive.yaml"),
+                )
+            }
+        )
     return replace(
         config,
         physics=backend.physics,
-        controller_bundles=backend.controller_bundles,
+        controller_bundles=bundles,
         scene=replace(config.scene, robots=tuple(robots), cameras=cameras),
         control=replace(config.control, sync_simulation_to_wall_clock=False),
         outputs=replace(
@@ -413,16 +427,22 @@ def run(args):
             }
             for r in resources.robots_by_id.values()
         }
-        if args.profile == "newton_cpu":
+        if args.profile.startswith("newton_"):
+            runtime.physics_runtime._synchronize_owner_stream()
             solver = runtime.physics_runtime.solver
-            model, data = solver.mj_model, solver.mj_data
+            model, data = solver.mj_model, solver.mjw_data
+            count = int(data.nacon.numpy()[0])
             report["contacts"] = [
                 {
-                    "body1": model.body(int(model.geom_bodyid[c.geom1])).name,
-                    "body2": model.body(int(model.geom_bodyid[c.geom2])).name,
-                    "distance": float(c.dist),
+                    "body1": model.body(int(model.geom_bodyid[pair[0]])).name,
+                    "body2": model.body(int(model.geom_bodyid[pair[1]])).name,
+                    "distance": float(distance),
                 }
-                for c in data.contact[: data.ncon]
+                for pair, distance in zip(
+                    data.contact.geom.numpy()[:count],
+                    data.contact.dist.numpy()[:count],
+                    strict=True,
+                )
             ]
         # Fixed camera mounts must remain fixed through actual integration;
         # snapshot/root-Xform equality alone cannot detect a floating child body.

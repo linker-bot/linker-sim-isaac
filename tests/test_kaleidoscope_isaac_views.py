@@ -113,6 +113,11 @@ class _ObjectPort:
 class _PhysicsStatePort:
     field_name = "solver.persistent"
 
+    def state_bindings(self):
+        from linkerbot_sim.kaleidoscope.state_api import StateBinding
+
+        return {self.field_name: StateBinding(self.tensor, self.write)}
+
     def __init__(self, origins: torch.Tensor) -> None:
         self.device = origins.device
         self.num_envs = origins.shape[0]

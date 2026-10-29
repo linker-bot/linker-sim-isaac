@@ -1,0 +1,66 @@
+# Native output gains; virtual advancing torque is configured separately.
+# joint_groups.hand: thumb_cmc_pitch, thumb_cmc_yaw, index/middle/ring/pinky_mcp_pitch.
+target: hand
+position_control:
+  method: implicit
+  active_joints:
+    stiffness:
+    - 2500.0
+    - 600.0
+    - 1250.0
+    - 1250.0
+    - 1250.0
+    - 1250.0
+    damping:
+    - 40.0
+    - 24.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    max_force:
+    - 60.0
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+velocity_control:
+  method: explicit
+  active_joints:
+    damping:
+    - 40.0
+    - 24.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    max_force:
+    - 60.0
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+effort_control:
+  method: direct
+  active_joints:
+    effort_limit:
+    - 60.0
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0

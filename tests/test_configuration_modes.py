@@ -167,13 +167,13 @@ def test_newton_cpu_leaf_rejects_cuda_only_graph_setting() -> None:
         physics_settings_from_mapping(raw, label=str(path))
 
 
-def test_newton_cpu_leaf_rejects_newton_contact_pipeline() -> None:
+def test_newton_leaf_rejects_removed_contact_pipeline_selector() -> None:
     path = REPO_ROOT / "configs" / "physics" / "newton" / "cpu.yaml"
     document = load_yaml_mapping(path)
     raw = dict(document["physics"])  # type: ignore[arg-type]
     raw["contact_pipeline"] = "newton"
 
-    with pytest.raises(ConfigurationError, match="contact_pipeline=newton"):
+    with pytest.raises(ConfigurationError, match="contact_pipeline"):
         physics_settings_from_mapping(raw, label=str(path))
 
 
@@ -1595,3 +1595,60 @@ def test_mirror_rejects_invalid_clock_ratio(control_hz, physics_hz):
             control_frequency_hz=control_hz,
             physics_frequency_hz=physics_hz,
         )
+
+
+@pytest.mark.parametrize(
+    "mode,backend",
+    [
+        ("mirror", "newton_cpu"),
+        ("mirror", "newton_cuda"),
+        ("kaleidoscope", "newton_cuda"),
+    ],
+)
+@pytest.mark.parametrize("camera", ["", "_gemini335l"])
+def test_ar5_o6_defaults_and_order_are_resolved_before_runtime(
+    tmp_path, mode, backend, camera
+):
+    from linkerbot_sim.assets.robot_instances import (
+        RobotExecutionConfig,
+        RobotSceneInstanceConfig,
+        resolve_controller_profile,
+    )
+    from linkerbot_sim.assets.root_pose import RootPoseConfig
+
+    root = _isolated_configs(tmp_path)
+    scene = root / (
+        "scenes/mirror/scene3.yaml"
+        if mode == "mirror"
+        else "scenes/kaleidoscope/tblock_push.yaml"
+    )
+    text = scene.read_text()
+    for side in ("l", "r"):
+        text = text.replace(f"ar5_08_l6_{side}", f"ar5_08_o6{camera}_{side}")
+    scene.write_text(text)
+    loader = load_mirror_config if mode == "mirror" else load_kaleidoscope_config
+    cfg = loader(backend, configs_root=root)
+    assert cfg.physics.solver_deterministic is False
+    assert cfg.physics.collision_deterministic is True
+    assert cfg.physics.contact_matching == "disabled"
+    assert cfg.physics.default_contact_gap_m == 0.0001
+    assert (cfg.physics.iterations, cfg.physics.line_search_iterations) == (100, 50)
+    for item in cfg.scene.robots:
+        profile = item.resolved_profile
+        assert profile.controlled_joints == (
+            *profile.joint_groups.arm,
+            *profile.joint_groups.hand,
+        )
+        assert profile.joint_groups.hand[0].endswith("thumb_cmc_pitch")
+        assert profile.joint_groups.hand[1].endswith("thumb_cmc_yaw")
+        instance = RobotSceneInstanceConfig(
+            robot_profile=item.robot_profile,
+            label=item.label,
+            root_pose=RootPoseConfig(),
+        )
+        execution = RobotExecutionConfig.from_profile(profile, scene_instance=instance)
+        selected = resolve_controller_profile(
+            instance, execution.robot, cfg.physics.engine
+        )
+        assert selected == "newton_compliant"
+        assert cfg.controller_bundles[selected].compliant_drive is not None

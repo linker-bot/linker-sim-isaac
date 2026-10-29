@@ -1,0 +1,43 @@
+# Native output gains; virtual advancing torque is configured separately.
+target: arm
+position_control:
+  method: implicit
+  active_joints:
+    stiffness: 16000.0
+    damping:
+    - 614.2237548828125
+    - 613.7109985351562
+    - 603.791015625
+    - 600.3331298828125
+    - 604.13671875
+    - 604.7486572265625
+    - 603.66796875
+    max_force: 200.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+velocity_control:
+  method: explicit
+  active_joints:
+    damping:
+    - 614.2237548828125
+    - 613.7109985351562
+    - 603.791015625
+    - 600.3331298828125
+    - 604.13671875
+    - 604.7486572265625
+    - 603.66796875
+    max_force: 200.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+effort_control:
+  method: direct
+  active_joints:
+    effort_limit: 200.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0

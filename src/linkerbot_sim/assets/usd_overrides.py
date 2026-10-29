@@ -473,7 +473,7 @@ def _resolve_joint_parameter(
     """把标量、序列或精确 name-map 展开到给定 joint 顺序。
 
     name-map 必须完整且不能含未知键；序列只能为单元素广播或与 joint 数严格等长。这样
-    配置不会因 USD 遍历顺序变化而静默错配到其他关节。
+    名称映射在配置边界按 joint_groups 绑定，避免 USD 遍历改变配置数组的含义。
     """
 
     if isinstance(value, Mapping):

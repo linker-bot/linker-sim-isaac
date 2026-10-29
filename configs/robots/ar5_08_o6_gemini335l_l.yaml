@@ -136,9 +136,10 @@ curobo:
 
 joint_groups:
   # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
-  # 默认 controlled_joints=[all] 时，命令/轨迹向量顺序来自 articulation.dof_names。
+  # 默认命令/轨迹顺序为下列 arm + hand；按关节名映射到引擎内部 DOF。
+  # O6：拇指弯曲、拇指侧摆、食指、中指、无名指、小指弯曲。
   # hand 仅列出可直接接收命令的 master 关节。MJCF equality 中的 DIP 等 follower
-  # 会由运行时从主动命令空间剔除，并按 master 实际状态计算 position-drive 目标。
+  # 由原生主从约束执行，不包含在主动命令空间内。
   arm:
     - arm_AR5_5_08L_W4C4A6_joint_1
     - arm_AR5_5_08L_W4C4A6_joint_2
@@ -148,8 +149,8 @@ joint_groups:
     - arm_AR5_5_08L_W4C4A6_joint_6
     - arm_AR5_5_08L_W4C4A6_joint_7
   hand:
-    - hand_lh_thumb_cmc_yaw
     - hand_lh_thumb_cmc_pitch
+    - hand_lh_thumb_cmc_yaw
     - hand_lh_index_mcp_pitch
     - hand_lh_middle_mcp_pitch
     - hand_lh_ring_mcp_pitch
