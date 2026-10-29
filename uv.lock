@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -32,21 +32,8 @@ wheels = [
 ]
 
 [[package]]
-name = "aioboto3"
-version = "15.5.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiobotocore", extra = ["boto3"], marker = "extra == 'extra-16-linker-sim-isaac-simulation'" },
-    { name = "aiofiles" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a2/01/92e9ab00f36e2899315f49eefcd5b4685fbb19016c7f19a9edf06da80bb0/aioboto3-15.5.0.tar.gz", hash = "sha256:ea8d8787d315594842fbfcf2c4dce3bac2ad61be275bc8584b2ce9a3402a6979", size = 255069, upload-time = "2025-10-30T13:37:16.122Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/3e/e8f5b665bca646d43b916763c901e00a07e40f7746c9128bdc912a089424/aioboto3-15.5.0-py3-none-any.whl", hash = "sha256:cc880c4d6a8481dd7e05da89f41c384dbd841454fc1998ae25ca9c39201437a6", size = 35913, upload-time = "2025-10-30T13:37:14.549Z" },
-]
-
-[[package]]
 name = "aiobotocore"
-version = "2.25.1"
+version = "2.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -57,14 +44,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/94/2e4ec48cf1abb89971cb2612d86f979a6240520f0a659b53a43116d344dc/aiobotocore-2.25.1.tar.gz", hash = "sha256:ea9be739bfd7ece8864f072ec99bb9ed5c7e78ebb2b0b15f29781fbe02daedbc", size = 120560, upload-time = "2025-10-28T22:33:21.787Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4d/f8/99fa90d9c25b78292899fd4946fce97b6353838b5ecc139ad8ba1436e70c/aiobotocore-2.26.0.tar.gz", hash = "sha256:50567feaf8dfe2b653570b4491f5bc8c6e7fb9622479d66442462c021db4fadc", size = 122026, upload-time = "2025-11-28T07:54:59.956Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/95/2a/d275ec4ce5cd0096665043995a7d76f5d0524853c76a3d04656de49f8808/aiobotocore-2.25.1-py3-none-any.whl", hash = "sha256:eb6daebe3cbef5b39a0bb2a97cffbe9c7cb46b2fcc399ad141f369f3c2134b1f", size = 86039, upload-time = "2025-10-28T22:33:19.949Z" },
-]
-
-[package.optional-dependencies]
-boto3 = [
-    { name = "boto3" },
+    { url = "https://files.pythonhosted.org/packages/b7/58/3bf0b7d474607dc7fd67dd1365c4e0f392c8177eaf4054e5ddee3ebd53b5/aiobotocore-2.26.0-py3-none-any.whl", hash = "sha256:a793db51c07930513b74ea7a95bd79aaa42f545bdb0f011779646eafa216abec", size = 87333, upload-time = "2025-11-28T07:54:58.457Z" },
 ]
 
 [[package]]
@@ -99,7 +81,7 @@ wheels = [
 
 [[package]]
 name = "aiohttp"
-version = "3.14.1"
+version = "3.14.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
@@ -111,10 +93,10 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "yarl" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/82/78/8ea7308cac6934de8c74a14f3d5f65d1c89287426688be79538d0e5c013d/aiohttp-3.14.1.tar.gz", hash = "sha256:307f2cff90a764d329e77040603fa032db89c5c24fdad50c4c15334cba744035", size = 7955794, upload-time = "2026-06-07T21:09:35.529Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz", hash = "sha256:9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc", size = 7971213, upload-time = "2026-07-23T01:57:27.037Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/9c/d445818389df371f56d141d881153ba23183c4735a03f7356ffb43f7757d/aiohttp-3.14.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3e6fc1a85fa7194a1a7d19f44e8609180f4a8eb5fa4c7ed8b4355f080fad235c", size = 1790278, upload-time = "2026-06-07T21:06:54.049Z" },
-    { url = "https://files.pythonhosted.org/packages/70/0a/e0075ce9ca0279ee1d4f0c0b85f54fea02ebc83c3007651a72bece658fec/aiohttp-3.14.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:6f71173be42d3241d428f760122febb748de0623f44308a6f120d0dd9ec572e3", size = 1767580, upload-time = "2026-06-07T21:07:07.873Z" },
+    { url = "https://files.pythonhosted.org/packages/52/b7/7cd31f29d6055bd711ae6e669367fba6f5ae9de463910a793e30556a8db7/aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:543906c127fb1d929b95076db19b83fa2d46751006ff1e23b093aa5ac4d8db42", size = 1792122, upload-time = "2026-07-23T01:54:15.752Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/eb/aad34e897e668424d6e995da5dff8a4a09af93363d3392488772957a63aa/aiohttp-3.14.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:d1558173930a5a8d3069cee5c92fc91c87c4dbcb099debbb3622053717145a19", size = 1768629, upload-time = "2026-07-23T01:54:40.103Z" },
 ]
 
 [[package]]
@@ -255,30 +237,30 @@ wheels = [
 
 [[package]]
 name = "boto3"
-version = "1.40.61"
+version = "1.41.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
     { name = "jmespath" },
     { name = "s3transfer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/f9/6ef8feb52c3cce5ec3967a535a6114b57ac7949fd166b0f3090c2b06e4e5/boto3-1.40.61.tar.gz", hash = "sha256:d6c56277251adf6c2bdd25249feae625abe4966831676689ff23b4694dea5b12", size = 111535, upload-time = "2025-10-28T19:26:57.247Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/81/450cd4143864959264a3d80f9246175a20de8c1e50ec889c710eaa28cdd9/boto3-1.41.5.tar.gz", hash = "sha256:bc7806bee681dfdff2fe2b74967b107a56274f1e66ebe4d20dc8eee1ea408d17", size = 111594, upload-time = "2025-11-26T20:27:47.021Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/24/3bf865b07d15fea85b63504856e137029b6acbc73762496064219cdb265d/boto3-1.40.61-py3-none-any.whl", hash = "sha256:6b9c57b2a922b5d8c17766e29ed792586a818098efe84def27c8f582b33f898c", size = 139321, upload-time = "2025-10-28T19:26:55.007Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/56/f47a80254ed4991cce9a2f6d8ae8aafbc8df1c3270e966b2927289e5a12f/boto3-1.41.5-py3-none-any.whl", hash = "sha256:bb278111bfb4c33dca8342bda49c9db7685e43debbfa00cc2a5eb854dd54b745", size = 139344, upload-time = "2025-11-26T20:27:45.571Z" },
 ]
 
 [[package]]
 name = "botocore"
-version = "1.40.61"
+version = "1.41.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jmespath" },
     { name = "python-dateutil" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/28/a3/81d3a47c2dbfd76f185d3b894f2ad01a75096c006a2dd91f237dca182188/botocore-1.40.61.tar.gz", hash = "sha256:a2487ad69b090f9cccd64cf07c7021cd80ee9c0655ad974f87045b02f3ef52cd", size = 14393956, upload-time = "2025-10-28T19:26:46.108Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/22/7fe08c726a2e3b11a0aef8bf177e83891c9cb2dc1809d35c9ed91a9e60e6/botocore-1.41.5.tar.gz", hash = "sha256:0367622b811597d183bfcaab4a350f0d3ede712031ce792ef183cabdee80d3bf", size = 14668152, upload-time = "2025-11-26T20:27:38.026Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/c5/f6ce561004db45f0b847c2cd9b19c67c6bf348a82018a48cb718be6b58b0/botocore-1.40.61-py3-none-any.whl", hash = "sha256:17ebae412692fd4824f99cde0f08d50126dc97954008e5ba2b522eb049238aa7", size = 14055973, upload-time = "2025-10-28T19:26:42.15Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/4e/21cd0b8f365449f1576f93de1ec8718ed18a7a3bc086dfbdeb79437bba7a/botocore-1.41.5-py3-none-any.whl", hash = "sha256:3fef7fcda30c82c27202d232cfdbd6782cb27f20f8e7e21b20606483e66ee73a", size = 14337008, upload-time = "2025-11-26T20:27:35.208Z" },
 ]
 
 [[package]]
@@ -327,11 +309,11 @@ wheels = [
 
 [[package]]
 name = "click"
-version = "8.1.7"
+version = "8.3.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz", hash = "sha256:ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de", size = 336121, upload-time = "2023-08-17T17:29:11.868Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz", hash = "sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2", size = 328061, upload-time = "2026-04-22T15:11:27.506Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/00/2e/d53fa4befbf2cfa713304affc7ca780ce4fc1fd8710527771b58311a3229/click-8.1.7-py3-none-any.whl", hash = "sha256:ae74fb96c20a0277a1d615f1e4d73c8414f5a98db8b799a7931d1582f3390c28", size = 97941, upload-time = "2023-08-17T17:29:10.08Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/44/c1221527f6a71a01ec6fbad7fa78f1d50dfa02217385cf0fa3eec7087d59/click-8.3.3-py3-none-any.whl", hash = "sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613", size = 110502, upload-time = "2026-04-22T15:11:25.044Z" },
 ]
 
 [[package]]
@@ -777,13 +759,13 @@ wheels = [
 
 [[package]]
 name = "isaacsim"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim/isaacsim-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:55fb65052c0fe025f7165f10e71b4e693e26b6fc2f8c7cc08875ac41b00e695d" },
+    { url = "https://pypi.nvidia.com/isaacsim/isaacsim-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:0ee5a58dca1e927fbf6e54732c35352a41bd704bd2a7d798f5ccbc6420e16d00" },
 ]
 
 [package.optional-dependencies]
@@ -793,7 +775,6 @@ all = [
     { name = "isaacsim-benchmark" },
     { name = "isaacsim-code-editor" },
     { name = "isaacsim-core" },
-    { name = "isaacsim-cortex" },
     { name = "isaacsim-example" },
     { name = "isaacsim-gui" },
     { name = "isaacsim-replicator" },
@@ -817,56 +798,55 @@ extscache = [
 
 [[package]]
 name = "isaacsim-app"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-app/isaacsim_app-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:aa3cd2ae94489d6818186afd722a31e4fc82018ff3e8a4d07199a93d500a84e2" },
+    { url = "https://pypi.nvidia.com/isaacsim-app/isaacsim_app-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:9e5d0b7d8a468a8e8bc3bd3ff8468ca8438bb50e45a820eb6bff32bbcad7b023" },
 ]
 
 [[package]]
 name = "isaacsim-asset"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-storage" },
     { name = "isaacsim-utils" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-asset/isaacsim_asset-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:cf1338595aa99fc4d4aafb0d091883864332003f602f89a8e15d1e424ebdd97a" },
+    { url = "https://pypi.nvidia.com/isaacsim-asset/isaacsim_asset-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:69822e9573d6858a77449c3cc7dea7af046d31847a8e01a6bb6b867f38609534" },
 ]
 
 [[package]]
 name = "isaacsim-benchmark"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-benchmark/isaacsim_benchmark-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:c5090850b594ddd7b422f2b7c9da14cd6a61e3ab0943bf5bbc3d6f1eacff9dfb" },
+    { url = "https://pypi.nvidia.com/isaacsim-benchmark/isaacsim_benchmark-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:f199e2c0ec9c0b00d4333be22a2d1d0fac77d812c6cd0691decbc02e556d5933" },
 ]
 
 [[package]]
 name = "isaacsim-code-editor"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-code-editor/isaacsim_code_editor-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:145f281814263424ff14ebe47f834bba62700a409489369a1b4e58caa5c5c47e" },
+    { url = "https://pypi.nvidia.com/isaacsim-code-editor/isaacsim_code_editor-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:631ee5e85ac957cef4c0af0459810481e7d4f09ad2770f083fe3711ab2a0e1ac" },
 ]
 
 [[package]]
 name = "isaacsim-core"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "absl-py" },
-    { name = "aioboto3" },
     { name = "awscrt" },
     { name = "azure-core" },
     { name = "azure-identity" },
@@ -929,70 +909,59 @@ dependencies = [
     { name = "urdf-usd-converter" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-core/isaacsim_core-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2dbde879bc55c1e30a4579539eef250c27fd3e3bc17dc909ef90b16b0aedb8ad" },
+    { url = "https://pypi.nvidia.com/isaacsim-core/isaacsim_core-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:a3963605f12926477588411c76385f8e76d0b55553032acf2004d932544c376a" },
 ]
 
 [[package]]
-name = "isaacsim-cortex"
-version = "6.1.0.0"
+name = "isaacsim-example"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
     { name = "isaacsim-ros1" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-cortex/isaacsim_cortex-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:df0f3133aa9aa2e43188942a7e3b5d62af73c5aeeb6c9c59cf1bbd10ad63db6a" },
-]
-
-[[package]]
-name = "isaacsim-example"
-version = "6.1.0.0"
-source = { registry = "https://pypi.nvidia.com/" }
-dependencies = [
-    { name = "isaacsim-cortex" },
-]
-wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-example/isaacsim_example-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:0d7364274750bace6f04d0529f5828b98ecd8c489bcd198f63b9b517e85e4909" },
+    { url = "https://pypi.nvidia.com/isaacsim-example/isaacsim_example-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:bd53fc66da7bf2b2b44b3cce6c63ce1e7896f9a4f2e4432dfc34065e690f288d" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-kit"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit/isaacsim_extscache_kit-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3e2e96b0badc486000e3cbee3ccabc1f7eb9b1191c7334a25a39b689ca535e09" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit/isaacsim_extscache_kit-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:8f14f7673aeb073d7917494c7b7ae3a2ca0b83ea70e478b46390a352ccbdc88c" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-kit-sdk"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit-sdk/isaacsim_extscache_kit_sdk-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:dd587ecb5066427a47063ee117a716e33498bf5e0eee1f8f4f77d502333fadd8" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-kit-sdk/isaacsim_extscache_kit_sdk-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:cf77f38f5cd29e1413696d7fd5eeec07559233234db6db32d7ca93efc4092298" },
 ]
 
 [[package]]
 name = "isaacsim-extscache-physics"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-extscache-physics/isaacsim_extscache_physics-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:94ab00d5e878148bf92335e068c38e7ba995fc083607781dc788ccf0df14be23" },
+    { url = "https://pypi.nvidia.com/isaacsim-extscache-physics/isaacsim_extscache_physics-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:4754ce429f61c9ac99b9bddfa272efe7abae575f3a3701c5ce1f6fb88b6beee3" },
 ]
 
 [[package]]
 name = "isaacsim-gui"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-core" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-gui/isaacsim_gui-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:9a911be5d95d9451b5403a6d3040767fcd95e1309b51a10a0457daafb7e021af" },
+    { url = "https://pypi.nvidia.com/isaacsim-gui/isaacsim_gui-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:d0a59ca7eef2ba34c5ba2e365e99ae44f14395237f0d7da424bd413d54ca12f3" },
 ]
 
 [[package]]
 name = "isaacsim-kernel"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "aiobotocore" },
@@ -1037,41 +1006,41 @@ dependencies = [
     { name = "yarl" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-kernel/isaacsim_kernel-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:fe795f2d965e8fb82befa71071a13687aba519d61f980820117b02261ae3cec7" },
+    { url = "https://pypi.nvidia.com/isaacsim-kernel/isaacsim_kernel-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:f6b49ed4fa67569c90d69c835e7700bb339b57ce67aecfe6b5b76c52b0c0b3b4" },
 ]
 
 [[package]]
 name = "isaacsim-replicator"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-core" },
     { name = "isaacsim-storage" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-replicator/isaacsim_replicator-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:6c69c090e42100a49c333bf46a6e94632bc121100a4c701f97852fdf00cb0d3f" },
+    { url = "https://pypi.nvidia.com/isaacsim-replicator/isaacsim_replicator-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3294365f92a2174747ba5e0bd46914bb24211f3d22dbff0f66d3437faf54c1a1" },
 ]
 
 [[package]]
 name = "isaacsim-rl"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-benchmark" },
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-rl/isaacsim_rl-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:441d1a0af29643c4058ee666368ea7a4e0d72874623a1ff081af8c7151cc53d6" },
+    { url = "https://pypi.nvidia.com/isaacsim-rl/isaacsim_rl-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:090e421ba8fd4c8607e162b4083c5e05e5b2bf42662f3cd5c64f4eeb29cc7659" },
 ]
 
 [[package]]
 name = "isaacsim-robot"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
     { name = "isaacsim-sensor" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime-gpu" },
     { name = "py-trees" },
     { name = "pydot" },
     { name = "pyparsing" },
@@ -1079,56 +1048,56 @@ dependencies = [
     { name = "transitions" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot/isaacsim_robot-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e5f28c9901343ee09edac33170f03506875f71dd675c1565deeb1e9f41a7ae0c" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot/isaacsim_robot-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:902fa8b706a886ea05dc387801f41e74d146cbb823ae5e8b98fe5e2bd207ef54" },
 ]
 
 [[package]]
 name = "isaacsim-robot-motion"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot-motion/isaacsim_robot_motion-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e807b6879b6fb680f8348edfd3507da4f5971b3b8d1dc39142b6eaabae3b9856" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot-motion/isaacsim_robot_motion-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:a8a449caa18ebae7331f074428f83d6aefa1c905f03283d0cfc32f4f853fc021" },
 ]
 
 [[package]]
 name = "isaacsim-robot-setup"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-robot-setup/isaacsim_robot_setup-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:c20c36e8db72166ef0d2089a13ce5476658ff1f89589db531fb2bc1092e47f44" },
+    { url = "https://pypi.nvidia.com/isaacsim-robot-setup/isaacsim_robot_setup-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:46212c8d8928e2ef3973644a9c73f36034747628768e7671676c6a26ebdb279a" },
 ]
 
 [[package]]
 name = "isaacsim-ros1"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-sensor" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-ros1/isaacsim_ros1-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:87537710b5560762fa0a468f3feb4f410f917ff64e739d267dea3615ea51d0a5" },
+    { url = "https://pypi.nvidia.com/isaacsim-ros1/isaacsim_ros1-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:bc9eeecf9c5fe2231f7d9197dd75dc6dd798e64cb78782a23176f1e532ee5e71" },
 ]
 
 [[package]]
 name = "isaacsim-ros2"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-sensor" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-ros2/isaacsim_ros2-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:f8455420dfabbcecd8150c1df5d7d1eac691938e311ed634bdcca43b9a793ae9" },
+    { url = "https://pypi.nvidia.com/isaacsim-ros2/isaacsim_ros2-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:34910c880e452528f5771e0f31673b08703e522f2d09cdb173216be7cd89844f" },
 ]
 
 [[package]]
 name = "isaacsim-sensor"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
@@ -1136,52 +1105,52 @@ dependencies = [
     { name = "isaacsim-utils" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-sensor/isaacsim_sensor-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:eaa4d80b1fb2933835c580eba6c2b7139cddf427d320dd275b0ed0b3f4ba7acf" },
+    { url = "https://pypi.nvidia.com/isaacsim-sensor/isaacsim_sensor-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:0be986b75d35339a49f8708d64af66e12ce2a8b5e03bd85cc35e7c983d4f5b3a" },
 ]
 
 [[package]]
 name = "isaacsim-storage"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-kernel" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-storage/isaacsim_storage-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:2f7fd9325300c4baa528c26f4df6b37ae3f0093db7e30c6b8831e6b33a5cb37b" },
+    { url = "https://pypi.nvidia.com/isaacsim-storage/isaacsim_storage-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:3367955d023bc663000952ecab337056e74050edcc295242b00ae094e1537daa" },
 ]
 
 [[package]]
 name = "isaacsim-template"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
     { name = "isaacsim-storage" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-template/isaacsim_template-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:bf5660b1f6aecfce33f81aa5bcedc752d66a7f85e467f98833519cabe1e3ec7c" },
+    { url = "https://pypi.nvidia.com/isaacsim-template/isaacsim_template-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:adf9e9444cd74ef4447b24c12789ca708b43c1fa0e9edabef77a72243c4f40f0" },
 ]
 
 [[package]]
 name = "isaacsim-test"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-test/isaacsim_test-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:1c037cdf2623ade77cfae8c350ec9a903b2e7ebae0a25efabb9e2ba362d73111" },
+    { url = "https://pypi.nvidia.com/isaacsim-test/isaacsim_test-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:32df9d97de233c916cbb48f7a3142a7071d086f6f84cfe5a870147dd612e1d3b" },
 ]
 
 [[package]]
 name = "isaacsim-utils"
-version = "6.1.0.0"
+version = "6.2.0.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-gui" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/isaacsim-utils/isaacsim_utils-6.1.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:5582f31bc825bdc92623ea6c667c69777cab57d096782d5801af586e14e81d59" },
+    { url = "https://pypi.nvidia.com/isaacsim-utils/isaacsim_utils-6.2.0.0-cp312-none-manylinux_2_35_x86_64.whl", hash = "sha256:e02a390491576376fbb1301337014fffcad1b538b4be8c3d369b33cee6b9b52b" },
 ]
 
 [[package]]
@@ -1323,7 +1292,7 @@ requires-dist = [
     { name = "cuda-bindings", extras = ["all"], marker = "extra == 'simulation'", specifier = "==12.9.7" },
     { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.26.0" },
     { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.3.0" },
-    { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.1.0.0" },
+    { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.2.0.0" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
     { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.411" },
@@ -1338,7 +1307,7 @@ requires-dist = [
     { name = "torchaudio", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "extra == 'simulation'", specifier = "==0.26.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "usd-core", marker = "extra == 'dev'", specifier = "==26.8" },
-    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.17.0" },
+    { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.18.0" },
     { name = "websockets", specifier = "==13.1" },
 ]
 provides-extras = ["test", "dev", "visualization", "training", "simulation"]
@@ -1513,7 +1482,7 @@ wheels = [
 
 [[package]]
 name = "mujoco-usd-converter"
-version = "0.5.0"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mujoco" },
@@ -1522,9 +1491,9 @@ dependencies = [
     { name = "tinyobjloader" },
     { name = "usd-exchange" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/11/144434c0c3b18ebd1412a92fd0af838290b10d783eb4d50566b24867f449/mujoco_usd_converter-0.5.0.tar.gz", hash = "sha256:426d92330c5941bab6dbf08b56bbd3333284e6c8446e0a1e080c954c7ae463a9", size = 312136, upload-time = "2026-08-05T18:25:41.757Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/95/47/92b378d3497d9cdaca18b1ee46f34cf3b8441dd5703f8e6bc63aff988089/mujoco_usd_converter-0.6.1.tar.gz", hash = "sha256:1d033e442bdb2f28e7f2e515ab88f8e60a3429f6a3a8ed2fee34fc59ef06a2ae", size = 312482, upload-time = "2026-09-29T19:43:39.02Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/5a/4c3be263beeda406d622ad273e0f5daba8e0ce3996e9e46a35cba820039f/mujoco_usd_converter-0.5.0-py3-none-any.whl", hash = "sha256:e4a97f9817fdd56b06e6207e0878e0de8baae5ee82880e365815c89d9a2058f4", size = 55631, upload-time = "2026-08-05T18:25:40.546Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/a2/d9d215a904886a79b0a8a8b14064608c2daf22150cc43e5e6a863b3bb50e/mujoco_usd_converter-0.6.1-py3-none-any.whl", hash = "sha256:e21e3b24b1877c0489b37624de43f59f34e98662e387e348e0b83271d4572d36", size = 55760, upload-time = "2026-09-29T19:43:37.557Z" },
 ]
 
 [[package]]
@@ -1588,11 +1557,11 @@ sim = [
 
 [[package]]
 name = "newton-usd-schemas"
-version = "0.4.1"
+version = "0.5.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/98/5f/aad1672263880d7e0ee3a7ce9b877ef16e99dba45fb5eb8084181eb7ee1e/newton_usd_schemas-0.4.1.tar.gz", hash = "sha256:1f6946ce2741d7a86ca8e3e84d7b64328c88b42a3b29160a7607b2ce0c837bf4", size = 69561, upload-time = "2026-07-30T17:40:41.505Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/3b/602eea8123824daf2215fcdf4a61a0958507ea11e5c38e4313285f6b745f/newton_usd_schemas-0.5.0.tar.gz", hash = "sha256:a404232e9f89cfce130ee5ed5c8b6b23b187514e857803b5d7b08568bb2516e0", size = 76299, upload-time = "2026-08-14T00:02:50.252Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/24/d1d44f682dbd28392ef0b6f9e6f9e40374c6009af06e494fa6a9308f79e2/newton_usd_schemas-0.4.1-py3-none-any.whl", hash = "sha256:8911e846c65448426609a2945db6d1135d33e84bf4107efd888a62287b1aa93d", size = 19424, upload-time = "2026-07-30T17:40:40.076Z" },
+    { url = "https://files.pythonhosted.org/packages/78/bc/ffad9598cc4772cb0b8d8d47c6700493dac3d8d6518dead78c596a0325ed/newton_usd_schemas-0.5.0-py3-none-any.whl", hash = "sha256:edb559522474855fc03e6f395e0702b11074a13fe1c2ed9cce63fbb06516b342", size = 22280, upload-time = "2026-08-14T00:02:49.056Z" },
 ]
 
 [[package]]
@@ -1828,7 +1797,7 @@ wheels = [
 ]
 
 [[package]]
-name = "onnxruntime"
+name = "onnxruntime-gpu"
 version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
@@ -1838,18 +1807,18 @@ dependencies = [
     { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/43/2a4e04f8dbeffad19bbcced4bcd4289bf478921518437404d6b92bdf213b/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9b6dd70599005bd1bf29779f04a91978b92b5e719c11a20068a8f8e535f725b6", size = 18185439, upload-time = "2026-05-08T19:07:36.299Z" },
+    { url = "https://files.pythonhosted.org/packages/94/fd/59bee7cffaa435da44fefdeb63e29c61de4dbfa4b279852f59cd02c042ae/onnxruntime_gpu-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3c01119ed4d9449d60367fa8ccffcd02bd3fe736754284e4b198d131f54edad6", size = 276971796, upload-time = "2026-05-08T19:15:46.192Z" },
 ]
 
 [[package]]
 name = "opencv-python-headless-noffmpeg"
-version = "4.14.0.94rc1"
+version = "4.14.0.94rc3"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/opencv-python-headless-noffmpeg/opencv_python_headless_noffmpeg-4.14.0.94rc1-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:758e5c9fbee25005c9d3fc163d9c66443af7a1776789a75683a630d1ed974393" },
+    { url = "https://pypi.nvidia.com/opencv-python-headless-noffmpeg/opencv_python_headless_noffmpeg-4.14.0.94rc3-cp312-cp312-manylinux_2_35_x86_64.whl", hash = "sha256:d6a4f1f50224a2d8fd64f17e92494222d126899905422226c83047eb676f7555" },
 ]
 
 [[package]]
@@ -2303,14 +2272,14 @@ wheels = [
 
 [[package]]
 name = "s3transfer"
-version = "0.14.0"
+version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "botocore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/74/8d69dcb7a9efe8baa2046891735e5dfe433ad558ae23d9e3c14c633d1d58/s3transfer-0.14.0.tar.gz", hash = "sha256:eff12264e7c8b4985074ccce27a3b38a485bb7f7422cc8046fee9be4983e4125", size = 151547, upload-time = "2025-09-09T19:23:31.089Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/bb/940d6af975948c1cc18f44545ffb219d3c35d78ec972b42ae229e8e37e08/s3transfer-0.15.0.tar.gz", hash = "sha256:d36fac8d0e3603eff9b5bfa4282c7ce6feb0301a633566153cbd0b93d11d8379", size = 152185, upload-time = "2025-11-20T20:28:56.327Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/48/f0/ae7ca09223a81a1d890b2557186ea015f6e0502e9b8cb8e1813f1d8cfa4e/s3transfer-0.14.0-py3-none-any.whl", hash = "sha256:ea3b790c7077558ed1f02a3072fb3cb992bbbd253392f4b6e9e8976941c7d456", size = 85712, upload-time = "2025-09-09T19:23:30.041Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/e1/5ef25f52973aa12a19cf4e1375d00932d7fb354ffd310487ba7d44225c1a/s3transfer-0.15.0-py3-none-any.whl", hash = "sha256:6f8bf5caa31a0865c4081186689db1b2534cef721d104eb26101de4b9d6a5852", size = 85984, upload-time = "2025-11-20T20:28:55.046Z" },
 ]
 
 [[package]]
@@ -2790,13 +2759,13 @@ wheels = [
 
 [[package]]
 name = "warp-lang"
-version = "1.17.0"
+version = "1.18.0"
 source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.17.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:47cd93636828dd16e55eeb4e77a0e3547b5fb0f383000a3d228629df68f28fd8" },
+    { url = "https://pypi.nvidia.com/warp-lang/warp_lang-1.18.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:090962bfae7dd22ade0d8e0258f41635e0e58980f15bcc9e7a7d312819dfe440" },
 ]
 
 [[package]]
