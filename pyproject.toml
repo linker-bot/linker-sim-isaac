@@ -19,17 +19,17 @@ dependencies = [
 # Test tooling is compatible with both the CPU-only and Isaac environments. Keep it
 # separate from dev because dev's usd-core must never share an environment with Kit.
 test = [
-  "coverage==7.4.4",
+  "coverage==7.17.0",
   "pytest==9.1.1",
 ]
 dev = [
-  "coverage==7.4.4",
-  "pyright==1.1.411",
+  "coverage==7.17.0",
+  "pyright==1.1.414",
   "pytest==9.1.1",
-  "ruff==0.16.4",
+  "ruff==0.17.2",
   # CPU-only USD tests use PyPI USD. Never combine this extra with simulation:
   # Isaac runtime must load pxr from Kit's isaacsim-kernel distribution.
-  "usd-core==26.8",
+  "usd-core==26.11",
 ]
 visualization = [
   "foxglove-sdk==0.26.0",
