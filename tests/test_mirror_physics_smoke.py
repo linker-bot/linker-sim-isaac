@@ -264,6 +264,7 @@ class _FakeRuntime:
             gravity_z=-9.81,
             add_ground=False,
             ground_height=0.0,
+            control_frequency_hz=120.0,
             physics_frequency_hz=120.0,
             render_frequency_hz=30.0,
             robots=(),

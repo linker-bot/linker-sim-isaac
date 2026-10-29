@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- Newton锁定已验证1.8开发提交和MuJoCo 3.15；PhysX与Newton统一加载Warp 1.17 wheel。普通入口默认可自定义的60Hz控制/480Hz物理，专用混合力控独立配置60Hz指令/240Hz反馈/480Hz物理。Mirror场景新增 `control_frequency_hz`；Newton leaf删除 `substeps` / `max_substep_dt_s` 和自动拆步逻辑。混合力控最低频率字段改为 `minimum_feedback_frequency_hz`，保留最低200Hz；hybrid增益、滤波、计数及反馈时序均不变。本步接触、资产默认不变；需重建锁定环境并复验任务行为。
+
 - 接入O6 1014_v4镜像结构、369.98g/手及修正的左惯性、简化碰撞体、两侧20.5mm AR5_08安装和上游从动耦合修复。相机避让路径需重新验证，控制增益保持不变。
 
 - 接入 L6/O6 共用法兰、可选 Gemini 335L 腕部组件及顶部 ZED 模块，提供具名光学挂载与独立相机规格。修正 USD 姿态读回和快照恢复时的根旋转表示切换。

@@ -37,7 +37,7 @@ profiles:
   outputs: mirror_default
 ```
 
-可选的 `profiles.hybrid_control` 只属于 Mirror。维护的组合使用 240 Hz 专用 scene 与 PhysX CPU：
+可选的 `profiles.hybrid_control` 只属于 Mirror。维护的组合使用默认 60 Hz 指令 / 240 Hz 反馈 / 480 Hz 物理的专用 scene 与 PhysX CPU：
 
 ```yaml
 mode: mirror
@@ -153,7 +153,7 @@ Scene 有三个相关但不能混用的名称：mode root 保存带产品命名�
 `kaleidoscope/tblock_push`、路径 `configs/scenes/kaleidoscope/tblock_push.yaml` 和
 `scene.id: tblock_push`。旧平铺 selector 和跨产品 scene 引用一律无效，因为两种 scene schema 不可互换。
 
-两份 scene 必须保持独立。前者包含相机/viewport/60 Hz 现实映像；后者是无视觉、240 Hz 的任务
+两份 scene 必须保持独立。前者包含相机/viewport的现实映像；后者是无视觉的并行任务
 prototype。环境数量与命名事实只在 Kaleidoscope mode root 声明，training 不能内联进 mode。
 
 Mirror scene 必须声明 `planning_startup: lazy|prewarm`。`lazy` 把 context 与 planner 创建推迟到首次
@@ -266,11 +266,51 @@ Newton 的 `nconmax_per_world`、`njmax_per_world` 和 world 数属于另一套�
 
 ### Newton 接触积分
 
-Newton CPU/CUDA leaf 均要求有限正值的 `max_substep_dt_s` 和
-`default_contact_time_constant_s`，单位为秒。实际内部子步数是
-`max(substeps, ceil(physics_dt / max_substep_dt_s))`。默认步长上限 0.002 秒时，
-60 / 120 / 240 Hz 外部时钟分别使用 9 / 5 / 3 个内部子步；不会增加决策、callback、渲染帧或改变仿真时间。
-碰撞管线每个内部子步刷新接触，额外求解会降低吞吐，评测前应明确并记录配置。
+Mirror场景显式配置 `control_frequency_hz: 60.0` 和 `physics_frequency_hz: 480.0`。
+PhysX与Newton均在一次目标更新后执行8个原生物理步，每步1/480秒。允许自定义120/600、20/240Hz等
+频率，物理/控制频率必须为整数比，否则加载失败。专用混合力控入口独立配置60Hz指令/240Hz反馈/480Hz物理。渲染和相机频率独立。
+
+Kaleidoscope沿用已有action decimation：场景默认480Hz物理，
+`task.action.physics_ticks_per_action: 8`，即60Hz策略动作；其中每次runtime.step是一个物理步，
+Newton不再额外隐式细分。
+
+自定义Newton profile需删除旧 `substeps`、`max_substep_dt_s`；次数在装配时派生，不再自动限制步长。
+内部runtime的 `get_physics_dt()` / `physics_dt_s` 表示一次runtime.step的时长（Mirror控制周期或
+Kaleidoscope物理周期）。Newton诊断的 `effective_substeps`、`substep_dt_s` 以及PhysX World原生步长
+用于核验真实积分频率，不能与墙钟吞吐混淆。每物理步更新接触与原生驱动，控制周期内保持目标；
+增加物理步会增加计算开销。
+
+### 独立的指令、hybrid反馈与物理频率
+
+| 时钟 | 配置 | 默认 | 含义 |
+| --- | --- | --- | --- |
+| Mirror指令 | `scene.control_frequency_hz` | 60Hz | 普通关节/轨迹目标更新，更新之间保持目标 |
+| Hybrid反馈 | `hybrid_force_position.feedback_frequency_hz` | 240Hz | 每次重新读取状态和力反馈、计算输出 |
+| 原生物理 | `scene.physics_frequency_hz` | 480Hz | 实际求解积分，与墙钟运行速度不同 |
+| 渲染 | `scene.render_frequency_hz` | 60Hz | 渲染节奏，不额外推进物理 |
+| 规划采样 | planning profile的 `request_defaults.sample_dt_s` | 0.02秒，即50Hz | 带时间戳的轨迹点，重采样到指令网格 |
+
+三种控制相关频率均为独立固定配置，不自适应升频。hybrid要求 **反馈/指令**、**物理/反馈**
+均为正整数；普通入口要求物理/指令为正整数。非法组合在Kit启动前报错，不暗中取整、提高或钳制频率。
+默认60/240/480Hz意味着每个指令周期4次反馈计算、8个物理步。指令提高到120Hz，反馈仍240Hz；
+物理提高到720或960Hz，反馈仍240Hz，每次反馈对应3或4个物理步。
+指令480Hz而反馈仍240Hz会报错，需显式设置兼容的反馈和物理频率。
+hybrid的60/240/600Hz也不合法；普通入口的120/600Hz则合法。
+
+旧 `minimum_physics_frequency_hz` 重命名为 `minimum_feedback_frequency_hz`，保留200Hz安全下限，
+只校验反馈频率；新增必填 `feedback_frequency_hz` 默认240Hz。滤波Nyquist及卸载速率也按反馈频率校验。
+hybrid增益、20Hz滤波和全部反馈计数保持原样：240Hz下30步热身0.125秒、120次归零采样0.5秒、
+3/5步接触进入/退出12.5/20.8毫秒、36步卸载0.15秒。只改指令或物理频率不会改变这些时长。
+若显式将反馈提高到480Hz，要保持原时长，应把上述计数以及传感器过期计数加倍；
+原36步卸载因无法满足力矩变化率限制会被拒绝。自定义反馈频率仍需重新验证增益与滤波表现。
+
+不额外对目标或力矩插值：目标保持，每次反馈读取新状态并重算输出。现有hybrid API仍执行目标固定的
+完整运动请求，本次不增加执行中流式替换目标的接口；普通关节请求继续使用已有轨迹采样。
+两种控制共用同一个物理owner，不切换原生步长。输出时间戳使用实际仿真时间；输出 `step` 是完成推进后的
+单调采样序号，混合两种模式后不能再乘固定步长推算时间。
+规划的 `sample_dt_s: 0.02` 保持原样；轨迹点按时间戳重新采样到控制周期，无需与控制频率整数匹配。
+
+Newton leaf仍要求 `default_contact_time_constant_s` 为有限正秒数，接触响应时间与积分步长分开配置。
 
 默认接触响应时间 0.01 秒按临界阻尼转换为 Newton `ke=1/t²`、`kd=2/t`，对应 MuJoCo
 `solref=(t, 1)`，在 USD 导入前设置到 builder。每 shape 显式设置的 Newton/MJC 刚度和阻尼
@@ -393,7 +433,7 @@ Mirror 则唯一引用 `configs/control/mirror.yaml`；它拥有控制模式、�
 `sync_simulation_to_wall_clock`、interface 和请求缺省语义，controller bundle 同样由 physics 派生。
 
 `sync_simulation_to_wall_clock: true` 让 idle 与 motion 共用一个按
-`scene.physics_frequency_hz` 推进的墙钟同步器，但不会修改 physics dt。某个 tick 落后时，Mirror 会从
+`scene.control_frequency_hz` 推进的墙钟同步器，但不会修改 physics dt。某个 tick 落后时，Mirror 会从
 当前墙钟重新建立 deadline，不会突发补跑错过的 tick；因此负载过高时仿真可以慢于真实时间。设为
 `false` 后不再等待墙钟，physics 会按机器可达到的最快速度推进。Canonical Mirror control profile 默认开启。
 

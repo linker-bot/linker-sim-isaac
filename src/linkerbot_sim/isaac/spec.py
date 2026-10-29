@@ -41,23 +41,27 @@ class IsaacComputeSpec:
 class IsaacPhysxCpuSpec:
     """Mirror 的 PhysX CPU owner 判别项。"""
 
+    substeps: int = 1
     kind: Literal["physx_cpu"] = "physx_cpu"
 
     def __post_init__(self) -> None:
         if self.kind != "physx_cpu":
             raise ValueError("physics.kind must be physx_cpu")
+        _require_positive_int(self.substeps, "physics.substeps")
 
 
 @dataclass(frozen=True)
 class IsaacPhysxCudaSpec:
     """Kaleidoscope 的单设备 PhysX CUDA/Torch/Fabric 判别项。"""
 
+    substeps: int = 1
     enable_scene_query_support: bool = False
     kind: Literal["physx_cuda"] = "physx_cuda"
 
     def __post_init__(self) -> None:
         if self.kind != "physx_cuda":
             raise ValueError("physics.kind must be physx_cuda")
+        _require_positive_int(self.substeps, "physics.substeps")
         if type(self.enable_scene_query_support) is not bool:
             raise TypeError("physics.enable_scene_query_support must be boolean")
 
@@ -71,7 +75,6 @@ class IsaacNewtonCudaSpec:
     njmax_per_world: int = 1200
     use_cuda_graph: bool = True
     substeps: int = 1
-    max_substep_dt_s: float = 0.002
     default_contact_time_constant_s: float = 0.01
     iterations: int = 100
     line_search_iterations: int = 50
@@ -93,7 +96,7 @@ class IsaacNewtonCudaSpec:
             _require_positive_int(getattr(self, name), f"physics.{name}")
         if type(self.use_cuda_graph) is not bool:
             raise TypeError("physics.use_cuda_graph must be boolean")
-        for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+        for name in ("default_contact_time_constant_s",):
             value_s = getattr(self, name)
             if (
                 isinstance(value_s, bool)
@@ -121,7 +124,6 @@ class IsaacNewtonCpuSpec:
     nconmax_per_world: int = 200
     njmax_per_world: int = 1200
     substeps: int = 1
-    max_substep_dt_s: float = 0.002
     default_contact_time_constant_s: float = 0.01
     iterations: int = 100
     line_search_iterations: int = 50
@@ -143,7 +145,7 @@ class IsaacNewtonCpuSpec:
             _require_positive_int(getattr(self, name), f"physics.{name}")
         if self.world_count != 1:
             raise ValueError("Newton CPU requires world_count=1")
-        for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+        for name in ("default_contact_time_constant_s",):
             value_s = getattr(self, name)
             if (
                 isinstance(value_s, bool)
@@ -252,6 +254,8 @@ class IsaacSessionSpec:
     experience_family: ExperienceFamily
     compute: IsaacComputeSpec
     physics: IsaacPhysicsSpec
+    # Duration of one runtime.step(): Mirror control tick, Kaleidoscope physics tick.
+    # Native solver dt is physics_dt / physics.substeps.
     physics_dt: float
     rendering_dt: float
     gravity_z: float

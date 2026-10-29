@@ -27,7 +27,7 @@ Mirror v2 与原生 Kaleidoscope 的控制模式切换只允许发生在两次�
 覆盖全部 robot/env；不会重建 runtime owner。回滚失败会永久 fail-stop，reset 不能清除，只能 close
 并由调用方重建。
 
-Hybrid 力/位控制第一阶段只支持 Mirror PhysX CPU、至少 200 Hz（维护 profile 为 240 Hz）、每条请求一个
+Hybrid 力/位控制第一阶段只支持 Mirror PhysX CPU、至少 200 Hz 反馈（维护 profile 默认 60 Hz 指令 / 240 Hz 反馈 / 480 Hz 物理）、每条请求一个
 目标 robot、物理 TCP 绑定和 `reference_frame: world`。目标 arm 的全部 joint 使用显式 effort；位控方向
 是显式笛卡尔阻抗，不是逐方向 implicit joint drive。hand 的 implicit position drive 与其它 robot 不被覆盖。
 

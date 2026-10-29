@@ -204,8 +204,6 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
     {
         "nconmax_per_world",
         "njmax_per_world",
-        "substeps",
-        "max_substep_dt_s",
         "default_contact_time_constant_s",
         "iterations",
         "line_search_iterations",
@@ -216,7 +214,6 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
 _NEWTON_POSITIVE_INT_FIELDS = (
     "nconmax_per_world",
     "njmax_per_world",
-    "substeps",
     "iterations",
     "line_search_iterations",
 )
@@ -229,8 +226,6 @@ class _NewtonCommonValues(TypedDict):
 
     nconmax_per_world: int
     njmax_per_world: int
-    substeps: int
-    max_substep_dt_s: float
     default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
@@ -253,12 +248,6 @@ def _newton_common_from_mapping(
             mapping["njmax_per_world"],
             label=f"{label}.njmax_per_world",
             minimum=1,
-        ),
-        substeps=as_int(mapping["substeps"], label=f"{label}.substeps", minimum=1),
-        max_substep_dt_s=as_float(
-            mapping["max_substep_dt_s"],
-            label=f"{label}.max_substep_dt_s",
-            strictly_positive=True,
         ),
         default_contact_time_constant_s=as_float(
             mapping["default_contact_time_constant_s"],
@@ -299,7 +288,7 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         raise ConfigurationError(f"{owner}.constraint_solver is invalid")
     if getattr(value, "contact_pipeline") not in _NEWTON_CONTACT_PIPELINES:
         raise ConfigurationError(f"{owner}.contact_pipeline is invalid")
-    for name in ("max_substep_dt_s", "default_contact_time_constant_s"):
+    for name in ("default_contact_time_constant_s",):
         value_s = getattr(value, name)
         if (
             isinstance(value_s, bool)
@@ -327,8 +316,6 @@ class NewtonCudaSettings:
     nconmax_per_world: int
     njmax_per_world: int
     use_cuda_graph: bool
-    substeps: int
-    max_substep_dt_s: float
     default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
@@ -382,8 +369,6 @@ class NewtonCpuSettings:
     execution: Literal["cpu"]
     nconmax_per_world: int
     njmax_per_world: int
-    substeps: int
-    max_substep_dt_s: float
     default_contact_time_constant_s: float
     iterations: int
     line_search_iterations: int
@@ -421,8 +406,6 @@ class NewtonCpuSettings:
             ),  # type: ignore[arg-type]
             nconmax_per_world=common["nconmax_per_world"],
             njmax_per_world=common["njmax_per_world"],
-            substeps=common["substeps"],
-            max_substep_dt_s=common["max_substep_dt_s"],
             default_contact_time_constant_s=common["default_contact_time_constant_s"],
             iterations=common["iterations"],
             line_search_iterations=common["line_search_iterations"],

@@ -13,8 +13,8 @@ task:
   action:
     # 每个动作分量在当前控制模式下解释为归一化关节命令。
     mode: joint_control
-    # 一个 policy decision 保持命令的物理步数；240 Hz / 2 = 120 Hz 决策频率。
-    physics_ticks_per_action: 2
+    # 一个 policy decision 保持命令的物理步数；480 Hz / 8 = 60 Hz 决策频率。
+    physics_ticks_per_action: 8
     # 对输入动作逐元素裁剪到 [-clip, clip]。
     clip: 1.0
     # position 模式下，clip 后单位动作对应的最大关节增量，单位 rad。
@@ -62,7 +62,7 @@ task:
 
   # episode 结束条件；成功阈值需连续满足 success_streak 个 decision。
   termination:
-    # 最长 policy decision 数；按当前 action cadence 对应约 4.17 s 仿真时间。
+    # 最长 policy decision 数；按当前 action cadence 对应约 8.33 s 仿真时间。
     horizon_decisions: 500
     # T-block 平面位置到目标的最大成功距离，单位 m。
     success_distance_m: 0.02

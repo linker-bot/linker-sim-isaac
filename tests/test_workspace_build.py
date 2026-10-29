@@ -33,7 +33,7 @@ def test_simulation_dependency_stack_targets_isaac_sim_6() -> None:
     assert "torch==2.11.0" in simulation
     assert "torchvision==0.26.0" in simulation
     assert "torchaudio==2.11.0" in simulation
-    assert "warp-lang==1.16.0" in simulation
+    assert "warp-lang==1.17.0" in simulation
     # 显存验收直接使用 cuda.bindings.nvml，不能只依赖 cuRobo 当前恰好携带的
     # transitive dependency；精确版本同时冻结与已验证 cu12 闭包的兼容性。
     assert "cuda-bindings[all]==12.9.7" in simulation
@@ -43,7 +43,11 @@ def test_simulation_dependency_stack_targets_isaac_sim_6() -> None:
         for dependency in simulation
     )
     assert not any(dependency.startswith("usd-core") for dependency in simulation)
-    assert "override-dependencies" not in project["tool"]["uv"]
+    assert set(project["tool"]["uv"]["override-dependencies"]) == {
+        "newton[sim] @ git+https://github.com/newton-physics/newton.git@55caec0e05718c33f0fe29e80a55af1be69baf07",
+        "mujoco==3.15.0",
+        "mujoco-warp==3.15.0",
+    }
 
 
 @pytest.mark.parametrize(

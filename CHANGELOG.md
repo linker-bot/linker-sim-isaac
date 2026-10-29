@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Pin Newton to the verified 1.8 development revision and MuJoCo 3.15; both PhysX and Newton load the same Warp 1.17 wheel. Ordinary profiles default to configurable 60 Hz control / 480 Hz physics; the dedicated hybrid profile retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Mirror scenes add `control_frequency_hz`; Newton leaves remove `substeps` / `max_substep_dt_s` and automatic subdivision. Hybrid renames `minimum_physics_frequency_hz` to `minimum_feedback_frequency_hz` and retains its 200 Hz minimum; hybrid gains, filters, tick counts and feedback timing are unchanged. Contact and asset defaults are unchanged in this step. Recreate the locked environment and revalidate task behavior.
+
 - Integrate O6 1014_v4 mirrored structure, 369.98 g/hand and corrected left inertia, simplified colliders, symmetric 20.5 mm AR5_08 mounting, and the upstream passive-coupling fix. Revalidate camera-clearance paths; controller gains remain unchanged.
 
 - Added common L6/O6 flanges, optional Gemini 335L wrist assemblies and a top ZED module with named optical mounts and separate camera presets. Corrected USD pose readback and preserved live root rotation topology during snapshot restoration.

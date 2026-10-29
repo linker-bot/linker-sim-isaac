@@ -365,3 +365,39 @@ def test_rigid_view_rejects_writes_without_world_root_free_joint() -> None:
 
     with pytest.raises(RuntimeError, match="FREE bodies"):
         view.set_world_poses(positions=[[0.0, 0.0, 0.0]], indices=[0])
+
+
+def test_position_targets_keep_coordinate_offset_after_free_object():
+    newton = pytest.importorskip("newton")
+    builder = newton.ModelBuilder()
+    builder.begin_world()
+    body = builder.add_link()
+    builder.add_shape_sphere(body, radius=0.1)
+    builder.add_articulation([builder.add_joint_free(body)])
+    arm = builder.add_link()
+    builder.add_shape_sphere(arm, radius=0.1)
+    joint = builder.add_joint_revolute(
+        -1, arm, axis=wp.vec3(0, 0, 1), label="/World/robot/axis"
+    )
+    builder.add_articulation([joint], label="/World/robot")
+    builder.end_world()
+    model = builder.finalize(device="cpu")
+    control = model.control()
+    view = NewtonArticulationView(
+        None,
+        model=model,
+        state=model.state(),
+        control=control,
+        paths=("/World/robot",),
+        controllable_dof_names=("axis",),
+    )
+    before = control.joint_target_q.numpy().copy()
+    view.prepare_dof_selection()
+    view.set_dof_position_targets([[0.25]])
+    view.set_dof_velocity_targets([[0.5]])
+    # The free body's seventh quaternion coordinate must not be overwritten by
+    # an arm target addressed with the sixth-DOF velocity offset.
+    np.testing.assert_array_equal(control.joint_target_q.numpy()[:7], before[:7])
+    assert control.joint_target_q.numpy()[7] == pytest.approx(0.25)
+    assert control.joint_target_qd.numpy()[6] == pytest.approx(0.5)
+    np.testing.assert_allclose(_numpy(view.get_dof_position_targets()), [[0.25]])

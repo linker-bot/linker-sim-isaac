@@ -236,7 +236,7 @@ def test_session_spec_is_renderer_free_and_uses_engine_gpu_buffer_defaults() -> 
     assert spec.physics.enable_scene_query_support is False
     assert not hasattr(config.physics, "gpu_buffers")
     assert not hasattr(spec.physics, "gpu_buffers")
-    assert spec.physics_dt == pytest.approx(1.0 / 240.0)
+    assert spec.physics_dt == pytest.approx(1.0 / 480.0)
     assert spec.render.enabled is False
     assert spec.app.gui is False
 

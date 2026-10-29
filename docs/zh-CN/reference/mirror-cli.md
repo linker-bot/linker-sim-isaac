@@ -26,7 +26,7 @@ Timeout 必须大于零；port 必须在 1–65535。TCP/WebSocket host 只接�
 ## Profile
 
 - `physx_cpu`：scene selector `mirror/scene3` + PhysX CPU；
-- `physx_cpu_hybrid`：240 Hz `mirror/scene3_hybrid` + PhysX CPU + 显式 hybrid controller；
+- `physx_cpu_hybrid`：60 Hz 指令 / 240 Hz 反馈 / 480 Hz 物理的 `mirror/scene3_hybrid` + PhysX CPU + 显式 hybrid controller；
 - `newton_cpu`：相同 Mirror 业务能力，Newton CPU 物理，根 CUDA 供 cuRobo/RTX，一个 world；
 - `newton_cuda`：相同业务能力，Newton CUDA 物理，一个 world。
 

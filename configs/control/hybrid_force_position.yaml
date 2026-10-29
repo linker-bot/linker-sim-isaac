@@ -2,7 +2,8 @@
 # Initial gains are deliberately conservative simulation values. Runtime v3 tuning may
 # only move them within the explicit tuning envelope below.
 hybrid_force_position:
-  minimum_physics_frequency_hz: 200.0
+  feedback_frequency_hz: 240.0
+  minimum_feedback_frequency_hz: 200.0
   max_duration_s: 10.0
   supported_reference_frames: [world]
   allowed_force_axes: [true, true, true, true, true, true]

@@ -106,6 +106,7 @@ def _scene() -> MirrorSceneSettings:
         gravity_z=-3.0,
         add_ground=False,
         ground_height=0.0,
+        control_frequency_hz=120.0,
         physics_frequency_hz=120.0,
         render_frequency_hz=30.0,
         robots=(),

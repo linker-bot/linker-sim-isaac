@@ -16,13 +16,25 @@ Install these host tools before creating the project environments:
   Kaleidoscope, Newton CUDA, RTX rendering, or cuRobo;
 - enough local storage for the Isaac Sim wheels and extension cache.
 
-The repository pins Python 3.12, Isaac Sim 6.1.0, PyTorch 2.11/cu128, Warp 1.16.0,
-Newton 1.5.0, MuJoCo/MuJoCo-Warp 3.11.0, and cuRobo 0.8.0. Treat `pyproject.toml` and `uv.lock` as the source of truth.
+The repository pins Python 3.12, Isaac Sim 6.1.0, PyTorch 2.11/cu128,
+Newton 1.8.0.dev0 at `55caec0e05718c33f0fe29e80a55af1be69baf07`,
+MuJoCo/MuJoCo-Warp 3.15.0, Warp wheel 1.17.0, and cuRobo 0.8.0.
+`pyproject.toml` and `uv.lock` are authoritative. MuJoCo requires websockets >=13;
+the application pins 13.1 to retain its current transport API.
 
-The 6.1 source requires this matched environment; a 6.0.1 environment is not supported.
-Keep a separate checkout/environment for older task revisions. The asset pin and
-configured physics parameters are unchanged, but solver upgrades can change contact
-trajectories; revalidate task policies before adopting the new baseline.
+The narrow uv dependency overrides replace Isaac's Newton 1.5 / MuJoCo 3.11
+pins because this project owns Newton directly and excludes Isaac's Newton
+extension. Both PhysX and Newton load the same Warp 1.17 wheel before Kit starts.
+The Kit integration extension remains bundled; its bundled Python Warp is not loaded.
+Runtime provenance verifies the loaded version and wheel path, and the Newton source revision.
+This is a project-tested combination, not Isaac's bundled Newton stack; plain
+`pip check` will report Isaac's intentionally overridden pins. Use the locked uv
+environment and the actual Kit smoke tests to validate it.
+
+Keep older tasks in separate checkouts and environments. Asset pins, controller
+and contact defaults are unchanged in this preparation step. Normal startup now uses
+60 Hz control / 480 Hz physics (configurable); SDK and timestep changes can
+still change contact trajectories and require task regression.
 
 ## 2. Clone The Workspace
 

@@ -1721,7 +1721,6 @@ class NewtonArticulationView(_NewtonViewBase):
 
         selection = self._qd.selection(indices, dof_indices)
         for slot in (
-            "position_targets",
             "velocity_targets",
             "efforts",
             "joint_qd",
@@ -1729,8 +1728,9 @@ class NewtonArticulationView(_NewtonViewBase):
             self._qd.output(selection, slot)
             self._qd.staging(selection, slot)
         q_selection = self._q.selection(indices, dof_indices)
-        self._q.output(q_selection, "joint_q")
-        self._q.staging(q_selection, "joint_q")
+        for slot in ("joint_q", "position_targets"):
+            self._q.output(q_selection, slot)
+            self._q.staging(q_selection, slot)
 
     def _selected_worlds(self, selection: _WarpSelection) -> tuple[int, ...]:
         return tuple(self.binding.world_indices[row] for row in selection.rows_host)
@@ -1835,7 +1835,7 @@ class NewtonArticulationView(_NewtonViewBase):
         dof_indices: object | None = None,
     ) -> object:
         control = self._control()
-        return self._qd.gather(
+        return self._q.gather(
             _required_array(control, "joint_target_q", category="control"),
             rows=indices,
             columns=dof_indices,
@@ -1851,7 +1851,7 @@ class NewtonArticulationView(_NewtonViewBase):
     ) -> None:
         self._require_controllable(dof_indices, field="position target")
         control = self._control()
-        selection = self._qd.scatter(
+        selection = self._q.scatter(
             _required_array(control, "joint_target_q", category="control"),
             positions,
             rows=indices,

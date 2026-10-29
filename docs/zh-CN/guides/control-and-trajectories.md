@@ -58,7 +58,7 @@ velocity/effort 使用零。前向失败且完整补偿后仍可使用旧模式�
 
 ## 混合力/位控制
 
-专用 `physx_cpu_hybrid` Mirror profile 以 240 Hz 运行。一条
+专用 `physx_cpu_hybrid` Mirror profile 默认以 60 Hz 指令 / 240 Hz 反馈 / 480 Hz 物理运行。一条
 `motion.hybrid_force_position` 执行期间，目标 robot 的全部 arm joint 临时使用 direct effort drive；
 `force_axes=false` 的笛卡尔方向执行显式位姿阻抗（`Kp/Kd`），`force_axes=true` 的方向执行显式力 PI
 （`Kf/Ki`）。hand 继续使用 position/implicit，其它 robot 保持原模式。不能在 arm 上把某个笛卡尔

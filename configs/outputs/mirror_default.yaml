@@ -64,7 +64,7 @@ outputs:
     log_hybrid_control: false
     # 最长缓存时间，单位 s；达到该间隔后把已缓冲行 flush 到文件。
     flush_interval_s: 0.05
-    # 每隔多少个 physics step 记录一行；1 表示每个物理步都采样。
+    # 每隔多少个 Mirror 控制步记录一行；不采集内部物理子步。
     interval_steps: 1
     # 实际关节状态：来自 articulation 当前 position/velocity。
     log_actual_position: true
@@ -83,7 +83,7 @@ outputs:
     # true 时必须至少启用一种消息 modality，并配置 live_port 或 mcap_path；false 时可保留
     # 合法 endpoint，运行时不会解析 MCAP 路径、绑定端口或创建 telemetry sink。
     enabled: true
-    # 状态发布频率，单位 Hz；由采样调度器从 physics step 节奏投影。
+    # 状态发布频率，单位 Hz；由采样调度器从 Mirror 控制步节奏投影。
     rate_hz: 60.0
     # 待发布状态 snapshot 的有界 buffer 容量。
     buffer_size: 1

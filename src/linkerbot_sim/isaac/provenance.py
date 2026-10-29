@@ -76,6 +76,8 @@ class RuntimeProvenance:
     curobo: ModuleProvenance | None = None
     curobo_backend: str | None = None
     curobo_commit: str | None = None
+    newton_commit: str | None = None
+    warp_distribution_path: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """返回可序列化且字段稳定的诊断映射。"""
@@ -152,7 +154,13 @@ def collect_runtime_provenance(
         isaacsim=_module_provenance("isaacsim", "isaacsim"),
         torch=_module_provenance("torch", "torch", torch),
         warp=_module_provenance("warp-lang", "warp", warp),
+        warp_distribution_path=str(
+            importlib.metadata.distribution("warp-lang").locate_file("warp")
+        ),
         newton=newton_info,
+        newton_commit=(
+            _distribution_vcs_commit("newton") if backend == "newton" else None
+        ),
         mujoco_warp=mujoco_warp_info,
         pxr=_module_provenance("isaacsim-kernel", "pxr.Usd", pxr_usd),
         torch_cuda=getattr(getattr(torch, "version", None), "cuda", None),
@@ -192,31 +200,31 @@ def validate_target_runtime(
         "python": (provenance.python, "3.12."),
         "isaacsim": (provenance.isaacsim.version, "6.1.0.0"),
         "torch": (provenance.torch.version, "2.11.0"),
-        "warp": (provenance.warp.version, "1.16.0"),
-        "warp.__version__": (provenance.warp.module_version, "1.16.0"),
+        "warp": (provenance.warp.version, "1.17.0"),
+        "warp.__version__": (provenance.warp.module_version, "1.17.0"),
         "torch_cuda": (provenance.torch_cuda, "12.8"),
     }
     if expected_backend == "newton":
         if provenance.newton is None:
-            expected["newton"] = (None, "1.5.0")
-            expected["newton.__version__"] = (None, "1.5.0")
+            expected["newton"] = (None, "1.8.0.dev0")
+            expected["newton.__version__"] = (None, "1.8.0.dev0")
         else:
-            expected["newton"] = (provenance.newton.version, "1.5.0")
+            expected["newton"] = (provenance.newton.version, "1.8.0.dev0")
             expected["newton.__version__"] = (
                 provenance.newton.module_version,
-                "1.5.0",
+                "1.8.0.dev0",
             )
         if provenance.mujoco_warp is None:
-            expected["mujoco-warp"] = (None, "3.11.0")
-            expected["mujoco_warp.__version__"] = (None, "3.11.0")
+            expected["mujoco-warp"] = (None, "3.15.0")
+            expected["mujoco_warp.__version__"] = (None, "3.15.0")
         else:
             expected["mujoco-warp"] = (
                 provenance.mujoco_warp.version,
-                "3.11.0",
+                "3.15.0",
             )
             expected["mujoco_warp.__version__"] = (
                 provenance.mujoco_warp.module_version,
-                "3.11.0",
+                "3.15.0",
             )
     if require_curobo:
         if provenance.curobo is None:
@@ -227,6 +235,13 @@ def validate_target_runtime(
         for name, (actual, wanted) in expected.items()
         if not str(actual).startswith(wanted)
     ]
+    if newton_runtime and provenance.newton_commit != (
+        "55caec0e05718c33f0fe29e80a55af1be69baf07"
+    ):
+        mismatches.append(
+            f"newton_commit={provenance.newton_commit!r} expected "
+            "'55caec0e05718c33f0fe29e80a55af1be69baf07'"
+        )
     if require_curobo and provenance.curobo_backend != "cuda_core":
         mismatches.append(
             f"curobo_backend={provenance.curobo_backend!r} expected 'cuda_core'"
@@ -421,13 +436,11 @@ def validate_target_runtime(
                 f"{name}={extension.version!r} expected {expected_version!r}"
             )
 
-    warp_extension = extensions.get("omni.warp.core")
-    if warp_extension is not None and not _path_is_within(
-        provenance.warp.path, warp_extension.path
-    ):
+    if not _path_is_within(provenance.warp.path, provenance.warp_distribution_path):
         mismatches.append(
-            "warp module path is outside enabled omni.warp.core extension: "
-            f"module={provenance.warp.path!r}, extension={warp_extension.path!r}"
+            "warp module path is outside the locked warp-lang distribution: "
+            f"module={provenance.warp.path!r}, "
+            f"distribution={provenance.warp_distribution_path!r}"
         )
 
     if expected_backend == "newton":

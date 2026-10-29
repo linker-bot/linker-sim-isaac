@@ -8,7 +8,13 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from ..common import ConfigurationError, as_string, require_keys, strict_mapping
+from ..common import (
+    ConfigurationError,
+    as_float,
+    as_string,
+    require_keys,
+    strict_mapping,
+)
 from ..control import HybridForcePositionSettings, MirrorControlSettings
 from ..curobo import CuroboProfileSettings
 from ..outputs import MirrorOutputsSettings
@@ -142,15 +148,31 @@ class MirrorConfig:
             raise ConfigurationError(
                 "hybrid_control requires the initial Mirror control.mode=position"
             )
-        frequency = float(self.scene.physics_frequency_hz)
-        if frequency < hybrid.minimum_physics_frequency_hz:
+        frequency = as_float(
+            hybrid.feedback_frequency_hz,
+            label="hybrid_control.feedback_frequency_hz",
+            strictly_positive=True,
+        )
+        for ratio, label in (
+            (frequency / self.scene.control_frequency_hz, "feedback/command"),
+            (self.scene.physics_frequency_hz / frequency, "physics/feedback"),
+        ):
+            if (
+                not math.isfinite(ratio)
+                or ratio < 1
+                or not math.isclose(ratio, round(ratio), rel_tol=0.0, abs_tol=1e-9)
+            ):
+                raise ConfigurationError(
+                    f"hybrid_control {label} frequency ratio must be a positive integer"
+                )
+        if frequency < hybrid.minimum_feedback_frequency_hz:
             raise ConfigurationError(
-                "hybrid_control physics frequency is too low: "
-                f"{frequency} < {hybrid.minimum_physics_frequency_hz}"
+                "hybrid_control feedback frequency is too low: "
+                f"{frequency} < {hybrid.minimum_feedback_frequency_hz}"
             )
         if hybrid.force.wrench_lpf_cutoff_hz >= frequency / 2.0:
             raise ConfigurationError(
-                "hybrid_control wrench_lpf_cutoff_hz must be less than the physics Nyquist"
+                "hybrid_control wrench_lpf_cutoff_hz must be less than the feedback Nyquist"
             )
         minimum_ramp_ticks = math.ceil(
             hybrid.limits.max_abs_joint_effort

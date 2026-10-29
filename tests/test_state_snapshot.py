@@ -205,3 +205,30 @@ def test_state_stream_rejects_invalid_capacity_and_drop_policy() -> None:
         StateStream(capacity=0)
     with pytest.raises(ValueError, match="drop_policy"):
         StateStream(drop_policy="block")
+
+
+def test_state_sampling_cadence_survives_command_feedback_clock_changes():
+    sampler = SceneRobotStateSampler(stage=None, rate_hz=20)
+    time_s = 0.0
+    sampled = []
+    for hz, count in ((60, 60), (240, 240), (60, 60)):
+        for _ in range(count):
+            time_s += 1 / hz
+            if sampler.should_sample(time_s=time_s):
+                sampled.append(time_s)
+    assert len(sampled) == 60
+    np.testing.assert_allclose(np.diff(sampled), 0.05, atol=1e-9)
+    sampler.reset()
+    assert sampler.should_sample(time_s=0.0)
+
+
+def test_state_sampling_does_not_halve_rate_due_to_float32_clock_rounding():
+    sampler = SceneRobotStateSampler(stage=None, rate_hz=60)
+    time_s = np.float32(0)
+    sampled = 0
+    for _ in range(600):
+        time_s = np.float32(time_s + np.float32(1 / 60))
+        sampled += sampler.should_sample(time_s=float(time_s))
+    assert 598 <= sampled <= 600
+    assert sampler.should_sample(time_s=20.0)
+    assert not sampler.should_sample(time_s=20.0)

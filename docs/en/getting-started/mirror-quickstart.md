@@ -52,7 +52,7 @@ CUDA. Both derive exactly one Mirror world and use `control: mirror`; the physic
 engine derives the default controller bundle. CPU physics still keeps the root CUDA
 device for cuRobo and RTX.
 
-Use `--profile physx_cpu_hybrid` for the dedicated 240 Hz PhysX CPU composition. It
+Use `--profile physx_cpu_hybrid` for the PhysX CPU hybrid composition with 60 Hz commands / 240 Hz feedback / 480 Hz physics. It
 adds `profiles.hybrid_control: hybrid_force_position`; operate it through Mirror v3
 after a wrench tare. The ordinary `physx_cpu` default does not silently enable hybrid
 control.

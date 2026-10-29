@@ -115,7 +115,7 @@ class MirrorRuntime:
         dt = (
             float(get_dt())
             if callable(get_dt)
-            else 1.0 / float(self.config.scene.physics_frequency_hz)
+            else 1.0 / float(self.config.scene.control_frequency_hz)
         )
         if not math.isfinite(dt) or dt <= 0.0:
             raise RuntimeError("physics runtime returned an invalid get_physics_dt")

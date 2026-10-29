@@ -12,7 +12,7 @@ dependencies = [
   "numpy>=2,<3",
   "PyYAML==6.0.3",
   "scipy==1.17.0",
-  "websockets==12.0",
+  "websockets==13.1",
 ]
 
 [project.optional-dependencies]
@@ -59,12 +59,19 @@ simulation = [
   # runtime compilation stack while Torch remains pinned to Isaac's cu128 build.
   "nvidia-curobo[cu12] @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
 
-  # Runtime libraries used outside the Kit-managed Python path as well.
-  # Isaac Sim 6.1's Newton 1.5 dependency requires Warp 1.16.x.
-  "warp-lang==1.16.0",
+  # Both PhysX and project-owned Newton load this locked wheel before Kit.
+  "warp-lang==1.17.0",
 ]
 
 [tool.uv]
+# Isaac 6.1 pins its own Newton extension to 1.5 / MuJoCo 3.11. Our Newton
+# experiences exclude that extension and own the solver directly. Keep this
+# override narrow and pinned to the AR5/O6 reference run; do not upgrade Isaac.
+override-dependencies = [
+  "newton[sim] @ git+https://github.com/newton-physics/newton.git@55caec0e05718c33f0fe29e80a55af1be69baf07",
+  "mujoco==3.15.0",
+  "mujoco-warp==3.15.0",
+]
 # This is a repository application: runtime profiles and assets live beside src/.
 package = false
 # dev 与 simulation 互斥：dev 带来 PyPI usd-core，simulation 依赖 Kit 提供的 pxr，

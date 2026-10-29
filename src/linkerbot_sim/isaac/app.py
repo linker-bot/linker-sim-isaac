@@ -228,6 +228,10 @@ def launch_simulation_app(spec: IsaacSessionSpec):
         raise TypeError("spec must be IsaacSessionSpec")
     _require_eula_acceptance()
 
+    # Both backends use the locked wheel. Preload before Kit adds its bundled
+    # Warp to sys.path; never replace a loaded Warp module in a running process.
+    import warp  # noqa: F401
+
     # 必须延迟导入：这些包在 import 时会初始化 Kit 插件状态，任何纯 Python 模块都不应
     # 通过类型注解或 facade 间接触发它们。
     import isaacsim  # noqa: F401

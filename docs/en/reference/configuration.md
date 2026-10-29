@@ -156,7 +156,7 @@ one world in the Mirror session projection; the reusable runtime itself remains 
 of managing multiple worlds.
 
 The optional `profiles.hybrid_control` slot is accepted only by Mirror. The maintained
-composition selects a dedicated 240 Hz scene and PhysX CPU:
+composition selects a dedicated hybrid scene at 60 Hz commands / 240 Hz feedback / 480 Hz physics and PhysX CPU:
 
 ```yaml
 mode: mirror
@@ -294,7 +294,7 @@ and XYZ Euler radians. Object prim paths are absolute.
 Mirror scene fields are exactly:
 
 - `id`, `description`, `gravity_z`, `add_ground`, `ground_height`;
-- `physics_frequency_hz`, `render_frequency_hz`;
+- `control_frequency_hz`, `physics_frequency_hz`, `render_frequency_hz`;
 - `planning_startup` (`lazy` or `prewarm`);
 - `robots`, `objects`, `cameras`, `viewport`, and `lights`.
 
@@ -410,7 +410,7 @@ physics:
 The `newton/cpu` and `newton/cuda` leaves declare separate executions. The latter declares `engine: newton`,
 `execution: cuda`, per-world
 contact/Jacobian capacities, CUDA graph use,
-substeps, solver iterations, line search, constraint solver, and contact
+solver iterations, line search, constraint solver, and contact
 pipeline. It inherits the device from the mode root. Mirror and Kaleidoscope share
 `newton/cuda`; Mirror derives one world while Kaleidoscope derives the runtime world
 count from final `environments.num_envs`. Neither loads the Isaac Newton extension. Robot
@@ -421,13 +421,71 @@ simply `isaac.physics.newton`.
 
 ### Newton contact integration
 
-Both Newton physics leaves require `max_substep_dt_s` and
-`default_contact_time_constant_s` (finite positive seconds). The runtime uses
-`max(substeps, ceil(physics_dt / max_substep_dt_s))` internal steps. With the
-canonical 0.002 s bound, 60 / 120 / 240 Hz outer clocks use 9 / 5 / 3 internal steps.
-This does not add decisions, callbacks or rendered frames, or change simulation time.
-The contact pipeline refreshes contacts at every internal step. The additional
-physics work costs throughput; select and record these values before benchmarking.
+Mirror scenes explicitly set `control_frequency_hz: 60.0` and
+`physics_frequency_hz: 480.0`. Both PhysX and Newton execute eight native steps
+per target update, each lasting 1/480 s. Custom frequencies must have an integer
+physics/control ratio, e.g. 120/600 or 20/240 Hz; invalid ratios fail at load time.
+The dedicated hybrid-force entry retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Rendering and camera rates remain independent.
+
+Kaleidoscope keeps its existing action decimation: the scene defaults to 480 Hz
+physics and `task.action.physics_ticks_per_action: 8`, giving 60 Hz policy actions.
+Each runtime step there is one physical step; no hidden Newton subdivision is added.
+
+Remove the old Newton leaf keys `substeps` and `max_substep_dt_s` from custom
+profiles. Counts are derived at composition, with no automatic timestep cap.
+The internal runtime `get_physics_dt()` / `physics_dt_s` is the duration of one
+runtime step (Mirror control tick or Kaleidoscope physical tick). Newton diagnostics
+include `effective_substeps` and `substep_dt_s`; PhysX World's native physics dt
+is the substep dt. Simulation frequencies are distinct from wall-clock throughput.
+Contacts and native drives update on every physical step, while targets are held
+between control updates. More physical steps cost throughput.
+
+### Independent command, hybrid feedback and physics clocks
+
+| Clock | Configuration | Default | Meaning |
+| --- | --- | --- | --- |
+| Mirror commands | `scene.control_frequency_hz` | 60 Hz | Ordinary joint/trajectory target updates; held between updates |
+| Hybrid feedback | `hybrid_force_position.feedback_frequency_hz` | 240 Hz | Fresh state/wrench read and controller calculation on every feedback tick |
+| Native physics | `scene.physics_frequency_hz` | 480 Hz | Actual solver integration, independent of wall-clock speed |
+| Rendering | `scene.render_frequency_hz` | 60 Hz | Rendering cadence; does not add physical steps |
+| Planning samples | `request_defaults.sample_dt_s` in the planning profile | 0.02 s (50 Hz) | Timestamped trajectory samples, resampled onto the command grid |
+
+These are fixed, independently configurable values, not adaptive rates. A hybrid
+profile requires positive integer ratios **feedback/command** and **physics/feedback**.
+Ordinary profiles require an integer physics/command ratio. Invalid combinations fail
+before Kit startup; no frequency is silently raised, rounded or clamped.
+
+Default 60/240/480 Hz means four feedback calculations and eight physical steps per
+command period. Changing commands to 120 Hz leaves feedback at 240 Hz. Raising physics
+to 720 or 960 Hz leaves feedback at 240 Hz, with three or four physical steps per
+feedback update. Commands at 480 Hz with feedback still at 240 Hz are rejected;
+explicitly configure a compatible feedback/physics pair. Hybrid 60/240/600 Hz is also
+rejected, although ordinary 120/600 Hz is valid.
+
+Hybrid profiles rename the old `minimum_physics_frequency_hz` key to
+`minimum_feedback_frequency_hz` (200 Hz); this existing safety floor checks the
+**feedback** rate. The new `feedback_frequency_hz` is required. Filter cutoff and
+effort ramp-down length are validated against that rate. Gains, the 20 Hz filter and
+all feedback counts are unchanged. At 240 Hz, 30 warmup ticks last 0.125 s, 120 tare
+samples take 0.5 s, contact enter/exit counts of 3/5 take 12.5/20.8 ms, and 36 ramp-down
+ticks take 0.15 s. Changing only commands or physics preserves these durations.
+If explicitly increasing feedback to 480 Hz, double those counts to preserve durations
+(including stale-sensor counts); the original 36-tick unload is rejected because it
+cannot meet the configured effort-rate bound. Custom feedback gains/filter behavior
+must be revalidated.
+
+Targets are held without an added interpolation layer; each feedback tick reads
+new state and computes new effort. The existing hybrid API executes a complete
+request with a frozen target: this change does **not** add streaming target updates
+inside that request. Ordinary joint requests continue to use their existing trajectory
+sampling. Hybrid and ordinary control advance the same physics owner without changing
+its native timestep. Output timestamps use simulation time; output `step` identifies
+a completed sampling boundary, not a uniform physical interval across both modes.
+Planning keeps `sample_dt_s: 0.02`; timestamped trajectory points are resampled onto
+the control grid and need not have an integer frequency ratio with control.
+
+Newton leaves still require `default_contact_time_constant_s` (finite positive
+seconds). This contact fallback is separate from the integration timestep.
 
 The canonical 0.01 s contact fallback maps to Newton `ke=1/t²`, `kd=2/t`
 (critical damping), yielding MuJoCo `solref=(t, 1)`. It is applied to the builder
@@ -567,7 +625,7 @@ default pose frame, and orientation mode. Its controller bundle is not configura
 the physics engine derives it.
 
 `sync_simulation_to_wall_clock: true` makes idle and motion execution share one pacing
-clock at `scene.physics_frequency_hz`. It does not alter physics dt. If a tick is late,
+clock at `scene.control_frequency_hz`. It does not alter physics dt. If a tick is late,
 Mirror rebases the next deadline instead of burst-running missed ticks, so an overloaded
 runtime may be slower than real time. Set the field to `false` to run physics as fast as
 the host allows. The canonical Mirror control profile enables synchronization.
