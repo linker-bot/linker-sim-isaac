@@ -2712,7 +2712,7 @@ generated_inventory:
   configuration_yaml:
     count: 58
     path_sha256: 907220fe50361c82dfc7df745e00b5658718a6d7c3c391c7da2e90912e201225
-    path_content_sha256: 21f3560cf08ff3802239c5377c55019e5ea479496c941387a60ccef5c993d7b4
+    path_content_sha256: 03f60656a103ef63e669a30252f8a39bb0b8ab2648f61d9436905a598a949f25
     files:
     - path: configs/cameras/development_1080p_60.yaml
       sha256: 080f782aad76fc0a107135d3fa578ecaeec820fffdcb4085dd150447ced95338
@@ -2797,13 +2797,13 @@ generated_inventory:
     - path: configs/robots/ar5_08_l25_r.yaml
       sha256: a62e9ea90592332129986d67e43b69d85f0ee8a336eb143d396ed3b381d473ce
     - path: configs/robots/ar5_08_l6_gemini335l_l.yaml
-      sha256: 17e24d8218dc2aa5da49e246d3dfab208522b68444429c00717003e89b138762
+      sha256: 6c1856c3efcc6a870201df892cfa70088113cd46257cc31ef6acbb59893a62bb
     - path: configs/robots/ar5_08_l6_gemini335l_r.yaml
-      sha256: c7434ca9578189ec531d7fda76cdc27cf038e1dbe7c8ae6727fbcee85c0eb171
+      sha256: 49941c25ad0830dd67800fc77c269bf27398c69641693b3d3b0773d7357e980f
     - path: configs/robots/ar5_08_l6_l.yaml
-      sha256: efab69321fed5b00faf2e6249edc9743095a26893d72c5854e31da06cf6f7be1
+      sha256: 74832ebbf730cf0538db668c498d22147c8b02a955a59a693ba461936bc955f6
     - path: configs/robots/ar5_08_l6_r.yaml
-      sha256: 7603b865b240a7c2685cd6c4d5510e9d13cc0edb0be910e1eac5cb1c950a2353
+      sha256: 076dd013906c92ea1f58ae653bcad448207441b3370b8c8c17093d8ba5ea835a
     - path: configs/robots/ar5_08_o6_gemini335l_l.yaml
       sha256: c0e5bf459ec1bec3d583d677c516642081d6e3e88607d5d3f73130c62a4c043e
     - path: configs/robots/ar5_08_o6_gemini335l_r.yaml
@@ -2813,9 +2813,9 @@ generated_inventory:
     - path: configs/robots/ar5_08_o6_r.yaml
       sha256: 193873fa3350ebd97d85f745a33131812fddcf4ff53abc6f4222472a77edfcd3
     - path: configs/robots/l6_l.yaml
-      sha256: 4e146476f691c9391c3e2a0d3de4ba5bf1fed260e3b5d118ee8106ece5dbe5ad
+      sha256: 5af15fd0a2116f42c6ac465df399d66121e17df53ff89ad71be02d9f8fe97171
     - path: configs/robots/l6_r.yaml
-      sha256: 7c856557718eb20318d5c691c372ad315cb65656e07f8191eb61744e3d7fc85b
+      sha256: 7c7f7a9bafc417b275d60d66e918c11ebd8671efd57f6e8f8429f6eda708d6da
     - path: configs/scenes/kaleidoscope/tblock_push.yaml
       sha256: 7ae4c49cfa370e22db3a8b4bbd2ba02edbada5c057f92e91f45fc5ab81a7eeeb
     - path: configs/scenes/mirror/camera_workstation.yaml
@@ -2908,7 +2908,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: 04606affa655f4ab4ae7ba4cb90bfce3571a31d496f13dc641ea16f4e1fab72e
+    path_content_sha256: a5cb826a5bd654c3576faa305a2ba34db29844cd387e72745daef6bbb6902eef
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2945,7 +2945,7 @@ generated_inventory:
     - path: docs/en/guides/configuration.md
       sha256: 97c2873a45195035fa2682d17dd3e9344f54ebc22bf3b8740fecb13473502f8a
     - path: docs/en/guides/control-and-trajectories.md
-      sha256: 6ca2b13d3b1b4aa155c78758f059f3934452e01c461bbe8a5ffce899a62f4f63
+      sha256: f381ac823a4897f62acb1f86ea97490dc00d66f8bbc1fc35935d64b971081feb
     - path: docs/en/guides/foxglove.md
       sha256: 6f5e2e466529b5620dfa975060532d302145765e2c520a49320b4db86d675b1d
     - path: docs/en/guides/motion-planning.md
@@ -2975,7 +2975,7 @@ generated_inventory:
     - path: docs/en/reference/mirror-cli.md
       sha256: 62e1c385adcfc0d8696485282394e68bdba28f8b46e8fa78b180203f4be3295e
     - path: docs/en/reference/mirror-json.md
-      sha256: 5bece0203bfbe5ac788f5f84b7cd1b6d5aec194ef43f4943fa7c5cde7f617d99
+      sha256: 9e67fa7c10a68b842fb8fb8d99f437111d99bff3c9dee2c798a0297c6b931665
     - path: docs/en/reference/outputs.md
       sha256: 527ffb32b82f379b77e02b39708f5add86acc82150b10ffa3cdbcdd253b2b3f0
     - path: docs/en/reference/python-api.md
@@ -3015,7 +3015,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/configuration.md
       sha256: 3f58aba379d00a1035534905db91832764e3f3cf9711c5c57d7535cc22c13cbf
     - path: docs/zh-CN/guides/control-and-trajectories.md
-      sha256: 0765a76f5dda539a84a20689cc529c0997ed665decb3d57ceed52dfbeb2eb0f4
+      sha256: 64fd8c7ffc8977b0efee460f94c471078498a3c93dd73845b5f1f4f52bab3dab
     - path: docs/zh-CN/guides/foxglove.md
       sha256: 050f43eab33c26fb258e147b7d96d7f865fac4e88da83f5ea5bcdb2d3d9d4583
     - path: docs/zh-CN/guides/motion-planning.md
@@ -3045,7 +3045,7 @@ generated_inventory:
     - path: docs/zh-CN/reference/mirror-cli.md
       sha256: 3284a435e44946766a1b287fcc5a1eaaf61f87688430eeaff689cdffacb06c47
     - path: docs/zh-CN/reference/mirror-json.md
-      sha256: d0333e85ea3b176ce745dcd5a282e37051171752845b4691b90f8bf561e32145
+      sha256: eb7bc7746af0550ebb240cd95a230b0d24c9117b16bbfcca728abc4514736d8a
     - path: docs/zh-CN/reference/outputs.md
       sha256: fd4e043acf2966562e6bb2a49bf45975796822ebc7fbd8e569dd129f2c200106
     - path: docs/zh-CN/reference/python-api.md

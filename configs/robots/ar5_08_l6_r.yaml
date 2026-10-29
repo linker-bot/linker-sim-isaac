@@ -134,6 +134,7 @@ curobo:
     load_collision_spheres: true
 
 joint_groups:
+  # 六维顺序：拇指弯曲、拇指侧摆、食指、中指、无名指、小指弯曲。
   # 名称必须与组合 articulation 的 DOF 名精确一致；列表定义 arm/hand 成员。
   # 默认命令/轨迹顺序为声明的 arm + hand；按名称映射到引擎内部 DOF。
   # hand 仅列出可直接接收命令的六个 master 关节。MJCF equality 中的 DIP 等 follower
@@ -147,9 +148,9 @@ joint_groups:
     - arm_AR5_5_08R_W4C4A6_joint_6
     - arm_AR5_5_08R_W4C4A6_joint_7
   hand:
+    - hand_rh_thumb_cmc_pitch
+    - hand_rh_thumb_cmc_roll
     - hand_rh_index_mcp_pitch
     - hand_rh_middle_mcp_pitch
     - hand_rh_ring_mcp_pitch
     - hand_rh_pinky_mcp_pitch
-    - hand_rh_thumb_cmc_roll
-    - hand_rh_thumb_cmc_pitch

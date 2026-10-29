@@ -99,6 +99,24 @@ Mirror `motion.hold` 保持当前 target，`runtime.reset` 可清 queue 并在 r
 继续阅读：[Mirror JSON 与运动示例](../reference/mirror-json.md)及
 [运动规划](motion-planning.md)。
 
+## L6/O6 手部命令顺序
+
+所有 L6、O6 profile 均采用以下六维顺序，覆盖独立 L6、AR5 组合及相机附件版本，
+适用于 PhysX 和 Newton：
+
+| 位置（从 1 开始） | 动作 | L6 关节后缀 | O6 关节后缀 |
+| --- | --- | --- | --- |
+| 1 | 拇指弯曲 | `thumb_cmc_pitch` | `thumb_cmc_pitch` |
+| 2 | 拇指侧摆 | `thumb_cmc_roll` | `thumb_cmc_yaw` |
+| 3 | 食指弯曲 | `index_mcp_pitch` | `index_mcp_pitch` |
+| 4 | 中指弯曲 | `middle_mcp_pitch` | `middle_mcp_pitch` |
+| 5 | 无名指弯曲 | `ring_mcp_pitch` | `ring_mcp_pitch` |
+| 6 | 小指弯曲 | `pinky_mcp_pitch` | `pinky_mcp_pitch` |
+
+完整名称由左手 `hand_lh_`、右手 `hand_rh_` 前缀与后缀拼成。保留真实资产名，
+L6 的 `roll` 不改名为 O6 的 `yaw`。旧 L6 的 index/middle/ring/pinky/roll/pitch
+数组需要重排；按名称发送的指令含义不变。L6 增益、主从联动和驱动选择保持不变。
+
 ## Newton AR5/O6 柔顺驱动
 
 Newton 对 AR5/O6（含 Gemini 相机附件组合）自动选择 `newton_compliant` 驱动，
@@ -109,9 +127,7 @@ Newton 对 AR5/O6（含 Gemini 相机附件组合）自动选择 `newton_complia
 `newton_drive.yaml` 设置虚拟电机及驱动动力学。参数数组按 robot profile 显式声明的
 arm/hand 关节组顺序解释，导入前绑定为精确关节名映射；USD 遍历和 articulation 顺序
 变化不会把拇指与四指增益错配。所有控制器 bundle 都采用此名称绑定。
-O6 六维顺序为：拇指弯曲 `thumb_cmc_pitch`、拇指侧摆 `thumb_cmc_yaw`、
-食指 `index_mcp_pitch`、中指 `middle_mcp_pitch`、无名指 `ring_mcp_pitch`、
-小指 `pinky_mcp_pitch`，完整名称加 `hand_lh_` / `hand_rh_` 前缀。
+L6 与 O6 采用上述相同语义的六维手部顺序，保留各自真实关节名。
 默认完整命令向量按声明的 arm + hand 排列，通过索引映射到原生引擎。
 
 | 关节组 | 原生 Kp / Kd | 原生限矩（N·m） | 被动阻尼（N·m·s/rad） |

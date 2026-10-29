@@ -213,6 +213,26 @@ boundary.
 See [Mirror JSON And Motion Examples](../reference/mirror-json.md) and
 [Kaleidoscope API](../reference/kaleidoscope-api.md).
 
+## L6/O6 hand command order
+
+All L6 and O6 profiles use the following six-value order, including standalone L6,
+AR5 assemblies and camera variants, on both PhysX and Newton:
+
+| Slot (1-based) | Motion | L6 joint suffix | O6 joint suffix |
+| --- | --- | --- | --- |
+| 1 | Thumb flexion | `thumb_cmc_pitch` | `thumb_cmc_pitch` |
+| 2 | Thumb lateral motion | `thumb_cmc_roll` | `thumb_cmc_yaw` |
+| 3 | Index flexion | `index_mcp_pitch` | `index_mcp_pitch` |
+| 4 | Middle flexion | `middle_mcp_pitch` | `middle_mcp_pitch` |
+| 5 | Ring flexion | `ring_mcp_pitch` | `ring_mcp_pitch` |
+| 6 | Pinky flexion | `pinky_mcp_pitch` | `pinky_mcp_pitch` |
+
+Prefix each suffix with `hand_lh_` for the left hand or `hand_rh_` for the right.
+These are the actual asset names; L6 `roll` is not renamed to O6 `yaw`.
+Existing L6 arrays in index/middle/ring/pinky/roll/pitch order must be reordered;
+name-keyed commands keep their meaning. L6 gains, coupling and drive selection
+are unchanged.
+
 ## Newton AR5/O6 compliant drive
 
 Newton automatically selects the compliant drive for AR5/O6, including Gemini
@@ -226,11 +246,9 @@ output settings and a `newton_drive.yaml` leaf for virtual motors and drive
 dynamics. Its parameter vectors follow the robot profile's declared arm/hand
 joint-group order and are bound to exact joint names before import; USD traversal
 and articulation ordering cannot swap thumb and finger gains. This name binding
-applies to every controller bundle. O6 hand arrays use: `thumb_cmc_pitch`,
-`thumb_cmc_yaw`, `index_mcp_pitch`, `middle_mcp_pitch`, `ring_mcp_pitch`,
-`pinky_mcp_pitch`, prefixed with `hand_lh_` or `hand_rh_`. Default complete command
-vectors concatenate declared arm then hand names; native solver indices are mapped,
-not reordered.
+applies to every controller bundle. L6 and O6 share the semantic hand order
+[listed below](#l6o6-hand-command-order). Default complete command vectors concatenate
+declared arm then hand names; native solver indices are mapped, not reordered.
 
 | Joint group | Native Kp / Kd | Native cap (N·m) | Passive damping (N·m·s/rad) |
 | --- | --- | --- | --- |

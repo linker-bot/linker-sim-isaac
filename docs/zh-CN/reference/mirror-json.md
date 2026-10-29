@@ -271,18 +271,21 @@ scene3 机械臂列表顺序如下：
 
 ```text
 left_arm/arm:
-  AR5V2_L_arm_joint_1, AR5V2_L_arm_joint_2, AR5V2_L_arm_joint_3,
-  AR5V2_L_arm_joint_4, AR5V2_L_arm_joint_5, AR5V2_L_arm_joint_6,
-  AR5V2_L_arm_joint_7
+  arm_AR5_5_08L_W4C4A6_joint_1, arm_AR5_5_08L_W4C4A6_joint_2, arm_AR5_5_08L_W4C4A6_joint_3,
+  arm_AR5_5_08L_W4C4A6_joint_4, arm_AR5_5_08L_W4C4A6_joint_5, arm_AR5_5_08L_W4C4A6_joint_6,
+  arm_AR5_5_08L_W4C4A6_joint_7
 
 right_arm/arm:
-  AR5V2_R_arm_joint_1, AR5V2_R_arm_joint_2, AR5V2_R_arm_joint_3,
-  AR5V2_R_arm_joint_4, AR5V2_R_arm_joint_5, AR5V2_R_arm_joint_6,
-  AR5V2_R_arm_joint_7
+  arm_AR5_5_08R_W4C4A6_joint_1, arm_AR5_5_08R_W4C4A6_joint_2, arm_AR5_5_08R_W4C4A6_joint_3,
+  arm_AR5_5_08R_W4C4A6_joint_4, arm_AR5_5_08R_W4C4A6_joint_5, arm_AR5_5_08R_W4C4A6_joint_6,
+  arm_AR5_5_08R_W4C4A6_joint_7
 ```
 
-左右手 `hand` 列表顺序均为 index、middle、ring、pinky、thumb roll、thumb pitch；完整名称分别带
-`L6V1_L_` 或 `L6V1_R_` 前缀。列表顺序来自配置，不使用 USD articulation 的内部 DOF 顺序。
+L6 的 `hand` 列表依次为 `thumb_cmc_pitch`、`thumb_cmc_roll`、`index_mcp_pitch`、
+`middle_mcp_pitch`、`ring_mcp_pitch`、`pinky_mcp_pitch`；完整名称加 `hand_lh_` 或 `hand_rh_`
+前缀。O6 语义顺序相同，侧摆名称为 `thumb_cmc_yaw`，详见
+[L6/O6 名称对应表](../guides/control-and-trajectories.md)。列表顺序来自配置，不使用 USD articulation
+的内部 DOF 顺序。旧 L6 数组需要重排；名称 mapping 的含义不变。
 
 `motion.joint_trajectory` 的名称形式把每个 joint 映射到等长 sample 列表；矩阵形式则是
 `[sample][group_joint]`，每一行都必须完整覆盖 group。`times_s` 数量必须等于 sample 数，所有值必须
@@ -370,8 +373,8 @@ right_arm/arm:
     "group": "arm",
     "duration_s": 1.0,
     "joint_deltas": {
-      "AR5V2_L_arm_joint_1": 0.1,
-      "AR5V2_L_arm_joint_4": -0.1
+      "arm_AR5_5_08L_W4C4A6_joint_1": 0.1,
+      "arm_AR5_5_08L_W4C4A6_joint_4": -0.1
     },
     "interpolation": "smoothstep"
   }
@@ -393,8 +396,8 @@ right_arm/arm:
     "group": "arm",
     "duration_s": 1.5,
     "joint_positions": {
-      "AR5V2_L_arm_joint_1": [0.1, 0.2, 0.0],
-      "AR5V2_L_arm_joint_2": [-0.1, -0.2, 0.0]
+      "arm_AR5_5_08L_W4C4A6_joint_1": [0.1, 0.2, 0.0],
+      "arm_AR5_5_08L_W4C4A6_joint_2": [-0.1, -0.2, 0.0]
     },
     "times_s": [0.5, 1.0, 1.5]
   }
@@ -417,8 +420,8 @@ right_arm/arm:
     "group": "arm",
     "duration_s": 0.2,
     "joint_efforts": {
-      "AR5V2_L_arm_joint_1": 2.5,
-      "AR5V2_L_arm_joint_2": -1.0
+      "arm_AR5_5_08L_W4C4A6_joint_1": 2.5,
+      "arm_AR5_5_08L_W4C4A6_joint_2": -1.0
     },
     "phase": "contact_push"
   }
@@ -474,13 +477,13 @@ right_arm/arm:
     "duration_s": 2.0,
     "sample_dt_s": 0.02,
     "joint_positions": {
-      "AR5V2_L_arm_joint_1": 0.0,
-      "AR5V2_L_arm_joint_2": 0.0,
-      "AR5V2_L_arm_joint_3": 0.0,
-      "AR5V2_L_arm_joint_4": 0.0,
-      "AR5V2_L_arm_joint_5": 0.0,
-      "AR5V2_L_arm_joint_6": 0.0,
-      "AR5V2_L_arm_joint_7": 0.0
+      "arm_AR5_5_08L_W4C4A6_joint_1": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_2": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_3": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_4": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_5": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_6": 0.0,
+      "arm_AR5_5_08L_W4C4A6_joint_7": 0.0
     },
     "avoid_collisions": true,
     "force_collision_refresh": true
@@ -502,8 +505,8 @@ right_arm/arm:
     "robot_label": "left_arm",
     "group": "arm",
     "joint_deltas": {
-      "AR5V2_L_arm_joint_2": 0.05,
-      "AR5V2_L_arm_joint_4": -0.05
+      "arm_AR5_5_08L_W4C4A6_joint_2": 0.05,
+      "arm_AR5_5_08L_W4C4A6_joint_4": -0.05
     },
     "avoid_collisions": false
   }
