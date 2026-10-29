@@ -2,8 +2,8 @@
 
 项目将机械臂和灵巧手的控制参数拆成独立 YAML 文件。这些文件由 catalog 从
 controllers 目录读取；本模块只把已读取 mapping 转换成后端无关的冻结 profile。
-机器人接触材质和刚体阻尼属于资产物理属性，
-由 robot YAML 的 ``robot.physics.physx`` 描述。
+机器人接触材质和刚体阻尼属于资产物理属性。显式选择的 Newton 柔顺驱动 bundle
+额外拥有虚拟电机、armature、被动阻尼及主从约束参数，不修改接触配置。
 
 职责边界:
         * 把 YAML 中的 arm/hand profile 解析成纯 Python dataclass。
@@ -22,7 +22,7 @@ controllers 目录读取；本模块只把已读取 mapping 转换成后端无�
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from numbers import Real
 import re
@@ -34,6 +34,7 @@ from linkerbot_sim.controllers.types import (
     ControlMethod,
     ControlMode,
     JointParameter,
+    resolve_joint_parameter,
 )
 
 CONTROLLER_BUNDLE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -83,6 +84,31 @@ class ControllerProfiles:
     arm: ControllerProfile
     hand: ControllerProfile
     default: ControllerProfile | None = None
+    compliant_drive: CompliantDriveSettings | None = None
+
+
+def validate_compliant_drive_selection(
+    profiles: ControllerProfiles,
+    *,
+    engine: str,
+    asset_path: str,
+    mode: str = "position",
+) -> None:
+    """Reject unsupported use before starting Kit or importing a physical asset."""
+    if profiles.compliant_drive is None:
+        return
+    from pathlib import Path
+
+    unit = Path(asset_path).parent.name
+    if engine != "newton" or mode != "position":
+        raise ValueError("Compliant drive requires Newton position control")
+    if not unit.startswith(("ar5_08_o6_", "ar5_o6_")):
+        raise ValueError(f"Compliant drive supports only AR5/O6 assemblies, got {unit}")
+    if any(
+        (p.position_control.mode, p.position_control.method) != ("position", "implicit")
+        for p in (profiles.arm, profiles.hand)
+    ):
+        raise ValueError("Compliant drive requires implicit native position outputs")
 
 
 def _required_keys(
@@ -207,13 +233,20 @@ def controller_profiles_from_mappings(
 ) -> ControllerProfiles:
     """组合 catalog 已读取的 arm/hand/default profile 文档。"""
 
-    unknown = sorted(set(profiles) - {"arm", "hand", "default"})
+    unknown = sorted(set(profiles) - {"arm", "hand", "default", "newton_drive"})
     missing = sorted({"arm", "hand"} - set(profiles))
     if missing:
         raise ValueError(f"{source}: missing controller profiles: {missing}")
     if unknown:
         raise ValueError(f"{source}: unsupported controller profiles: {unknown}")
     return ControllerProfiles(
+        compliant_drive=(
+            compliant_drive_from_mapping(
+                profiles["newton_drive"], label=f"{source}/newton_drive.yaml"
+            )
+            if "newton_drive" in profiles
+            else None
+        ),
         arm=controller_profile_from_mapping(
             "arm", profiles["arm"], source=f"{source}/arm_controller.yaml"
         ),
@@ -435,3 +468,140 @@ __all__ = [
     "controller_profiles_from_mappings",
     "normalize_controller_bundle_name",
 ]
+
+
+@dataclass(frozen=True)
+class VirtualMotorSettings:
+    advancing_torque: float
+    viscosity: float
+    output_damping: float
+    passive_damping: float
+    reflected_passive_damping: float
+    lower: float
+    upper: float
+
+
+@dataclass(frozen=True)
+class CompliantDriveSettings:
+    arm_armature: float
+    arm_passive_damping: float
+    arm_force_guard: float
+    hand_armature: float
+    follower_damping: float
+    motor_stiffness: float
+    motor_speed_limit: float
+    thumb_yaw: VirtualMotorSettings
+    thumb_flexion: VirtualMotorSettings
+    finger_flexion: VirtualMotorSettings
+    equality_solref: tuple[float, float]
+    equality_solimp: tuple[float, float, float, float, float]
+
+
+def _mapping(value: object, keys: set[str], label: str) -> Mapping[str, object]:
+    if not isinstance(value, Mapping) or set(value) != keys:
+        raise ValueError(f"{label} requires exactly {sorted(keys)}")
+    return value
+
+
+def _number(value: object, label: str, *, positive: bool = False) -> float:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"{label} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number) or number < 0 or (positive and number == 0):
+        raise ValueError(
+            f"{label} must be finite and {'positive' if positive else 'nonnegative'}"
+        )
+    return number
+
+
+def _motor(value: object, label: str) -> VirtualMotorSettings:
+    fields = set(VirtualMotorSettings.__dataclass_fields__)
+    mapping = _mapping(value, fields, label)
+    values = {
+        key: _number(
+            item,
+            f"{label}.{key}",
+            positive=key in {"advancing_torque", "viscosity", "upper"},
+        )
+        for key, item in mapping.items()
+    }
+    if values["lower"] >= values["upper"]:
+        raise ValueError(f"{label}.lower must be below upper")
+    return VirtualMotorSettings(**values)
+
+
+def compliant_drive_from_mapping(
+    value: object, *, label: str
+) -> CompliantDriveSettings:
+    fields = set(CompliantDriveSettings.__dataclass_fields__)
+    mapping = _mapping(value, fields, label)
+    motors = {
+        name: _motor(mapping[name], f"{label}.{name}")
+        for name in ("thumb_yaw", "thumb_flexion", "finger_flexion")
+    }
+    scalars = {
+        key: _number(
+            mapping[key],
+            f"{label}.{key}",
+            positive=key
+            in {
+                "arm_armature",
+                "arm_force_guard",
+                "hand_armature",
+                "motor_stiffness",
+                "motor_speed_limit",
+            },
+        )
+        for key in fields - motors.keys() - {"equality_solref", "equality_solimp"}
+    }
+    solref = mapping["equality_solref"]
+    solimp = mapping["equality_solimp"]
+    if not isinstance(solref, (list, tuple)) or len(solref) != 2:
+        raise ValueError(f"{label}.equality_solref requires two positive numbers")
+    ref = tuple(_number(x, f"{label}.equality_solref", positive=True) for x in solref)
+    if not isinstance(solimp, (list, tuple)) or len(solimp) != 5:
+        raise ValueError(f"{label}.equality_solimp requires five numbers")
+    imp = tuple(_number(x, f"{label}.equality_solimp") for x in solimp)
+    if not (0 < imp[0] <= imp[1] < 1 and imp[2] > 0 and 0 < imp[3] < 1 and imp[4] >= 1):
+        raise ValueError(f"{label}.equality_solimp has invalid impedance parameters")
+    return CompliantDriveSettings(
+        **scalars,
+        thumb_yaw=motors["thumb_yaw"],
+        thumb_flexion=motors["thumb_flexion"],
+        finger_flexion=motors["finger_flexion"],
+        equality_solref=(ref[0], ref[1]),
+        equality_solimp=(imp[0], imp[1], imp[2], imp[3], imp[4]),
+    )
+
+
+def bind_compliant_drive_joints(
+    profiles: ControllerProfiles, joint_groups
+) -> ControllerProfiles:
+    """Bind the opt-in profile's vectors to declared arm/hand names before import.
+
+    O6 USD traversal and articulation orders differ. Declared group order is the
+    new profile's explicit configuration order; exact name maps survive both.
+    Ordinary bundles retain their existing runtime-order semantics.
+    """
+    if profiles.compliant_drive is None:
+        return profiles
+    components = {}
+    for group in ("arm", "hand"):
+        names = tuple(getattr(joint_groups, group))
+        component = getattr(profiles, group)
+        modes = {}
+        for mode in ("position_control", "velocity_control", "effort_control"):
+            settings = getattr(component, mode)
+            values = {}
+            for field in ("stiffness", "damping", "max_force", "effort_limit"):
+                value = getattr(settings, field)
+                if value is not None:
+                    resolved = resolve_joint_parameter(
+                        value, names, label=f"{group}.{mode}.{field}"
+                    )
+                    values[field] = MappingProxyType(
+                        dict(zip(names, (float(x) for x in resolved), strict=True))
+                    )
+            modes[mode] = replace(settings, **values)
+        components[group] = replace(component, **modes)
+    return replace(profiles, arm=components["arm"], hand=components["hand"])

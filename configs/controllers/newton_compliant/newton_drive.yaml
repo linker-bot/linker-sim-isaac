@@ -1,0 +1,36 @@
+# Opt-in AR5/O6 Newton drive. Contact configuration remains separate.
+arm_armature: 0.01
+arm_passive_damping: 0.0
+arm_force_guard: 199.0
+hand_armature: 0.001
+follower_damping: 0.4
+motor_stiffness: 600.0
+motor_speed_limit: 1.0
+thumb_yaw:
+  advancing_torque: 3.0
+  viscosity: 20.0
+  output_damping: 20.0
+  passive_damping: 0.0
+  # Original motor-law free-speed budget includes the combined 20+4 damping;
+  # native yaw damping is already 24, so no extra passive damping is applied.
+  reflected_passive_damping: 4.0
+  lower: 0.0
+  upper: 1.36
+thumb_flexion:
+  advancing_torque: 5.0
+  viscosity: 20.0
+  output_damping: 40.0
+  passive_damping: 4.0
+  reflected_passive_damping: 5.38384
+  lower: 0.0
+  upper: 0.58
+finger_flexion:
+  advancing_torque: 5.0
+  viscosity: 4.2
+  output_damping: 40.0
+  passive_damping: 4.0
+  reflected_passive_damping: 4.31684
+  lower: 0.0
+  upper: 1.6
+equality_solref: [0.002, 1.0]
+equality_solimp: [0.999, 0.999, 0.001, 0.5, 2.0]

@@ -27,7 +27,10 @@ from linkerbot_sim.assets.usd_overrides import (
     apply_robot_usd_overrides,
 )
 from linkerbot_sim.assets.instance_paths import validate_disjoint_instance_prim_paths
-from linkerbot_sim.configuration.controllers import ControllerProfiles
+from linkerbot_sim.configuration.controllers import (
+    ControllerProfiles,
+    bind_compliant_drive_joints,
+)
 from linkerbot_sim.controllers.projection import robot_usd_override_configs
 from linkerbot_sim.configuration.objects import (
     DynamicChainObjectProfileConfig,
@@ -238,6 +241,7 @@ def import_source_robots(
             raise TypeError(
                 f"resolved controller bundle {controller_name!r} has invalid type"
             )
+        controllers = bind_compliant_drive_joints(controllers, profile.joint_groups)
         execution = replace(
             execution,
             robot=replace(
@@ -266,6 +270,15 @@ def import_source_robots(
                 stage=stage,
                 subtree_root=imported_root_path,
             )
+        from linkerbot_sim.configuration.controllers import (
+            validate_compliant_drive_selection,
+        )
+
+        validate_compliant_drive_selection(
+            controllers,
+            engine=physics_backend,
+            asset_path=str(execution.robot.asset_path),
+        )
         overrides = robot_usd_override_configs(controllers)
         if execution.robot.contact_material is not None:
             overrides = execution.robot.contact_material.apply_to_configs(overrides)

@@ -212,3 +212,67 @@ boundary.
 
 See [Mirror JSON And Motion Examples](../reference/mirror-json.md) and
 [Kaleidoscope API](../reference/kaleidoscope-api.md).
+
+## Opt-in Newton AR5/O6 compliant drive
+
+For an AR5/O6 robot instance, including Gemini camera assemblies, select
+`controller_profile: newton_compliant` in its scene entry. This intermediate
+profile supports **position control only**, on Newton CPU and CUDA. Other
+assemblies, PhysX, and runtime velocity/effort switching are rejected. Existing
+scene defaults remain unchanged until the final integration step of #53.
+
+The bundle has ordinary `arm_controller.yaml` / `hand_controller.yaml` native
+output settings and a `newton_drive.yaml` leaf for virtual motors and drive
+dynamics. Its parameter vectors follow the robot profile's declared arm/hand
+joint-group order and are bound to exact joint names before import; USD traversal
+and articulation ordering cannot swap thumb and finger gains.
+
+| Joint group | Native Kp / Kd | Native cap (N·m) | Passive damping (N·m·s/rad) |
+| --- | --- | --- | --- |
+| AR5 J1–J7 | 16000 / 614.224, 613.711, 603.791, 600.333, 604.137, 604.749, 603.668 | 200 | 0 |
+| O6 thumb yaw | 600 / 24 | 10 | 0 |
+| O6 thumb flexion | 2500 / 40 | 60 | 4 |
+| O6 four-finger MCP | 1250 / 40 | 60 | 4 |
+| O6 followers | No independent actuator; native equality | No independent motor cap | 0.4 |
+
+The hand virtual motor has Kp=600 and a 1 rad/s maximum shaft speed. Its
+**advancing torque** is 3 N·m for thumb yaw and 5 N·m for flexion; these are
+separate from the native holding/output caps above. Viscosity is 20 for thumb yaw
+and flexion, 4.2 for four-finger flexion; output damping is respectively 20, 40,
+and 40. The backward-Euler shaft update permits motion only toward the commanded
+angle, caps free speed and displacement, and stalls against output load instead
+of accumulating an unbounded reference. It reads active-joint motion; native
+joint equality transmits follower contact reactions. Physical q/qd are never
+clamped or overwritten by the controller.
+
+At the default **60 Hz command / 480 Hz physics**, the virtual shaft advances once
+per command, while the previous/current shaft reference is linearly interpolated
+across eight native steps. The current `output_damping / Kp * shaft_velocity`
+offset remains applied during interpolation. Mirror's command rate comes from the
+scene; Kaleidoscope's comes from physics frequency divided by
+`physics_ticks_per_action`. Valid custom integer ratios retain one motor update
+per command, rather than accelerating the motor with the physics rate.
+
+Arm references use cubic Hermite interpolation between successive command
+positions and supplied velocities, with velocity feedforward. A direct position
+target has zero endpoint velocity; a trajectory should supply its sampled
+velocity. This is a generic per-interval interpolation, not the experimental
+T-block phase-specific PCHIP/retiming policy. Immediately before each native
+step, a target guard limits estimated arm PD output to 199 N·m, below the 200 N·m
+native cap. This estimate is not a native force measurement or a guarantee on
+post-integration constraint reactions.
+
+Robot bodies and mounted accessories have gravity compensation; objects retain
+gravity. Arm/hand armature is 0.01/0.001, joint Coulomb friction is zero, and native
+follower equality uses `solref=(0.002,1)`,
+`solimp=(0.999,0.999,0.001,0.5,2)`. These drive-profile overrides apply only to
+selected robot roots. Geometry, mass/inertia, joint limits, contact/friction
+parameters, and solver selection remain unchanged in this step.
+
+Controller history, including the command substep phase, participates in reset,
+snapshot, restore and selected-world clone. Cold position resets initialize the
+virtual shafts from measured joint positions. CPU/CUDA share float64 history and
+identical equations; CUDA execution uses the physics owner's stream and graph.
+Kaleidoscope exposes this float64 state as `controller.virtual_shaft`; it must not
+be downcast when saving a snapshot. Requested targets remain separate from the
+native targets generated at each physics step.

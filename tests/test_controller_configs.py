@@ -504,6 +504,13 @@ def test_all_bundled_controller_yaml_loads_strictly() -> None:
     assert paths
     for path in paths:
         data = load_yaml(path)
+        if path.name == "newton_drive.yaml":
+            from linkerbot_sim.configuration.controllers import (
+                compliant_drive_from_mapping,
+            )
+
+            compliant_drive_from_mapping(data, label=str(path))
+            continue
         target = data.get("target")
         assert isinstance(target, str)
         profile = controller_profile_from_mapping(target, data, source=str(path))

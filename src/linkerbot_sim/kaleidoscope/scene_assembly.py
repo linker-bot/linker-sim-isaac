@@ -131,6 +131,9 @@ def build_kaleidoscope_scene_assembly(
                 controller_bundle=config.default_controller_bundle,
                 controller_bundles=config.controller_bundles,
                 prepare_newton_render_topology=viewport is not None,
+                drive_steps_per_command=int(
+                    config.task.action.physics_ticks_per_action
+                ),
             )
             raw_views.extend(robot.articulation_view for robot in replicated.robots)
             if viewport is not None:

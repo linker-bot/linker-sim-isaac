@@ -65,6 +65,7 @@ def test_newton_single_world_initializes_before_binding_articulations(
         imported=imported,
         execution_configs=execution_configs,
         object_handles=handles,
+        controller_profiles=(None, None),
     )
 
     assert [event[0] for event in events] == ["initialize", "bind", "bind"]
@@ -99,6 +100,7 @@ def test_newton_single_world_rejects_wrong_count_before_view_binding(
                 SimpleNamespace(robot=SimpleNamespace(name="left_model")),
             ),
             object_handles=(),
+            controller_profiles=(None,),
         )
 
 

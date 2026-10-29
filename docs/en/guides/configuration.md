@@ -251,3 +251,5 @@ device, action space, physics frequency, reward, or termination semantics.
 
 For every field and cross-profile invariant, see the
 [Configuration Reference](../reference/configuration.md).
+
+For the opt-in AR5/O6 Newton drive profile and its separate native/virtual limits, see [control and trajectories](control-and-trajectories.md#opt-in-newton-ar5o6-compliant-drive).

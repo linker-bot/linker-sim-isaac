@@ -1,0 +1,65 @@
+# Native output gains; virtual advancing torque is configured separately.
+target: hand
+position_control:
+  method: implicit
+  active_joints:
+    stiffness:
+    - 600.0
+    - 2500.0
+    - 1250.0
+    - 1250.0
+    - 1250.0
+    - 1250.0
+    damping:
+    - 24.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    max_force:
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+velocity_control:
+  method: explicit
+  active_joints:
+    damping:
+    - 24.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    - 40.0
+    max_force:
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0
+effort_control:
+  method: direct
+  active_joints:
+    effort_limit:
+    - 10.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+    - 60.0
+  follower_joints:
+    stiffness: 0.0
+    damping: 0.0
+    max_force: 0.0

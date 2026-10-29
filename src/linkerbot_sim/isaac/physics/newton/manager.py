@@ -158,6 +158,7 @@ class NewtonRuntime:
         self.model: object | None = None
         self.state: object | None = None
         self.control: object | None = None
+        self.compliant_drive = None
         self.solver: object | None = None
         self.stream: object | None = None
         self.replication: NewtonReplicationResult | None = None
@@ -251,6 +252,8 @@ class NewtonRuntime:
         env_origins: object,
         robots: Mapping[str, object],
         object_handles: Sequence[object],
+        drive_profiles: Mapping[str, object] | None = None,
+        drive_steps_per_command: int | None = None,
     ) -> None:
         """在 USD 导入完成后 finalize 唯一 Newton model，再允许创建 view。
 
@@ -366,6 +369,14 @@ class NewtonRuntime:
             expected_relation_count=relation_count,
         )
 
+        from linkerbot_sim.isaac.physics.newton.compliant_drive import (
+            NewtonCompliantDrive,
+            configure_compliant_drives,
+        )
+
+        drive_layout = configure_compliant_drives(
+            self.replication.builder, robots, drive_profiles or {}
+        )
         with wp.ScopedDevice(wp_device), self._owner_stream_scope():
             model = self.replication.builder.finalize(device=wp_device)
         # Newton 1.8 positions use coordinates (FREE: 7); velocities/efforts
@@ -460,6 +471,17 @@ class NewtonRuntime:
             self.solver = solver
             _audit_solver_equality_mapping(solver, audit)
             self._initialize_solver_integration_state(solver, device=wp_device)
+            if drive_layout is not None:
+                self.compliant_drive = NewtonCompliantDrive(
+                    model,
+                    state,
+                    drive_layout,
+                    command_dt=self.physics_dt
+                    * (drive_steps_per_command or self.physics_spec.substeps)
+                    / self.physics_spec.substeps,
+                    substeps=drive_steps_per_command or self.physics_spec.substeps,
+                    stream=self.stream,
+                )
             self._initial_state = model.state()
             self._initial_control = model.control()
             self._initial_state.assign(state)
@@ -495,6 +517,8 @@ class NewtonRuntime:
             self.state.assign(self._initial_state)
             _copy_control(self.control, self._initial_control, stream=self.stream)
             self._restore_initial_solver_integration_state()
+            if self.compliant_drive is not None:
+                self.compliant_drive.restore(self.compliant_drive.baseline)
             # ``_step`` 只控制 update_data_interval；生产合同固定为 1，但全量 reset 仍把
             # host-side bookkeeping 归零，避免诊断信息跨 episode 累积。
             solver = getattr(self, "solver", None)
@@ -531,6 +555,8 @@ class NewtonRuntime:
             self._initial_state.assign(self.state)
             _copy_control(self._initial_control, self.control, stream=self.stream)
             self._solver_integration_store.commit()
+            if self.compliant_drive is not None:
+                self.compliant_drive.commit()
 
     @property
     def solver_integration_state_width(self) -> int:
@@ -608,7 +634,7 @@ class NewtonRuntime:
                 self._solver_integration_store.borrow(),
                 dtype=np.float64,
             )
-        return {
+        payload = {
             "schema": _SOLVER_INTEGRATION_SNAPSHOT_SCHEMA,
             "source_execution": self.execution,
             "world_count": self._num_worlds,
@@ -617,6 +643,10 @@ class NewtonRuntime:
             "simulation_time_s": self._sim_time,
             "values": values.copy().tolist(),
         }
+        drive = getattr(self, "compliant_drive", None)
+        if drive is not None:
+            payload["controller_history"] = drive.history.numpy().tolist()
+        return payload
 
     def validate_solver_integration_state_host(
         self,
@@ -655,6 +685,20 @@ class NewtonRuntime:
             self._solver_integration_store.restore(
                 values.astype(np.float64, copy=False)
             )
+        drive = getattr(self, "compliant_drive", None)
+        if drive is not None:
+            import warp as wp
+
+            self._flush_cold_state_updates()
+            with self._owner_stream_scope():
+                drive.restore(
+                    wp.array(
+                        payload["controller_history"],
+                        dtype=wp.float64,
+                        device=self.device,
+                    )
+                )
+            self._synchronize_owner_stream()
         self._sim_time = simulation_time
 
     def reset_solver_integration_state_host(self) -> None:
@@ -669,6 +713,11 @@ class NewtonRuntime:
         self._require_initialized()
         with self._owner_stream_scope():
             self._restore_initial_solver_integration_state()
+        drive = getattr(self, "compliant_drive", None)
+        if drive is not None:
+            self._flush_cold_state_updates()
+            with self._owner_stream_scope():
+                drive.reset_from_positions(self.state.joint_q)
         self._synchronize_owner_stream()
         self._sim_time = 0.0
 
@@ -689,6 +738,17 @@ class NewtonRuntime:
             "simulation_time_s",
             "values",
         }
+        drive = getattr(self, "compliant_drive", None)
+        if drive is not None:
+            expected_keys.add("controller_history")
+            history = np.asarray(payload.get("controller_history"), dtype=np.float64)
+            if history.shape != drive.history.shape or not np.isfinite(history).all():
+                raise ValueError("Invalid compliant controller history shape or values")
+            phases = history[:, 8::9]
+            if not np.all(
+                (phases == np.floor(phases)) & (phases >= 0) & (phases < drive.substeps)
+            ):
+                raise ValueError("Invalid compliant controller history phase")
         unknown = sorted(str(key) for key in set(payload).difference(expected_keys))
         missing = sorted(str(key) for key in expected_keys.difference(payload))
         if unknown or missing:
@@ -1126,6 +1186,7 @@ class NewtonRuntime:
         self._collision_pipeline = None
         self.solver = None
         self.model = None
+        self.compliant_drive = None
         self.stream = None
         self.replication = None
         self.native_master_follower_audit = None
@@ -1180,7 +1241,14 @@ class NewtonRuntime:
         with self._owner_stream_scope():
             # contacts buffer 与 solver/state 都归 owner。CUDA 可捕获整段 DAG；CPU 在同一
             # 结构下 eager 执行。state 同时作为输入/输出是 Newton 原地积分的预期 ABI。
-            for _ in range(substeps):
+            drive = self.compliant_drive
+            native_control = self.control
+            if drive is not None:
+                drive.prepare(self.state, self.control)
+                native_control = drive.control
+            for substep in range(substeps):
+                if drive is not None:
+                    drive.apply(self.state, substep)
                 # The previous solve moved the bodies. Reusing the outer step's
                 # contacts misses pairs that first touch during an internal step.
                 contacts = None
@@ -1191,7 +1259,7 @@ class NewtonRuntime:
                 self.solver.step(
                     self.state,
                     self.state,
-                    self.control,
+                    native_control,
                     contacts,
                     substep_dt,
                 )
@@ -1267,6 +1335,9 @@ class NewtonRuntime:
                     selected_world_mask=projection_mask,
                     stream=self.stream,
                 )
+            drive = getattr(self, "compliant_drive", None)
+            if drive is not None and projection_mask is not None:
+                drive.reset_from_positions(self.state.joint_q, projection_mask)
             if len(selected_worlds) == self._num_worlds:
                 fk_mask = None
             else:

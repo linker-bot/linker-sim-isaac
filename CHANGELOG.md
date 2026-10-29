@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Add the opt-in `newton_compliant` AR5/O6 profile for Newton CPU/CUDA: bounded virtual shafts, compliant native output, per-physics-step arm/hand references, scoped dynamics, and controller state restoration. Existing scene/contact/asset defaults remain unchanged; see the control guide for the distinct virtual advancing and native output limits.
+
 - Pin Newton to the verified 1.8 development revision and MuJoCo 3.15; both PhysX and Newton load the same Warp 1.17 wheel. Ordinary profiles default to configurable 60 Hz control / 480 Hz physics; the dedicated hybrid profile retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Mirror scenes add `control_frequency_hz`; Newton leaves remove `substeps` / `max_substep_dt_s` and automatic subdivision. Hybrid renames `minimum_physics_frequency_hz` to `minimum_feedback_frequency_hz` and retains its 200 Hz minimum; hybrid gains, filters, tick counts and feedback timing are unchanged. Contact and asset defaults are unchanged in this step. Recreate the locked environment and revalidate task behavior.
 
 - Integrate O6 1014_v4 mirrored structure, 369.98 g/hand and corrected left inertia, simplified colliders, symmetric 20.5 mm AR5_08 mounting, and the upstream passive-coupling fix. Revalidate camera-clearance paths; controller gains remain unchanged.

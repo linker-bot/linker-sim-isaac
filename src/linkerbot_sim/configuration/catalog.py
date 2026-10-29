@@ -26,6 +26,7 @@ from .controllers import (
     ControllerProfiles,
     controller_profiles_from_mappings,
     normalize_controller_bundle_name,
+    validate_compliant_drive_selection,
 )
 from .modes.kaleidoscope import (
     KaleidoscopeConfig,
@@ -367,6 +368,9 @@ class _ConfigurationGraphReader:
         default_path = bundle_root / "default_controller.yaml"
         if default_path.is_file():
             component_files["default"] = default_path
+        drive_path = bundle_root / "newton_drive.yaml"
+        if drive_path.is_file():
+            component_files["newton_drive"] = drive_path
         documents: dict[str, Mapping[str, object]] = {}
         try:
             for component, candidate in component_files.items():
@@ -467,6 +471,20 @@ def _resolve_scene_asset_profiles(
             for instance in scene.objects
         ),
     )
+
+
+def _validate_compliant_selections(
+    scene, controller_bundles, *, engine: str, mode: str = "position"
+) -> None:
+    for instance in scene.robots:
+        profile = instance.resolved_profile
+        name = instance.controller_profile or profile.controller_profile or engine
+        validate_compliant_drive_selection(
+            controller_bundles[name],
+            engine=engine,
+            asset_path=profile.asset_path,
+            mode=mode,
+        )
 
 
 def _effective_controller_bundle_names(
@@ -587,6 +605,9 @@ def load_mirror_config(
             runtime_default=physics.engine,
         )
     )
+    _validate_compliant_selections(
+        scene, controller_bundles, engine=physics.engine, mode=control.mode
+    )
     return MirrorConfig(
         mode=mode,
         profiles=references,
@@ -691,6 +712,7 @@ def load_kaleidoscope_config(
             runtime_default=physics.engine,
         )
     )
+    _validate_compliant_selections(scene, controller_bundles, engine=physics.engine)
     return KaleidoscopeConfig(
         mode=mode,
         profiles=references,

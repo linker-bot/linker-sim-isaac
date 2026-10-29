@@ -87,6 +87,7 @@ def build_replicated_newton_scene(
     controller_bundle: str,
     controller_bundles: Mapping[str, ControllerProfiles],
     prepare_newton_render_topology: bool,
+    drive_steps_per_command: int = 1,
 ) -> ReplicatedNewtonScene:
     """导入一次 source env，并由唯一 NewtonRuntime finalize 多 world model。"""
 
@@ -170,6 +171,10 @@ def build_replicated_newton_scene(
         env_origins=origins,
         robots=manager_robots,
         object_handles=object_handles,
+        drive_steps_per_command=drive_steps_per_command,
+        drive_profiles={
+            source.label: source.controller_profiles for source in source_robots
+        },
     )
     if int(getattr(runtime, "world_count", -1)) != plan.world_count:
         raise RuntimeError(

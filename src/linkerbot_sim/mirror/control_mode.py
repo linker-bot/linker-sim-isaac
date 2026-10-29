@@ -11,6 +11,7 @@ from linkerbot_sim.controllers.control_mode import (
     CONTROL_MODES,
     ControlModeChange,
     ControlModeGenerationConflict,
+    ControlModeIncompatibleError,
     ControlModeRollbackError,
     ControlModeState,
     ControlModeSwitchError,
@@ -75,6 +76,13 @@ class MirrorControlModeService:
         self._active_mode = self._initial_mode
         self._generation = 0
         self._bindings = tuple(bindings)
+        self._supported_modes = (
+            ("position",)
+            if any(b.controller_profiles.compliant_drive is not None for b in bindings)
+            else CONTROL_MODES
+        )
+        if self._initial_mode not in self._supported_modes:
+            raise ValueError("Compliant drive requires initial position control")
         labels = tuple(binding.label for binding in self._bindings)
         if len(set(labels)) != len(labels):
             raise ValueError("Mirror control binding labels cannot repeat")
@@ -90,7 +98,7 @@ class MirrorControlModeService:
             initial_mode=self._initial_mode,
             active_mode=self._active_mode,
             generation=self._generation,
-            supported_modes=CONTROL_MODES,
+            supported_modes=self._supported_modes,
         )
 
     def set_mode(
@@ -100,6 +108,12 @@ class MirrorControlModeService:
         expected_generation: int | None = None,
     ) -> ControlModeChange:
         requested = require_control_mode(mode)
+        if requested not in self._supported_modes:
+            raise ControlModeIncompatibleError(
+                "Compliant drive supports only position control",
+                active_mode=self._active_mode,
+                operation="set_control_mode",
+            )
         if expected_generation is not None:
             expected = require_expected_generation(expected_generation)
             if expected != self._generation:

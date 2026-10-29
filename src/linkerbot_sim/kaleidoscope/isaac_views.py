@@ -115,6 +115,8 @@ class PhysicsStateTensorPort(Protocol):
         reset_mask: torch.Tensor | None = None,
     ) -> None: ...
 
+    def state_bindings(self) -> dict[str, StateBinding]: ...
+
     def close(self) -> None: ...
 
 
@@ -562,13 +564,10 @@ class KaleidoscopeTensorViews:
             ),
         }
         if self.physics_state_port is not None:
-            name = self.physics_state_port.field_name
-            if name in bindings:
-                raise ValueError(f"duplicate physics state field {name!r}")
-            bindings[name] = StateBinding(
-                self.physics_state_port.tensor,
-                self.physics_state_port.write,
-            )
+            for name, binding in self.physics_state_port.state_bindings().items():
+                if name in bindings:
+                    raise ValueError(f"duplicate physics state field {name!r}")
+                bindings[name] = binding
         for name, tensor in task_fields.items():
             if name in bindings:
                 raise ValueError(f"duplicate state field {name!r}")

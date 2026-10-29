@@ -115,7 +115,11 @@ class KaleidoscopeControlModeCoordinator:
             raise ValueError("supported control modes must be non-empty and unique")
         if "position" not in normalized:
             raise ValueError("Kaleidoscope initial position mode must be supported")
-        self._supported_modes = normalized
+        compliant = any(
+            b.controller_profiles.compliant_drive is not None for b in bindings
+        )
+        self._supported_modes = ("position",) if compliant else normalized
+        prepared_modes = ("position",) if compliant else CONTROL_MODES
         self._initial_mode: ControlMode = "position"
         self._active_mode: ControlMode = "position"
         self._generation = 0
@@ -147,7 +151,7 @@ class KaleidoscopeControlModeCoordinator:
         effort_limits: list[torch.Tensor] = []
         for binding in bindings:
             by_mode: dict[ControlMode, object] = {}
-            for mode in CONTROL_MODES:
+            for mode in prepared_modes:
                 projection = project_command_runtime(
                     joint_control_settings(binding.controller_profiles, mode=mode),
                     joint_names=binding.command_joint_names,
@@ -156,7 +160,7 @@ class KaleidoscopeControlModeCoordinator:
                 value = binding.port.prepare_control_runtime(projection)
                 binding.port.validate_prepared_control_runtime(value)
                 by_mode[mode] = value
-                if mode == "effort":
+                if mode == ("position" if compliant else "effort"):
                     effort_limits.append(value.common.effort_limits)
             width = len(binding.command_joint_names)
             self._zero_by_width[width] = torch.zeros(
