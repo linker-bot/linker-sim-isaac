@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -595,13 +595,13 @@ wheels = [
 
 [[package]]
 name = "foxglove-sdk"
-version = "0.26.0"
+version = "0.30.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1c/9d/f8abcea4ea831b9ae4ace9227abad2b567f0c34503a61e7be5060eea506f/foxglove_sdk-0.26.0.tar.gz", hash = "sha256:79def3c5699da30763a500c99801a2e7aa02652cfc202c1e79478a04e964cfa6", size = 565974, upload-time = "2026-07-21T01:35:37.389Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/26/431975e0af037e233c9845db240503f2ae3c0725ec757a4b2807d1cb809d/foxglove_sdk-0.30.2.tar.gz", hash = "sha256:61cb51caa05db2b1ce4ecf25a45228e31b0d104c0dead770887b85ad4a483c63", size = 741006, upload-time = "2026-10-21T16:31:37.046Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/ed/3e91daf06df9600529d9cc7527f690636e25e1f3d00d355167412a54f96a/foxglove_sdk-0.26.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c964e9849865568686af14753e5ba0797a2b45051ef9c6be9d927065a21631c9", size = 2174256, upload-time = "2026-07-21T01:35:21.889Z" },
-    { url = "https://files.pythonhosted.org/packages/7d/bd/3405c05e6c8d3ddea7f4c1a783b028db91355fb12a959628f975b17a85cd/foxglove_sdk-0.26.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:ab242e1dcdf117675438d4aaa29acc4c8f76e889e3446bfe6bc401895342cf70", size = 18509399, upload-time = "2026-07-21T01:35:26.908Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/4f/2447874458617e72e9215bdc047ac0f7eef8321081f1d842af70ede3a3e0/foxglove_sdk-0.26.0-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:65f299a53c447c92646d2d1cc3b3f5ca12de6e7ef85727d09d2c2d077ff7fadb", size = 2481485, upload-time = "2026-07-21T01:35:31.633Z" },
+    { url = "https://files.pythonhosted.org/packages/51/f9/33a0ffcd45564a5192f46f2ec80b52ed164d7d4674b4fa475a2134eb4cf1/foxglove_sdk-0.30.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a8a1c245e572f14a0b1cf4d8aed091e13925b7ecc19e04de2a9991931c698e4f", size = 2270653, upload-time = "2026-10-21T16:31:21.217Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/57/8c0701163307ffb909e0c032d1d546f0b29e4293074f95e537438a206d46/foxglove_sdk-0.30.2-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:fbeb25a9f2a97534a9e1fb434e43dae2737a2f22084ce2de46cd717aadd77419", size = 18923690, upload-time = "2026-10-21T16:31:26.741Z" },
+    { url = "https://files.pythonhosted.org/packages/19/a3/f884af57bb212a870c992e4fc7222848842749f616114f8466b44f7eeb14/foxglove_sdk-0.30.2-cp310-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:f41d3cf666035b550b7a60ff582082c8b6911b8615802908da46608b7d5cbc13", size = 2580427, upload-time = "2026-10-21T16:31:31.952Z" },
 ]
 
 [[package]]
@@ -653,7 +653,7 @@ wheels = [
 
 [[package]]
 name = "gymnasium"
-version = "1.3.0"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
@@ -661,9 +661,9 @@ dependencies = [
     { name = "numpy" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/ff/14b6880d703dfaca204490979d3254ccd280c99550798993319902873658/gymnasium-1.3.0.tar.gz", hash = "sha256:6939e86e835d6b71b6ba6bfd360487420876deafc79bfb7bacba83a7c446bcf3", size = 830646, upload-time = "2026-04-22T13:47:14.155Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/3a/6713c8a92c259fd7619dc93ff19e6e435463f20d3d7b180b14ce99074c10/gymnasium-1.4.0.tar.gz", hash = "sha256:9754f630a32abfdbb76386abe1bc1e706c982db2d62dfa119c9952eb2de7697d", size = 350436, upload-time = "2026-10-05T11:02:16.217Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e9/73/fda6a25f3beeb5e49d74330b44092b9e5a547395ccd478d1103ddcbff1fc/gymnasium-1.3.0-py3-none-any.whl", hash = "sha256:6b8c159a8540dcbcb221722d7efda24d78ebbcbc3bd2ea1c2611aa2a34471fc2", size = 953904, upload-time = "2026-04-22T13:47:12.13Z" },
+    { url = "https://files.pythonhosted.org/packages/38/4e/6a51be94ae8e9dc8eaddd6ea74a6dde754448c4c746b51a232681f81e41c/gymnasium-1.4.0-py3-none-any.whl", hash = "sha256:1cb947c59e7c72d8eabb2c2274c00cd20948e69f8452a9ef4092223be24fdf0e", size = 476306, upload-time = "2026-10-05T11:02:14.783Z" },
 ]
 
 [[package]]
@@ -1071,7 +1071,7 @@ source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
     { name = "isaacsim-sensor" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime-gpu" },
     { name = "py-trees" },
     { name = "pydot" },
     { name = "pyparsing" },
@@ -1321,8 +1321,8 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = "==7.4.4" },
     { name = "coverage", marker = "extra == 'test'", specifier = "==7.4.4" },
     { name = "cuda-bindings", extras = ["all"], marker = "extra == 'simulation'", specifier = "==12.9.7" },
-    { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.26.0" },
-    { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.3.0" },
+    { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.30.2" },
+    { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.4.0" },
     { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.1.0.0" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
@@ -1332,7 +1332,7 @@ requires-dist = [
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.4" },
     { name = "scipy", specifier = "==1.17.0" },
-    { name = "skrl", extras = ["torch"], marker = "extra == 'training'", specifier = "==2.1.0" },
+    { name = "skrl", extras = ["torch"], marker = "extra == 'training'", specifier = "==2.1.1" },
     { name = "tinyobjloader", marker = "extra == 'simulation'", specifier = "==2.0.0rc13" },
     { name = "torch", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
@@ -1828,7 +1828,7 @@ wheels = [
 ]
 
 [[package]]
-name = "onnxruntime"
+name = "onnxruntime-gpu"
 version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
@@ -1838,7 +1838,7 @@ dependencies = [
     { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/43/2a4e04f8dbeffad19bbcced4bcd4289bf478921518437404d6b92bdf213b/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9b6dd70599005bd1bf29779f04a91978b92b5e719c11a20068a8f8e535f725b6", size = 18185439, upload-time = "2026-05-08T19:07:36.299Z" },
+    { url = "https://files.pythonhosted.org/packages/94/fd/59bee7cffaa435da44fefdeb63e29c61de4dbfa4b279852f59cd02c042ae/onnxruntime_gpu-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3c01119ed4d9449d60367fa8ccffcd02bd3fe736754284e4b198d131f54edad6", size = 276971796, upload-time = "2026-05-08T19:15:46.192Z" },
 ]
 
 [[package]]
@@ -2415,7 +2415,7 @@ wheels = [
 
 [[package]]
 name = "skrl"
-version = "2.1.0"
+version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "gymnasium" },
@@ -2423,9 +2423,9 @@ dependencies = [
     { name = "tensorboard" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0b/bb/8ac912d477c7e18065281021e3d68db2d91034a09ff1668247733490703c/skrl-2.1.0.tar.gz", hash = "sha256:4a1c925b5e025cda3133023331a46f4197ddc5ce420abc01b95e934235402f08", size = 253522, upload-time = "2026-05-10T20:06:54.3Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/5a/9c116f0f590a52fd21935cae65473779704e80db89e7f55a1de8323b728c/skrl-2.1.1.tar.gz", hash = "sha256:f8eb4939200c85b37a79a6847f78b7eb9fc32e70fa69201b4716204d536b06e7", size = 252550, upload-time = "2026-10-21T07:39:11.156Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/44/de/eca16c14e27a986ddc0314711a6bc42bb70c247073c7f62c390e4ffaa5ed/skrl-2.1.0-py3-none-any.whl", hash = "sha256:5d0cf61fcf81243018220dacbd4a04c84250c1e67274aaeac1779cd53db44e23", size = 458097, upload-time = "2026-05-10T20:06:52.3Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/81/25a1962f3bcc3a8208a239e91e33b9823d89a03fa90dbd2e7e4c9b9f4f0e/skrl-2.1.1-py3-none-any.whl", hash = "sha256:ef39a87ef2f34fc1c4963a0b2b56022add7c6b29937bcbc63d2f4c37a8c46c00", size = 459647, upload-time = "2026-10-21T07:39:09.914Z" },
 ]
 
 [package.optional-dependencies]
