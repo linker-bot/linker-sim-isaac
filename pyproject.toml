@@ -42,7 +42,7 @@ training = [
 ]
 simulation = [
   # Core simulator, its offline extension cache, and matching PyTorch release.
-  "isaacsim[all,extscache]==6.1.0.0",
+  "isaacsim[all,extscache]==6.2.0.0",
   # isaacsim-core pins this release candidate; declaring it directly lets uv
   # admit the exact candidate without enabling unrelated pre-release packages.
   "tinyobjloader==2.0.0rc13",
@@ -60,7 +60,7 @@ simulation = [
   "nvidia-curobo[cu12] @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
 
   # Both PhysX and project-owned Newton load this locked wheel before Kit.
-  "warp-lang==1.17.0",
+  "warp-lang==1.18.0",
 ]
 
 [tool.uv]
