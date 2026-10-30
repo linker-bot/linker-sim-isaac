@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
@@ -378,12 +378,13 @@ wheels = [
 
 [[package]]
 name = "coverage"
-version = "7.4.4"
+version = "7.17.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/bf/d5/f809d8b630cf4c11fe490e20037a343d12a74ec2783c6cdb5aee725e7137/coverage-7.4.4.tar.gz", hash = "sha256:c901df83d097649e257e803be22592aedfd5182f07b3cc87d640bbb9afd50f49", size = 783727, upload-time = "2024-03-14T19:11:17.611Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d2/79/e78bd8f75a9b8e32233ce92d4607f0a21ce88a9156cace2884e7175a82f5/coverage-7.17.0.tar.gz", hash = "sha256:cc010a0a7fbdd9bb8bdfd0d3f04a5151275860213cbd7e2b876b29778489c712", size = 991021, upload-time = "2026-10-22T16:06:50.009Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/98/79/185cb42910b6a2b2851980407c8445ac0da0750dff65e420e86f973c8396/coverage-7.4.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ce4b94265ca988c3f8e479e741693d143026632672e3ff924f25fab50518dd51", size = 238223, upload-time = "2024-03-14T19:10:10.055Z" },
-    { url = "https://files.pythonhosted.org/packages/f4/1b/79cdb7b11bbbd6540a536ac79412904b5c1f8903d5c1330084212afa8ceb/coverage-7.4.4-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:69eb372f7e2ece89f14751fbcbe470295d73ed41ecd37ca36ed2eb47512a6ab9", size = 244805, upload-time = "2024-03-14T19:10:16.343Z" },
+    { url = "https://files.pythonhosted.org/packages/91/ac/eb4c31f741509a9ef48cf6f28385e98e9de0785599282252eee252ff8af7/coverage-7.17.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:85932227e9dd38e62cd29c17fefdfecfb919eead6af1e3259522d03cf85de983", size = 261789, upload-time = "2026-10-22T16:04:23.037Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/2d/eb0cbde0535342df0d17a667163030a3afb67e5eb9e3ad94af9540041584/coverage-7.17.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:e4eaf11d6b0f2147f46cfbf06fe7edcca6f095d0120da00ddc2458995ee869fc", size = 260361, upload-time = "2026-10-22T16:04:35.661Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/17/48032919343afa2906112d458aceda2043afdb24a2ee8eb4c60904d8ddf1/coverage-7.17.0-py3-none-any.whl", hash = "sha256:bac487dce0d2aff28ddf1a533a916f771416eee0e493960f611e49037b878e9d", size = 217383, upload-time = "2026-10-22T16:06:48.471Z" },
 ]
 
 [[package]]
@@ -1071,7 +1072,7 @@ source = { registry = "https://pypi.nvidia.com/" }
 dependencies = [
     { name = "isaacsim-robot-motion" },
     { name = "isaacsim-sensor" },
-    { name = "onnxruntime" },
+    { name = "onnxruntime-gpu" },
     { name = "py-trees" },
     { name = "pydot" },
     { name = "pyparsing" },
@@ -1318,26 +1319,26 @@ visualization = [
 
 [package.metadata]
 requires-dist = [
-    { name = "coverage", marker = "extra == 'dev'", specifier = "==7.4.4" },
-    { name = "coverage", marker = "extra == 'test'", specifier = "==7.4.4" },
+    { name = "coverage", marker = "extra == 'dev'", specifier = "==7.17.0" },
+    { name = "coverage", marker = "extra == 'test'", specifier = "==7.17.0" },
     { name = "cuda-bindings", extras = ["all"], marker = "extra == 'simulation'", specifier = "==12.9.7" },
     { name = "foxglove-sdk", marker = "extra == 'visualization'", specifier = "==0.26.0" },
     { name = "gymnasium", marker = "extra == 'training'", specifier = "==1.3.0" },
     { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.1.0.0" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.411" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.414" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==9.1.1" },
     { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.4" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.17.2" },
     { name = "scipy", specifier = "==1.17.0" },
     { name = "skrl", extras = ["torch"], marker = "extra == 'training'", specifier = "==2.1.0" },
     { name = "tinyobjloader", marker = "extra == 'simulation'", specifier = "==2.0.0rc13" },
     { name = "torch", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", marker = "extra == 'simulation'", specifier = "==2.11.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", marker = "extra == 'simulation'", specifier = "==0.26.0", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "usd-core", marker = "extra == 'dev'", specifier = "==26.8" },
+    { name = "usd-core", marker = "extra == 'dev'", specifier = "==26.11" },
     { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.17.0" },
     { name = "websockets", specifier = "==13.1" },
 ]
@@ -1828,7 +1829,7 @@ wheels = [
 ]
 
 [[package]]
-name = "onnxruntime"
+name = "onnxruntime-gpu"
 version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
@@ -1838,7 +1839,7 @@ dependencies = [
     { name = "protobuf" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/43/2a4e04f8dbeffad19bbcced4bcd4289bf478921518437404d6b92bdf213b/onnxruntime-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9b6dd70599005bd1bf29779f04a91978b92b5e719c11a20068a8f8e535f725b6", size = 18185439, upload-time = "2026-05-08T19:07:36.299Z" },
+    { url = "https://files.pythonhosted.org/packages/94/fd/59bee7cffaa435da44fefdeb63e29c61de4dbfa4b279852f59cd02c042ae/onnxruntime_gpu-1.26.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3c01119ed4d9449d60367fa8ccffcd02bd3fe736754284e4b198d131f54edad6", size = 276971796, upload-time = "2026-05-08T19:15:46.192Z" },
 ]
 
 [[package]]
@@ -2112,15 +2113,15 @@ wheels = [
 
 [[package]]
 name = "pyright"
-version = "1.1.411"
+version = "1.1.414"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nodeenv" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/ab/265f7dc69d28113ebba19092e57b075f41543b2ed048429c5f56e2b88eac/pyright-1.1.411.tar.gz", hash = "sha256:d885a0551f2e763b089a02702174e7f4ba77548cddabc972ab86d1f7f1b0f998", size = 4112861, upload-time = "2026-06-25T02:14:06.37Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/1b/244c7b710031ada80f27e579ec20d28a2285dfc318fed0339866b1047f12/pyright-1.1.414.tar.gz", hash = "sha256:523c0a97c60da6333234955c277730c9cf4f5bd6d5399e7b7d2b0fc5d3599524", size = 4154638, upload-time = "2026-09-10T12:26:53.181Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/49/385be530a6a5b78d1cbcd5c2e38debc8959a2fc6bdb716f4e581002979fc/pyright-1.1.411-py3-none-any.whl", hash = "sha256:dc7c72a8e2700c55baa127554040e067041ea53ccfd50bf96308cc4291c7d5d9", size = 6181526, upload-time = "2026-06-25T02:14:04.691Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/ba/18b6e682ead424ad24bcc134339ae5d1b931cd9ae260540592a058a91279/pyright-1.1.414-py3-none-any.whl", hash = "sha256:2a6b4b3298c9eec174c5ed83bd338de6eee82df2992f3e1930e6199d381be36f", size = 6225049, upload-time = "2026-09-10T12:26:51.427Z" },
 ]
 
 [[package]]
@@ -2293,12 +2294,12 @@ wheels = [
 
 [[package]]
 name = "ruff"
-version = "0.16.4"
+version = "0.17.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/00/8f/d8074b1f25e003164087a8bfe79a0f1a3945135764dbb6aaab04103dcaf9/ruff-0.16.4.tar.gz", hash = "sha256:13171aa9d9af2240ee3504e639de73122c67e74036de5ba2e1d01422cd17e3dc", size = 4899731, upload-time = "2026-08-20T17:43:59.196Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/58/690cf56da80c8f2c8bf12042b6017beac2c34fe961f65420bcb3fb7fac38/ruff-0.17.2.tar.gz", hash = "sha256:84d632402d14c23b488f941db23712d6736a013225162062d34558c3f3c780eb", size = 5333400, upload-time = "2026-10-22T18:38:00.181Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/b6/56bc0b8cf45b54b28b3a5e6381c8945d51b5b18adf659454c32295209a31/ruff-0.16.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f2d812e482f5a7e02eee26cd73d2a37ebbdf47d795ea63ba1b89110ae93e9fb3", size = 10286522, upload-time = "2026-08-20T17:43:37.288Z" },
-    { url = "https://files.pythonhosted.org/packages/b2/a0/fbdeb59e48c6261f523e56c8f12e9c08fbe693786595cc7e3959207a9232/ruff-0.16.4-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:fbd85d2875fdd67e833213a651f613bbf25303abf6aa822a5121f4531195678d", size = 10697071, upload-time = "2026-08-20T17:43:49.891Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/d8/59894cf630d2d86882457a2a6a0a1533410c5c805bfbac6f6eb4b5aef69d/ruff-0.17.2-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c60f93fec7142dba5b8f487f94bf2f6231dae24dc11e4c48648347c8b0720004", size = 10528000, upload-time = "2026-10-22T18:37:37.88Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/5a/a7a640f47bb906ec8fa233ea84319d503e6dee02b59e3901bd312ebd1f9b/ruff-0.17.2-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:2d086be452eed686aa51271ecf2cbe5037956517cc6ee39a17b4489ac12f8bbe", size = 10790587, upload-time = "2026-10-22T18:37:50.191Z" },
 ]
 
 [[package]]
@@ -2710,10 +2711,10 @@ wheels = [
 
 [[package]]
 name = "usd-core"
-version = "26.8"
+version = "26.11"
 source = { registry = "https://pypi.org/simple" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/0b/efe5c0d7c273149ac94083831e5b36649925a621a73cd2ddf9616e160c8c/usd_core-26.8-cp312-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:204fb1ef1fc977b827c491f4e9fa39b57518504ed0cacfe12e026e95123cacf1", size = 29530957, upload-time = "2026-07-20T14:32:24.255Z" },
+    { url = "https://files.pythonhosted.org/packages/68/37/01c0d76d58fc95e24d786e8399cffe352eb147e8d41dea49a923fca9c961/usd_core-26.11-cp312-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c412fa1d2a5dd0c7bc65484ffe34add8f3fc7b03510867e7e019bcaf06b76177", size = 28776103, upload-time = "2026-10-21T05:54:15.768Z" },
 ]
 
 [[package]]
