@@ -161,6 +161,13 @@ PCHIP/重定时策略。每个原生物理步前将估计 PD 输出保护在 199
 设置场景求解参数和按部件区分的碰撞材质。CPU/CUDA 管线、gap 回退值及
 求解器默认值见[Newton 共用设置](../reference/configuration.md)。
 
+当前固定资产已包含[资产PR #23](https://github.com/linker-bot/linker-sim-assets/pull/23)：
+AR5/AR5_08 J6/J7在运行MJCF及规划URDF中均为 **±60°**，包括其他AR5手部组合。
+只有AR5/O6组合MJCF同步已选原生被动动力学、equality、力矩上限、重力补偿及材质。
+原始几何、质量惯量及安装保持不变。组合MJCF仍使用力矩`motor`：独立运行时`ctrl`
+输入为力矩而非角度，不包含虚拟控制器；本运行时提供上述位置驱动和参考逻辑。
+XML中的原生求解选项不负责选择Newton碰撞库及其刷新频率。
+
 运行 `just smoke-newton-drive` 验证 CPU/CUDA 的正式 Mirror 运动入口：手部声明顺序、
 机械臂速度传递、每条指令八个物理子步、手部目标插值、原生仿真时间及历史状态恢复。
 

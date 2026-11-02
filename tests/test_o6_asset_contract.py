@@ -1,4 +1,4 @@
-"""The O6 runtime and planning assets must share the 1014 installation contract."""
+"""Pinned assets must agree with runtime drive and planning contracts."""
 
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -11,6 +11,8 @@ from linkerbot_sim.mirror.collision.urdf_kinematics import _UrdfKinematics
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "packages/linker-robot-assets/src/linker_robot_assets/assets"
+CONTROLLERS = ROOT / "configs/controllers/newton_compliant"
+DRIVE = yaml.safe_load((CONTROLLERS / "newton_drive.yaml").read_text())
 
 
 @pytest.mark.parametrize("side", ("l", "r"))
@@ -49,7 +51,12 @@ def test_o6_profiles_use_matching_runtime_and_planning_units(side, camera):
         assert equality.get("joint2") == mimic.get("joint")
         ratio = float(equality.get("polycoef").split()[1])
         assert ratio == float(mimic.get("multiplier"))
-        assert equality.get("solref") == "-10000000 -63000"
+        np.testing.assert_allclose(
+            np.fromstring(equality.get("solref"), sep=" "), DRIVE["equality_solref"]
+        )
+        np.testing.assert_allclose(
+            np.fromstring(equality.get("solimp"), sep=" "), DRIVE["equality_solimp"]
+        )
     assert profile["joint_groups"]["hand"] == [
         prefix + joint
         for joint in (
@@ -64,3 +71,65 @@ def test_o6_profiles_use_matching_runtime_and_planning_units(side, camera):
     # Composed models keep the existing external torque-control interface.
     assert not xml.findall("actuator/position")
     assert len(xml.findall("actuator/motor")) == 13
+
+    # Asset torque caps and passive dynamics must agree with the selected drive;
+    # virtual advancing limits are intentionally a different controller layer.
+    for group in ("arm", "hand"):
+        controller = yaml.safe_load(
+            (CONTROLLERS / f"{group}_controller.yaml").read_text()
+        )
+        names = profile["joint_groups"][group]
+        caps = np.broadcast_to(
+            controller["position_control"]["active_joints"]["max_force"], len(names)
+        )
+        for name, cap in zip(names, caps, strict=True):
+            motor = xml.find(f"actuator/motor[@joint='{name}']")
+            np.testing.assert_allclose(
+                np.fromstring(motor.get("forcerange"), sep=" "), [-cap, cap]
+            )
+            joint = xml.find(f".//worldbody//joint[@name='{name}']")
+            assert float(joint.get("armature")) == DRIVE[f"{group}_armature"]
+            if group == "arm":
+                damping = DRIVE["arm_passive_damping"]
+            else:
+                kind = (
+                    "thumb_yaw"
+                    if name.endswith("thumb_cmc_yaw")
+                    else "thumb_flexion"
+                    if name.endswith("thumb_cmc_pitch")
+                    else "finger_flexion"
+                )
+                damping = DRIVE[kind]["passive_damping"]
+            assert float(joint.get("damping")) == damping
+    for equality in xml.findall("equality/joint"):
+        follower = xml.find(f".//worldbody//joint[@name='{equality.get('joint1')}']")
+        assert float(follower.get("damping")) == DRIVE["follower_damping"]
+
+
+@pytest.mark.parametrize(
+    "profile_path",
+    sorted((ROOT / "configs/robots").glob("ar5_08_*.yaml")),
+    ids=lambda p: p.stem,
+)
+def test_ar5_runtime_and_planner_wrist_limits_agree(profile_path):
+    profile = yaml.safe_load(profile_path.read_text())
+    robot = profile["robot"]
+    paths = {robot["asset_path"], profile["curobo"]["robot"]["urdf_path"]}
+    mounted = robot.get("planning_collision", {}).get("mounted_urdf")
+    if mounted:
+        paths.add(mounted)
+    for path in paths:
+        root = ET.parse(ROOT / path).getroot()
+        mjcf = root.tag == "mujoco"
+        joints = root.findall(".//worldbody//joint" if mjcf else "joint")
+        wrists = [
+            j for j in joints if j.get("name", "").endswith(("_joint_6", "_joint_7"))
+        ]
+        assert len(wrists) == 2, path
+        for joint in wrists:
+            if mjcf:
+                limits = np.fromstring(joint.get("range"), sep=" ")
+            else:
+                limit = joint.find("limit")
+                limits = [float(limit.get("lower")), float(limit.get("upper"))]
+            np.testing.assert_allclose(limits, [-np.pi / 3, np.pi / 3], atol=1e-12)

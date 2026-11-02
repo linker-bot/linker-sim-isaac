@@ -2449,7 +2449,7 @@ generated_inventory:
   test_python:
     count: 134
     path_sha256: 0671062ae088daeefecfb4cf8c5dcd1d8111b8604f3340e472e908136e148a08
-    path_content_sha256: dc0ae612c63267527fb3edc06d913d4795085933f6c5e891759133d0dd150424
+    path_content_sha256: a088d23fec2ce016e4a305e83441cb88573b0dc64ac4b99345d7fa4d8b118f36
     files:
     - path: tests/fakes/__init__.py
       sha256: 09e0fc6f1627bcd298bf3d267d672e5eb7bc5bb8e0120b02696cefa356afb751
@@ -2618,7 +2618,7 @@ generated_inventory:
     - path: tests/test_newton_views.py
       sha256: efb7526a0d4e1e01d88567efbab4d75eca9dd15fa34b1adb0797d758a330108b
     - path: tests/test_o6_asset_contract.py
-      sha256: 4b78a49e66610930be0bb5f06965c111b8be039bc0ac9b7eca21e683da76a0b1
+      sha256: f9c8bcf1bd2bed5cf47c546b261a7afda8842d23d9acfd26f6ab065565f84193
     - path: tests/test_object_asset_entrypoints.py
       sha256: 4199bfb9ab9faa2904cfc353b5656acbbc6651ec0401b33e75e5404c547e2f07
     - path: tests/test_object_instances.py
@@ -2918,7 +2918,7 @@ generated_inventory:
   maintained_docs:
     count: 71
     path_sha256: c37c41b17cfa3cd673f681857f89595b960a9c0a96c5241addf9db6af7b507a5
-    path_content_sha256: 81dfaa764b58c96323ff51fecdcd92e50b23878ea691272e4aa565089cd4f4be
+    path_content_sha256: 218b7a3e4b661bd4c142c3ee710a450fa4d8ba224fbce26a62f5d3566191b49f
     files:
     - path: docs/README.md
       sha256: 41f3c80bc1fded1594137037c8b94cb5e20f85f531d05819cc44ddddcf353ef0
@@ -2941,7 +2941,7 @@ generated_inventory:
     - path: docs/en/getting-started/choose-runtime-and-api.md
       sha256: efca7b65828c4246ff8a5456a693815807034a22d24de6fd7d89db5a0a1955b9
     - path: docs/en/getting-started/installation.md
-      sha256: 1e62e9182019bce1633cd55f9071f40dbb0296eb488535ac43fec21f995cd494
+      sha256: 523af965cea7938f84770235ccfb43b5ee305f8512f631f4bec71f87e61d2e15
     - path: docs/en/getting-started/kaleidoscope-quickstart.md
       sha256: ed8842fb63ad82708431a25ef3962d5d00b7fc1a542609c5d30e07de044b9c5d
     - path: docs/en/getting-started/mirror-quickstart.md
@@ -2955,7 +2955,7 @@ generated_inventory:
     - path: docs/en/guides/configuration.md
       sha256: 97c2873a45195035fa2682d17dd3e9344f54ebc22bf3b8740fecb13473502f8a
     - path: docs/en/guides/control-and-trajectories.md
-      sha256: 3fb1e7bf3812808a597fb5d7d56872e229cbd1226597735139caaf08cefa5a77
+      sha256: de8e137c2dd2f5f4c7f1d54a89d0d51e5ee2713d33d2f59f44f4bcb751caf155
     - path: docs/en/guides/foxglove.md
       sha256: 6f5e2e466529b5620dfa975060532d302145765e2c520a49320b4db86d675b1d
     - path: docs/en/guides/motion-planning.md
@@ -3011,7 +3011,7 @@ generated_inventory:
     - path: docs/zh-CN/getting-started/choose-runtime-and-api.md
       sha256: 129f50f0a9008fe7560d385d58062416e7218d396ccf4c42f0a35c54d693bb02
     - path: docs/zh-CN/getting-started/installation.md
-      sha256: 0a21d5ba5af84d352868683c3bd75cf8834fe908acc9116508fe6629fe8c4258
+      sha256: 27a442e1b38764f791a3cdc16e45b29e528b4511a3604870835ccb0e143f9211
     - path: docs/zh-CN/getting-started/kaleidoscope-quickstart.md
       sha256: 6dc1ccb820fc403612d489d41c6f549d25044111e977ff5e0f65fd0f2bd2ce8e
     - path: docs/zh-CN/getting-started/mirror-quickstart.md
@@ -3025,7 +3025,7 @@ generated_inventory:
     - path: docs/zh-CN/guides/configuration.md
       sha256: 3f58aba379d00a1035534905db91832764e3f3cf9711c5c57d7535cc22c13cbf
     - path: docs/zh-CN/guides/control-and-trajectories.md
-      sha256: 245f41915ea1fa972137ddba5a4916e4d855da6202decba7f529c3c57bb94ba0
+      sha256: 1788f540a392e17004b9b7d6751a52cbce760c6288806f127f4c60b3dd9522de
     - path: docs/zh-CN/guides/foxglove.md
       sha256: 050f43eab33c26fb258e147b7d96d7f865fac4e88da83f5ea5bcdb2d3d9d4583
     - path: docs/zh-CN/guides/motion-planning.md

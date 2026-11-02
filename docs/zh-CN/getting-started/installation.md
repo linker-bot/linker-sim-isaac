@@ -26,14 +26,15 @@ Kit集成扩展仍使用随附版本，但不加载其中的旧Python Warp。运
 这属于项目验证组合，不是Isaac原生绑定的Newton栈；直接执行 `pip check` 会报告被有意覆盖的
 Isaac约束，应使用锁定uv环境及实际Kit smoke验证。
 
-旧任务保留独立checkout和环境。本准备步骤不改变资产引用、控制器或接触默认，
-普通启动改为可自定义的60 Hz控制/480 Hz物理；SDK和步长变化仍可能改变接触轨迹，需复验任务。
+旧任务保留独立checkout和环境。普通启动默认60 Hz控制/480 Hz物理，Newton碰撞刷新
+默认240 Hz；这些频率均可配置。AR5/O6资产已包含同步后的MJCF，Newton采用已选
+柔顺驱动/接触默认；更新工作区和资产子模块后，需要复验已有任务。
 
 ## 2. 获取工作区
 
-机器人几何资产（AR5 机械臂、LinkerHand L6）来自共享仓库
+机器人几何资产（AR5 机械臂、LinkerHand L6/O6）来自共享仓库
 [`linker-sim-assets`](https://github.com/linker-bot/linker-sim-assets)，以 Git
-submodule 形式挂载在 `packages/linker-robot-assets`，并固定到某个 tag。其网格用
+submodule 形式挂载在 `packages/linker-robot-assets`，并固定到精确提交。其网格用
 Git LFS 存储，因此克隆时需带上 submodule 并拉取 LFS 内容：
 
 ```bash
