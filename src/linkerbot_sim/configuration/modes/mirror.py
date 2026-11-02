@@ -101,6 +101,8 @@ class MirrorConfig:
                 "Mirror only accepts PhysX CPU, Newton CPU, or Newton CUDA; "
                 "PhysX CUDA is not yet in the Mirror support matrix"
             )
+        if isinstance(self.physics, (NewtonCpuSettings, NewtonCudaSettings)):
+            self.physics.collision_interval(self.scene.physics_frequency_hz)
         if self.default_controller_bundle not in self.controller_bundles:
             raise ConfigurationError(
                 "Mirror physics-derived default controller bundle did not enter the resolved configuration graph: "

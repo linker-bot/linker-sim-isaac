@@ -250,6 +250,11 @@ def test_newton_session_spec_uses_final_override_as_world_count() -> None:
     assert spec.compute.cuda_device == config.cuda_device
     assert spec.physics_device == config.torch_device
     assert spec.physics.world_count == 17
+    assert spec.physics.substeps == 1
+    assert spec.physics.collision_interval == 2
+    assert spec.physics.rigid_contact_max_per_world == 1024
+    assert spec.physics.max_triangle_pairs_per_world == 16384
+    assert spec.physics.mesh_mesh_block_multiplier == 8
     assert spec.physics.nconmax_per_world == config.physics.nconmax_per_world
     assert spec.physics.njmax_per_world == config.physics.njmax_per_world
     assert spec.render.enabled is False

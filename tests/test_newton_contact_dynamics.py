@@ -97,6 +97,8 @@ def _box_runtime(
     state.joint_qd.assign(qd)
     newton.eval_fk(model, state.joint_q, state.joint_qd, state)
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.physics_spec = spec
     manager.physics_dt = 1.0 / 60.0
@@ -269,3 +271,47 @@ def test_explicit_60_480_native_clock_with_cuda_graph(execution):
     assert native_time() - before == pytest.approx(1.0, abs=1e-5)
     assert runtime.physics_spec.substeps == 8
     assert np.all(np.isfinite(runtime.state.joint_q.numpy()))
+
+
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+@pytest.mark.parametrize("substeps,interval", [(1, 2), (8, 2), (8, 3)])
+def test_native_collision_cadence_and_graph_phase_cache(execution, substeps, interval):
+    runtime = _box_runtime(execution, height=10)
+    runtime.physics_spec = replace(
+        runtime.physics_spec, substeps=substeps, collision_interval=interval
+    )
+    runtime.physics_dt = substeps / 480
+    runtime.device = "cpu" if execution == "cpu" else "cuda:0"
+    runtime._graph_state = "disabled" if execution == "cpu" else "pending"
+    runtime._graph_error = None
+    runtime._sim_time = 0
+    runtime._step_callbacks = []
+    runtime._require_initialized = lambda: None
+    runtime._flush_cold_state_updates = lambda: None
+    runtime._capture_solver_integration_state = lambda: None
+    generation = runtime._contacts.contact_generation
+    initial = int(generation.numpy()[0])
+    for _ in range(6):
+        runtime.step()
+    runtime._synchronize_owner_stream()
+    assert (
+        int(generation.numpy()[0]) - initial
+        == (6 * substeps + interval - 1) // interval
+    )
+    assert runtime.simulation_time == pytest.approx(6 * substeps / 480)
+    assert float(runtime.solver.mjw_data.time.numpy()[0]) == pytest.approx(
+        6 * substeps / 480, abs=1e-6
+    )
+    assert np.isfinite(runtime.state.joint_q.numpy()).all()
+    if execution == "cuda":
+        assert runtime.cuda_graph_state == "captured", runtime.cuda_graph_error
+        assert len(runtime._graphs) == (1 if substeps % interval == 0 else interval)
+    # Cold-state invalidation must select the refresh graph, including after an odd tick.
+    runtime.step()
+    runtime._collision_phase = 0
+    previous = int(generation.numpy()[0])
+    runtime.step()
+    runtime._synchronize_owner_stream()
+    assert (
+        int(generation.numpy()[0]) - previous == (substeps + interval - 1) // interval
+    )

@@ -440,7 +440,99 @@ Explicit asset gap values, **including zero**, take precedence over the fallback
 The default is applied before import; shapes are not overwritten after import.
 Read back the resulting native `geom_gap` when validating an asset. These are the
 selected starting settings; performance tuning must be evaluated alongside task
-outcomes. This step does not change friction/impedance or asset geometry/limits.
+outcomes. Asset geometry and joint limits are unchanged by these runtime settings.
+
+### AR5/O6 contact policy
+
+Both Newton leaves include `ar5_o6_contact`. The policy is applied once before
+model finalization when **any AR5/O6 assembly**, including camera variants, is
+present. It also applies to mixed O6/L6 scenes and every replicated world.
+Without a supported O6 assembly the policy is inactive. PhysX is unaffected.
+Set `ar5_o6_contact: null` in a custom physics leaf to disable this override.
+
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `cone` / `impratio` | `elliptic` / `100` | Entire solver scene, including other robots and object/table contacts |
+| `condim` | `4` for all three roles below | Each configured collider; normal, two sliding and one torsional constraint; no rolling constraints |
+| `solref` | `(0.004, 1)` | Normal contact reference on configured colliders |
+| `friction_gain` | `1000` | Newton tangential gain `kf` on configured colliders; used to generate the friction reference |
+| `margin_m` / `restitution` | `0` / `0` | Configured colliders |
+| `geom_priority` / `geom_solmix` | `0` / `1` | Equal material priority and equal impedance mixing weights |
+| `gap` | Existing asset value, otherwise `0.0001 m` | Separate import policy; this material override does not rewrite it |
+
+| Role | Colliders | Sliding / torsional / rolling friction | `solimp` |
+| --- | --- | --- | --- |
+| `hand` | All links of the selected O6 hands, including palms | `(4, 0, 0)` | `(0.95, 0.95, 0.001, 0.5, 2)` |
+| `object` | Dynamic scene objects and dynamic chains | `(1, 0.005, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+| `station` | Selected AR5 arms/accessories, static objects, table and remaining scene colliders | `(1, 0, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+
+Other robots retain their own collider material values. They still use the global
+cone/impratio, and contacts with a configured object use both sides' materials.
+This is a scene material policy, not an override limited to O6–object contact pairs:
+object/table contacts also change. Covered material values override the imported
+values; geometry, inertia, collision filtering and explicit asset **gap** are preserved.
+
+With equal priority, the Newton bridge takes the componentwise maximum friction
+and maximum dimension, and blends impedance using `geom_solmix`. O6–object contact
+therefore has sliding friction **4**, torsional friction **0.005 m**, `condim=4`, and
+`solimp=(0.925,0.95,0.001,0.5,2)`. Zero authored torsional friction is bounded by the
+upstream numerical floor (`1e-5 m`) when it is needed; it is not a calibrated pad radius.
+The raw normal reference is `(0.004,1)`, subject to the solver's timestep safety
+bound (at 480 Hz the time constant is at least `2/480 s`). Friction reference is
+computed separately from `kf`, body weights and `impratio`; it is not copied from
+normal `solref`. A larger `impratio` does not guarantee zero slip.
+
+Newton collisions remain in use on CPU/CUDA. No MuJoCo `MULTICCD` switch, contact
+matching, iteration budget, drive gain, geometry or asset file is changed by this
+policy. Older experiments that forced every gap to 0.0001 m are not an exact
+reproduction of assets with explicit gap zero. Runtime diagnostics expose activation,
+material shape counts and the solver cone/impratio. `just smoke-newton-contact`
+checks actual CPU/CUDA material mixing in addition to contact integration.
+
+### Newton collision cadence and work allocation
+
+The shared Newton CPU/CUDA leaves default to **240 Hz collision refresh**, independently
+of 60 Hz commands and 480 Hz physical integration. This pipeline setting applies to
+all Newton scenes, including L6-only scenes; the AR5/O6 material activation above is
+separate. PhysX is unchanged.
+
+| Required physics field | CPU default | CUDA default | Meaning |
+| --- | ---: | ---: | --- |
+| `collision_frequency_hz` | 240 | 240 | Rebuild contact geometry at this rate |
+| `rigid_contact_max_per_world` | 1024 | 1024 | Newton contact storage per world |
+| `max_triangle_pairs_per_world` | 16384 | 16384 | Narrow-phase triangle candidate storage per world |
+| `mesh_mesh_block_multiplier` | 8 | 8 | Multiply the pinned Newton mesh-mesh work grid; CPU uses 512 blocks |
+
+Both capacities are multiplied by the final world count. They are allocations, not
+per-pair contact quotas. Contact reduction, collision determinism and upstream buffer
+checks stay enabled; the MuJoCo Warp solver's `nconmax_per_world=200` and
+`njmax_per_world=1200` remain separate. Dense scenes must increase capacities rather
+than tolerate overflow. Work-grid multiplication still queries all collision edges;
+its gain depends on device, geometry and batch size. CPU 64/512-block measured
+costs were nearly equal; the CPU gain primarily comes from cadence and allocation. The implementation uses the narrow
+phase field of the pinned Newton revision, without modifying the installed package.
+
+Physical frequency must be an integer multiple of collision frequency. For example,
+480/240, 720/240 and 960/240 are valid; 600/240 is rejected before Kit startup. Set
+300 Hz collision explicitly for 600 Hz physics, or set collision equal to physics
+for detection on every step. There is no automatic frequency rounding.
+
+At 480/240 Hz, geometry refreshes every two physical steps. The intervening step
+reuses contact pairs, local anchors and normals, while updating separations and
+solving forces at 480 Hz. New contacts and normal changes can therefore be delayed;
+this is a numerical tradeoff, not a strictly equivalent execution optimization.
+Mirror's internal substeps and Kaleidoscope's individual physics ticks share the
+same cadence. CUDA caches a graph for each encountered phase so replay does not
+freeze the schedule. Reset, clone or state restoration invalidates the old contacts
+and forces a refresh before the next solve across the batch. Contact caches are not
+part of the integration snapshot; use every-step detection when comparing restored
+states without this additional cache history.
+
+The accepted fixed-command T-block runs retained approximately the original relative
+motion while reducing CUDA loop wall time by 42–45%. They still had roughly 1–1.5 mm
+peak penetration and small upright release remnants. This is not a guarantee for
+other objects, velocities, environment counts or training throughput. See
+[PR #66 evidence](https://github.com/linker-bot/linker-sim-isaac/pull/66#issuecomment-6572277419).
 
 ### Newton contact integration
 
@@ -448,6 +540,8 @@ Mirror scenes explicitly set `control_frequency_hz: 60.0` and
 `physics_frequency_hz: 480.0`. Both PhysX and Newton execute eight native steps
 per target update, each lasting 1/480 s. Custom frequencies must have an integer
 physics/control ratio, e.g. 120/600 or 20/240 Hz; invalid ratios fail at load time.
+Newton also validates physics/collision: 120/600 requires an explicit compatible
+collision rate such as 300 Hz.
 The dedicated hybrid-force entry retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Rendering and camera rates remain independent.
 
 Kaleidoscope keeps its existing action decimation: the scene defaults to 480 Hz
@@ -460,7 +554,8 @@ The internal runtime `get_physics_dt()` / `physics_dt_s` is the duration of one
 runtime step (Mirror control tick or Kaleidoscope physical tick). Newton diagnostics
 include `effective_substeps` and `substep_dt_s`; PhysX World's native physics dt
 is the substep dt. Simulation frequencies are distinct from wall-clock throughput.
-Contacts and native drives update on every physical step, while targets are held
+Contact forces and native drives update on every physical step; Newton refreshes
+contact geometry at its independent collision frequency, while targets are held
 between control updates. More physical steps cost throughput.
 
 ### Independent command, hybrid feedback and physics clocks
@@ -470,6 +565,7 @@ between control updates. More physical steps cost throughput.
 | Mirror commands | `scene.control_frequency_hz` | 60 Hz | Ordinary joint/trajectory target updates; held between updates |
 | Hybrid feedback | `hybrid_force_position.feedback_frequency_hz` | 240 Hz | Fresh state/wrench read and controller calculation on every feedback tick |
 | Native physics | `scene.physics_frequency_hz` | 480 Hz | Actual solver integration, independent of wall-clock speed |
+| Newton collision | `physics.collision_frequency_hz` | 240 Hz | Refresh contact geometry; forces are solved every physical step |
 | Rendering | `scene.render_frequency_hz` | 60 Hz | Rendering cadence; does not add physical steps |
 | Planning samples | `request_defaults.sample_dt_s` in the planning profile | 0.02 s (50 Hz) | Timestamped trajectory samples, resampled onto the command grid |
 
@@ -483,7 +579,7 @@ command period. Changing commands to 120 Hz leaves feedback at 240 Hz. Raising p
 to 720 or 960 Hz leaves feedback at 240 Hz, with three or four physical steps per
 feedback update. Commands at 480 Hz with feedback still at 240 Hz are rejected;
 explicitly configure a compatible feedback/physics pair. Hybrid 60/240/600 Hz is also
-rejected, although ordinary 120/600 Hz is valid.
+rejected, although ordinary 120/600 Hz requires an explicit compatible Newton collision rate.
 
 Hybrid profiles rename the old `minimum_physics_frequency_hz` key to
 `minimum_feedback_frequency_hz` (200 Hz); this existing safety floor checks the

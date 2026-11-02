@@ -191,6 +191,8 @@ class KaleidoscopeConfig:
             raise ConfigurationError(
                 "Kaleidoscope only accepts PhysX CUDA or Newton CUDA; execution must be cuda"
             )
+        if isinstance(self.physics, NewtonCudaSettings):
+            self.physics.collision_interval(self.scene.physics_frequency_hz)
         if self.default_controller_bundle not in self.controller_bundles:
             raise ConfigurationError(
                 "Kaleidoscope physics-derived default controller bundle did not enter the resolved configuration graph: "

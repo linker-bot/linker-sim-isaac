@@ -1277,6 +1277,13 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             solver_deterministic=source.solver_deterministic,
             collision_deterministic=source.collision_deterministic,
             contact_matching=source.contact_matching,
+            collision_interval=source.collision_interval(
+                config.scene.physics_frequency_hz
+            ),
+            rigid_contact_max_per_world=source.rigid_contact_max_per_world,
+            max_triangle_pairs_per_world=source.max_triangle_pairs_per_world,
+            mesh_mesh_block_multiplier=source.mesh_mesh_block_multiplier,
+            ar5_o6_contact=source.ar5_o6_contact,
         )
     else:
         source = config.physics
@@ -1296,6 +1303,13 @@ def _mirror_session_spec(config: MirrorConfig) -> IsaacSessionSpec:
             solver_deterministic=source.solver_deterministic,
             collision_deterministic=source.collision_deterministic,
             contact_matching=source.contact_matching,
+            collision_interval=source.collision_interval(
+                config.scene.physics_frequency_hz
+            ),
+            rigid_contact_max_per_world=source.rigid_contact_max_per_world,
+            max_triangle_pairs_per_world=source.max_triangle_pairs_per_world,
+            mesh_mesh_block_multiplier=source.mesh_mesh_block_multiplier,
+            ar5_o6_contact=source.ar5_o6_contact,
         )
     render_resources = bool(
         render.enabled

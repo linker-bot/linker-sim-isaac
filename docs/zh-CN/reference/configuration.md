@@ -197,7 +197,45 @@ CPU 仍限定 Mirror 单 world、同步执行；CUDA 另支持图捕获和 Kalei
 
 资产明确指定的 gap（**包括0**）优先，默认值在导入前设置，不在导入后覆盖所有 shape。
 资产验收需读回实际 `geom_gap`。这些是当前候选设置，后续在任务成功率和性能共同约束下
-另行测试；本步未修改摩擦/阻抗、碰撞几何及资产限角。
+另行测试；这些运行时设置不修改碰撞几何及资产限角。
+
+### AR5/O6 接触配置
+
+Newton CPU/CUDA leaf 均提供 `ar5_o6_contact`。场景包含**任意 AR5/O6 组合**（含相机版）
+时，在 model finalize 前统一应用；混合 O6/L6 场景及每个复制 world 也适用。没有此组合时不启用，
+PhysX 不受影响。自定义 physics leaf 可设 `ar5_o6_contact: null` 关闭这层覆盖。
+
+| 参数 | 默认值 | 作用范围 |
+| --- | --- | --- |
+| `cone` / `impratio` | `elliptic` / `100` | 整个求解场景，包含其他机器人及物体/桌面接触 |
+| `condim` | 下表三类材质统一 `4` | 每个覆盖的碰撞体；法向、两个切向和一个扭转约束，不启用滚动约束 |
+| `solref` | `(0.004, 1)` | 覆盖碰撞体的法向接触参考 |
+| `friction_gain` | `1000` | Newton 切向增益 `kf`，参与生成摩擦方向的参考参数 |
+| `margin_m` / `restitution` | `0` / `0` | 覆盖的碰撞体 |
+| `geom_priority` / `geom_solmix` | `0` / `1` | 同优先级、等权混合阻抗 |
+| `gap` | 资产原值，未指定时 `0.0001 m` | 独立的导入规则；接触材质覆盖不重写 gap |
+
+| 材质类别 | 覆盖碰撞体 | 滑动/扭转/滚动摩擦 | `solimp` |
+| --- | --- | --- | --- |
+| `hand` | 选中的 O6 全手，包含手掌 | `(4, 0, 0)` | `(0.95, 0.95, 0.001, 0.5, 2)` |
+| `object` | 动态场景物体与动态链 | `(1, 0.005, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+| `station` | 对应 AR5/附件、静态物体、桌面和其余场景碰撞体 | `(1, 0, 0)` | `(0.9, 0.95, 0.001, 0.5, 2)` |
+
+其他机器人的自身碰撞材质保持原值，但仍受全局 cone/impratio 影响；它们与已覆盖物体接触时，
+两侧材质也会参与混合。这不是仅限 O6–物体接触对的覆盖，物体–桌面接触同样会变化。
+覆盖材质优先于导入材质；保留几何、惯量、自碰撞过滤以及资产显式 **gap**。
+
+同优先级时，Newton bridge 对摩擦逐项取最大值、对维数取最大值，按 `geom_solmix` 混合阻抗。
+因此 O6–物体实际接触为滑动摩擦 **4**、扭转摩擦 **0.005 m**、`condim=4`，
+`solimp=(0.925,0.95,0.001,0.5,2)`。显式为零的扭转摩擦在需要时受上游数值下限
+`1e-5 m` 约束；它不代表经过标定的指腹半径。法向原始 `solref=(0.004,1)` 还受求解器步长
+安全下限约束（480 Hz 时至少为 `2/480 s`）。摩擦方向的参考参数由 `kf`、刚体权重和
+`impratio` 另行计算，不直接复制法向 solref；增大 impratio 也不保证完全不滑移。
+
+两种设备继续使用 Newton 碰撞。本策略不修改 MuJoCo MULTICCD、接触匹配、迭代预算、驱动增益、
+几何或资产文件。早期实验曾强制所有 gap 为 0.0001 m，与保留资产显式零值的当前导入不完全相同。
+诊断提供是否启用、各类 shape 数量和实际 cone/impratio；`just smoke-newton-contact`
+同时验证 CPU/CUDA 实际材质混合与接触积分。
 
 公开 physics leaf 使用正交字段，不使用 backend `kind`：
 
@@ -281,11 +319,43 @@ OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src .venv/bin/python \
 Newton 的 `nconmax_per_world`、`njmax_per_world` 和 world 数属于另一套容量合同，不能由这四个 PhysX
 字段或该脚本推断。
 
+### Newton 碰撞频率与工作分配
+
+Newton CPU/CUDA共用默认 **240 Hz碰撞刷新**，独立于60 Hz指令和480 Hz物理积分。
+这项管线配置适用于全部Newton场景，包括仅有L6的场景；上面的AR5/O6材质触发规则独立。
+PhysX不变。
+
+| physics必填字段 | CPU默认 | CUDA默认 | 含义 |
+| --- | ---: | ---: | --- |
+| `collision_frequency_hz` | 240 | 240 | 重新生成接触几何的频率 |
+| `rigid_contact_max_per_world` | 1024 | 1024 | 每world的Newton接触存储容量 |
+| `max_triangle_pairs_per_world` | 16384 | 16384 | 每world的窄相三角候选存储容量 |
+| `mesh_mesh_block_multiplier` | 8 | 8 | 固定Newton版本的网格查询工作块倍数；CPU为512块 |
+
+两项容量均乘以最终world数，属于预分配，不是每形状对的接触点配额。保留接触裁减、碰撞确定性
+和上游缓冲区检查；MuJoCo Warp求解器的`nconmax_per_world=200`、`njmax_per_world=1200`
+仍是独立容量。密集场景应增加容量，不能容忍溢出。工作块倍数不减少待检查边，收益取决于GPU、
+几何和批量规模；CPU的64/512块实测耗时接近，CPU主要收益来自刷新节拍和容量。
+实现适配当前固定Newton版本的narrow phase字段，不修改安装包源码。
+
+物理频率必须是碰撞频率的整数倍。480/240、720/240、960/240合法，600/240在Kit启动前报错；
+600 Hz物理可显式搭配300 Hz碰撞。将碰撞频率设为物理频率即可每步检测，不会自动取整频率。
+
+480/240 Hz下每两个物理步刷新一次几何；中间步复用接触配对、局部锚点和法线，但仍更新间距并
+以480 Hz重新求解接触力。新接触和法线变化可能延迟，这是数值取舍，不能视为严格等价的执行优化。
+Mirror内部子步与Kaleidoscope逐物理tick采用同一节拍；CUDA按遇到的相位缓存执行图，避免回放时
+冻结检测节拍。reset、clone或状态恢复使旧接触失效，下一物理步先对整批刷新。接触缓存不属于
+积分状态快照；需要排除这部分历史影响的恢复对照，应采用每物理步检测。
+
+已接受的固定T块测试中，相对运动接近原值，CUDA循环墙钟减少42–45%，仍有约1–1.5 mm峰值穿透
+和竖直释放残留；不保证其他物体、速度、环境数量或训练吞吐具有同样表现。
+详见[PR #66证据](https://github.com/linker-bot/linker-sim-isaac/pull/66#issuecomment-6572277419)。
+
 ### Newton 接触积分
 
 Mirror场景显式配置 `control_frequency_hz: 60.0` 和 `physics_frequency_hz: 480.0`。
 PhysX与Newton均在一次目标更新后执行8个原生物理步，每步1/480秒。允许自定义120/600、20/240Hz等
-频率，物理/控制频率必须为整数比，否则加载失败。专用混合力控入口独立配置60Hz指令/240Hz反馈/480Hz物理。渲染和相机频率独立。
+频率，物理/控制频率必须为整数比，否则加载失败。Newton还校验物理/碰撞整数比；120/600需显式配置例如300 Hz碰撞。专用混合力控入口独立配置60Hz指令/240Hz反馈/480Hz物理。渲染和相机频率独立。
 
 Kaleidoscope沿用已有action decimation：场景默认480Hz物理，
 `task.action.physics_ticks_per_action: 8`，即60Hz策略动作；其中每次runtime.step是一个物理步，
@@ -294,7 +364,7 @@ Newton不再额外隐式细分。
 自定义Newton profile需删除旧 `substeps`、`max_substep_dt_s`；次数在装配时派生，不再自动限制步长。
 内部runtime的 `get_physics_dt()` / `physics_dt_s` 表示一次runtime.step的时长（Mirror控制周期或
 Kaleidoscope物理周期）。Newton诊断的 `effective_substeps`、`substep_dt_s` 以及PhysX World原生步长
-用于核验真实积分频率，不能与墙钟吞吐混淆。每物理步更新接触与原生驱动，控制周期内保持目标；
+用于核验真实积分频率，不能与墙钟吞吐混淆。每物理步求解接触力与原生驱动，Newton接触几何按独立碰撞频率刷新；
 增加物理步会增加计算开销。
 
 ### 独立的指令、hybrid反馈与物理频率
@@ -304,6 +374,7 @@ Kaleidoscope物理周期）。Newton诊断的 `effective_substeps`、`substep_dt
 | Mirror指令 | `scene.control_frequency_hz` | 60Hz | 普通关节/轨迹目标更新，更新之间保持目标 |
 | Hybrid反馈 | `hybrid_force_position.feedback_frequency_hz` | 240Hz | 每次重新读取状态和力反馈、计算输出 |
 | 原生物理 | `scene.physics_frequency_hz` | 480Hz | 实际求解积分，与墙钟运行速度不同 |
+| Newton碰撞 | `physics.collision_frequency_hz` | 240Hz | 更新接触几何；每物理步仍求解接触力 |
 | 渲染 | `scene.render_frequency_hz` | 60Hz | 渲染节奏，不额外推进物理 |
 | 规划采样 | planning profile的 `request_defaults.sample_dt_s` | 0.02秒，即50Hz | 带时间戳的轨迹点，重采样到指令网格 |
 
@@ -312,7 +383,7 @@ Kaleidoscope物理周期）。Newton诊断的 `effective_substeps`、`substep_dt
 默认60/240/480Hz意味着每个指令周期4次反馈计算、8个物理步。指令提高到120Hz，反馈仍240Hz；
 物理提高到720或960Hz，反馈仍240Hz，每次反馈对应3或4个物理步。
 指令480Hz而反馈仍240Hz会报错，需显式设置兼容的反馈和物理频率。
-hybrid的60/240/600Hz也不合法；普通入口的120/600Hz则合法。
+hybrid的60/240/600Hz也不合法；普通入口的120/600Hz需另为Newton配置兼容的碰撞频率。
 
 旧 `minimum_physics_frequency_hz` 重命名为 `minimum_feedback_frequency_hz`，保留200Hz安全下限，
 只校验反馈频率；新增必填 `feedback_frequency_hz` 默认240Hz。滤波Nyquist及卸载速率也按反馈频率校验。

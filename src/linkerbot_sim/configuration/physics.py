@@ -16,6 +16,7 @@ from .common import (
     ConfigurationError,
     as_bool,
     as_float,
+    as_float_tuple,
     as_int,
     as_string,
     require_keys,
@@ -200,6 +201,99 @@ class PhysxCudaSettings:
         )
 
 
+@dataclass(frozen=True)
+class NewtonContactMaterial:
+    """One collision role; MuJoCo mixes the two colliding materials."""
+
+    friction: tuple[float, ...]
+    solimp: tuple[float, ...]
+    condim: int
+
+    @classmethod
+    def from_mapping(cls, value: object, *, label: str) -> NewtonContactMaterial:
+        data = strict_mapping(value, label=label)
+        require_keys(data, required={"friction", "solimp", "condim"}, label=label)
+        friction = as_float_tuple(data["friction"], label=f"{label}.friction", length=3)
+        solimp = as_float_tuple(data["solimp"], label=f"{label}.solimp", length=5)
+        condim = as_int(data["condim"], label=f"{label}.condim")
+        if any(v < 0 for v in friction):
+            raise ConfigurationError(f"{label}.friction must be non-negative")
+        if not (
+            0 < solimp[0] <= solimp[1] < 1
+            and solimp[2] > 0
+            and 0 < solimp[3] < 1
+            and solimp[4] >= 1
+        ):
+            raise ConfigurationError(f"{label}.solimp is outside the supported range")
+        if condim not in {1, 3, 4, 6}:
+            raise ConfigurationError(f"{label}.condim must be 1, 3, 4 or 6")
+        return cls(friction=friction, solimp=solimp, condim=condim)
+
+
+@dataclass(frozen=True)
+class NewtonContactSettings:
+    """AR5/O6-scoped material policy and scene-wide friction solver options."""
+
+    cone: str
+    impratio: float
+    solref: tuple[float, ...]
+    friction_gain: float
+    margin_m: float
+    restitution: float
+    hand: NewtonContactMaterial
+    object: NewtonContactMaterial
+    station: NewtonContactMaterial
+
+    @classmethod
+    def from_mapping(cls, value: object, *, label: str) -> NewtonContactSettings:
+        data = strict_mapping(value, label=label)
+        require_keys(
+            data,
+            required={
+                "cone",
+                "impratio",
+                "solref",
+                "friction_gain",
+                "margin_m",
+                "restitution",
+                "hand",
+                "object",
+                "station",
+            },
+            label=label,
+        )
+        solref = as_float_tuple(data["solref"], label=f"{label}.solref", length=2)
+        if any(v <= 0 for v in solref):
+            raise ConfigurationError(
+                f"{label}.solref requires positive time constant and damping ratio"
+            )
+        return cls(
+            cone=as_string(
+                data["cone"], label=f"{label}.cone", choices={"elliptic", "pyramidal"}
+            ),
+            impratio=as_float(
+                data["impratio"], label=f"{label}.impratio", strictly_positive=True
+            ),
+            solref=solref,
+            friction_gain=as_float(
+                data["friction_gain"], label=f"{label}.friction_gain", minimum=0
+            ),
+            margin_m=as_float(data["margin_m"], label=f"{label}.margin_m", minimum=0),
+            restitution=as_float(
+                data["restitution"], label=f"{label}.restitution", minimum=0, maximum=1
+            ),
+            hand=NewtonContactMaterial.from_mapping(
+                data["hand"], label=f"{label}.hand"
+            ),
+            object=NewtonContactMaterial.from_mapping(
+                data["object"], label=f"{label}.object"
+            ),
+            station=NewtonContactMaterial.from_mapping(
+                data["station"], label=f"{label}.station"
+            ),
+        )
+
+
 _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
     {
         "nconmax_per_world",
@@ -212,9 +306,16 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
         "solver_deterministic",
         "collision_deterministic",
         "contact_matching",
+        "collision_frequency_hz",
+        "rigid_contact_max_per_world",
+        "max_triangle_pairs_per_world",
+        "mesh_mesh_block_multiplier",
     }
 )
 _NEWTON_POSITIVE_INT_FIELDS = (
+    "rigid_contact_max_per_world",
+    "max_triangle_pairs_per_world",
+    "mesh_mesh_block_multiplier",
     "nconmax_per_world",
     "njmax_per_world",
     "iterations",
@@ -237,6 +338,11 @@ class _NewtonCommonValues(TypedDict):
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
+    ar5_o6_contact: NewtonContactSettings | None
 
 
 def _newton_common_from_mapping(
@@ -245,6 +351,33 @@ def _newton_common_from_mapping(
     """只解析两种 execution 共有的容量与求解器字段。"""
 
     return _NewtonCommonValues(
+        collision_frequency_hz=as_float(
+            mapping["collision_frequency_hz"],
+            label=f"{label}.collision_frequency_hz",
+            strictly_positive=True,
+        ),
+        rigid_contact_max_per_world=as_int(
+            mapping["rigid_contact_max_per_world"],
+            label=f"{label}.rigid_contact_max_per_world",
+            minimum=1,
+        ),
+        max_triangle_pairs_per_world=as_int(
+            mapping["max_triangle_pairs_per_world"],
+            label=f"{label}.max_triangle_pairs_per_world",
+            minimum=1,
+        ),
+        mesh_mesh_block_multiplier=as_int(
+            mapping["mesh_mesh_block_multiplier"],
+            label=f"{label}.mesh_mesh_block_multiplier",
+            minimum=1,
+        ),
+        ar5_o6_contact=(
+            NewtonContactSettings.from_mapping(
+                mapping["ar5_o6_contact"], label=f"{label}.ar5_o6_contact"
+            )
+            if mapping.get("ar5_o6_contact") is not None
+            else None
+        ),
         nconmax_per_world=as_int(
             mapping["nconmax_per_world"],
             label=f"{label}.nconmax_per_world",
@@ -318,7 +451,7 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         raise ConfigurationError(
             "physics.default_contact_gap_m must be finite and >= 0"
         )
-    for name in ("default_contact_time_constant_s",):
+    for name in ("default_contact_time_constant_s", "collision_frequency_hz"):
         value_s = getattr(value, name)
         if (
             isinstance(value_s, bool)
@@ -331,6 +464,20 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         field_value = getattr(value, name)
         if type(field_value) is not int or field_value < 1:
             raise ConfigurationError(f"physics.{name} must be an integer >= 1")
+
+
+def _newton_collision_interval(physics_hz: float, collision_hz: float) -> int:
+    ratio = physics_hz / collision_hz
+    if (
+        not math.isfinite(ratio)
+        or ratio < 1
+        or not math.isclose(ratio, round(ratio), rel_tol=1e-9, abs_tol=1e-9)
+    ):
+        raise ConfigurationError(
+            "scene.physics_frequency_hz must be an integer multiple of "
+            "physics.collision_frequency_hz; configure both rates explicitly"
+        )
+    return round(ratio)
 
 
 @dataclass(frozen=True)
@@ -354,6 +501,11 @@ class NewtonCudaSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
+    ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cuda":
@@ -364,6 +516,11 @@ class NewtonCudaSettings:
         if type(self.use_cuda_graph) is not bool:
             raise ConfigurationError("physics.use_cuda_graph must be a boolean")
 
+    def collision_interval(self, physics_frequency_hz: float) -> int:
+        return _newton_collision_interval(
+            physics_frequency_hz, self.collision_frequency_hz
+        )
+
     @classmethod
     def from_mapping(
         cls, mapping: Mapping[str, object], *, label: str
@@ -373,7 +530,9 @@ class NewtonCudaSettings:
             "execution",
             "use_cuda_graph",
         }
-        require_keys(mapping, required=required, label=label)
+        require_keys(
+            mapping, required=required, optional={"ar5_o6_contact"}, label=label
+        )
         return cls(
             engine=as_string(
                 mapping["engine"], label=f"{label}.engine", choices={"newton"}
@@ -404,6 +563,11 @@ class NewtonCpuSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
+    ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
         if self.engine != "newton" or self.execution != "cpu":
@@ -412,12 +576,19 @@ class NewtonCpuSettings:
             )
         _validate_newton_common(self, owner="NewtonCpuSettings")
 
+    def collision_interval(self, physics_frequency_hz: float) -> int:
+        return _newton_collision_interval(
+            physics_frequency_hz, self.collision_frequency_hz
+        )
+
     @classmethod
     def from_mapping(
         cls, mapping: Mapping[str, object], *, label: str
     ) -> "NewtonCpuSettings":
         required = _NEWTON_COMMON_REQUIRED_KEYS | {"engine", "execution"}
-        require_keys(mapping, required=required, label=label)
+        require_keys(
+            mapping, required=required, optional={"ar5_o6_contact"}, label=label
+        )
         common = _newton_common_from_mapping(mapping, label=label)
         return cls(
             engine=as_string(

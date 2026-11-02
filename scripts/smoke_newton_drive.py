@@ -74,7 +74,7 @@ def trace_substeps(physics):
 
     drive.apply = apply
     if physics.execution == "cuda":
-        physics._graph = None
+        physics._graphs.clear()
         physics._graph_state = "pending"
     return count, trace
 
@@ -131,6 +131,7 @@ def run(profile, output):
             )
 
         count, trace = trace_substeps(physics)
+        collision_start = int(physics._contacts.contact_generation.numpy()[0])
         start_time = physics.simulation_time
         native_start = float(physics.solver.mjw_data.time.numpy()[0])
 
@@ -235,6 +236,11 @@ def run(profile, output):
         np.testing.assert_array_equal(drive.history.numpy(), history)
         assert np.isfinite(physics.state.joint_q.numpy()).all()
         diagnostics = physics.diagnostics()
+        collision_updates = (
+            int(physics._contacts.contact_generation.numpy()[0]) - collision_start
+        )
+        assert diagnostics["collision_frequency_hz"] == 240
+        assert collision_updates == n // 2
         if physics.execution == "cuda":
             assert physics._graph_state == "captured", diagnostics
         result = dict(
@@ -243,6 +249,8 @@ def run(profile, output):
             physics_hz=480,
             command_ticks=150,
             physics_steps=n,
+            collision_hz=240,
+            collision_updates=collision_updates,
             arm_velocity_peak=float(np.max(np.abs(data[:960, arms, 10]))),
             arm_reference_max_error=float(
                 np.max(np.abs(arm_data[:, :, 11] - arm_expected))
