@@ -78,6 +78,8 @@ def test_initialize_rechecks_extension_and_stage_owner_before_newton_import(
     monkeypatch,
 ) -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stage = object()
     manager._initialized = False
@@ -266,7 +268,7 @@ def test_cpu_manager_initializes_one_world_with_warp_and_newton_contacts(
 
     fake_newton.solvers = SimpleNamespace(SolverMuJoCo=_solver_factory)
     fake_newton.CollisionPipeline = lambda *a, **k: SimpleNamespace(
-        contacts=lambda: object()
+        contacts=lambda: object(), narrow_phase=SimpleNamespace(num_mesh_mesh_blocks=64)
     )
     monkeypatch.setitem(sys.modules, "newton", fake_newton)
     monkeypatch.setattr(
@@ -387,6 +389,8 @@ def test_cpu_manager_initializes_one_world_with_warp_and_newton_contacts(
 
 def test_initialize_rejects_world_count_different_from_frozen_spec(monkeypatch) -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stage = object()
     manager.physics_spec = IsaacNewtonCudaSpec(world_count=2)
@@ -411,6 +415,8 @@ def test_initialize_rejects_render_selection_outside_final_world_count(
     monkeypatch,
 ) -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stage = object()
     manager.physics_spec = IsaacNewtonCudaSpec(world_count=2)
@@ -491,6 +497,8 @@ def test_cpu_solver_constructor_kwargs_select_shared_warp_pipeline() -> None:
 
 def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.physics_spec = IsaacNewtonCudaSpec()
     manager.physics_dt = 1.0 / 60.0
@@ -572,6 +580,8 @@ def test_simulate_refreshes_contacts_after_each_internal_motion(
             events.append("clear")
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stream = object()
     manager.solver = _Solver()
@@ -580,7 +590,7 @@ def test_simulate_refreshes_contacts_after_each_internal_motion(
     manager._collision_pipeline = _CollisionPipeline()
     manager._contacts = contacts
     manager.physics_dt = 0.03
-    manager.physics_spec = SimpleNamespace(substeps=3)
+    manager.physics_spec = SimpleNamespace(substeps=3, collision_interval=1)
 
     manager._simulate()
 
@@ -613,6 +623,8 @@ def test_step_captures_solver_persistent_state_after_physics(
     _wp, _active_streams, scopes = _scoped_stream_recorder(monkeypatch)
     events: list[str] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._require_initialized = lambda: None
     manager._flush_cold_state_updates = lambda: events.append("flush")
@@ -621,6 +633,7 @@ def test_step_captures_solver_persistent_state_after_physics(
     manager._graph_state = "disabled"
     manager.stream = object()
     manager.physics_dt = 0.01
+    manager.physics_spec = IsaacNewtonCpuSpec()
     manager._sim_time = 0.0
     manager._step_callbacks = []
 
@@ -653,6 +666,8 @@ def test_cpu_step_runs_eager_without_owner_stream_and_captures_persistent_state(
             events.append("capture")
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.execution = "cpu"
     manager.stream = None
@@ -704,6 +719,8 @@ def test_reset_assigns_state_and_control_on_owner_stream(
             )
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -779,6 +796,8 @@ def test_commit_initial_state_rebases_reset_state_and_control_on_owner_stream(
 
     monkeypatch.setattr(newton_manager, "_copy_control", _copy_control)
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -865,6 +884,8 @@ def test_cpu_commit_and_reset_rebase_state_without_cuda_stream(
 
     monkeypatch.setattr(newton_manager, "_copy_control", _copy_control)
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -917,6 +938,8 @@ def test_cpu_commit_and_reset_rebase_state_without_cuda_stream(
 
 def test_commit_initial_state_rejects_nonzero_simulation_time() -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -959,6 +982,8 @@ def test_solver_integration_state_round_trip_restores_selected_time_and_warmstar
         update_data_interval=1,
     )
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -1045,6 +1070,8 @@ def test_cpu_solver_integration_host_payload_round_trip_is_owned() -> None:
 
     store = _Store()
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -1106,6 +1133,8 @@ def test_cpu_solver_integration_host_payload_rejects_shape_signature_and_time(
         signature=41,
     )
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._initialized = True
@@ -1140,11 +1169,13 @@ def test_model_write_notifies_solver_on_owner_stream(
             notifications.append((flag, active_streams[-1] if active_streams else None))
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stream = owner_stream
     manager.solver = _Solver()
     manager.physics_spec = SimpleNamespace(use_cuda_graph=True)
-    manager._graph = object()
+    manager._graphs = {0: object()}
     manager._graph_state = "captured"
 
     manager.on_newton_view_write(
@@ -1157,7 +1188,7 @@ def test_model_write_notifies_solver_on_owner_stream(
     assert scopes == [(owner_stream, False, False)]
     assert len(notifications) == 1
     assert notifications[0][1] is owner_stream
-    assert manager._graph is None
+    assert manager._graphs == {}
     assert manager._graph_state == "pending"
 
 
@@ -1174,6 +1205,8 @@ def test_cpu_gain_write_notifies_solver_without_enabling_cuda_graph(
     monkeypatch.setitem(sys.modules, "newton.solvers", solvers)
     notifications: list[object] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.execution = "cpu"
     manager.stream = None
@@ -1181,7 +1214,7 @@ def test_cpu_gain_write_notifies_solver_without_enabling_cuda_graph(
         notify_model_changed=lambda flag: notifications.append(flag)
     )
     manager.physics_spec = IsaacNewtonCpuSpec()
-    manager._graph = None
+    manager._graphs = {}
     manager._graph_state = "disabled"
 
     manager.on_newton_view_write(
@@ -1192,7 +1225,7 @@ def test_cpu_gain_write_notifies_solver_without_enabling_cuda_graph(
     )
 
     assert notifications == [notification_flag]
-    assert manager._graph is None
+    assert manager._graphs == {}
     assert manager.cuda_graph_state == "disabled"
 
 
@@ -1209,6 +1242,8 @@ def test_cpu_gravity_write_notifies_solver_without_enabling_cuda_graph(
     monkeypatch.setitem(sys.modules, "newton.solvers", solvers)
     events: list[object] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.execution = "cpu"
     manager.stream = None
@@ -1219,7 +1254,7 @@ def test_cpu_gravity_write_notifies_solver_without_enabling_cuda_graph(
         notify_model_changed=lambda flag: events.append(("notify", flag))
     )
     manager.physics_spec = IsaacNewtonCpuSpec()
-    manager._graph = None
+    manager._graphs = {}
     manager._graph_state = "disabled"
 
     manager.set_gravity(-3.5)
@@ -1229,7 +1264,7 @@ def test_cpu_gravity_write_notifies_solver_without_enabling_cuda_graph(
         ("gravity", (0.0, 0.0, -3.5)),
         ("notify", notification_flag),
     ]
-    assert manager._graph is None
+    assert manager._graphs == {}
     assert manager.cuda_graph_state == "disabled"
 
 
@@ -1262,6 +1297,8 @@ def test_full_generalized_state_write_is_fk_dirty_without_projection(
 
     state = SimpleNamespace(joint_q=object(), joint_qd=object())
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stream = object()
     manager.device = "cuda:0"
@@ -1297,8 +1334,10 @@ def test_full_generalized_state_write_is_fk_dirty_without_projection(
     assert manager._dirty_worlds == {1}
     assert manager._projection_worlds == set()
 
+    manager._collision_phase = 1
     manager._flush_cold_state_updates()
 
+    assert manager._collision_phase == 0
     assert events[0] == ("world_mask", (1,), ())
     assert events[1][0] == "articulation_mask"
     assert events[2][0] == "fk"
@@ -1308,6 +1347,8 @@ def test_full_generalized_state_write_is_fk_dirty_without_projection(
 
 def test_command_and_body_writes_use_distinct_projection_sets() -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._dirty_worlds = set()
     manager._projection_worlds = set()
@@ -1370,6 +1411,8 @@ def test_device_partial_reset_projection_preserves_unselected_follower(
     row_world = wp.array([0, 1], dtype=wp.int32, device="cpu")
     partial = wp.array([True, False], dtype=wp.bool, device="cpu")
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.stream = None
     manager.device = "cpu"
@@ -1411,6 +1454,8 @@ def test_device_row_mask_notification_stays_on_cuda() -> None:
     row_world = wp.array([0, 1], dtype=wp.int32, device="cuda:0")
     device_mask = torch.tensor([False, True], device="cuda:0", dtype=torch.bool)
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.execution = "cuda"
     manager.device = "cuda:0"
@@ -1479,6 +1524,8 @@ def test_control_copy_forwards_owner_stream_to_every_warp_copy(
 def test_close_synchronizes_releases_registered_views_and_is_idempotent() -> None:
     events: list[object] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     owner_stream = object()
     model = object()
@@ -1513,7 +1560,7 @@ def test_close_synchronizes_releases_registered_views_and_is_idempotent() -> Non
     manager.solver = solver
     manager._contacts = object()
     manager._collision_pipeline = object()
-    manager._graph = object()
+    manager._graphs = {0: object()}
     manager._projector = object()
     manager._initial_control = object()
     manager._initial_state = object()
@@ -1539,7 +1586,7 @@ def test_close_synchronizes_releases_registered_views_and_is_idempotent() -> Non
     assert second.manager is None and second.gpu_mapping is None
     assert manager.closed is True
     assert len(manager._registered_views) == 0
-    assert manager._graph is None
+    assert manager._graphs == {}
     assert manager._projector is None
     assert manager._initial_control is None
     assert manager._initial_state is None
@@ -1557,6 +1604,8 @@ def test_close_synchronizes_releases_registered_views_and_is_idempotent() -> Non
 
 def test_manager_registers_newton_views_weakly() -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager._registered_views = weakref.WeakSet()
@@ -1588,6 +1637,8 @@ def test_manager_leaves_external_camera_resources_to_mode_owner() -> None:
             events.append("render_sync")
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.closed = False
     manager.stream = object()
@@ -1595,7 +1646,7 @@ def test_manager_leaves_external_camera_resources_to_mode_owner() -> None:
     manager.state = object()
     manager.control = object()
     manager.solver = object()
-    manager._graph = object()
+    manager._graphs = {0: object()}
     manager._projector = object()
     manager._initial_control = object()
     manager._initial_state = object()
@@ -1679,6 +1730,8 @@ def test_render_publishes_once_without_owning_camera_products() -> None:
     first = _RenderTarget("first")
     second = _RenderTarget("second")
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._render_resources = [first, object(), second]
     manager._render_callback = lambda: events.append("app.update")
@@ -1700,6 +1753,8 @@ def test_cpu_pre_render_flushes_and_publishes_without_cuda_synchronization() -> 
 
     body_q = object()
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.execution = "cpu"
     manager.stream = None
@@ -1717,6 +1772,8 @@ def test_cpu_pre_render_flushes_and_publishes_without_cuda_synchronization() -> 
 def test_render_without_camera_target_ticks_app_once() -> None:
     events: list[str] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._render_resources = [object()]
     manager._render_callback = lambda: events.append("app.update")
@@ -1730,6 +1787,8 @@ def test_render_without_camera_target_ticks_app_once() -> None:
 def test_render_update_does_not_publish_or_advance_physics() -> None:
     events: list[str] = []
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._render_callback = lambda: events.append("app.update")
     manager._sim_time = 1.5
@@ -1751,6 +1810,8 @@ def test_render_does_not_consume_external_camera_update_count() -> None:
             events.append(("active", active))
 
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager._render_resources = [_RenderTarget()]
     manager._render_callback = lambda: events.append("app.update")
@@ -1850,6 +1911,8 @@ def test_explicit_substeps_advance_exactly_480_steps_per_second(
     spec_type, outer_hz, substeps
 ):
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
     manager.compliant_drive = None
     manager.physics_dt = 1.0 / outer_hz
     manager.physics_spec = spec_type(substeps=substeps)
@@ -1864,3 +1927,52 @@ def test_explicit_substeps_advance_exactly_480_steps_per_second(
     assert len(durations) == 480
     np.testing.assert_allclose(durations, 1.0 / 480.0)
     assert sum(durations) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("spec_class", [IsaacNewtonCpuSpec, IsaacNewtonCudaSpec])
+def test_collision_allocations_scale_without_reducing_solver_capacity(spec_class):
+    spec = spec_class()
+    assert newton_manager._collision_pipeline_kwargs(spec, 4) == {
+        "rigid_contact_max": 4096,
+        "max_triangle_pairs": 65536,
+        "reduce_contacts": True,
+        "verify_buffers": True,
+    }
+    assert (spec.nconmax_per_world, spec.njmax_per_world) == (200, 1200)
+
+
+@pytest.mark.parametrize("substeps,interval", [(1, 2), (8, 2), (8, 3)])
+def test_collision_cadence_survives_outer_ticks_and_forced_refresh(substeps, interval):
+    steps = []
+    collisions = []
+    manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_phase = 0
+    manager._graphs = {}
+    manager.physics_spec = IsaacNewtonCpuSpec(
+        substeps=substeps, collision_interval=interval
+    )
+    manager.physics_dt = substeps / 480
+    manager.stream = None
+    manager._sim_time = 0
+    manager._step_callbacks = []
+    manager._graph_state = "disabled"
+    manager._require_initialized = lambda: None
+    manager._flush_cold_state_updates = lambda: None
+    manager._capture_solver_integration_state = lambda: None
+    manager.compliant_drive = None
+    manager.control = object()
+    manager._contacts = object()
+    manager.state = SimpleNamespace(clear_forces=lambda: None)
+    manager.solver = SimpleNamespace(step=lambda *a: steps.append(a[-1]))
+    manager._collision_pipeline = SimpleNamespace(
+        collide=lambda *a: collisions.append(len(steps))
+    )
+    for _ in range(5):
+        manager.step()
+    assert collisions == list(range(0, 5 * substeps, interval))
+    assert len(steps) == 5 * substeps
+    assert all(dt == pytest.approx(1 / 480) for dt in steps)
+    # Same invalidation used after cold-state writes: no stale first-step contacts.
+    manager._collision_phase = 0
+    manager.step()
+    assert 5 * substeps in collisions

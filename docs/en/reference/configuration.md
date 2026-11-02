@@ -489,12 +489,59 @@ reproduction of assets with explicit gap zero. Runtime diagnostics expose activa
 material shape counts and the solver cone/impratio. `just smoke-newton-contact`
 checks actual CPU/CUDA material mixing in addition to contact integration.
 
+### Newton collision cadence and work allocation
+
+The shared Newton CPU/CUDA leaves default to **240 Hz collision refresh**, independently
+of 60 Hz commands and 480 Hz physical integration. This pipeline setting applies to
+all Newton scenes, including L6-only scenes; the AR5/O6 material activation above is
+separate. PhysX is unchanged.
+
+| Required physics field | CPU default | CUDA default | Meaning |
+| --- | ---: | ---: | --- |
+| `collision_frequency_hz` | 240 | 240 | Rebuild contact geometry at this rate |
+| `rigid_contact_max_per_world` | 1024 | 1024 | Newton contact storage per world |
+| `max_triangle_pairs_per_world` | 16384 | 16384 | Narrow-phase triangle candidate storage per world |
+| `mesh_mesh_block_multiplier` | 8 | 8 | Multiply the pinned Newton mesh-mesh work grid; CPU uses 512 blocks |
+
+Both capacities are multiplied by the final world count. They are allocations, not
+per-pair contact quotas. Contact reduction, collision determinism and upstream buffer
+checks stay enabled; the MuJoCo Warp solver's `nconmax_per_world=200` and
+`njmax_per_world=1200` remain separate. Dense scenes must increase capacities rather
+than tolerate overflow. Work-grid multiplication still queries all collision edges;
+its gain depends on device, geometry and batch size. CPU 64/512-block measured
+costs were nearly equal; the CPU gain primarily comes from cadence and allocation. The implementation uses the narrow
+phase field of the pinned Newton revision, without modifying the installed package.
+
+Physical frequency must be an integer multiple of collision frequency. For example,
+480/240, 720/240 and 960/240 are valid; 600/240 is rejected before Kit startup. Set
+300 Hz collision explicitly for 600 Hz physics, or set collision equal to physics
+for detection on every step. There is no automatic frequency rounding.
+
+At 480/240 Hz, geometry refreshes every two physical steps. The intervening step
+reuses contact pairs, local anchors and normals, while updating separations and
+solving forces at 480 Hz. New contacts and normal changes can therefore be delayed;
+this is a numerical tradeoff, not a strictly equivalent execution optimization.
+Mirror's internal substeps and Kaleidoscope's individual physics ticks share the
+same cadence. CUDA caches a graph for each encountered phase so replay does not
+freeze the schedule. Reset, clone or state restoration invalidates the old contacts
+and forces a refresh before the next solve across the batch. Contact caches are not
+part of the integration snapshot; use every-step detection when comparing restored
+states without this additional cache history.
+
+The accepted fixed-command T-block runs retained approximately the original relative
+motion while reducing CUDA loop wall time by 42–45%. They still had roughly 1–1.5 mm
+peak penetration and small upright release remnants. This is not a guarantee for
+other objects, velocities, environment counts or training throughput. See
+[PR #66 evidence](https://github.com/linker-bot/linker-sim-isaac/pull/66#issuecomment-6572277419).
+
 ### Newton contact integration
 
 Mirror scenes explicitly set `control_frequency_hz: 60.0` and
 `physics_frequency_hz: 480.0`. Both PhysX and Newton execute eight native steps
 per target update, each lasting 1/480 s. Custom frequencies must have an integer
 physics/control ratio, e.g. 120/600 or 20/240 Hz; invalid ratios fail at load time.
+Newton also validates physics/collision: 120/600 requires an explicit compatible
+collision rate such as 300 Hz.
 The dedicated hybrid-force entry retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Rendering and camera rates remain independent.
 
 Kaleidoscope keeps its existing action decimation: the scene defaults to 480 Hz
@@ -507,7 +554,8 @@ The internal runtime `get_physics_dt()` / `physics_dt_s` is the duration of one
 runtime step (Mirror control tick or Kaleidoscope physical tick). Newton diagnostics
 include `effective_substeps` and `substep_dt_s`; PhysX World's native physics dt
 is the substep dt. Simulation frequencies are distinct from wall-clock throughput.
-Contacts and native drives update on every physical step, while targets are held
+Contact forces and native drives update on every physical step; Newton refreshes
+contact geometry at its independent collision frequency, while targets are held
 between control updates. More physical steps cost throughput.
 
 ### Independent command, hybrid feedback and physics clocks
@@ -517,6 +565,7 @@ between control updates. More physical steps cost throughput.
 | Mirror commands | `scene.control_frequency_hz` | 60 Hz | Ordinary joint/trajectory target updates; held between updates |
 | Hybrid feedback | `hybrid_force_position.feedback_frequency_hz` | 240 Hz | Fresh state/wrench read and controller calculation on every feedback tick |
 | Native physics | `scene.physics_frequency_hz` | 480 Hz | Actual solver integration, independent of wall-clock speed |
+| Newton collision | `physics.collision_frequency_hz` | 240 Hz | Refresh contact geometry; forces are solved every physical step |
 | Rendering | `scene.render_frequency_hz` | 60 Hz | Rendering cadence; does not add physical steps |
 | Planning samples | `request_defaults.sample_dt_s` in the planning profile | 0.02 s (50 Hz) | Timestamped trajectory samples, resampled onto the command grid |
 
@@ -530,7 +579,7 @@ command period. Changing commands to 120 Hz leaves feedback at 240 Hz. Raising p
 to 720 or 960 Hz leaves feedback at 240 Hz, with three or four physical steps per
 feedback update. Commands at 480 Hz with feedback still at 240 Hz are rejected;
 explicitly configure a compatible feedback/physics pair. Hybrid 60/240/600 Hz is also
-rejected, although ordinary 120/600 Hz is valid.
+rejected, although ordinary 120/600 Hz requires an explicit compatible Newton collision rate.
 
 Hybrid profiles rename the old `minimum_physics_frequency_hz` key to
 `minimum_feedback_frequency_hz` (200 Hz); this existing safety floor checks the

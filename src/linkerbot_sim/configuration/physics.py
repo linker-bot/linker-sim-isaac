@@ -306,9 +306,16 @@ _NEWTON_COMMON_REQUIRED_KEYS = frozenset(
         "solver_deterministic",
         "collision_deterministic",
         "contact_matching",
+        "collision_frequency_hz",
+        "rigid_contact_max_per_world",
+        "max_triangle_pairs_per_world",
+        "mesh_mesh_block_multiplier",
     }
 )
 _NEWTON_POSITIVE_INT_FIELDS = (
+    "rigid_contact_max_per_world",
+    "max_triangle_pairs_per_world",
+    "mesh_mesh_block_multiplier",
     "nconmax_per_world",
     "njmax_per_world",
     "iterations",
@@ -331,6 +338,10 @@ class _NewtonCommonValues(TypedDict):
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
     ar5_o6_contact: NewtonContactSettings | None
 
 
@@ -340,6 +351,26 @@ def _newton_common_from_mapping(
     """只解析两种 execution 共有的容量与求解器字段。"""
 
     return _NewtonCommonValues(
+        collision_frequency_hz=as_float(
+            mapping["collision_frequency_hz"],
+            label=f"{label}.collision_frequency_hz",
+            strictly_positive=True,
+        ),
+        rigid_contact_max_per_world=as_int(
+            mapping["rigid_contact_max_per_world"],
+            label=f"{label}.rigid_contact_max_per_world",
+            minimum=1,
+        ),
+        max_triangle_pairs_per_world=as_int(
+            mapping["max_triangle_pairs_per_world"],
+            label=f"{label}.max_triangle_pairs_per_world",
+            minimum=1,
+        ),
+        mesh_mesh_block_multiplier=as_int(
+            mapping["mesh_mesh_block_multiplier"],
+            label=f"{label}.mesh_mesh_block_multiplier",
+            minimum=1,
+        ),
         ar5_o6_contact=(
             NewtonContactSettings.from_mapping(
                 mapping["ar5_o6_contact"], label=f"{label}.ar5_o6_contact"
@@ -420,7 +451,7 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         raise ConfigurationError(
             "physics.default_contact_gap_m must be finite and >= 0"
         )
-    for name in ("default_contact_time_constant_s",):
+    for name in ("default_contact_time_constant_s", "collision_frequency_hz"):
         value_s = getattr(value, name)
         if (
             isinstance(value_s, bool)
@@ -433,6 +464,20 @@ def _validate_newton_common(value: object, *, owner: str) -> None:
         field_value = getattr(value, name)
         if type(field_value) is not int or field_value < 1:
             raise ConfigurationError(f"physics.{name} must be an integer >= 1")
+
+
+def _newton_collision_interval(physics_hz: float, collision_hz: float) -> int:
+    ratio = physics_hz / collision_hz
+    if (
+        not math.isfinite(ratio)
+        or ratio < 1
+        or not math.isclose(ratio, round(ratio), rel_tol=1e-9, abs_tol=1e-9)
+    ):
+        raise ConfigurationError(
+            "scene.physics_frequency_hz must be an integer multiple of "
+            "physics.collision_frequency_hz; configure both rates explicitly"
+        )
+    return round(ratio)
 
 
 @dataclass(frozen=True)
@@ -456,6 +501,10 @@ class NewtonCudaSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
     ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
@@ -466,6 +515,11 @@ class NewtonCudaSettings:
         _validate_newton_common(self, owner="NewtonCudaSettings")
         if type(self.use_cuda_graph) is not bool:
             raise ConfigurationError("physics.use_cuda_graph must be a boolean")
+
+    def collision_interval(self, physics_frequency_hz: float) -> int:
+        return _newton_collision_interval(
+            physics_frequency_hz, self.collision_frequency_hz
+        )
 
     @classmethod
     def from_mapping(
@@ -509,6 +563,10 @@ class NewtonCpuSettings:
     solver_deterministic: bool
     collision_deterministic: bool
     contact_matching: Literal["disabled", "latest", "sticky"]
+    collision_frequency_hz: float
+    rigid_contact_max_per_world: int
+    max_triangle_pairs_per_world: int
+    mesh_mesh_block_multiplier: int
     ar5_o6_contact: NewtonContactSettings | None = None
 
     def __post_init__(self) -> None:
@@ -517,6 +575,11 @@ class NewtonCpuSettings:
                 "NewtonCpuSettings must use engine=newton, execution=cpu"
             )
         _validate_newton_common(self, owner="NewtonCpuSettings")
+
+    def collision_interval(self, physics_frequency_hz: float) -> int:
+        return _newton_collision_interval(
+            physics_frequency_hz, self.collision_frequency_hz
+        )
 
     @classmethod
     def from_mapping(

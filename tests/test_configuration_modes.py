@@ -1498,7 +1498,13 @@ def test_mirror_default_and_custom_exact_clock(profile):
             control_frequency_hz=control_hz,
             physics_frequency_hz=physics_hz,
         )
-        spec = _mirror_session_spec(replace(config, scene=scene))
+        physics = config.physics
+        if (
+            isinstance(physics, (NewtonCpuSettings, NewtonCudaSettings))
+            and physics_hz == 600
+        ):
+            physics = replace(physics, collision_frequency_hz=300)
+        spec = _mirror_session_spec(replace(config, scene=scene, physics=physics))
         assert spec.physics_dt == pytest.approx(1 / control_hz)
         assert spec.physics_dt / spec.physics.substeps == pytest.approx(1 / physics_hz)
 
@@ -1652,3 +1658,41 @@ def test_ar5_o6_defaults_and_order_are_resolved_before_runtime(
         )
         assert selected == "newton_compliant"
         assert cfg.controller_bundles[selected].compliant_drive is not None
+
+
+@pytest.mark.parametrize("profile", ["newton_cpu", "newton_cuda"])
+def test_newton_collision_defaults_and_projection(profile):
+    from dataclasses import replace
+    from linkerbot_sim.mirror.scene_assembly import _mirror_session_spec
+
+    cfg = load_mirror_config(profile)
+    assert cfg.physics.collision_frequency_hz == 240
+    spec = _mirror_session_spec(cfg).physics
+    assert spec.collision_interval == 2
+    assert spec.rigid_contact_max_per_world == 1024
+    assert spec.max_triangle_pairs_per_world == 16384
+    assert spec.mesh_mesh_block_multiplier == 8
+    for hz, interval in [(240, 2), (480, 1), (120, 4)]:
+        changed = replace(cfg, physics=replace(cfg.physics, collision_frequency_hz=hz))
+        assert _mirror_session_spec(changed).physics.collision_interval == interval
+    for hz in (250, 960):
+        with pytest.raises(ConfigurationError, match="physics.collision_frequency_hz"):
+            replace(cfg, physics=replace(cfg.physics, collision_frequency_hz=hz))
+    for name, bad in [
+        ("collision_frequency_hz", 0),
+        ("collision_frequency_hz", float("nan")),
+        ("rigid_contact_max_per_world", 0),
+        ("max_triangle_pairs_per_world", -1),
+        ("mesh_mesh_block_multiplier", True),
+    ]:
+        with pytest.raises(ConfigurationError, match=name):
+            replace(cfg.physics, **{name: bad})
+
+
+def test_kaleidoscope_collision_rate_is_independent_of_action_decimation():
+    from dataclasses import replace
+
+    cfg = load_kaleidoscope_config("newton_cuda")
+    assert cfg.physics.collision_interval(cfg.scene.physics_frequency_hz) == 2
+    with pytest.raises(ConfigurationError, match="physics.collision_frequency_hz"):
+        replace(cfg, physics=replace(cfg.physics, collision_frequency_hz=250))

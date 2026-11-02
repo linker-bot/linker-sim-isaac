@@ -186,7 +186,10 @@ class NewtonRuntime:
         self._sim_time = 0.0
         # graph 只捕获纯 GPU physics DAG。首次 model-property 写会使 solver 内部缓存和
         # 已捕获地址/执行图失效，因此 on_newton_view_write 会将状态退回 pending。
-        self._graph: object | None = None
+        # A graph records Python branches. Cache one DAG per collision phase so
+        # Kaleidoscope's one-substep ticks do not replay detection every tick.
+        self._graphs: dict[int, object] = {}
+        self._collision_phase = 0
         self._graph_state = (
             "pending"
             if self.execution == "cuda"
@@ -453,6 +456,12 @@ class NewtonRuntime:
                 broad_phase="explicit",
                 deterministic=self.physics_spec.collision_deterministic,
                 contact_matching=self.physics_spec.contact_matching,
+                **_collision_pipeline_kwargs(self.physics_spec, self._num_worlds),
+            )
+            # Pinned Newton exposes this grid only on its narrow phase. Changing
+            # its partition count still queries the complete mesh edge list.
+            self._collision_pipeline.narrow_phase.num_mesh_mesh_blocks *= (
+                self.physics_spec.mesh_mesh_block_multiplier
             )
             self._contacts = self._collision_pipeline.contacts()
 
@@ -605,12 +614,14 @@ class NewtonRuntime:
             values,
             active_world_mask=active_world_mask,
         )
+        self._collision_phase = 0
 
     def reset_solver_integration_state(self, active_world_mask: object) -> None:
         """把 mask 选中的 solver rows 恢复到 committed baseline。"""
 
         self._require_initialized()
         self._solver_integration_store.reset(active_world_mask)
+        self._collision_phase = 0
 
     def capture_solver_integration_state_host(self) -> dict[str, object]:
         """在显式冷边界把 solver persistent state 复制为 JSON-compatible payload。
@@ -669,6 +680,7 @@ class NewtonRuntime:
                 device=self.device,
             )
             self._solver_integration_store.restore(device_values)
+        self._collision_phase = 0
         self._synchronize_owner_stream()
         drive = getattr(self, "compliant_drive", None)
         if drive is not None:
@@ -835,34 +847,38 @@ class NewtonRuntime:
         self._require_initialized()
         self._flush_cold_state_updates()
 
-        if self._graph_state == "captured":
+        phase = self._collision_phase
+        if self._graph_state in {"pending", "captured"}:
             import warp as wp
 
-            wp.capture_launch(self._graph, stream=self.stream)
-        elif self._graph_state == "pending":
-            import warp as wp
-
-            try:
-                with wp.ScopedCapture(
-                    device=self.device, stream=self.stream
-                ) as capture:
-                    self._simulate()
-                self._graph = capture.graph
-                self._graph_state = "captured"
-                # capture 只记录首个 physics step，不执行它；立即 launch，保证调用者看到的
-                # 第一次 step 确实推进了一次，而不是暴露成“graph warm-up 空帧”。
-                wp.capture_launch(self._graph, stream=self.stream)
-            except Exception as exc:
-                self._graph = None
-                self._graph_state = "eager_fallback"
-                self._graph_error = f"{type(exc).__name__}: {exc}"
-                logger.warning(
-                    "Newton CUDA graph capture failed; using eager: %s",
-                    self._graph_error,
-                )
+            graph = self._graphs.get(phase)
+            if graph is None:
+                try:
+                    with wp.ScopedCapture(
+                        device=self.device, stream=self.stream
+                    ) as capture:
+                        self._simulate()
+                    graph = capture.graph
+                    self._graphs[phase] = graph
+                    self._graph_state = "captured"
+                except Exception as exc:
+                    self._graphs.clear()
+                    self._graph_state = "eager_fallback"
+                    self._graph_error = f"{type(exc).__name__}: {exc}"
+                    logger.warning(
+                        "Newton CUDA graph capture failed; using eager: %s",
+                        self._graph_error,
+                    )
+            # Capture records without advancing physics. Execute exactly once.
+            if graph is not None:
+                wp.capture_launch(graph, stream=self.stream)
+            else:
                 self._simulate()
         else:
             self._simulate()
+        self._collision_phase = (
+            phase + self.physics_spec.substeps
+        ) % self.physics_spec.collision_interval
         # 在推进后捕获共享 Warp 积分状态；CUDA packing 不进入 physics graph。
         self._capture_solver_integration_state()
         self._sim_time += self.physics_dt
@@ -933,7 +949,7 @@ class NewtonRuntime:
             if self.solver is not None and bool(
                 getattr(self.physics_spec, "use_cuda_graph", False)
             ):
-                self._graph = None
+                self._graphs = {}
                 self._graph_state = "pending"
 
     def on_newton_view_write(
@@ -1001,6 +1017,7 @@ class NewtonRuntime:
             # snapshot/clone 的权威 solver state。这四类写入只需 FK。其它 generalized setter
             # 仍是 command/reset 语义，必须先恢复 native equality follower。
         elif category == "model" and self.solver is not None:
+            self._collision_phase = 0
             from newton import ModelFlags
 
             # view scatter 与 solver cache invalidation 必须在同一 owner stream 排序。
@@ -1009,7 +1026,7 @@ class NewtonRuntime:
             with self._owner_stream_scope():
                 self.solver.notify_model_changed(ModelFlags.JOINT_DOF_PROPERTIES)
             if bool(getattr(self.physics_spec, "use_cuda_graph", False)):
-                self._graph = None
+                self._graphs = {}
                 self._graph_state = "pending"
         elif category != "control":
             raise ValueError(f"unknown Newton view write category {category!r}")
@@ -1093,6 +1110,13 @@ class NewtonRuntime:
             "solver_deterministic": self.physics_spec.solver_deterministic,
             "collision_deterministic": self.physics_spec.collision_deterministic,
             "contact_matching": self.physics_spec.contact_matching,
+            "collision_interval": self.physics_spec.collision_interval,
+            "collision_frequency_hz": self.physics_spec.substeps
+            / self.physics_dt
+            / self.physics_spec.collision_interval,
+            "rigid_contact_max_per_world": self.physics_spec.rigid_contact_max_per_world,
+            "max_triangle_pairs_per_world": self.physics_spec.max_triangle_pairs_per_world,
+            "mesh_mesh_block_multiplier": self.physics_spec.mesh_mesh_block_multiplier,
             "default_contact_gap_m": self.physics_spec.default_contact_gap_m,
             "ar5_o6_contact": (
                 {
@@ -1168,7 +1192,7 @@ class NewtonRuntime:
         self._render_sync = None
         self._render_callback = None
 
-        self._graph = None
+        self._graphs = {}
         self._projector = None
         self._world_masks = None
         self._initial_control = None
@@ -1246,12 +1270,15 @@ class NewtonRuntime:
             for substep in range(substeps):
                 if drive is not None:
                     drive.apply(self.state, substep)
-                # The previous solve moved the bodies. Reusing the outer step's
-                # contacts misses pairs that first touch during an internal step.
+                # Refresh geometry at the configured cadence; the solver still
+                # updates separation and solves forces on every physical step.
                 contacts = None
                 if self._collision_pipeline is not None:
                     assert self._contacts is not None
-                    self._collision_pipeline.collide(self.state, self._contacts)
+                    if (
+                        self._collision_phase + substep
+                    ) % self.physics_spec.collision_interval == 0:
+                        self._collision_pipeline.collide(self.state, self._contacts)
                     contacts = self._contacts
                 self.solver.step(
                     self.state,
@@ -1303,6 +1330,9 @@ class NewtonRuntime:
             return
         import newton
 
+        # A teleport/reset/clone invalidates old contact anchors. Refresh all
+        # worlds on the next physical step, without reading device masks on host.
+        self._collision_phase = 0
         assert self.model is not None and self.state is not None
         assert self._projector is not None
         assert self._world_masks is not None
@@ -1382,6 +1412,18 @@ class NewtonRuntime:
     def _require_open(self) -> None:
         if self.closed:
             raise RuntimeError("Newton manager is closed")
+
+
+def _collision_pipeline_kwargs(
+    settings: IsaacNewtonCpuSpec | IsaacNewtonCudaSpec, world_count: int
+) -> dict[str, int | bool]:
+    """Global pipeline allocations scale with worlds; never clip a manifold."""
+    return {
+        "rigid_contact_max": settings.rigid_contact_max_per_world * world_count,
+        "max_triangle_pairs": settings.max_triangle_pairs_per_world * world_count,
+        "reduce_contacts": True,
+        "verify_buffers": True,
+    }
 
 
 def _resolve_constraint_solver(

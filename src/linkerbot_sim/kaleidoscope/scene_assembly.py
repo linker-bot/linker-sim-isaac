@@ -389,6 +389,12 @@ def session_spec_from_config(
             solver_deterministic=physics_source.solver_deterministic,
             collision_deterministic=physics_source.collision_deterministic,
             contact_matching=physics_source.contact_matching,
+            collision_interval=physics_source.collision_interval(
+                config.scene.physics_frequency_hz
+            ),
+            rigid_contact_max_per_world=physics_source.rigid_contact_max_per_world,
+            max_triangle_pairs_per_world=physics_source.max_triangle_pairs_per_world,
+            mesh_mesh_block_multiplier=physics_source.mesh_mesh_block_multiplier,
             ar5_o6_contact=physics_source.ar5_o6_contact,
         )
     else:

@@ -87,6 +87,10 @@ class IsaacNewtonCudaSpec:
     solver_deterministic: bool = False
     collision_deterministic: bool = True
     contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
+    collision_interval: int = 1
+    rigid_contact_max_per_world: int = 1024
+    max_triangle_pairs_per_world: int = 16384
+    mesh_mesh_block_multiplier: int = 8
     ar5_o6_contact: NewtonContactSettings | None = None
     kind: Literal["newton_cuda"] = "newton_cuda"
 
@@ -98,6 +102,10 @@ class IsaacNewtonCudaSpec:
             "nconmax_per_world",
             "njmax_per_world",
             "substeps",
+            "collision_interval",
+            "rigid_contact_max_per_world",
+            "max_triangle_pairs_per_world",
+            "mesh_mesh_block_multiplier",
             "iterations",
             "line_search_iterations",
         ):
@@ -150,6 +158,10 @@ class IsaacNewtonCpuSpec:
     solver_deterministic: bool = False
     collision_deterministic: bool = True
     contact_matching: Literal["disabled", "latest", "sticky"] = "disabled"
+    collision_interval: int = 1
+    rigid_contact_max_per_world: int = 1024
+    max_triangle_pairs_per_world: int = 16384
+    mesh_mesh_block_multiplier: int = 8
     ar5_o6_contact: NewtonContactSettings | None = None
     kind: Literal["newton_cpu"] = "newton_cpu"
 
@@ -161,6 +173,10 @@ class IsaacNewtonCpuSpec:
             "nconmax_per_world",
             "njmax_per_world",
             "substeps",
+            "collision_interval",
+            "rigid_contact_max_per_world",
+            "max_triangle_pairs_per_world",
+            "mesh_mesh_block_multiplier",
             "iterations",
             "line_search_iterations",
         ):

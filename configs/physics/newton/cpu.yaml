@@ -24,6 +24,15 @@ physics:
   solver_deterministic: false
   collision_deterministic: true
   contact_matching: disabled
+  # Refresh contact geometry independently of control and integration rates.
+  # physics_frequency_hz must be an integer multiple; 480/240 => every two steps.
+  collision_frequency_hz: 240.0
+  # Newton pipeline allocations scale with world count, not per-pair contact quotas.
+  # Increase these for denser scenes; upstream overflow checks remain enabled.
+  rigid_contact_max_per_world: 1024
+  max_triangle_pairs_per_world: 16384
+  # Relative to the pinned Newton mesh-mesh work grid (CPU: 64 -> 512 blocks).
+  mesh_mesh_block_multiplier: 8
   # Any AR5/O6 assembly activates this policy. Cone/impratio affect the whole scene;
   # other robot materials remain authored. No AR5/O6 means no contact override.
   ar5_o6_contact:
