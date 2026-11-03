@@ -1312,6 +1312,9 @@ training = [
     { name = "gymnasium" },
     { name = "skrl", extra = ["torch"] },
 ]
+video = [
+    { name = "pynvvideocodec" },
+]
 visualization = [
     { name = "foxglove-sdk" },
 ]
@@ -1326,6 +1329,7 @@ requires-dist = [
     { name = "isaacsim", extras = ["all", "extscache"], marker = "extra == 'simulation'", specifier = "==6.1.0.0" },
     { name = "numpy", specifier = ">=2,<3" },
     { name = "nvidia-curobo", extras = ["cu12"], marker = "extra == 'simulation'", git = "https://github.com/NVlabs/curobo.git?rev=4ea77366ca48ee453e7df139e39fa6532af49f3b" },
+    { name = "pynvvideocodec", marker = "extra == 'video'", specifier = "==2.2.4" },
     { name = "pyright", marker = "extra == 'dev'", specifier = "==1.1.411" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==9.1.1" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==9.1.1" },
@@ -1341,7 +1345,7 @@ requires-dist = [
     { name = "warp-lang", marker = "extra == 'simulation'", specifier = "==1.17.0" },
     { name = "websockets", specifier = "==13.1" },
 ]
-provides-extras = ["test", "dev", "visualization", "training", "simulation"]
+provides-extras = ["test", "dev", "visualization", "video", "training", "simulation"]
 
 [[package]]
 name = "llvmlite"
@@ -2063,6 +2067,14 @@ name = "pyliblzfse"
 version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/2c/ba/a4bc465d36f6aafbff89da1bf67bcc6a97475b1d2300a74a778dcb293cef/pyliblzfse-0.4.1.tar.gz", hash = "sha256:bb0b899b3830c02fdf3dbde48ea59611833f366fef836e5c32cf8145134b7d3d", size = 47666, upload-time = "2020-07-09T02:50:17.52Z" }
+
+[[package]]
+name = "pynvvideocodec"
+version = "2.2.4"
+source = { registry = "https://pypi.nvidia.com/" }
+wheels = [
+    { url = "https://pypi.nvidia.com/pynvvideocodec/pynvvideocodec-2.2.4-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:41ad2b4d010ed22eb46c849d3e792789ae06281f6b41767c1b25f76f130aee98" },
+]
 
 [[package]]
 name = "pyopengl"

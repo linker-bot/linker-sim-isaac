@@ -94,6 +94,13 @@ smoke-kaleidoscope-memory:
 test-mirror:
     {{uv_simulation}} pytest -q tests/test_mirror_*.py
 
+# CPU contracts for the optional CUDA video facade; no codec/GPU installation.
+test-mirror-video:
+    {{uv_dev}} pytest -q tests/test_mirror_video.py
+
+audit-dependency-delta base_project:
+    {{python_dev}} scripts/check_dependency_audit_delta.py --base-project "{{base_project}}" --head-project .
+
 test-isaac:
     {{uv_simulation}} pytest -q tests/test_isaac_*.py tests/test_check_isaac_runtime.py tests/test_physics_runtime_ownership.py tests/test_runtime_provenance.py tests/test_simulation_app_lifecycle.py
 

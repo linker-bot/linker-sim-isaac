@@ -44,6 +44,7 @@ Catalog 只在显式调用时执行 YAML I/O；配置对象不创建 runtime res
 | --- | --- |
 | `MirrorConfig` | 便于类型标注的配置根 |
 | `MirrorRuntime` | 一个 session 与全部 Mirror resource 的 owner |
+| `MirrorVideoRecorder` | 有界 CUDA RGB → NVENC H.264/MP4 writer；见 [GPU 视频](../guides/gpu-video.md)。 |
 | `MirrorController` | owner-thread typed request dispatcher |
 | `create_mirror_runtime(config, *, assembly_factory=None)` | 唯一 composition factory；队列容量只来自 strict control profile |
 | `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, before_session_close=None, max_iterations=None, close_on_exit=True)` | 主线程 admission/physics/render loop；省略 poll timeout 时读取 strict control profile，可选 close hook 与 `MirrorRuntime.close` 使用同一已排空的 pre-session 边界 |

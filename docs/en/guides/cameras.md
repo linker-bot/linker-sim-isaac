@@ -185,8 +185,9 @@ rgb_numpy = rgb_gpu.numpy()  # explicit download for CPU I/O or analysis
 cpu_frames = runtime.render(camera_ids=("top",), device="cpu")
 ```
 
-Automatic PNG/NPY/Foxglove output keeps its existing explicit CPU download and bounded
-writers. GPU video encoding is a separate feature; this API does not add a codec.
+Automatic PNG/NPY/Foxglove outputs retain explicit CPU download and bounded writers.
+The optional [Mirror GPU video writer](gpu-video.md) consumes owned CUDA RGB directly
+for NVENC H.264/MP4; it does not replace the automatic output scheduler.
 
 Do not access render products from transport workers. All capture and stage interaction
 must occur on the Mirror owner thread; only owned payloads may cross to output workers.

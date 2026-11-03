@@ -107,8 +107,9 @@ rgb_numpy = rgb_gpu.numpy()  # CPU I/O 或分析所需的显式下载
 cpu_frames = runtime.render(camera_ids=("top",), device="cpu")
 ```
 
-自动 PNG/NPY/Foxglove 输出继续使用已有显式 CPU 下载和有界 writer。GPU 视频编码属于后续独立功能，
-本接口不增加 codec。
+自动 PNG/NPY/Foxglove 输出继续使用已有显式 CPU 下载和有界 writer。可选的
+[Mirror GPU 视频 writer](gpu-video.md)直接消费自有 CUDA RGB 并进行 NVENC H.264/MP4 编码，
+不替代自动输出调度器。
 
 ## 数据与背压
 

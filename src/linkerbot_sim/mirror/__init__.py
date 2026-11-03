@@ -17,6 +17,10 @@ _EXPORTS = {
     ),
     "MirrorController": ("linkerbot_sim.mirror.controller", "MirrorController"),
     "MirrorRuntime": ("linkerbot_sim.mirror.runtime", "MirrorRuntime"),
+    "MirrorVideoRecorder": (
+        "linkerbot_sim.sensors.camera.video",
+        "MirrorVideoRecorder",
+    ),
     "create_mirror_runtime": (
         "linkerbot_sim.mirror.bootstrap",
         "create_mirror_runtime",
