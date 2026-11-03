@@ -134,7 +134,7 @@ def exercise_task_flow(runtime):
     from linkerbot_sim.planning.requests import IKRequest
 
     baseline = runtime.get_state()
-    first = runtime.render()
+    first = runtime.render(device="cpu")
     moved = deepcopy(baseline)
     block = moved["objects"]["Tblock"]
     block["positions_local"][1] += 0.08
@@ -146,7 +146,7 @@ def exercise_task_flow(runtime):
         "linkerbot.snapshot.newton_solver_integration_state", None
     )
     runtime.set_state(moved)
-    second = runtime.render()
+    second = runtime.render(device="cpu")
     changed = int(np.count_nonzero(first["side"]["depth"] != second["side"]["depth"]))
     assert changed > 10, changed
     runtime.restore_snapshot(baseline)
@@ -253,7 +253,7 @@ def run(args):
 
         def capture():
             before = runtime.physics_runtime.simulation_time
-            frames = runtime.render()
+            frames = runtime.render(device="cpu")
             assert runtime.physics_runtime.simulation_time == before
             poses = {}
             for camera in cameras:

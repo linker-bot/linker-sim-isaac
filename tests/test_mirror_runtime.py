@@ -275,7 +275,7 @@ def test_render_coordinator_honors_direct_camera_update_budget() -> None:
         name="direct",
         render_update_count=4,
         set_render_active=lambda _active: None,
-        get_current_frame=lambda clone: {"clone": clone},
+        get_current_frame=lambda clone, device: {"clone": clone},
     )
     coordinator = RenderCoordinator(
         physics_runtime=physics,
@@ -323,7 +323,9 @@ def test_render_coordinator_updates_multiple_physx_cameras_together() -> None:
                 SimpleNamespace(name="first", set_render_active=lambda _active: None),
                 SimpleNamespace(name="second", set_render_active=lambda _active: None),
             ),
-            capture_hook=lambda cameras: events.append(f"capture:{len(cameras)}"),
+            capture_hook=lambda cameras, device: events.append(
+                f"capture:{len(cameras)}"
+            ),
         ),
     )
 
@@ -340,7 +342,7 @@ def test_no_output_consumers_skip_automatic_camera_capture() -> None:
             cameras=(
                 SimpleNamespace(name="camera", set_render_active=lambda _active: None),
             ),
-            capture_hook=lambda _cameras: events.append("capture"),
+            capture_hook=lambda _cameras, device: events.append("capture"),
         ),
     )
 
@@ -368,7 +370,9 @@ def test_render_coordinator_shares_direct_camera_history_updates() -> None:
             first,
             second,
         ),
-        capture_hook=lambda _cameras: events.append("capture") or {"ready": True},
+        capture_hook=lambda _cameras, device: (
+            events.append("capture") or {"ready": True}
+        ),
     )
     coordinator = RenderCoordinator(physics_runtime=physics, cameras=bundle)
 
@@ -409,7 +413,7 @@ def test_render_coordinator_deactivates_all_cameras_after_render_failure() -> No
         physics_runtime=FailingPhysics(events),
         cameras=CameraBundle(
             cameras=(DirectCamera("first"), DirectCamera("second")),
-            capture_hook=lambda _cameras: events.append("capture"),
+            capture_hook=lambda _cameras, device: events.append("capture"),
         ),
     )
 
@@ -815,6 +819,38 @@ def test_invalid_camera_selection_has_no_render_side_effects(selection) -> None:
     assert events == []
 
 
+@pytest.mark.parametrize("device", [None, 1, "gpu", "cuda:-1", "cuda:1.0", ""])
+def test_invalid_render_device_has_no_render_side_effects(device):
+    events = []
+    coordinator = RenderCoordinator(physics_runtime=_Physics(events))
+    with pytest.raises(ValueError, match="render device"):
+        coordinator.render_frame(device=device)
+    assert events == []
+
+
+def test_mirror_render_defaults_to_root_cuda_device_and_owns_capture():
+    events = []
+    config = load_mirror_config()
+    config = replace(config, compute=replace(config.compute, cuda_device=3))
+    runtime = create_mirror_runtime(
+        config, assembly_factory=lambda cfg: _assembly(cfg, events=events)
+    )
+    camera = SimpleNamespace(
+        name="image",
+        get_current_frame=lambda **kwargs: kwargs,
+        set_render_active=lambda _: None,
+    )
+    runtime.rendering = RenderCoordinator(
+        physics_runtime=runtime.physics_runtime, cameras=CameraBundle(cameras=(camera,))
+    )
+    assert runtime.render() == {"image": {"clone": True, "device": "cuda:3"}}
+    assert runtime.render(device="cpu") == {"image": {"clone": True, "device": "cpu"}}
+    assert runtime.render(device="cuda:2") == {
+        "image": {"clone": True, "device": "cuda:2"}
+    }
+    runtime.close()
+
+
 def test_subset_capture_only_activates_selected_camera_and_does_not_publish() -> None:
     active = {}
     seen = []
@@ -822,7 +858,10 @@ def test_subset_capture_only_activates_selected_camera_and_does_not_publish() ->
         SimpleNamespace(
             name=name,
             set_render_active=lambda value, name=name: active.__setitem__(name, value),
-            get_current_frame=lambda clone, name=name: {"owner": name, "clone": clone},
+            get_current_frame=lambda clone, device, name=name: {
+                "owner": name,
+                "clone": clone,
+            },
         )
         for name in ("a", "b", "c")
     )

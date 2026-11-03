@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- Mirror `render()` 默认返回位于 `compute.cuda_device` 的自有 Warp 数组；NumPy 消费者需指定 `device="cpu"`。Newton RGB/depth 使用带布局校验的原生 SyntheticData CUDA buffer 出口，不经 host 图像往返。设备复制在返回前完成，相机关闭后数据仍有效；host 数据或设备不一致时报错。自动文件/live 输出继续显式下载；相机 smoke 默认 Newton CUDA，并验证 GPU 所有权、新帧和录制行为。
+
 - 为 `tblock_push_v1` 增加带版本的 Kaleidoscope reset 模板和 CPU 离线 seed 采样。允许换进程、GPU 编号和环境数量，经正常 reset 事务恢复到指定行并续接逻辑 RNG；任务、后端、控制配置和资产必须一致。先导出一次实际导入的名义输入，再离线采样；已有 snapshot/checkpoint 接口保持独立。
 
 - 接入linker-sim-assets PR #23已合并的AR5/O6组合物理配置：同步原生MJCF动力学/材质，运行与规划资源中的J6/J7统一精确±60°。保留已选柔顺驱动、原始几何及60/480/240 Hz指令/积分/碰撞默认。独立MJCF力矩motor不包含运行时虚拟控制器。

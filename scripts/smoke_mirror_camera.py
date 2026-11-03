@@ -34,7 +34,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--profile",
         choices=("physx_cpu", "newton_cpu", "newton_cuda"),
-        default="physx_cpu",
+        default="newton_cuda",
     )
     parser.add_argument("--gui", action="store_true")
     parser.add_argument(
@@ -122,8 +122,12 @@ def camera_config(args):
 
 
 def capture(runtime):
+    import warp as wp
+
     before = float(runtime.physics_runtime.simulation_time)
+    started = time.perf_counter()
     frames = runtime.render()
+    capture_wall_s = time.perf_counter() - started
     after = float(runtime.physics_runtime.simulation_time)
     assert before == after, (before, after)
     metadata = {
@@ -135,9 +139,81 @@ def capture(runtime):
             item
         )
         assert item["physics_time_s"] == before, item
-        for pixels in frames[name].values():
-            assert np.isfinite(pixels).any()
-    return frames, metadata
+        camera = next(
+            c for c in runtime.scene_resources.sensor_cameras if c.name == name
+        )
+        width, height = camera.settings.resolution
+        cpu = camera.get_current_frame(clone=True, device="cpu")
+        for modality, pixels in frames[name].items():
+            assert isinstance(pixels, wp.array) and pixels.device.is_cuda
+            assert pixels.device == wp.get_device(
+                f"cuda:{runtime.config.compute.cuda_device}"
+            )
+            assert pixels.dtype == (wp.uint8 if modality == "rgb" else wp.float32)
+            assert pixels.shape in (
+                ((height, width, 3),)
+                if modality == "rgb"
+                else ((height, width), (height, width, 1))
+            ), (modality, pixels.shape)
+            borrowed = camera.get_modality_data(modality, device=None)
+            assert pixels.ptr != borrowed.ptr
+            # Downloads are explicit verification/I/O boundaries, after capture.
+            np.testing.assert_array_equal(pixels.numpy(), cpu[modality])
+            assert np.isfinite(cpu[modality]).any()
+    return frames, metadata, capture_wall_s
+
+
+def download(frames):
+    return {
+        name: {modality: pixels.numpy() for modality, pixels in frame.items()}
+        for name, frame in frames.items()
+    }
+
+
+def assert_retained(frames, expected):
+    for name, frame in download(frames).items():
+        for modality, pixels in frame.items():
+            np.testing.assert_array_equal(pixels, expected[name][modality])
+
+
+def cuda_layouts(runtime):
+    import omni.syntheticdata as syn
+    import warp as wp
+
+    result = {}
+    for camera in runtime.scene_resources.sensor_cameras:
+        result[camera.name] = {}
+        # Check below CameraSensor's host-promotion fallback as well as the
+        # public owned result. RGB/depth annotators must originate on CUDA.
+        for name, annotator in getattr(camera.camera, "_annotators", {}).items():
+            raw = annotator.get_data(device="cuda")
+            raw = raw["data"] if isinstance(raw, dict) else raw
+            assert isinstance(raw, wp.array) and raw.device.is_cuda
+            result[camera.name][name] = {
+                "device": str(raw.device),
+                "shape": raw.shape,
+                "dtype": str(raw.dtype),
+            }
+        for modality, template in getattr(camera.camera, "_cuda_templates", {}).items():
+            attrs = syn.sensors.get_synthetic_data().get_node_attributes(
+                template,
+                [
+                    "outputs:cudaDeviceIndex",
+                    "outputs:bufferSize",
+                    "outputs:width",
+                    "outputs:height",
+                    "outputs:strides",
+                    "outputs:format",
+                ],
+                camera.camera.render_product_path,
+            )
+            result[camera.name][modality] = {
+                key.removeprefix("outputs:"): value.tolist()
+                if hasattr(value, "tolist")
+                else value
+                for key, value in attrs.items()
+            }
+    return result
 
 
 def changed_pixels(before, after):
@@ -160,7 +236,9 @@ def run(args):
     runtime = create_mirror_runtime(camera_config(args))
     try:
         baseline = runtime.get_state()
-        first, initial_meta = capture(runtime)  # no warmup physics steps
+        owned, initial_meta, first_wall_s = capture(runtime)  # no warmup physics steps
+        first = download(owned)
+        layouts = cuda_layouts(runtime)
         moved = deepcopy(baseline)
         obj = moved["objects"]["Tblock"]
         obj["positions_local"][1] += 0.15
@@ -178,8 +256,9 @@ def run(args):
             "linkerbot.snapshot.newton_solver_integration_state", None
         )
         runtime.set_state(moved)
-        second, moved_meta = capture(runtime)
-        differences = changed_pixels(first, second)
+        second, moved_meta, moved_wall_s = capture(runtime)
+        differences = changed_pixels(first, download(second))
+        assert_retained(owned, first)
         assert all(count > 10 for count in differences.values()), differences
         for name in initial_meta:
             assert (
@@ -187,8 +266,8 @@ def run(args):
                 > initial_meta[name]["native_frame_id"]
             )
         runtime.restore_snapshot(baseline)
-        restored, restored_meta = capture(runtime)
-        restore_error = changed_pixels(first, restored)
+        restored, restored_meta, restored_wall_s = capture(runtime)
+        restore_error = changed_pixels(first, download(restored))
         if "depth" in args.modalities:
             assert all(
                 count < max(10, np.asarray(first[name]["depth"]).size * 0.001)
@@ -245,7 +324,7 @@ def run(args):
         capture(runtime)
         assert observer is None or observer._next_sample_time == deadlines
         runtime.reset(hold_after_reset=False)
-        _, reset_meta = capture(runtime)
+        _, reset_meta, reset_wall_s = capture(runtime)
         report = {
             "profile": args.profile,
             "gui": args.gui,
@@ -259,16 +338,25 @@ def run(args):
             "sampled_wall_s": sampled_wall_s,
             "product_selection": activation,
             "reset": reset_meta,
+            "cuda_layouts": layouts,
+            "owned_cuda_frames": True,
+            "cuda_capture_wall_s": {
+                "initial": first_wall_s,
+                "moved": moved_wall_s,
+                "restored": restored_wall_s,
+                "reset": reset_wall_s,
+            },
         }
     except BaseException:
         traceback.print_exc()
         runtime.close()
         raise
-    runtime.close(
-        before_session_close=lambda _report: print(
-            MARKER + " " + json.dumps(report), flush=True
-        )
-    )
+
+    def closed_cameras(_report):
+        assert_retained(owned, first)
+        print(MARKER + " " + json.dumps(report), flush=True)
+
+    runtime.close(before_session_close=closed_cameras)
 
 
 def main():
@@ -318,17 +406,17 @@ def exercise_product_selection(runtime):
     assert ids() == before, (before, ids())
     for selection in ((), ("missing",), (cameras[0].name, cameras[0].name)):
         try:
-            runtime.render(selection)
+            runtime.render(selection, device="cpu")
         except ValueError:
             pass
         else:
             raise AssertionError(f"accepted invalid camera selection: {selection}")
     selected = cameras[0].name
-    first = runtime.render((selected,))
+    first = runtime.render((selected,), device="cpu")
     assert tuple(first) == (selected,)
     frozen = {name: pixels.copy() for name, pixels in first[selected].items()}
     first_id = cameras[0].get_capture_metadata()["native_frame_id"]
-    runtime.render((selected,))
+    runtime.render((selected,), device="cpu")
     assert cameras[0].get_capture_metadata()["native_frame_id"] > first_id
     for name in before:
         if name != selected:

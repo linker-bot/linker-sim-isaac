@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 import time
+import re
 
 from linkerbot_sim.mirror.lifecycle import close_result_stopped
 
@@ -31,21 +32,21 @@ class CameraBundle:
 
     cameras: tuple[object, ...] = ()
     output: object | None = None
-    capture_hook: Callable[[Sequence[object]], object] | None = None
+    capture_hook: Callable[[Sequence[object], str], object] | None = None
     _closed: bool = field(default=False, init=False, repr=False)
 
-    def capture(self, cameras: Sequence[object]) -> object:
+    def capture(self, cameras: Sequence[object], *, device: str) -> object:
         if self._closed:
             raise RuntimeError("CameraBundle is closed")
         if self.capture_hook is not None:
-            return self.capture_hook(cameras)
+            return self.capture_hook(cameras, device)
         frames: dict[str, object] = {}
         for index, camera in enumerate(cameras):
             getter = getattr(camera, "get_current_frame", None)
             if not callable(getter):
                 continue
             name = str(getattr(camera, "name", f"camera_{index}"))
-            frames[name] = getter(clone=True)
+            frames[name] = getter(clone=True, device=device)
         return frames
 
     def close(self) -> bool:
@@ -77,11 +78,19 @@ class RenderCoordinator:
         self._gui_serviced()
 
     def render_frame(
-        self, camera_ids: Sequence[str] | None = None, *, capture: bool = True
+        self,
+        camera_ids: Sequence[str] | None = None,
+        *,
+        capture: bool = True,
+        device: str = "cuda",
     ) -> object:
         """Capture a new frozen snapshot for selected cameras, without publishing outputs."""
 
         self._require_open()
+        if device not in ("cpu", "cuda") and (
+            not isinstance(device, str) or not re.fullmatch(r"cuda:[0-9]+", device)
+        ):
+            raise ValueError("render device must be cpu, cuda or cuda:<index>")
         if type(capture) is not bool:
             raise TypeError("render capture must be a boolean")
         cameras = self._select_cameras(camera_ids)
@@ -118,7 +127,7 @@ class RenderCoordinator:
             result = (
                 {}
                 if not capture or self.cameras is None
-                else self.cameras.capture(cameras)
+                else self.cameras.capture(cameras, device=device)
             )
             self._activate(())
             self._gui_serviced()

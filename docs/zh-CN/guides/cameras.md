@@ -72,13 +72,43 @@ Newton 为 `kit_render_product_frame`）、
 不是原生曝光身份；没有匹配渲染的物理步不能把旧像素标成新观测。原生帧号只在 Kit 进程内有效，
 快照序号只在当前 coordinator 内有效。相机 handle 的 `get_capture_metadata()` 返回相同身份信息。
 
-定向回归为 `scripts/smoke_mirror_camera.py`：无物理预热的首帧、暂停物块 set/restore、reset、
+定向回归为 `scripts/smoke_mirror_camera.py`（默认 `newton_cuda`）：无物理预热的首帧、暂停物块 set/restore、reset、
 产品停用与子集新帧。使用 `--record-root <空目录>` 时每步允许自动采样，supervisor 在关闭后
 解码 RGB/depth 文件并检查原生身份、物理时间和频率。可选 `--gui`、
 `--resolution 1920x1080`、`--cameras 4`，或
 `--cameras 3 --frequencies 60 30 10 --steps 120`。
 `--modalities rgb` / `--modalities depth` 验证单模态。也提供 640×320 诊断分辨率，
 它不是设备标定 preset。这些检查不代表墙钟吞吐达到 60 FPS。
+同时验证原生 CUDA 数组、后续渲染及相机关闭后仍有效的自有副本，以及同一曝光的显式 CPU 下载一致性。
+
+## Python 图像设备与所有权
+
+`runtime.render(camera_ids=None, device="cuda")` 返回相机名 → 模态 → Warp 数组。
+`cuda` 使用根配置 `compute.cuda_device`；即使物理采用 CPU，RTX 图像仍在该 GPU 上。
+`cuda:<index>` 要求原生数据位于指定设备。遇到 host 数据或设备不一致时抛错，不静默上传或跨卡复制。
+`device="cpu"` 显式下载为自有 NumPy 数组。使用 NumPy 的调用方应选择 CPU，或显式下载返回数组。
+
+RGB 为 uint8 `(height, width, 3)`；Depth 为 float32，Newton 使用 `(height, width)`，
+PhysX 使用 `(height, width, 1)`，表示以场景米为单位的 image-plane 距离，本接口不替换无效或
+非有限值。Newton 直接导出 SyntheticData CUDA buffer，校验格式、尺寸和字节 stride，以设备 view
+去掉 alpha，不激活 host `ExportRawArray` 链路。Physics-to-USD 位姿发布仍是独立的 host 同步边界。
+
+返回的 CUDA 数组拥有独立 allocation，设备复制在返回前完成，后续采集或相机/runtime 关闭不会覆盖像素。
+CUDA context 存活时可以保留这些数组，但这不允许跨线程访问 Kit 或跨进程传递数组。
+直接 camera handle 的 `get_current_frame(device="cuda:0", clone=True)` 获取当前帧自有副本，
+不请求新曝光；`clone=False` / `device=None` 可能返回借用的原生 buffer，仅在下一次渲染或关闭前有效。
+Handle 的 `get_current_frame()` 默认设备仍为 CPU，消费者应明确选择设备。
+
+```python
+frames = runtime.render(camera_ids=("top",))  # 自有 CUDA 数据
+rgb_gpu = frames["top"]["rgb"]
+rgb_numpy = rgb_gpu.numpy()  # CPU I/O 或分析所需的显式下载
+# 另外请求一次新曝光，并返回 CPU 数据：
+cpu_frames = runtime.render(camera_ids=("top",), device="cpu")
+```
+
+自动 PNG/NPY/Foxglove 输出继续使用已有显式 CPU 下载和有界 writer。GPU 视频编码属于后续独立功能，
+本接口不增加 codec。
 
 ## 数据与背压
 
