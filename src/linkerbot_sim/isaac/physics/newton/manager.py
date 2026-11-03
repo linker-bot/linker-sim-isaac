@@ -1333,8 +1333,8 @@ class NewtonRuntime:
             return
         import newton
 
-        # A teleport/reset/clone invalidates old contact anchors. Refresh all
-        # worlds on the next physical step, without reading device masks on host.
+        # A teleport/reset/clone invalidates selected worlds' contact history.
+        # Also refresh collision before the next solver step, even between ticks.
         self._collision_phase = 0
         assert self.model is not None and self.state is not None
         assert self._projector is not None
@@ -1350,6 +1350,10 @@ class NewtonRuntime:
             for row_world, row_mask, _owner in self._device_projection_rows
         )
         with self._owner_stream_scope():
+            pipeline = self._collision_pipeline
+            matching_enabled = (
+                pipeline is not None and pipeline.contact_matching != "disabled"
+            )
             # projection 与 FK 可以覆盖不同 world：full-state restore 只进入 FK 集合，因而
             # solver 动态产生的 follower q/qd 会原样保留。mask 均由初始化时预分配的 device
             # buffer 或 Warp kernel 生成；这里不读取 articulation_world，也不上传 NumPy mask。
@@ -1370,6 +1374,8 @@ class NewtonRuntime:
                 drive.reset_from_positions(self.state.joint_q, projection_mask)
             if len(selected_worlds) == self._num_worlds:
                 fk_mask = None
+                if matching_enabled:
+                    pipeline.reset_contact_matching()
             else:
                 # 即使 device mask 全 false 也不能在 Python 读取其值来跳过。这里重新构造
                 # dirty mask，并让 articulation-map kernel 与 eval_fk(mask) 自然成为 no-op。
@@ -1378,6 +1384,10 @@ class NewtonRuntime:
                     masked_rows=device_dirty_rows,
                 )
                 fk_mask = self._world_masks.articulation_mask(selected_mask)
+                if matching_enabled:
+                    pipeline.reset_contact_matching(
+                        self._world_masks.contact_mask(selected_mask)
+                    )
             newton.eval_fk(
                 self.model,
                 self.state.joint_q,

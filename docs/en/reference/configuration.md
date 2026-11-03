@@ -437,10 +437,13 @@ state uses the same Warp float32 representation on both devices.
 | `default_contact_gap_m` | 0.0001 | Fallback detection gap (0.1 mm), not allowed penetration |
 
 The pinned Newton pipeline forces deterministic collision sorting when matching is
-`latest` or `sticky`; runtime diagnostics report this effective value. Matching
-history is not part of this runtime's reset/snapshot/clone state. In particular,
-`sticky` may reuse pre-reset contact anchors; keep the default `disabled` for these
-lifecycle operations until matching history is handled explicitly.
+`latest` or `sticky`; runtime diagnostics report this effective value. Reset and
+cold state writes (including snapshot restore, clone, and teleport) invalidate
+matching history for the affected worlds and force collision detection before the
+next solver step. Partial writes preserve other worlds' history, including their
+contacts with shared ground. Matching history is not serialized in snapshots or
+copied by clone: restored/cloned worlds establish fresh contacts rather than exactly
+continuing the previous contact history. The default remains `disabled`.
 
 Explicit asset gap values, **including zero**, take precedence over the fallback.
 The default is applied before import; shapes are not overwritten after import.

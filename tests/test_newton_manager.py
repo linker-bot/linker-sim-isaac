@@ -1306,6 +1306,7 @@ def test_full_generalized_state_write_is_fk_dirty_without_projection(
 
     state = SimpleNamespace(joint_q=object(), joint_qd=object())
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_pipeline = None
     manager._collision_phase = 0
     manager._graphs = {}
     manager.compliant_drive = None
@@ -1420,6 +1421,7 @@ def test_device_partial_reset_projection_preserves_unselected_follower(
     row_world = wp.array([0, 1], dtype=wp.int32, device="cpu")
     partial = wp.array([True, False], dtype=wp.bool, device="cpu")
     manager = NewtonRuntime.__new__(NewtonRuntime)
+    manager._collision_pipeline = None
     manager._collision_phase = 0
     manager._graphs = {}
     manager.compliant_drive = None

@@ -7,11 +7,118 @@ import numpy as np
 import pytest
 
 from linkerbot_sim.isaac.physics.newton.manager import NewtonRuntime
+from linkerbot_sim.isaac.physics.newton.constraints import NewtonDeviceWorldMasks
 from linkerbot_sim.isaac.physics.newton.replication import (
     _load_newton_dependencies,
     _new_registered_builder,
 )
 from linkerbot_sim.isaac.spec import IsaacNewtonCpuSpec, IsaacNewtonCudaSpec
+
+
+@pytest.mark.parametrize("execution", ["cpu", "cuda"])
+@pytest.mark.parametrize("matching", ["latest", "sticky"])
+def test_cold_state_writes_invalidate_only_selected_contact_history(
+    execution, matching
+):
+    """Real contact matching, including global ground and captured CUDA collision."""
+    newton = pytest.importorskip("newton")
+    wp = pytest.importorskip("warp")
+    wp.init()
+    if execution == "cuda" and not wp.is_cuda_available():
+        pytest.skip("CUDA is required")
+    device = "cpu" if execution == "cpu" else "cuda:0"
+    builder = newton.ModelBuilder()
+    builder.add_ground_plane()
+    for _ in range(2):
+        builder.begin_world()
+        body = builder.add_link(
+            xform=wp.transform((0.0, 0.0, 0.019), wp.quat_identity())
+        )
+        builder.add_shape_sphere(body, radius=0.02)
+        joint = builder.add_joint_free(body)
+        builder.add_articulation([joint])
+        builder.end_world()
+    model = builder.finalize(device=device)
+    runtime = NewtonRuntime.__new__(NewtonRuntime)
+    runtime.device = device
+    runtime.stream = wp.Stream(device) if execution == "cuda" else None
+    runtime.model = model
+    runtime.state = model.state()
+    runtime._num_worlds = model.world_count
+    runtime._dirty_worlds = set()
+    runtime._projection_worlds = set()
+    runtime._device_dirty_rows = []
+    runtime._device_projection_rows = []
+    runtime._projector = object()  # Full q/qd writes must not project followers.
+    runtime._world_masks = NewtonDeviceWorldMasks(
+        world_count=model.world_count,
+        articulation_world=model.articulation_world,
+        device=device,
+        stream=runtime.stream,
+    )
+    with runtime._owner_stream_scope():
+        newton.eval_fk(
+            model, runtime.state.joint_q, runtime.state.joint_qd, runtime.state
+        )
+        pipeline = newton.CollisionPipeline(model, contact_matching=matching)
+        contacts = pipeline.contacts()
+        pipeline.collide(runtime.state, contacts)
+        graph = None
+        if execution == "cuda":
+            with wp.ScopedCapture(stream=runtime.stream) as capture:
+                pipeline.collide(runtime.state, contacts)
+            graph = capture.graph
+    runtime._collision_pipeline = pipeline
+
+    def collide_and_check(expected_matched):
+        with runtime._owner_stream_scope():
+            if graph is None:
+                pipeline.collide(runtime.state, contacts)
+            else:
+                wp.capture_launch(graph, stream=runtime.stream)
+        if runtime.stream is not None:
+            wp.synchronize_stream(runtime.stream)
+        count = int(contacts.rigid_contact_count.numpy()[0])
+        assert count == 2
+        shape_world = model.shape_world.numpy()
+        worlds = np.maximum(
+            shape_world[contacts.rigid_contact_shape0.numpy()[:count]],
+            shape_world[contacts.rigid_contact_shape1.numpy()[:count]],
+        )
+        matched = contacts.rigid_contact_match_index.numpy()[:count] >= 0
+        np.testing.assert_array_equal(matched[np.argsort(worlds)], expected_matched)
+
+    def flush(worlds=(), device_rows=()):
+        runtime.on_newton_view_write(
+            view=object(), category="state", field="joint_q_full", world_indices=worlds
+        )
+        runtime._device_dirty_rows.extend(device_rows)
+        runtime._collision_phase = 1
+        runtime._flush_cold_state_updates()
+        assert runtime._collision_phase == 0
+
+    collide_and_check([True, True])
+    # Host-selected restore/clone must also invalidate history without projection.
+    flush((0,))
+    collide_and_check([False, True])
+    collide_and_check([True, True])
+    # Device selection is in view row order, which need not equal world order.
+    row_world = wp.array([1, 0], dtype=wp.int32, device=device)
+    selected = wp.array([True, False], dtype=wp.bool, device=device)
+    flush(device_rows=[(row_world, selected, selected)])
+    collide_and_check([True, False])
+    collide_and_check([True, True])
+    empty = wp.zeros(2, dtype=wp.bool, device=device)
+    flush(device_rows=[(row_world, empty, empty)])
+    collide_and_check([True, True])
+    # Consecutive partial writes accumulate until collision consumes the mask.
+    flush((0,))
+    flush(device_rows=[(row_world, selected, selected)])
+    collide_and_check([False, False])
+    collide_and_check([True, True])
+    flush((0, 1))
+    collide_and_check([False, False])
+    collide_and_check([True, True])
 
 
 def test_mjcf_fallback_keeps_native_inheritance_and_geometry(tmp_path):

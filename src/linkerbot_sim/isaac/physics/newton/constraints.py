@@ -672,6 +672,11 @@ class NewtonDeviceWorldMasks:
                 dtype=wp.bool,
                 device=self.device,
             )
+            self._contact_worlds = wp.empty(
+                self.world_count + 1,
+                dtype=wp.bool,
+                device=self.device,
+            )
 
     def world_mask(
         self,
@@ -752,6 +757,29 @@ class NewtonDeviceWorldMasks:
             )
         return self._selected_articulations
 
+    def contact_mask(self, selected_world_mask: object) -> object:
+        """Map world selection to Newton's bool mask, leaving global shapes unselected."""
+        import warp as wp
+
+        _require_warp_vector(
+            selected_world_mask,
+            name="selected_world_mask",
+            dtype=wp.int32,
+            minimum_size=self.world_count,
+            exact_size=self.world_count,
+            device=self.device,
+        )
+        with _warp_stream_scope(self.stream):
+            wp.launch(
+                _contact_world_mask_kernel(),
+                dim=self.world_count + 1,
+                inputs=[selected_world_mask],
+                outputs=[self._contact_worlds],
+                device=self.device,
+                stream=self.stream,
+            )
+        return self._contact_worlds
+
 
 def make_selected_world_mask(
     selected_worlds: Sequence[int],
@@ -810,6 +838,7 @@ class _WarpProjectionLevel:
 _projection_kernel: Any | None = None
 _mark_selected_world_kernel_instance: Any | None = None
 _articulation_world_mask_kernel_instance: Any | None = None
+_contact_world_mask_kernel_instance: Any | None = None
 _masked_rows_to_worlds_kernel_instance: Any | None = None
 
 
@@ -886,6 +915,29 @@ def _articulation_world_mask_kernel() -> object:
 
     _articulation_world_mask_kernel_instance = map_articulation_worlds
     return _articulation_world_mask_kernel_instance
+
+
+def _contact_world_mask_kernel() -> object:
+    global _contact_world_mask_kernel_instance
+    if _contact_world_mask_kernel_instance is not None:
+        return _contact_world_mask_kernel_instance
+    import warp as wp
+
+    @wp.kernel
+    def map_contact_worlds(
+        selected_world_mask: wp.array(dtype=wp.int32),
+        contact_world_mask: wp.array(dtype=wp.bool),
+    ):
+        world = wp.tid()
+        selected = False
+        if world < selected_world_mask.shape[0]:
+            selected = selected_world_mask[world] != 0
+        # The final entry is global world -1. Selecting a shared ground here
+        # would also discard otherwise unaffected worlds' ground contacts.
+        contact_world_mask[world] = selected
+
+    _contact_world_mask_kernel_instance = map_contact_worlds
+    return _contact_world_mask_kernel_instance
 
 
 def _masked_rows_to_worlds_kernel() -> object:
