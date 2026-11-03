@@ -590,7 +590,7 @@ class NewtonRuntime:
     def borrow_solver_integration_state(self) -> object:
         """借用 manager-owned ``[world, TIME|ACT|WARMSTART]`` canonical buffer。
 
-        CUDA 返回 Warp array，CPU 返回 NumPy float64 array。调用方不得替换其 storage；
+        CPU/CUDA 均返回 Warp float32 array。调用方不得替换其 storage；
         实际写入必须经过 :meth:`set_solver_integration_state`。
         """
 
@@ -605,8 +605,8 @@ class NewtonRuntime:
     ) -> None:
         """恢复全部或 mask 选中的 MuJoCo integration rows。
 
-        CUDA 路径仍要求 full-N device buffer 与 device mask；CPU 路径严格只有一个 world，
-        接受 NumPy/bool selector。两者都只保存不由 Newton State/Control 覆盖的字段。
+        两端均要求 full-N Warp float32 buffer 与可选 Warp bool world mask，设备与
+        runtime 一致；只保存不由 Newton State/Control 覆盖的字段。
         """
 
         self._require_initialized()
@@ -684,8 +684,6 @@ class NewtonRuntime:
         self._synchronize_owner_stream()
         drive = getattr(self, "compliant_drive", None)
         if drive is not None:
-            import warp as wp
-
             self._flush_cold_state_updates()
             with self._owner_stream_scope():
                 drive.restore(
@@ -1108,7 +1106,12 @@ class NewtonRuntime:
             "iterations": self.physics_spec.iterations,
             "line_search_iterations": self.physics_spec.line_search_iterations,
             "solver_deterministic": self.physics_spec.solver_deterministic,
-            "collision_deterministic": self.physics_spec.collision_deterministic,
+            # Matching can force sorting on upstream, even when requested off.
+            "collision_deterministic": getattr(
+                self._collision_pipeline,
+                "deterministic",
+                self.physics_spec.collision_deterministic,
+            ),
             "contact_matching": self.physics_spec.contact_matching,
             "collision_interval": self.physics_spec.collision_interval,
             "collision_frequency_hz": self.physics_spec.substeps
@@ -1269,7 +1272,7 @@ class NewtonRuntime:
                 native_control = drive.control
             for substep in range(substeps):
                 if drive is not None:
-                    drive.apply(self.state, substep)
+                    drive.apply(self.state)
                 # Refresh geometry at the configured cadence; the solver still
                 # updates separation and solves forces on every physical step.
                 contacts = None

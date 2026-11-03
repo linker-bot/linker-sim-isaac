@@ -436,6 +436,12 @@ state uses the same Warp float32 representation on both devices.
 | `contact_matching` | disabled | No persistent matching; `latest` and `sticky` remain explicit choices |
 | `default_contact_gap_m` | 0.0001 | Fallback detection gap (0.1 mm), not allowed penetration |
 
+The pinned Newton pipeline forces deterministic collision sorting when matching is
+`latest` or `sticky`; runtime diagnostics report this effective value. Matching
+history is not part of this runtime's reset/snapshot/clone state. In particular,
+`sticky` may reuse pre-reset contact anchors; keep the default `disabled` for these
+lifecycle operations until matching history is handled explicitly.
+
 Explicit asset gap values, **including zero**, take precedence over the fallback.
 The default is applied before import; shapes are not overwritten after import.
 Read back the resulting native `geom_gap` when validating an asset. These are the

@@ -455,7 +455,7 @@ class NewtonCompliantDrive:
             stream=self.stream,
         )
 
-    def apply(self, state, substep):
+    def apply(self, state):
         import warp as wp
 
         wp.launch(

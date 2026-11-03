@@ -195,6 +195,11 @@ CPU 仍限定 Mirror 单 world、同步执行；CUDA 另支持图捕获和 Kalei
 | `contact_matching` | disabled | 不保持跨步接触匹配；可显式选择 latest/sticky |
 | `default_contact_gap_m` | 0.0001 | 缺省检测 gap，0.1 mm，并非允许穿透量 |
 
+固定版本的 Newton 在 `latest` 或 `sticky` 匹配模式下强制开启碰撞确定性排序，
+运行时诊断报告实际生效值。匹配历史尚未纳入 reset/snapshot/clone 状态管理，尤其
+`sticky` 可能复用重置前的接触锚点；这些生命周期操作应保持默认 `disabled`，
+直到匹配历史得到显式处理。
+
 资产明确指定的 gap（**包括0**）优先，默认值在导入前设置，不在导入后覆盖所有 shape。
 资产验收需读回实际 `geom_gap`。这些是当前候选设置，后续在任务成功率和性能共同约束下
 另行测试；这些运行时设置不修改碰撞几何及资产限角。

@@ -495,12 +495,21 @@ def test_cpu_solver_constructor_kwargs_select_shared_warp_pipeline() -> None:
     }
 
 
-def test_manager_diagnostics_report_effective_constraint_solver() -> None:
+@pytest.mark.parametrize(
+    "requested,matching,effective",
+    [(True, "disabled", True), (False, "disabled", False), (False, "sticky", True)],
+)
+def test_manager_diagnostics_report_effective_solver_and_collision_settings(
+    requested, matching, effective
+) -> None:
     manager = NewtonRuntime.__new__(NewtonRuntime)
     manager._collision_phase = 0
     manager._graphs = {}
     manager.compliant_drive = None
-    manager.physics_spec = IsaacNewtonCudaSpec()
+    manager.physics_spec = IsaacNewtonCudaSpec(
+        collision_deterministic=requested, contact_matching=matching
+    )
+    manager._collision_pipeline = SimpleNamespace(deterministic=effective)
     manager.physics_dt = 1.0 / 60.0
     manager.execution = "cuda"
     manager.device = "cuda:0"
@@ -519,8 +528,8 @@ def test_manager_diagnostics_report_effective_constraint_solver() -> None:
     assert diagnostics["contact_pipeline"] == "newton"
     assert diagnostics["solver_implementation"] == "mujoco_warp"
     assert diagnostics["solver_deterministic"] is False
-    assert diagnostics["collision_deterministic"] is True
-    assert diagnostics["contact_matching"] == "disabled"
+    assert diagnostics["collision_deterministic"] is effective
+    assert diagnostics["contact_matching"] == matching
     assert diagnostics["default_contact_gap_m"] == 0.0001
 
 
