@@ -193,14 +193,18 @@ class MirrorRuntime:
         if callable(observe):
             observe(phase="idle")
 
-    def render(self, camera_ids: Sequence[str] | None = None) -> object:
+    def render(
+        self, camera_ids: Sequence[str] | None = None, *, device: str = "cuda"
+    ) -> object:
         """Return fresh configured modalities for all or selected cameras; never step physics."""
 
         self._require_open("render")
         self._require_owner_thread("render")
         if self.rendering is None:
             raise RuntimeError("the current Mirror config does not enable rendering")
-        return self.rendering.render_frame(camera_ids)
+        if device == "cuda":
+            device = f"cuda:{self.config.compute.cuda_device}"
+        return self.rendering.render_frame(camera_ids, device=device)
 
     def get_state(self) -> dict[str, object]:
         self._require_open("get_state")

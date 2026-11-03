@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
+import re
 from typing import Any
 
 from linkerbot_sim.isaac.physics.backend import normalize_physics_backend
@@ -189,11 +190,13 @@ class SensorCameraRuntime:
             data = frame.get(modality) if isinstance(frame, dict) else None
         return _array_for_consumer(data, device=device, clone=clone)
 
-    def get_current_frame(self, *, clone: bool = False) -> dict[str, object]:
-        """按项目旧 facade 契约返回已配置 annotator 的 frame mapping。"""
+    def get_current_frame(
+        self, *, clone: bool = False, device: str | None = "cpu"
+    ) -> dict[str, object]:
+        """Read configured modalities; CUDA clone owns pixels beyond the next render."""
 
         return {
-            modality: self.get_modality_data(modality, clone=clone)
+            modality: self.get_modality_data(modality, device=device, clone=clone)
             for modality in self.settings.modalities
         }
 
@@ -548,6 +551,7 @@ class _NewtonSyntheticDataCamera:
         self._window = None
         self._viewport = None
         self._sensor_types: dict[str, object] = {}
+        self._cuda_templates: dict[str, str] = {}
         self._initialized = False
         try:
             # Robot-mounted camera 的 parent 此时可能尚未随资产导入。这里只预留
@@ -595,9 +599,17 @@ class _NewtonSyntheticDataCamera:
         self._sensor_types = {
             name: available[name] for name in self._settings.modalities
         }
-        for sensor_type in self._sensor_types.values():
-            syn.sensors.create_or_retrieve_sensor(viewport, sensor_type)
         self._viewport = viewport
+        graph = syn.sensors.get_synthetic_data()
+        # Export renderer-owned CUDA buffers directly. ExportRawArray activates a
+        # host-copy node even when the eventual consumer wants a CUDA tensor.
+        for modality, sensor_type in self._sensor_types.items():
+            render_var = syn.SyntheticData.convert_sensor_type_to_rendervar(
+                sensor_type.name
+            )
+            template = render_var + "buffPtr"
+            self._cuda_templates[modality] = template
+            graph.activate_node_template(template, 0, [viewport.render_product_path])
         self._initialized = True
 
     def get_data(self, annotator: str) -> tuple[object, dict[str, object]]:
@@ -605,17 +617,25 @@ class _NewtonSyntheticDataCamera:
             raise RuntimeError("Newton camera is closed")
         import omni.syntheticdata as syn
 
-        getters = {
-            "rgb": syn.sensors.get_rgb,
-            "distance_to_image_plane": syn.sensors.get_distance_to_image_plane,
-        }
-        getter = getters.get(str(annotator))
-        if getter is None:
+        modality = {"rgb": "rgb", "distance_to_image_plane": "depth"}.get(annotator)
+        if modality not in self._cuda_templates:
             raise ValueError(f"Newton camera annotator is unsupported: {annotator}")
-        data = getter(self._viewport)
-        if str(annotator) == "rgb" and getattr(data, "ndim", 0) == 3:
-            data = data[..., :3]
-        return data, {}
+        attributes = syn.sensors.get_synthetic_data().get_node_attributes(
+            self._cuda_templates[modality],
+            [
+                "outputs:dataPtr",
+                "outputs:cudaDeviceIndex",
+                "outputs:bufferSize",
+                "outputs:width",
+                "outputs:height",
+                "outputs:strides",
+                "outputs:format",
+            ],
+            self._viewport.render_product_path,
+        )
+        return _cuda_image_from_native_buffer(
+            attributes or {}, modality=modality, resolution=self._settings.resolution
+        ), {}
 
     def set_render_active(self, active: bool) -> None:
         """选择本相机 viewport；只控制渲染更新，不推进物理。"""
@@ -654,14 +674,16 @@ class _NewtonSyntheticDataCamera:
         if self._closed:
             return
         first_error: BaseException | None = None
-        if self._initialized and self._viewport is not None:
+        if self._cuda_templates and self._viewport is not None:
             try:
                 import omni.syntheticdata as syn
 
-                syn.sensors.disable_sensors(
-                    self._viewport,
-                    list(self._sensor_types.values()),
-                )
+                graph = syn.sensors.get_synthetic_data()
+                for modality, template in tuple(self._cuda_templates.items()):
+                    graph.deactivate_node_template(
+                        template, 0, [self._viewport.render_product_path]
+                    )
+                    del self._cuda_templates[modality]
             except (ImportError, ModuleNotFoundError):
                 pass
             except BaseException as exc:
@@ -669,6 +691,7 @@ class _NewtonSyntheticDataCamera:
             else:
                 self._initialized = False
                 self._sensor_types.clear()
+                self._cuda_templates.clear()
         destroy = getattr(self._window, "destroy", None)
         if callable(destroy):
             try:
@@ -689,6 +712,7 @@ class _NewtonSyntheticDataCamera:
         if first_error is not None:
             raise first_error
         self._sensor_types.clear()
+        self._cuda_templates.clear()
         self._initialized = False
         self._stage = None
         self._closed = True
@@ -901,17 +925,99 @@ def _array_for_consumer(
 ) -> object:
     """按 facade 请求把 Warp/array-like payload 转为消费者可用数据。"""
 
+    if device not in (None, "cpu", "cuda") and (
+        not isinstance(device, str) or not re.fullmatch(r"cuda:[0-9]+", device)
+    ):
+        raise ValueError("camera device must be cpu, cuda or cuda:<index>")
     if value is None:
         return None
     if device == "cpu":
         numpy_method = getattr(value, "numpy", None)
         if callable(numpy_method):
             value = numpy_method()
+    elif device is not None:
+        import warp as wp
+
+        if not isinstance(value, wp.array) or not value.device.is_cuda:
+            raise RuntimeError("camera did not provide a native CUDA array")
+        if value.device != wp.get_device(device):
+            raise RuntimeError("camera CUDA device differs from requested device")
+    if clone and getattr(getattr(value, "device", None), "is_cuda", False):
+        import warp as wp
+
+        # Finish the owned device copy before another Kit update can overwrite
+        # the borrowed renderer buffer; callers may use it after runtime close.
+        owned = wp.clone(value)
+        wp.synchronize_stream(wp.get_stream(value.device))
+        return owned
     if clone:
         copy_method = getattr(value, "copy", None)
         if callable(copy_method):
             value = copy_method()
     return value
+
+
+def _cuda_image_from_native_buffer(
+    attributes: dict[str, object], *, modality: str, resolution: tuple[int, int]
+) -> object:
+    """Borrow a native device buffer until the next render; never upload host pixels."""
+
+    if modality not in ("rgb", "depth"):
+        raise ValueError(f"unsupported CUDA image modality: {modality}")
+    width, height = resolution
+    pointer = attributes.get("outputs:dataPtr", 0)
+    device = attributes.get("outputs:cudaDeviceIndex", -1)
+    size = attributes.get("outputs:bufferSize", 0)
+    if not pointer:
+        # Native readiness tests need an empty shape while the renderer warms up.
+        return None
+    if (
+        type(pointer) is not int
+        or pointer <= 0
+        or type(device) is not int
+        or device < 0
+    ):
+        raise RuntimeError("SyntheticData did not provide a CUDA image pointer")
+    import warp as wp
+    from omni.gpu_foundation_factory import TextureFormat
+
+    # SyntheticData describes byte strides in (pixel, row) order. Validate the
+    # render-var format and allocation before constructing any device view.
+    strides = tuple(attributes.get("outputs:strides", ()))
+    expected_format = (
+        TextureFormat.RGBA8_UNORM if modality == "rgb" else TextureFormat.R32_SFLOAT
+    )
+    if (
+        attributes.get("outputs:width") != width
+        or attributes.get("outputs:height") != height
+        or attributes.get("outputs:format") != int(expected_format)
+        or len(strides) != 2
+        or strides[0] != 4
+        or strides[1] < width * 4
+        or strides[1] % 4
+        or size != strides[1] * height
+        or pointer % 4
+    ):
+        raise RuntimeError(f"unexpected native {modality} image buffer layout")
+    row_stride = int(strides[1])
+
+    if modality == "rgb":
+        return wp.array(
+            ptr=pointer,
+            dtype=wp.uint8,
+            shape=(height, width, 3),
+            strides=(row_stride, 4, 1),
+            device=f"cuda:{device}",
+            copy=False,
+        )
+    return wp.array(
+        ptr=pointer,
+        dtype=wp.float32,
+        shape=(height, width),
+        strides=(row_stride, 4),
+        device=f"cuda:{device}",
+        copy=False,
+    )
 
 
 def _first_scalar(value: object) -> float:

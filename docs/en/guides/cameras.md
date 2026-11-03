@@ -124,7 +124,7 @@ step without a matching render cannot relabel old pixels as a new observation.
 Native IDs are local to the Kit process; snapshot indices are local to the coordinator.
 Camera handles expose the same identity through `get_capture_metadata()`.
 
-The focused regression is `scripts/smoke_mirror_camera.py`: first frame without
+The focused regression is `scripts/smoke_mirror_camera.py` (default `newton_cuda`): first frame without
 physics warmup, paused object set/restore, reset, product inactivity and fresh subset
 capture. With `--record-root <empty-directory>`, every step permits automatic capture;
 the supervisor decodes drained RGB/depth and checks native identities, physical time
@@ -132,6 +132,9 @@ and cadence. Select `--gui`, `--resolution 1920x1080`, `--cameras 4`, or
 `--cameras 3 --frequencies 60 30 10 --steps 120` for focused variants.
 `--modalities rgb` or `--modalities depth` tests a single configured modality.
 A 640×320 diagnostic setting is also available; it is not a device calibration preset.
+The smoke also verifies native CUDA arrays, owned copies surviving later renders and
+camera teardown, and explicit CPU downloads matching the same exposure. These checks
+do not establish 60 FPS wall-clock throughput.
 
 The physics runtime does not own cameras. `CameraBundle` owns camera handles and their
 output sink; Mirror closes the bundle before the Isaac session.
@@ -151,9 +154,39 @@ disk or consumer throughput long before rendering saturates.
 
 ## Access From Python
 
-`runtime.render()` returns the camera bundle's capture result when configured. Camera
-handles normally expose `get_current_frame(clone=True)`; frames are copied before a
-background consumer retains them.
+`runtime.render(camera_ids=None, device="cuda")` returns a camera-name → modality →
+Warp-array mapping. `cuda` selects `compute.cuda_device`, including for CPU physics;
+RTX still renders on the configured GPU. `cuda:<index>` requires that exact native
+device. A host payload or device mismatch raises; it is never silently uploaded or
+copied to another GPU. `device="cpu"` explicitly downloads into owned NumPy arrays.
+Callers using NumPy must now select CPU or explicitly download the returned arrays.
+
+RGB is uint8 `(height, width, 3)`. Depth is float32 `(height, width)` on Newton and
+`(height, width, 1)` on PhysX, distance to the image plane in scene meters; invalid
+or non-finite depth is not replaced by this interface. Newton exports SyntheticData
+CUDA buffers directly, validates format, dimensions and byte strides, and drops alpha
+through a device view. It does not activate the host `ExportRawArray` path. Physics-to-USD
+pose publication remains a separate host synchronization boundary.
+
+Returned CUDA arrays own their allocation. The device copy completes before returning,
+so subsequent captures or camera/runtime closure cannot overwrite the pixels. They may
+be retained while their CUDA context is alive; this does not authorize cross-thread Kit
+access or transfer them across processes. Direct camera handles expose
+`get_current_frame(device="cuda:0", clone=True)` for an owned copy of the current frame,
+without requesting a new exposure. `clone=False` / `device=None` may expose borrowed
+native buffers valid only until the next render or close. The handle's default
+`get_current_frame()` device is CPU; choose the device explicitly in consumers.
+
+```python
+frames = runtime.render(camera_ids=("top",))  # owned CUDA data
+rgb_gpu = frames["top"]["rgb"]
+rgb_numpy = rgb_gpu.numpy()  # explicit download for CPU I/O or analysis
+# A separate request for a fresh exposure, returned on CPU:
+cpu_frames = runtime.render(camera_ids=("top",), device="cpu")
+```
+
+Automatic PNG/NPY/Foxglove output keeps its existing explicit CPU download and bounded
+writers. GPU video encoding is a separate feature; this API does not add a codec.
 
 Do not access render products from transport workers. All capture and stage interaction
 must occur on the Mirror owner thread; only owned payloads may cross to output workers.

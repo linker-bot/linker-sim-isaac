@@ -201,6 +201,140 @@ def test_runtime_copies_warp_annotator_data_to_cpu() -> None:
     assert result is not payload._values
 
 
+@pytest.fixture
+def cuda_api(monkeypatch):
+    calls = []
+    api = ModuleType("warp")
+    api.get_device = lambda name: SimpleNamespace(
+        alias="cuda:0" if name == "cuda" else name,
+        is_cuda=name.startswith("cuda"),
+    )
+
+    class Array:
+        def __init__(self, *, device="cuda:0", **kwargs):
+            self.device = api.get_device(device)
+            self.layout = kwargs
+
+        def numpy(self):
+            pytest.fail("CUDA capture must not download pixels")
+
+    api.array = Array
+    api.uint8, api.float32 = object(), object()
+
+    def clone(value):
+        calls.append(("clone", value))
+        return Array(device=value.device.alias, **value.layout)
+
+    api.clone = clone
+    api.get_stream = lambda device: ("stream", device.alias)
+    api.synchronize_stream = lambda stream: calls.append(("sync", stream))
+    monkeypatch.setitem(sys.modules, "warp", api)
+    native = ModuleType("omni.gpu_foundation_factory")
+    native.TextureFormat = SimpleNamespace(RGBA8_UNORM=11, R32_SFLOAT=33)
+    monkeypatch.setitem(sys.modules, native.__name__, native)
+    return api, calls
+
+
+def test_cuda_capture_copies_on_device_and_completes_owned_copy(cuda_api):
+    wp, calls = cuda_api
+    runtime = _create_runtime()
+    borrowed = wp.array()
+    runtime.camera.get_data = lambda _: (borrowed, {})
+    result = runtime.get_current_frame(device="cuda:0", clone=True)
+    assert set(result) == {"rgb", "depth"}
+    assert all(value is not borrowed for value in result.values())
+    assert calls == [("clone", borrowed), ("sync", ("stream", "cuda:0"))] * 2
+    assert runtime.get_modality_data("rgb", device="cuda") is borrowed
+    assert runtime.get_modality_data("rgb", device=None) is borrowed
+
+
+@pytest.mark.parametrize("device", ["gpu", "cuda:-1", "cuda:1.5", "", 1])
+def test_invalid_explicit_device_rejected_without_copy(device, cuda_api):
+    wp, calls = cuda_api
+    with pytest.raises(ValueError, match="camera device"):
+        camera_runtime._array_for_consumer(wp.array(), device=device, clone=True)
+    assert calls == []
+
+
+@pytest.mark.parametrize("source", ["numpy", "cpu", "cuda:1"])
+def test_cuda_request_rejects_host_or_different_device_without_upload(source, cuda_api):
+    wp, calls = cuda_api
+    value = np.ones((2, 3)) if source == "numpy" else wp.array(device=source)
+    with pytest.raises(RuntimeError, match="CUDA"):
+        camera_runtime._array_for_consumer(value, device="cuda:0", clone=True)
+    assert calls == []
+
+
+def _native_attributes(modality="rgb", row_stride=16):
+    return {
+        "outputs:dataPtr": 4096,
+        "outputs:cudaDeviceIndex": 0,
+        "outputs:bufferSize": row_stride * 2,
+        "outputs:width": 3,
+        "outputs:height": 2,
+        "outputs:strides": np.asarray([4, row_stride], dtype=np.int32),
+        "outputs:format": 11 if modality == "rgb" else 33,
+    }
+
+
+@pytest.mark.parametrize("modality", ["rgb", "depth"])
+@pytest.mark.parametrize("row_stride", [12, 16])
+def test_cuda_buffer_view_preserves_native_layout(modality, row_stride, cuda_api):
+    wp, _ = cuda_api
+    view = camera_runtime._cuda_image_from_native_buffer(
+        _native_attributes(modality, row_stride), modality=modality, resolution=(3, 2)
+    )
+    assert view.layout == {
+        "ptr": 4096,
+        "dtype": wp.uint8 if modality == "rgb" else wp.float32,
+        "shape": (2, 3, 3) if modality == "rgb" else (2, 3),
+        "strides": (row_stride, 4, 1) if modality == "rgb" else (row_stride, 4),
+        "copy": False,
+    }
+    assert view.device == wp.get_device("cuda:0")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("dataPtr", -1),
+        ("dataPtr", True),
+        ("dataPtr", 4097),
+        ("cudaDeviceIndex", -1),
+        ("cudaDeviceIndex", "0"),
+        ("width", 4),
+        ("height", 3),
+        ("format", 33),
+        ("bufferSize", 31),
+        ("strides", ()),
+        ("strides", (3, 16)),
+        ("strides", (4, 8)),
+        ("strides", (4, 13)),
+    ],
+)
+def test_cuda_buffer_rejects_invalid_metadata_before_wrapping(field, value, cuda_api):
+    attributes = _native_attributes()
+    attributes[f"outputs:{field}"] = value
+    with pytest.raises(RuntimeError, match="pointer|layout"):
+        camera_runtime._cuda_image_from_native_buffer(
+            attributes, modality="rgb", resolution=(3, 2)
+        )
+
+
+def test_cuda_buffer_not_ready_is_empty_without_loading_warp(monkeypatch):
+    monkeypatch.setitem(sys.modules, "warp", None)
+    assert (
+        camera_runtime._cuda_image_from_native_buffer(
+            {}, modality="depth", resolution=(3, 2)
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="modality"):
+        camera_runtime._cuda_image_from_native_buffer(
+            {}, modality="unknown", resolution=(3, 2)
+        )
+
+
 def test_runtime_unbatches_pose_and_preserves_world_camera_axes() -> None:
     runtime = _create_runtime()
 
@@ -446,8 +580,10 @@ def test_direct_camera_viewport_disables_only_its_camera_navigation(
     assert viewport.resolution == (640, 480)
 
 
+@pytest.mark.parametrize("fail_activation", [False, True])
 def test_direct_camera_accepts_robot_parent_created_before_initialize(
     monkeypatch,
+    fail_activation,
 ) -> None:
     events: list[str] = []
     parent_path = "/World/Robot/Wrist"
@@ -458,7 +594,9 @@ def test_direct_camera_accepts_robot_parent_created_before_initialize(
         modalities=("rgb",),
     )
     stage = FakeStage(set())
-    viewport = SimpleNamespace(updates_enabled=False)
+    viewport = SimpleNamespace(
+        updates_enabled=False, render_product_path="/Render/Test"
+    )
 
     class _Window:
         viewport_api = viewport
@@ -483,13 +621,28 @@ def test_direct_camera_accepts_robot_parent_created_before_initialize(
     )
     syntheticdata = ModuleType("omni.syntheticdata")
     syntheticdata._syntheticdata = SimpleNamespace(
-        SensorType=SimpleNamespace(Rgb="rgb", DistanceToImagePlane="depth")
+        SensorType=SimpleNamespace(
+            Rgb=SimpleNamespace(name="Rgb"),
+            DistanceToImagePlane=SimpleNamespace(name="DistanceToImagePlane"),
+        )
+    )
+    syntheticdata.SyntheticData = SimpleNamespace(
+        convert_sensor_type_to_rendervar=lambda name: name
+    )
+
+    def activate(name, index, paths):
+        events.append(f"sensor:{name}")
+        if fail_activation:
+            raise RuntimeError("partial activation")
+
+    graph = SimpleNamespace(
+        activate_node_template=activate,
+        deactivate_node_template=lambda name, index, paths: events.append(
+            "sensors_disabled"
+        ),
     )
     syntheticdata.sensors = SimpleNamespace(
-        create_or_retrieve_sensor=lambda _viewport, sensor_type: events.append(
-            f"sensor:{sensor_type}"
-        ),
-        disable_sensors=lambda _viewport, _types: events.append("sensors_disabled"),
+        get_synthetic_data=lambda: graph,
     )
     monkeypatch.setitem(sys.modules, "omni.syntheticdata", syntheticdata)
     omni = sys.modules.get("omni")
@@ -507,10 +660,14 @@ def test_direct_camera_accepts_robot_parent_created_before_initialize(
 
     assert events == ["viewport_reserved"]
     stage._valid_paths.add(parent_path)
-    runtime.camera.initialize()
-    assert events == ["viewport_reserved", "camera_prim", "sensor:rgb"]
+    if fail_activation:
+        with pytest.raises(RuntimeError, match="partial activation"):
+            runtime.camera.initialize()
+    else:
+        runtime.camera.initialize()
+    assert events == ["viewport_reserved", "camera_prim", "sensor:RgbbuffPtr"]
     assert str(viewport.camera_path) == settings.prim_path
-    assert runtime.camera._initialized is True
+    assert runtime.camera._initialized is not fail_activation
     runtime.close()
     assert events[-2:] == ["sensors_disabled", "destroy"]
 
@@ -524,7 +681,9 @@ def test_direct_camera_rejects_parent_still_missing_at_initialize(
         parent_prim_path="/World/Robot/Wrist",
         prim_path="/World/Robot/Wrist/Camera",
     )
-    viewport = SimpleNamespace(updates_enabled=False)
+    viewport = SimpleNamespace(
+        updates_enabled=False, render_product_path="/Render/Test"
+    )
 
     class _Window:
         viewport_api = viewport
@@ -567,11 +726,15 @@ def test_direct_camera_close_attempts_destroy_after_disable_failure(
     events: list[str] = []
     syntheticdata = ModuleType("omni.syntheticdata")
 
-    def fail_disable(_viewport: object, _types: object) -> None:
+    def fail_disable(*args: object) -> None:
         events.append("disable")
         raise RuntimeError("disable failed")
 
-    syntheticdata.sensors = SimpleNamespace(disable_sensors=fail_disable)
+    syntheticdata.sensors = SimpleNamespace(
+        get_synthetic_data=lambda: SimpleNamespace(
+            deactivate_node_template=fail_disable
+        )
+    )
     monkeypatch.setitem(sys.modules, "omni.syntheticdata", syntheticdata)
     omni = sys.modules.get("omni")
     if omni is None:
@@ -587,9 +750,10 @@ def test_direct_camera_close_attempts_destroy_after_disable_failure(
     camera = _NewtonSyntheticDataCamera.__new__(_NewtonSyntheticDataCamera)
     camera._closed = False
     camera._initialized = True
-    camera._viewport = object()
+    camera._viewport = SimpleNamespace(render_product_path="/Render/Test")
     camera._window = _Window()
     camera._sensor_types = {"rgb": object()}
+    camera._cuda_templates = {"rgb": "RgbbuffPtr"}
     camera._stage = object()
 
     with pytest.raises(RuntimeError, match="disable failed"):

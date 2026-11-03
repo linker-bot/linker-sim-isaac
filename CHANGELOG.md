@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Mirror `render()` now defaults to owned Warp arrays on `compute.cuda_device`; request `device="cpu"` for NumPy. Newton RGB/depth use native SyntheticData CUDA buffer exports with layout checks, without a host image round trip. Device copies finish before return and survive camera teardown; a host payload or device mismatch fails. Automatic file/live output still downloads explicitly. Camera smoke defaults to Newton CUDA and validates GPU ownership as well as fresh-frame/recording behavior.
+
 - Add versioned Kaleidoscope reset templates and CPU-only seed sampling for `tblock_push_v1`. Restore sampled rows through the normal reset transaction in another process, GPU index, or environment batch size while retaining their logical RNG stream. Require matching task/backend/control configuration and assets; export imported nominal inputs once before offline sampling. Existing snapshots/checkpoints remain separate.
 
 - Integrate merged AR5/O6 assembly physics from linker-sim-assets PR #23: synchronized native MJCF dynamics/materials and exact ±60° J6/J7 limits in runtime and planning resources. Keep the selected compliant controller, original geometry and 60/480/240 Hz command/integration/collision defaults. Standalone MJCF torque motors do not implement the runtime virtual controller.
