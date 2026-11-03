@@ -31,16 +31,17 @@ This is a project-tested combination, not Isaac's bundled Newton stack; plain
 `pip check` will report Isaac's intentionally overridden pins. Use the locked uv
 environment and the actual Kit smoke tests to validate it.
 
-Keep older tasks in separate checkouts and environments. Asset pins, controller
-and contact defaults are unchanged in this preparation step. Normal startup now uses
-60 Hz control / 480 Hz physics (configurable); SDK and timestep changes can
-still change contact trajectories and require task regression.
+Keep older tasks in separate checkouts and environments. Normal startup uses
+60 Hz control / 480 Hz physics; Newton collision refresh defaults to 240 Hz.
+These frequencies are configurable. AR5/O6 assets include synchronized MJCF;
+Newton selects the compliant drive and contact defaults. Revalidate existing tasks
+when updating this checkout and its asset submodule.
 
 ## 2. Clone The Workspace
 
-Robot geometry (AR5 arm, LinkerHand L6) is consumed from the shared
+Robot geometry (AR5 arm, LinkerHand L6/O6) is consumed from the shared
 [`linker-sim-assets`](https://github.com/linker-bot/linker-sim-assets) repository,
-mounted as a Git submodule at `packages/linker-robot-assets` and pinned to a tag.
+mounted as a Git submodule at `packages/linker-robot-assets` and pinned to an exact commit.
 Its meshes are stored with Git LFS, so clone with submodules and pull LFS content:
 
 ```bash

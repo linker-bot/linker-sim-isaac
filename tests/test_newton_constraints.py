@@ -485,6 +485,8 @@ def test_device_world_masks_map_empty_and_partial_rows_without_host_readback() -
     empty = wp.array([False, False, False], dtype=wp.bool, device="cpu")
     world_mask = selector.world_mask((), masked_rows=((row_world, empty),))
     articulation_mask = selector.articulation_mask(world_mask)
+    contact_mask = selector.contact_mask(world_mask)
+    np.testing.assert_array_equal(contact_mask.numpy(), [False] * 4)
     np.testing.assert_array_equal(world_mask.numpy(), [0, 0, 0])
     np.testing.assert_array_equal(
         articulation_mask.numpy(), [False, False, False, False]
@@ -495,10 +497,14 @@ def test_device_world_masks_map_empty_and_partial_rows_without_host_readback() -
     articulation_mask = selector.articulation_mask(world_mask)
     np.testing.assert_array_equal(world_mask.numpy(), [0, 1, 1])
     np.testing.assert_array_equal(articulation_mask.numpy(), [False, True, True, True])
+    assert selector.contact_mask(world_mask) is contact_mask
+    np.testing.assert_array_equal(contact_mask.numpy(), [False, True, True, False])
 
     # host 冷路径 selector 与 device mask 可合并，且复用数组前会在 device 上清零旧选择。
     world_mask = selector.world_mask((0,), masked_rows=((row_world, empty),))
     np.testing.assert_array_equal(world_mask.numpy(), [1, 0, 0])
+    selector.contact_mask(world_mask)
+    np.testing.assert_array_equal(contact_mask.numpy(), [True, False, False, False])
 
 
 def test_audit_real_newton_builder_and_finalized_model() -> None:

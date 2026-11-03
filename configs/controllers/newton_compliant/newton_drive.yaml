@@ -1,4 +1,4 @@
-# Opt-in AR5/O6 Newton drive. Contact configuration remains separate.
+# Default AR5/O6 Newton drive. Contact configuration remains separate.
 arm_armature: 0.01
 arm_passive_damping: 0.0
 arm_force_guard: 199.0

@@ -53,8 +53,8 @@ def trace_substeps(physics):
     )
     original = drive.apply
 
-    def apply(state, substep):
-        original(state, substep)
+    def apply(state):
+        original(state)
         wp.launch(
             record,
             dim=1,

@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Integrate merged AR5/O6 assembly physics from linker-sim-assets PR #23: synchronized native MJCF dynamics/materials and exact ±60° J6/J7 limits in runtime and planning resources. Keep the selected compliant controller, original geometry and 60/480/240 Hz command/integration/collision defaults. Standalone MJCF torque motors do not implement the runtime virtual controller.
+
 - Default both Newton executions to configurable 240 Hz collision refresh while preserving 60 Hz commands and 480 Hz integration. Scale Newton contact/triangle allocations (1024/16384) by world count; use mesh work-grid multiplier 8 on both devices (CPU 64/512-block timings were nearly equal). Preserve buffer checks, geometry and solver budgets. Track collision phases across CUDA graph replay and refresh after state reset/restore. This changes contact freshness; see PR #66 for retained penetration/release limitations.
 
 - Enable the selected contact policy on Newton CPU/CUDA whenever an AR5/O6 assembly is present: scene-wide elliptic cone/impratio 100, role-scoped friction/impedance, and condim 4 for every covered material. Other robots keep their materials; shared objects/table and global solver settings still affect mixed scenes. Preserve asset-explicit gap, original geometry, drive settings and 100/50 iteration limits. See the configuration reference for mixing and override scope.

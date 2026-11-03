@@ -294,6 +294,16 @@ The separate [AR5/O6 contact policy](../reference/configuration.md#ar5o6-contact
 sets scene solver options and role-specific collider materials. CPU/CUDA pipeline,
 gap fallback and solver defaults are documented in the [shared Newton settings](../reference/configuration.md#shared-newton-pipeline-defaults).
 
+The pinned assets include [asset PR #23](https://github.com/linker-bot/linker-sim-assets/pull/23):
+AR5/AR5_08 J6/J7 are **±60°** in runtime MJCF and planning URDFs, including other
+AR5 hand combinations. Only AR5/O6 assembly MJCFs synchronize the selected native
+passive dynamics, equality, torque caps, gravity compensation and materials.
+Original geometry, mass/inertia and installation remain intact. Composed MJCFs
+keep torque `motor` actuators: standalone `ctrl` values are torques, not angle
+commands, and do not reproduce the virtual controller. This runtime supplies the
+position drives and reference logic described above. The native solver options
+in XML do not select the Newton collision library or its refresh frequency.
+
 Run `just smoke-newton-drive` to verify public Mirror motion commands on CPU and
 CUDA: declared hand order, arm velocity forwarding, eight physics substeps per
 command, hand-reference interpolation, native simulation time and history restore.

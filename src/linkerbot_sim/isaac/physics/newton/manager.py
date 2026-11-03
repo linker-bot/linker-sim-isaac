@@ -590,7 +590,7 @@ class NewtonRuntime:
     def borrow_solver_integration_state(self) -> object:
         """借用 manager-owned ``[world, TIME|ACT|WARMSTART]`` canonical buffer。
 
-        CUDA 返回 Warp array，CPU 返回 NumPy float64 array。调用方不得替换其 storage；
+        CPU/CUDA 均返回 Warp float32 array。调用方不得替换其 storage；
         实际写入必须经过 :meth:`set_solver_integration_state`。
         """
 
@@ -605,8 +605,8 @@ class NewtonRuntime:
     ) -> None:
         """恢复全部或 mask 选中的 MuJoCo integration rows。
 
-        CUDA 路径仍要求 full-N device buffer 与 device mask；CPU 路径严格只有一个 world，
-        接受 NumPy/bool selector。两者都只保存不由 Newton State/Control 覆盖的字段。
+        两端均要求 full-N Warp float32 buffer 与可选 Warp bool world mask，设备与
+        runtime 一致；只保存不由 Newton State/Control 覆盖的字段。
         """
 
         self._require_initialized()
@@ -684,8 +684,6 @@ class NewtonRuntime:
         self._synchronize_owner_stream()
         drive = getattr(self, "compliant_drive", None)
         if drive is not None:
-            import warp as wp
-
             self._flush_cold_state_updates()
             with self._owner_stream_scope():
                 drive.restore(
@@ -1108,7 +1106,12 @@ class NewtonRuntime:
             "iterations": self.physics_spec.iterations,
             "line_search_iterations": self.physics_spec.line_search_iterations,
             "solver_deterministic": self.physics_spec.solver_deterministic,
-            "collision_deterministic": self.physics_spec.collision_deterministic,
+            # Matching can force sorting on upstream, even when requested off.
+            "collision_deterministic": getattr(
+                self._collision_pipeline,
+                "deterministic",
+                self.physics_spec.collision_deterministic,
+            ),
             "contact_matching": self.physics_spec.contact_matching,
             "collision_interval": self.physics_spec.collision_interval,
             "collision_frequency_hz": self.physics_spec.substeps
@@ -1269,7 +1272,7 @@ class NewtonRuntime:
                 native_control = drive.control
             for substep in range(substeps):
                 if drive is not None:
-                    drive.apply(self.state, substep)
+                    drive.apply(self.state)
                 # Refresh geometry at the configured cadence; the solver still
                 # updates separation and solves forces on every physical step.
                 contacts = None
@@ -1330,8 +1333,8 @@ class NewtonRuntime:
             return
         import newton
 
-        # A teleport/reset/clone invalidates old contact anchors. Refresh all
-        # worlds on the next physical step, without reading device masks on host.
+        # A teleport/reset/clone invalidates selected worlds' contact history.
+        # Also refresh collision before the next solver step, even between ticks.
         self._collision_phase = 0
         assert self.model is not None and self.state is not None
         assert self._projector is not None
@@ -1347,6 +1350,10 @@ class NewtonRuntime:
             for row_world, row_mask, _owner in self._device_projection_rows
         )
         with self._owner_stream_scope():
+            pipeline = self._collision_pipeline
+            matching_enabled = (
+                pipeline is not None and pipeline.contact_matching != "disabled"
+            )
             # projection 与 FK 可以覆盖不同 world：full-state restore 只进入 FK 集合，因而
             # solver 动态产生的 follower q/qd 会原样保留。mask 均由初始化时预分配的 device
             # buffer 或 Warp kernel 生成；这里不读取 articulation_world，也不上传 NumPy mask。
@@ -1367,6 +1374,8 @@ class NewtonRuntime:
                 drive.reset_from_positions(self.state.joint_q, projection_mask)
             if len(selected_worlds) == self._num_worlds:
                 fk_mask = None
+                if matching_enabled:
+                    pipeline.reset_contact_matching()
             else:
                 # 即使 device mask 全 false 也不能在 Python 读取其值来跳过。这里重新构造
                 # dirty mask，并让 articulation-map kernel 与 eval_fk(mask) 自然成为 no-op。
@@ -1375,6 +1384,10 @@ class NewtonRuntime:
                     masked_rows=device_dirty_rows,
                 )
                 fk_mask = self._world_masks.articulation_mask(selected_mask)
+                if matching_enabled:
+                    pipeline.reset_contact_matching(
+                        self._world_masks.contact_mask(selected_mask)
+                    )
             newton.eval_fk(
                 self.model,
                 self.state.joint_q,
