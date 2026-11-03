@@ -9,6 +9,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 CI_INCLUDE = {
     "src/linkerbot_sim/configuration",
+    "src/linkerbot_sim/kaleidoscope/reset_description.py",
+    "src/linkerbot_sim/kaleidoscope/reset_math.py",
     "scripts/check_dependency_audit_delta.py",
     "scripts/check_markdown_links.py",
     "scripts/check_pure_coverage.py",

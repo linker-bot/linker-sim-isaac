@@ -346,7 +346,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.state` | product | Mirror state 读取与写入 | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.timing` | product | mirror 层 timing 实现 owner | Isaac main thread | internal | [架构参考](../getting-started/project-overview.md) |
 
-### kaleidoscope (32)
+### kaleidoscope (34)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -369,6 +369,8 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.observations` | product | 设备原生 observation 组装 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.physx_ports` | product | PhysX CUDA tensor port 合同 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.registration` | product | 显式 Gymnasium 注册 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_description` | product | kaleidoscope 层 reset description 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_math` | product | kaleidoscope 层 reset math 实现 owner | pure | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.resets` | product | 批量 reset 与 autoreset 语义 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.rewards` | product | 设备原生 reward 计算 | cuRobo/CUDA | internal | [架构参考](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.runtime` | product | 资源生命周期与仿真步进编排 | cuRobo/CUDA | owner path | [架构参考](../getting-started/choose-runtime-and-api.md) |

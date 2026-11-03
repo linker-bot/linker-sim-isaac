@@ -18,6 +18,7 @@ from linkerbot_sim.kaleidoscope.resets import (
     build_tblock_reset_command,
 )
 from linkerbot_sim.kaleidoscope.rewards import tblock_reward
+from linkerbot_sim.kaleidoscope.reset_math import reset_rng_keys
 from linkerbot_sim.kaleidoscope.task import TaskStepResult
 from linkerbot_sim.kaleidoscope.task_buffers import TaskBuffers
 from linkerbot_sim.kaleidoscope.tensors import (
@@ -579,8 +580,9 @@ class TBlockPushV1:
 
         if type(seed) is not int:
             raise TypeError("task seed must be an int")
-        keys = torch.arange(self.num_envs, device=self.device, dtype=torch.int64)
-        keys.mul_(6364136223846793005).add_(seed)
+        keys = reset_rng_keys(
+            torch.arange(self.num_envs, device=self.device, dtype=torch.int64), seed
+        )
         self.buffers.rng_key.copy_(keys)
         self.buffers.rng_counter.zero_()
 

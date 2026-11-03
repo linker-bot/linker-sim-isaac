@@ -75,6 +75,10 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 | `TorchKaleidoscopeEnv` | 原生 CUDA tensor 环境 |
 | `GymnasiumKaleidoscopeAdapter` | 显式 NumPy VectorEnv 边界 |
 | `KaleidoscopeEpisodeSnapshot` | owned CUDA episode snapshot |
+| `KaleidoscopeResetTemplate` | CPU 离线 reset 采样所需的可移植名义输入 |
+| `KaleidoscopeResetDescription` | 带版本的新 episode 初始行及逻辑 RNG 续接状态 |
+| `sample_reset_description(template, *, seed, source_env_ids=(0,), reset_index=0)` | 无需 Torch、CUDA 或物理会话的纯采样 |
+| `reset_json(value)` | 将 reset 模板或描述序列化为 JSON |
 | `KaleidoscopeTrainingPort` | training 唯一允许依赖的结构化 port |
 | `ControlModeState` | immutable initial/active mode、generation、支持集和 scope |
 | `ControlModeChange` | 幂等或真实模式变化的结果 |
@@ -91,6 +95,9 @@ Wire DTO、camera coordinator、close report 和 snapshot schema 是参考实现
 State/clone 的方法合同见 [Kaleidoscope API](kaleidoscope-api.md)。`make_torch_env()` 的训练 step
 始终无渲染；`make_viewport_env()` 也只在调用方显式执行 `env.render()` 时更新一帧，不提供 camera、
 SyntheticData、Replicator 或录制。
+
+原生环境通过 `get_reset_template()` 导出离线采样模板，通过
+`restore_reset_description(description, *, target_env_ids=None)` 恢复新 episode 初始状态。
 
 `TorchKaleidoscopeEnv` 原生提供 `get_control_mode()` / `set_control_mode()`；setter 不进入
 `KaleidoscopeTrainingPort`、Gymnasium 或 skrl，训练始终保持初始 position 模式。

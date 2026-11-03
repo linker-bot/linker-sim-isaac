@@ -237,6 +237,83 @@ Saving performs an explicit device-to-host transfer and writes compressed NPZ wi
 pickle. Loading performs an explicit host-to-device transfer. Neither operation is
 called by `step` or `reset`.
 
+## Offline Reset Sampling And Portable Initial States
+
+For `tblock_push_v1`, export the actual imported nominal pose once from an idle
+native environment. This cold operation reads nominal joints to the host and
+hashes configuration/root assets; it neither samples RNG nor advances physics.
+Do not infer nominal joints as zero or duplicate asset import logic in a task.
+
+```python
+from pathlib import Path
+from linkerbot_sim.kaleidoscope import reset_json
+
+template = env.get_reset_template()
+Path("reset-template.json").write_text(reset_json(template), encoding="utf-8")
+```
+
+The saved template can then be sampled in a CPU-only process with no Torch, Kit,
+CUDA, physics session, or local asset files:
+
+```python
+import json
+from pathlib import Path
+from linkerbot_sim.kaleidoscope import (
+    KaleidoscopeResetTemplate, sample_reset_description, reset_json,
+)
+
+template = KaleidoscopeResetTemplate.from_mapping(
+    json.loads(Path("reset-template.json").read_text(encoding="utf-8"))
+)
+description = sample_reset_description(
+    template, seed=42, source_env_ids=(9, 2), reset_index=3,
+)
+Path("reset.json").write_text(reset_json(description), encoding="utf-8")
+```
+
+`source_env_ids` identify logical RNG streams, independent of batch size and
+destination rows. `reset_index=0` is the first reset after reseeding. The sampler
+uses the same integer RNG/range arithmetic and draw count as ordinary GPU reset;
+float32 geometry is compared with a numerical tolerance, not a bitwise promise.
+
+In another compatible native environment, restore each description row into the
+corresponding selected destination row:
+
+```python
+import json
+from pathlib import Path
+import torch
+from linkerbot_sim.kaleidoscope import KaleidoscopeResetDescription
+
+description = KaleidoscopeResetDescription.from_mapping(
+    json.loads(Path("reset.json").read_text(encoding="utf-8"))
+)
+observations, info = env.restore_reset_description(
+    description, target_env_ids=torch.tensor([1, 0], device=env.device),
+)
+```
+
+Omitting `target_env_ids` selects all environment rows, whose count must match the
+description. The normal reset transaction resets velocities, targets, controller
+and action histories, and task bookkeeping; it refreshes state without advancing
+physics. Selected rows inherit the saved RNG key and post-reset counter, so their
+next ordinary reset continues the original logical stream. Unselected rows remain
+unchanged. Invalid payloads/configurations are rejected before writes; a failure
+after reset writing begins puts the runtime in fail-stop, as ordinary reset does.
+An outstanding SAME_STEP transaction forbids this cold operation.
+
+Compatibility requires the same task, backend, robot/scene assets, resolved
+configuration and active control mode. A process, CUDA device index, or environment
+count may differ. The mode is checked, never switched implicitly. Root asset bytes
+are hashed; referenced meshes/textures are not recursively bundled or hashed, so
+installing the same complete pinned asset revision remains a caller requirement.
+Descriptions are versioned new-episode inputs, not arbitrary-time contact/solver
+checkpoints, collision-free seed guarantees, or cross-backend state conversion.
+Existing GPU snapshots and portable cold checkpoints retain their separate APIs.
+
+Run `just smoke-kaleidoscope-reset` for independent producer/consumer processes on
+PhysX and Newton, using different batch sizes and destination rows.
+
 ## Fixed Action Variants
 
 The task profile freezes one action variant at construction:

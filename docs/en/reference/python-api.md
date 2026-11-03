@@ -91,6 +91,10 @@ Import from `linkerbot_sim.kaleidoscope`:
 | `TorchKaleidoscopeEnv` | Native CUDA tensor vector environment. |
 | `KaleidoscopeTrainingPort` | Minimal runtime-checkable protocol consumed by trainers. |
 | `KaleidoscopeEpisodeSnapshot` | Owned GPU episode snapshot. |
+| `KaleidoscopeResetTemplate` | Portable nominal inputs for CPU-only reset sampling. |
+| `KaleidoscopeResetDescription` | Versioned initial episode rows and logical RNG continuation. |
+| `sample_reset_description(template, *, seed, source_env_ids=(0,), reset_index=0)` | Sample initial states without Torch, CUDA or a physics session. |
+| `reset_json(value)` | Serialize a reset template or description to JSON. |
 | `ControlModeState` | Immutable initial/active mode, generation, supported modes, and scope. |
 | `ControlModeChange` | Result of an idempotent or real mode change. |
 | `ControlModeGenerationConflict` | Optimistic generation precondition failed. |
@@ -105,7 +109,7 @@ Import from `linkerbot_sim.kaleidoscope`:
 | `register_gymnasium_envs()` | Idempotently register the maintained environment ID. |
 
 `TorchKaleidoscopeEnv` supports `reset`, `reset_idx`, `step`, `get_control_mode`,
-`set_control_mode`, `get_state`, `set_state`,
+`set_control_mode`, `get_state`, `set_state`, `get_reset_template`, `restore_reset_description`,
 `snapshot`, `restore_snapshot`, `clone_state`, `render`, `is_running`, and `close`.
 `render` is available only on an environment constructed by `make_viewport_env` and
 never runs implicitly inside a training step. It also implements the

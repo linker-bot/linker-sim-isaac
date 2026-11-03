@@ -11,6 +11,7 @@ from linkerbot_sim.kaleidoscope.geometry import (
     wrap_to_pi,
 )
 from linkerbot_sim.kaleidoscope.observations import tblock_heading
+from linkerbot_sim.kaleidoscope.reset_math import reset_rng_bits, uniform_range
 from linkerbot_sim.kaleidoscope.tensors import require_cuda_tensor
 
 if TYPE_CHECKING:
@@ -71,8 +72,7 @@ class DeviceCounterRNG:
         counter = self.counter.index_select(0, ids)[:, None]
         lane = torch.arange(columns, device=ids.device, dtype=torch.int64)[None, :]
         # 31-bit LCG 保证各 CUDA 后端都支持一致的整数位运算；lane 使用不同 Weyl increment。
-        state = key + (counter + lane * 747796405) * 2891336453
-        state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+        state = reset_rng_bits(key, counter, lane)
         self.counter.index_add_(
             0,
             ids,
@@ -161,15 +161,15 @@ def build_tblock_reset_command(
         columns=nominal_q.numel() + 5,
         advance_mask=rng_advance_mask,
     )
-    q_noise = _uniform_range(random[:, : nominal_q.numel()], joint_delta_range)
+    q_noise = uniform_range(random[:, : nominal_q.numel()], joint_delta_range)
     joint_positions = nominal_q[None, :] + q_noise.to(dtype=nominal_q.dtype)
     joint_velocities = torch.zeros_like(joint_positions)
 
     offset = nominal_q.numel()
     block_position = nominal_p[None, :].expand(count, -1).clone()
-    block_position[:, 0].add_(_uniform_range(random[:, offset], block_x_range))
-    block_position[:, 1].add_(_uniform_range(random[:, offset + 1], block_y_range))
-    reset_yaw = _uniform_range(random[:, offset + 2], block_yaw_range)
+    block_position[:, 0].add_(uniform_range(random[:, offset], block_x_range))
+    block_position[:, 1].add_(uniform_range(random[:, offset + 1], block_y_range))
+    reset_yaw = uniform_range(random[:, offset + 2], block_yaw_range)
     qz = torch.stack(
         (
             torch.cos(0.5 * reset_yaw),
@@ -185,9 +185,9 @@ def build_tblock_reset_command(
     block_velocity = torch.zeros((count, 6), device=ids.device, dtype=nominal_p.dtype)
 
     goal_position = block_position.clone()
-    goal_position[:, 0].add_(_uniform_range(random[:, offset + 3], goal_x_range))
-    goal_position[:, 1].add_(_uniform_range(random[:, offset + 4], goal_y_range))
-    goal_delta_yaw = _uniform_range(
+    goal_position[:, 0].add_(uniform_range(random[:, offset + 3], goal_x_range))
+    goal_position[:, 1].add_(uniform_range(random[:, offset + 4], goal_y_range))
+    goal_delta_yaw = uniform_range(
         rng.uniform(ids, columns=1, advance_mask=rng_advance_mask)[:, 0],
         goal_yaw_range,
     )
@@ -212,13 +212,6 @@ def build_tblock_reset_command(
         goal_position=goal_position,
         goal_yaw=goal_yaw,
     )
-
-
-def _uniform_range(unit: "torch.Tensor", bounds: tuple[float, float]) -> "torch.Tensor":
-    low, high = (float(bounds[0]), float(bounds[1]))
-    if low > high:
-        raise ValueError("randomization range minimum must not exceed maximum")
-    return low + unit * (high - low)
 
 
 __all__ = ["DeviceCounterRNG", "TBlockResetCommand", "build_tblock_reset_command"]

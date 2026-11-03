@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from linkerbot_sim.kaleidoscope.reset_math import reset_rng_keys
+
 if TYPE_CHECKING:
     import torch
 
@@ -60,8 +62,9 @@ class TaskBuffers:
             return torch.zeros(shape, device=device, dtype=torch.bool)
 
         # 每个 env 的 logical key 不依赖物理 grid 位置；clone_state 默认连同 counter 一起复制。
-        rng_key = torch.arange(num_envs, device=device, dtype=torch.int64)
-        rng_key.mul_(6364136223846793005).add_(int(base_seed))
+        rng_key = reset_rng_keys(
+            torch.arange(num_envs, device=device, dtype=torch.int64), int(base_seed)
+        )
         return cls(
             episode_length=zeros_i(num_envs),
             episode_physics_steps=zeros_i(num_envs),

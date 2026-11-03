@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Add versioned Kaleidoscope reset templates and CPU-only seed sampling for `tblock_push_v1`. Restore sampled rows through the normal reset transaction in another process, GPU index, or environment batch size while retaining their logical RNG stream. Require matching task/backend/control configuration and assets; export imported nominal inputs once before offline sampling. Existing snapshots/checkpoints remain separate.
+
 - Integrate merged AR5/O6 assembly physics from linker-sim-assets PR #23: synchronized native MJCF dynamics/materials and exact ±60° J6/J7 limits in runtime and planning resources. Keep the selected compliant controller, original geometry and 60/480/240 Hz command/integration/collision defaults. Standalone MJCF torque motors do not implement the runtime virtual controller.
 
 - Default both Newton executions to configurable 240 Hz collision refresh while preserving 60 Hz commands and 480 Hz integration. Scale Newton contact/triangle allocations (1024/16384) by world count; use mesh work-grid multiplier 8 on both devices (CPU 64/512-block timings were nearly equal). Preserve buffer checks, geometry and solver budgets. Track collision phases across CUDA graph replay and refresh after state reset/restore. This changes contact freshness; see PR #66 for retained penetration/release limitations.
