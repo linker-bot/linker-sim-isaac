@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- 为 `tblock_push_v1` 增加带版本的 Kaleidoscope reset 模板和 CPU 离线 seed 采样。允许换进程、GPU 编号和环境数量，经正常 reset 事务恢复到指定行并续接逻辑 RNG；任务、后端、控制配置和资产必须一致。先导出一次实际导入的名义输入，再离线采样；已有 snapshot/checkpoint 接口保持独立。
+
 - 接入linker-sim-assets PR #23已合并的AR5/O6组合物理配置：同步原生MJCF动力学/材质，运行与规划资源中的J6/J7统一精确±60°。保留已选柔顺驱动、原始几何及60/480/240 Hz指令/积分/碰撞默认。独立MJCF力矩motor不包含运行时虚拟控制器。
 
 - Newton CPU/CUDA默认采用独立可配置的240 Hz碰撞刷新，保持60 Hz指令和480 Hz积分。接触/三角候选容量1024/16384按world扩展；两端网格工作块倍数8（CPU的64/512块实测耗时接近）。保留容量检查、几何和求解预算；CUDA graph跨tick维护检测相位，reset/restore后先刷新接触。此项改变接触新鲜程度，已知穿透及释放限制见PR #66。

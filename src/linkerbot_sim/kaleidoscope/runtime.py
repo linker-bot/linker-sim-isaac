@@ -112,6 +112,7 @@ class KaleidoscopeRuntime:
         ik_failure_penalty: float = -1.0,
         viewport: object | None = None,
         viewport_reconfigure: Callable[[], None] | None = None,
+        reset_config: object | None = None,
     ) -> None:
         import torch
 
@@ -138,6 +139,7 @@ class KaleidoscopeRuntime:
         self.views = views
         self.action_term = action_term
         self.task = task
+        self._reset_config = reset_config
         self.state_api = state_api
         self.num_envs = views.num_envs
         self.device = views.device
@@ -248,6 +250,85 @@ class KaleidoscopeRuntime:
     def reset(self) -> tuple["torch.Tensor", Mapping[str, "torch.Tensor"]]:
         return self.reset_idx(self._all_env_ids)
 
+    def get_reset_template(self):
+        """Explicit cold export of nominal reset inputs; never samples or steps."""
+        from linkerbot_sim.kaleidoscope.reset_description import make_reset_template
+
+        self._require_usable()
+        self._require_no_same_step_transaction()
+        if self._phase != "idle":
+            raise RuntimeError("reset template export requires an idle runtime")
+        if self._reset_config is None:
+            raise RuntimeError("runtime has no portable reset configuration")
+        return make_reset_template(
+            self._reset_config,
+            nominal_joint_positions=self.task._nominal_joint_positions.detach()
+            .cpu()
+            .tolist(),
+            control_mode=self.get_control_mode().active_mode,
+        )
+
+    def restore_reset_description(self, description, *, target_env_ids=None):
+        """Restore a new episode via the normal reset transaction, not set_state.
+
+        Validation and cold host-to-device staging finish before any runtime/RNG
+        writer. Selected rows inherit the description's logical RNG stream.
+        """
+        import torch
+
+        from linkerbot_sim.kaleidoscope.reset_description import (
+            KaleidoscopeResetDescription,
+        )
+
+        self._require_usable()
+        self._require_no_same_step_transaction()
+        if not isinstance(description, KaleidoscopeResetDescription):
+            raise TypeError("expected KaleidoscopeResetDescription")
+        template = self.get_reset_template()
+        description.validate_template(template)
+        ids = normalize_env_ids(
+            target_env_ids, num_envs=self.num_envs, device=self.device
+        )
+        if len(description.rows) != ids.numel():
+            raise ValueError("reset description row count must match target_env_ids")
+
+        def upload(name, dtype=torch.float32):
+            return torch.tensor(
+                [getattr(row, name) for row in description.rows],
+                device=self.device,
+                dtype=dtype,
+            )
+
+        q = upload("joint_positions")
+        command = TBlockResetCommand(
+            env_ids=ids,
+            joint_positions=q,
+            joint_velocities=torch.zeros_like(q),
+            joint_targets=q.clone(),
+            block_position=upload("block_position"),
+            block_orientation_wxyz=upload("block_orientation_wxyz"),
+            block_velocity=torch.zeros((ids.numel(), 6), device=self.device),
+            goal_position=upload("goal_position"),
+            goal_yaw=upload("goal_yaw"),
+        )
+        keys = upload("rng_key", torch.int64)
+        counters = upload("rng_counter", torch.int64)
+        with self._phase_scope("reset"):
+            try:
+                self.task.buffers.goal_position.index_copy_(
+                    0, ids, command.goal_position
+                )
+                self.task.buffers.goal_yaw.index_copy_(0, ids, command.goal_yaw)
+                self.task.buffers.rng_key.index_copy_(0, ids, keys)
+                self.task.buffers.rng_counter.index_copy_(0, ids, counters)
+                self._apply_reset_command(ids, command)
+            except BaseException:
+                self._failed = True
+                raise
+        return self.task.buffers.last_finite_observation.index_select(0, ids), {
+            "env_ids": ids.clone()
+        }
+
     def reseed(self, seed: int) -> None:
         """只允许在 reset 之前调用的确定性 RNG 冷边界。"""
 
@@ -269,17 +350,20 @@ class KaleidoscopeRuntime:
         with self._phase_scope("reset"):
             try:
                 command = self.task.reset_command(ids)
-                self.control_mode.write_reset(command)
-                self.action_term.reset(ids, command)
-                self.physics_runtime.forward()
-                state = self.views.refresh(ids)
-                self.task.initialize_after_reset(ids, state)
+                self._apply_reset_command(ids, command)
             except BaseException:
                 self._failed = True
                 raise
         # index_select 已返回独立 storage；无需再做第二次 device-to-device copy。
         observations = self.task.buffers.last_finite_observation.index_select(0, ids)
         return observations, {"env_ids": ids.clone()}
+
+    def _apply_reset_command(self, ids, command) -> None:
+        self.control_mode.write_reset(command)
+        self.action_term.reset(ids, command)
+        self.physics_runtime.forward()
+        state = self.views.refresh(ids)
+        self.task.initialize_after_reset(ids, state)
 
     def step(self, actions: "torch.Tensor") -> TaskStepResult:
         """Native/debug 严格入口：done 行未 reset 时在推进 physics 前拒绝。"""

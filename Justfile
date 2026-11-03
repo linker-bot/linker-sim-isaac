@@ -65,7 +65,7 @@ test-training:
 
 test-gpu-kaleidoscope:
     {{python}} -c 'import torch; assert torch.cuda.is_available(), "CUDA is required for the Kaleidoscope GPU gate"'
-    {{uv_simulation}} pytest -q tests/test_kaleidoscope_gpu_contracts.py tests/test_kaleidoscope_composition.py tests/test_kaleidoscope_isaac_views.py tests/test_kaleidoscope_kit.py tests/test_kaleidoscope_physics_smoke.py tests/test_kaleidoscope_physx_ports.py tests/test_kaleidoscope_newton_ports.py tests/test_kaleidoscope_scene_assembly.py tests/test_isaac_replicated_newton_scene.py tests/test_curobo_device_batch_ik.py tests/test_curobo_kinematics_context.py tests/test_skrl_cuda_integration.py
+    {{uv_simulation}} pytest -q tests/test_kaleidoscope_gpu_contracts.py tests/test_kaleidoscope_reset_description.py tests/test_kaleidoscope_composition.py tests/test_kaleidoscope_isaac_views.py tests/test_kaleidoscope_kit.py tests/test_kaleidoscope_physics_smoke.py tests/test_kaleidoscope_physx_ports.py tests/test_kaleidoscope_newton_ports.py tests/test_kaleidoscope_scene_assembly.py tests/test_isaac_replicated_newton_scene.py tests/test_curobo_device_batch_ik.py tests/test_curobo_kinematics_context.py tests/test_skrl_cuda_integration.py
 
 # 两个真实 physics owner 必须由不同 Kit 进程启动和关闭；这条门禁只属于有 CUDA/Isaac 的
 # simulation CI，不能成为普通 CPU quality 的隐式依赖。
@@ -165,7 +165,12 @@ smoke-newton-drive:
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_newton_drive.py --profile newton_cpu --output logs/newton-cpu-drive-entry.json
     OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_newton_drive.py --profile newton_cuda --output logs/newton-cuda-drive-entry.json
 
-test-simulation: smoke-newton-contact smoke-newton-drive test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
+# Separate producer/consumer processes, different batch sizes and target rows.
+smoke-kaleidoscope-reset:
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_reset.py --profile physx_cuda
+    OMNI_KIT_ACCEPT_EULA=Y PYTHONPATH=src {{python}} scripts/smoke_kaleidoscope_reset.py --profile newton_cuda
+
+test-simulation: smoke-newton-contact smoke-newton-drive test-isaac test-gpu-kaleidoscope smoke-runtime-kits smoke-mirror smoke-mirror-camera smoke-mirror-efforts smoke-mirror-assemblies smoke-mirror-planning-geometry smoke-mirror-contacts smoke-mirror-task-flow smoke-kaleidoscope smoke-kaleidoscope-reset smoke-kaleidoscope-newton-capacity smoke-kaleidoscope-memory
 
 validate-config:
     {{uv_dev}} python scripts/validate_mode_config.py --mode mirror --profile physx_cpu

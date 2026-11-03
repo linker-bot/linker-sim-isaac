@@ -92,6 +92,14 @@ class TorchKaleidoscopeEnv:
     def clone_state(self, *args: object, **kwargs: object) -> None:
         self.runtime.clone_state(*args, **kwargs)
 
+    def get_reset_template(self):
+        return self.runtime.get_reset_template()
+
+    def restore_reset_description(self, description, *, target_env_ids=None):
+        return self.runtime.restore_reset_description(
+            description, target_env_ids=target_env_ids
+        )
+
     def get_control_mode(self):
         return self.runtime.get_control_mode()
 

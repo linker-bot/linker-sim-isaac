@@ -181,6 +181,7 @@ def create_kaleidoscope_runtime(
             ik_failure_penalty=settings.ik_failure_penalty,
             viewport=viewport,
             viewport_reconfigure=assembly.viewport_reconfigure,
+            reset_config=config,
         )
     except BaseException as primary:
         construction_error = primary

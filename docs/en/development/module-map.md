@@ -346,7 +346,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | mirror | `linkerbot_sim.mirror.state` | product | Mirror state access and mutation | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 | mirror | `linkerbot_sim.mirror.timing` | product | mirror implementation owner for timing | Isaac main thread | internal | [Architecture reference](../getting-started/project-overview.md) |
 
-### kaleidoscope (32)
+### kaleidoscope (34)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -369,6 +369,8 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | kaleidoscope | `linkerbot_sim.kaleidoscope.observations` | product | device-native observation assembly | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.physx_ports` | product | PhysX CUDA tensor port contracts | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.registration` | product | explicit Gymnasium registration | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_description` | product | kaleidoscope implementation owner for reset description | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
+| kaleidoscope | `linkerbot_sim.kaleidoscope.reset_math` | product | kaleidoscope implementation owner for reset math | pure | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.resets` | product | batched reset and autoreset semantics | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.rewards` | product | device-native reward computation | cuRobo/CUDA | internal | [Architecture reference](../getting-started/choose-runtime-and-api.md) |
 | kaleidoscope | `linkerbot_sim.kaleidoscope.runtime` | product | resource lifecycle and simulation-step orchestration | cuRobo/CUDA | owner path | [Architecture reference](../getting-started/choose-runtime-and-api.md) |

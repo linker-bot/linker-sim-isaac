@@ -10,6 +10,19 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS = {
+    "KaleidoscopeResetTemplate": (
+        "linkerbot_sim.kaleidoscope.reset_description",
+        "KaleidoscopeResetTemplate",
+    ),
+    "KaleidoscopeResetDescription": (
+        "linkerbot_sim.kaleidoscope.reset_description",
+        "KaleidoscopeResetDescription",
+    ),
+    "sample_reset_description": (
+        "linkerbot_sim.kaleidoscope.reset_description",
+        "sample_reset_description",
+    ),
+    "reset_json": ("linkerbot_sim.kaleidoscope.reset_description", "reset_json"),
     "ControlModeChange": (
         "linkerbot_sim.controllers.control_mode",
         "ControlModeChange",

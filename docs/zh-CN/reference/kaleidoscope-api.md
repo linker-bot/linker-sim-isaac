@@ -152,6 +152,73 @@ position；缺少 `robot.position_reference` 时从旧 `robot.target` 派生。o
 tracking error。velocity action 按 decision duration 推进 shadow reference；effort action 在每次
 decision 开始时把它锚到当前 q。
 
+## 离线 Reset 采样与可移植初始状态
+
+`tblock_push_v1` 可先从 idle 原生环境导出一次实际导入的名义输入。该冷操作将名义关节值
+读回 CPU 并计算配置/根资产签名，不采样 RNG、不推进物理；任务不应假设名义关节全为零，
+也不应复制资产导入逻辑。
+
+```python
+from pathlib import Path
+from linkerbot_sim.kaleidoscope import reset_json
+
+template = env.get_reset_template()
+Path("reset-template.json").write_text(reset_json(template), encoding="utf-8")
+```
+
+之后可在只有 CPU 的进程中采样，无需 Torch、Kit、CUDA、物理会话或本地资产：
+
+```python
+import json
+from pathlib import Path
+from linkerbot_sim.kaleidoscope import (
+    KaleidoscopeResetTemplate, sample_reset_description, reset_json,
+)
+
+template = KaleidoscopeResetTemplate.from_mapping(
+    json.loads(Path("reset-template.json").read_text(encoding="utf-8"))
+)
+description = sample_reset_description(
+    template, seed=42, source_env_ids=(9, 2), reset_index=3,
+)
+Path("reset.json").write_text(reset_json(description), encoding="utf-8")
+```
+
+`source_env_ids` 是逻辑 RNG 流编号，与批量大小和目标环境行无关；`reset_index=0` 表示
+reseed 后第一次 reset。采样与普通 GPU reset 共用整数 RNG、范围变换和抽样计数规则；
+float32 几何采用容差比较，不承诺逐位相同。
+
+在另一个兼容的原生环境中，将描述各行依次恢复到指定目标行：
+
+```python
+import json
+from pathlib import Path
+import torch
+from linkerbot_sim.kaleidoscope import KaleidoscopeResetDescription
+
+description = KaleidoscopeResetDescription.from_mapping(
+    json.loads(Path("reset.json").read_text(encoding="utf-8"))
+)
+observations, info = env.restore_reset_description(
+    description, target_env_ids=torch.tensor([1, 0], device=env.device),
+)
+```
+
+省略 `target_env_ids` 时选择全部行，数量必须与描述一致。恢复复用正常 reset 事务，
+重置速度、目标、控制器/动作历史和任务计数，刷新状态但不推进物理。选中行继承描述的
+RNG key 和 reset 后计数，下一次普通 reset 续接原逻辑流；其他行不变。数据或配置不合法
+时在任何写入前拒绝；开始写入后失败则与普通 reset 一样进入 fail-stop。未完成的 SAME_STEP
+事务期间禁止此冷操作。
+
+要求任务、后端、机器人/场景资产、解析后配置和当前控制模式相同；允许换进程、CUDA 编号、
+环境数量。恢复不会隐式切换控制模式。签名覆盖根资产文件内容，不递归打包或哈希引用的
+mesh/texture，调用方仍须安装相同完整资产版本。描述带 schema 版本，表示新 episode 输入，
+不是任意时刻接触/求解器历史 checkpoint，也不保证初始姿态无碰撞，不支持跨后端恢复。
+已有 GPU snapshot 和可移植冷 checkpoint 保持独立接口。
+
+`just smoke-kaleidoscope-reset` 在 PhysX/Newton 中分别启动独立生产/消费进程，验证不同
+环境数量及目标行的恢复。
+
 ## Gymnasium
 
 ```python

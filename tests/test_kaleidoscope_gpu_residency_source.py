@@ -36,6 +36,7 @@ def test_native_hot_path_has_no_host_array_conversion() -> None:
     excluded = {
         KALEIDOSCOPE / "adapters" / "gymnasium.py",
         KALEIDOSCOPE / "checkpoint.py",
+        KALEIDOSCOPE / "reset_description.py",  # Explicit pure/cold portable boundary.
     }
     violations = []
     for path in KALEIDOSCOPE.rglob("*.py"):
@@ -58,6 +59,12 @@ def test_native_hot_path_has_no_host_array_conversion() -> None:
             # 生命周期错误；训练 tokenized_step 不经过这个入口。下方独立测试将豁免
             # 收紧为恰好一次 item()，防止未来在同一函数偷渡第二个 host readback。
             if path.name == "runtime.py" and function == "step" and attribute == "item":
+                continue
+            if (
+                path.name == "runtime.py"
+                and function == "get_reset_template"
+                and attribute in {"cpu", "tolist"}
+            ):
                 continue
             violations.append((str(path), f"{function}.{attribute}", line))
     assert violations == []
