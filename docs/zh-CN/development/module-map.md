@@ -246,7 +246,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.spec` | isaac_infrastructure | isaac 层 spec 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.world` | isaac_infrastructure | isaac 层 world 实现 owner | Isaac main thread | internal | [架构参考](../operations/constraints.md) |
 
-### sensors (10)
+### sensors (11)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -259,6 +259,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | sensors | `linkerbot_sim.sensors.camera.observer` | isaac_infrastructure | sensors 层 observer 实现 owner | Isaac main thread | internal | [架构参考](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.camera.recorder` | isaac_infrastructure | sensors 层 recorder 实现 owner | Isaac main thread | internal | [架构参考](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.camera.runtime` | isaac_infrastructure | 资源生命周期与仿真步进编排 | Isaac main thread | internal | [架构参考](../guides/cameras.md) |
+| sensors | `linkerbot_sim.sensors.camera.video` | isaac_infrastructure | sensors 层 video 实现 owner | cuRobo/CUDA | internal | [架构参考](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.config` | isaac_infrastructure | sensors 层 config 实现 owner | Isaac main thread | internal | [架构参考](../guides/cameras.md) |
 
 ### snapshots (7)

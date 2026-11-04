@@ -47,6 +47,7 @@ Import from `linkerbot_sim.mirror`:
 | --- | --- |
 | `MirrorConfig` | Re-export of the strict product configuration. |
 | `MirrorRuntime` | Owner-thread runtime and lifecycle root. |
+| `MirrorVideoRecorder` | Bounded CUDA RGB → NVENC H.264/MP4 writer; see [GPU video](../guides/gpu-video.md). |
 | `MirrorController` | Typed request dispatch and admission coordination. |
 | `create_mirror_runtime(config, *, assembly_factory=None)` | Construct the product resource graph; queue capacities come only from the strict control profile. |
 | `run_mirror(runtime, *, endpoints=(), poll_timeout_s=None, should_stop=None, on_ready=None, before_session_close=None, max_iterations=None, close_on_exit=True)` | Run the owner-thread event loop; an omitted poll timeout comes from the strict control profile, and the optional close hook uses the same drained pre-session boundary as `MirrorRuntime.close`. |

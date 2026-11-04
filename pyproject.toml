@@ -34,6 +34,10 @@ dev = [
 visualization = [
   "foxglove-sdk==0.26.0",
 ]
+video = [
+  # Optional Mirror CUDA-to-NVENC writer; does not change the Isaac runtime graph.
+  "PyNvVideoCodec==2.2.4",
+]
 training = [
   # Gymnasium is deliberately kept at the NumPy process boundary. Native
   # Kaleidoscope and skrl paths exchange CUDA tensors directly.

@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- 新增可选 `MirrorVideoRecorder`：自有 CUDA RGB 输入、GPU 布局转换及 NVENC H.264/MP4 编码，校验连续物理时刻/原生帧，提供同步背压、帧数/字节配额与排空后完成标记。`video` extra 固定 PyNvVideoCodec 2.2.4，原仿真依赖不变，不静默采用 host 像素或软件编码。录像用于展示，不替代 depth 数值证据或完整状态恢复。
+
 - Mirror `render()` 默认返回位于 `compute.cuda_device` 的自有 Warp 数组；NumPy 消费者需指定 `device="cpu"`。Newton RGB/depth 使用带布局校验的原生 SyntheticData CUDA buffer 出口，不经 host 图像往返。设备复制在返回前完成，相机关闭后数据仍有效；host 数据或设备不一致时报错。自动文件/live 输出继续显式下载；相机 smoke 默认 Newton CUDA，并验证 GPU 所有权、新帧和录制行为。
 
 - 为 `tblock_push_v1` 增加带版本的 Kaleidoscope reset 模板和 CPU 离线 seed 采样。允许换进程、GPU 编号和环境数量，经正常 reset 事务恢复到指定行并续接逻辑 RNG；任务、后端、控制配置和资产必须一致。先导出一次实际导入的名义输入，再离线采样；已有 snapshot/checkpoint 接口保持独立。

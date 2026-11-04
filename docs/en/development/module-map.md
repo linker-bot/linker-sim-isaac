@@ -246,7 +246,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | isaac | `linkerbot_sim.isaac.spec` | isaac_infrastructure | isaac implementation owner for spec | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 | isaac | `linkerbot_sim.isaac.world` | isaac_infrastructure | isaac implementation owner for world | Isaac main thread | internal | [Architecture reference](../operations/constraints.md) |
 
-### sensors (10)
+### sensors (11)
 
 | Group | Module | Layer | Responsibility | Runtime | Classification | Related documentation |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -259,6 +259,7 @@ Controller/Env → Runtime → IsaacSession → concrete PhysicsRuntime
 | sensors | `linkerbot_sim.sensors.camera.observer` | isaac_infrastructure | sensors implementation owner for observer | Isaac main thread | internal | [Architecture reference](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.camera.recorder` | isaac_infrastructure | sensors implementation owner for recorder | Isaac main thread | internal | [Architecture reference](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.camera.runtime` | isaac_infrastructure | resource lifecycle and simulation-step orchestration | Isaac main thread | internal | [Architecture reference](../guides/cameras.md) |
+| sensors | `linkerbot_sim.sensors.camera.video` | isaac_infrastructure | sensors implementation owner for video | cuRobo/CUDA | internal | [Architecture reference](../guides/cameras.md) |
 | sensors | `linkerbot_sim.sensors.config` | isaac_infrastructure | sensors implementation owner for config | Isaac main thread | internal | [Architecture reference](../guides/cameras.md) |
 
 ### snapshots (7)

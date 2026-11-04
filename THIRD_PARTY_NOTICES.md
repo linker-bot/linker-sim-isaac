@@ -115,3 +115,13 @@ Redistributors should retain the upstream attribution.
 End users and redistributors are responsible for ensuring full compliance
 with all applicable third-party licenses when shipping source, binaries,
 containers, or integrated products.
+
+## NVIDIA PyNvVideoCodec
+
+- Project: [PyNvVideoCodec](https://developer.nvidia.com/pynvvideocodec).
+- Version: 2.2.4, installed only through the optional `video` extra.
+- License: MIT for the Python codec SDK; its wheel `NOTICES.txt` includes FFmpeg
+  portions under LGPL v3. NVIDIA driver/video-codec components have their own terms.
+- Notes: Used for CUDA-input NVENC encoding and MP4 muxing. No codec binary or
+  third-party source is vendored in this repository; retain upstream notices when
+  distributing the separately installed dependency.
