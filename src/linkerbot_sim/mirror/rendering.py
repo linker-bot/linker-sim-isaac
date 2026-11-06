@@ -10,9 +10,10 @@ import re
 from linkerbot_sim.mirror.lifecycle import close_result_stopped
 
 
-# Match SyntheticData next_render_simulation_async: asynchronous RTX can need
-# more app updates than SWH sensor waits when several products initialize together.
-_MAX_CAPTURE_UPDATES = 150
+# Cold shader work changes the duration of an update, so update counts cannot
+# bound elapsed waiting. Checked between native calls; the process supervisor
+# must still terminate a renderer that never returns from an update.
+_CAPTURE_TIMEOUT_S = 120.0
 
 
 def _close_resource(resource: object) -> bool:
@@ -251,32 +252,36 @@ class RenderCoordinator:
                 begin()
         count = max((count for _target, count in targets), default=1)
         physics_time = getattr(self.physics_runtime, "simulation_time", None)
-        pending = []
-        # Native completion may lag several renderer updates. Bound warmup instead
-        # of advancing physics or returning old annotator data under a new index.
-        limit = max(count, _MAX_CAPTURE_UPDATES)
-        for update in range(limit):
+        pending = list(cameras)
+        started = time.monotonic()
+        elapsed = 0.0
+        updates = 0
+        # No physics warmup, arbitrary update cap, or late-frame publication.
+        while elapsed < _CAPTURE_TIMEOUT_S:
             render()
+            updates += 1
             if getattr(self.physics_runtime, "simulation_time", None) != physics_time:
                 raise RuntimeError("camera rendering advanced physics time")
-            if update + 1 < count:
-                continue
-            pending = [
-                camera
-                for camera in cameras
-                if callable(ready := getattr(camera, "render_capture_ready", None))
-                and not ready()
-            ]
-            if not pending:
+            if updates >= count:
+                pending = [
+                    camera
+                    for camera in cameras
+                    if callable(ready := getattr(camera, "render_capture_ready", None))
+                    and not ready()
+                ]
+            elapsed = time.monotonic() - started
+            if elapsed < _CAPTURE_TIMEOUT_S and updates >= count and not pending:
                 return
         names = [str(getattr(camera, "name", "unknown")) for camera in pending]
         details = {
-            name: status()
-            for name, camera in zip(names, pending)
+            str(getattr(camera, "name", "unknown")): status()
+            for camera in cameras
             if callable(status := getattr(camera, "render_capture_status", None))
         }
         raise RuntimeError(
-            f"camera fresh-frame timeout after {limit} renderer updates: {names}; {details}"
+            f"camera fresh-frame timeout after {elapsed:.3f}s "
+            f"(budget={_CAPTURE_TIMEOUT_S:.3f}s, renderer_updates={updates}, "
+            f"minimum_updates={count}); pending={names}; {details}"
         )
 
     def close(self) -> bool:

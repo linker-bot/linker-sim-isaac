@@ -917,3 +917,44 @@ def test_physx_render_activation_uses_owned_hydra_product_only_on_change() -> No
     assert activations == [False, True, False]
     with pytest.raises(TypeError, match="boolean"):
         runtime.set_render_active(1)
+
+
+@pytest.mark.parametrize(
+    "frame_id,native_ready,depth_shape,expected",
+    (
+        (None, False, (), "awaiting_native_frame"),
+        (-1, False, (), "awaiting_native_frame"),
+        (3, False, (2, 3), "awaiting_fresh_frame"),
+        (4, True, (0, 0), "awaiting_modalities"),
+        (4, True, (3,), "awaiting_modalities"),
+        (4, True, (2, 3), "ready"),
+    ),
+)
+def test_capture_status_distinguishes_product_readiness_without_guessing_shader_state(
+    monkeypatch, frame_id, native_ready, depth_shape, expected
+):
+    runtime = SensorCameraRuntime(settings=_settings(), camera=object())
+    runtime._frame_tracker = SimpleNamespace(
+        frame_id=frame_id,
+        ready=native_ready,
+        product_path="/Render/CameraA",
+        _minimum_frame=4,
+        frame_source="kit_swh",
+        _render_time=0.0,
+        _minimum_render_time=0.0,
+    )
+    pixels = {"rgb": np.zeros((2, 3, 3)), "depth": np.zeros(depth_shape)}
+    monkeypatch.setattr(
+        runtime, "get_modality_data", lambda modality, **_: pixels[modality]
+    )
+    status = runtime.render_capture_status()
+    assert status["readiness"] == expected
+    assert status["renderer_readiness"] == "unknown"
+    assert status["render_product_path"] == "/Render/CameraA"
+    assert status["modality_shapes"] == {"rgb": (2, 3, 3), "depth": depth_shape}
+    assert runtime.render_capture_ready() == (expected == "ready")
+
+
+def test_capture_status_reports_absence_of_native_tracking():
+    runtime = SensorCameraRuntime(settings=_settings(), camera=object())
+    assert runtime.render_capture_status() == {"native_tracking": False}

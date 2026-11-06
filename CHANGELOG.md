@@ -56,7 +56,9 @@ their Git commit.
 
 ### Fixed
 
-- Share renderer updates across selected Mirror Newton cameras while preserving per-product fresh-frame checks, frozen physics, recording cadence and idle/failure cleanup. Multi-camera capture no longer repeats the history wait for each product; bounded warmup follows SyntheticData’s 150-update render-simulation budget to allow simultaneous product initialization.
+- Bound Mirror camera readiness waits by 120 s of monotonic time instead of 150 updates. Reject late/partial captures, retain native freshness checks, and report missing frames, stale frames or incomplete modalities with timing and product details. Shader readiness remains explicitly unknown; the cooperative deadline requires an outer process timeout for blocked native calls. Cache paths are unchanged.
+
+- Share renderer updates across selected Mirror Newton cameras while preserving per-product fresh-frame checks, frozen physics, recording cadence and idle/failure cleanup. Multi-camera capture no longer repeats the history wait for each product; the shared wait uses the monotonic deadline described below.
 
 - Preserve the configured Newton contact fallback through Isaac 6.1 MJCF conversion. Prepare an owned temporary source with the missing default, retaining explicitly authored and inherited `solref` values; source assets and PhysX imports are unchanged.
 
