@@ -777,8 +777,23 @@ def test_direct_camera_render_selection_updates_owned_viewport() -> None:
     assert viewport.updates_enabled is True
 
 
-def test_direct_camera_uses_four_ticks_for_hidden_product_history() -> None:
-    assert _NewtonSyntheticDataCamera.render_update_count == 4
+def test_direct_camera_checks_completion_after_first_update() -> None:
+    assert _NewtonSyntheticDataCamera.render_update_count == 1
+
+
+def test_capture_requires_native_completion_and_every_modality(monkeypatch) -> None:
+    runtime = SensorCameraRuntime(settings=_settings(), camera=object())
+    tracker = SimpleNamespace(ready=False)
+    runtime._frame_tracker = tracker
+    pixels = {"rgb": np.zeros((2, 3, 3)), "depth": np.zeros((0, 0))}
+    monkeypatch.setattr(
+        runtime, "get_modality_data", lambda modality, **_kw: pixels[modality]
+    )
+    assert not runtime.render_capture_ready()
+    tracker.ready = True
+    assert not runtime.render_capture_ready()
+    pixels["depth"] = np.zeros((2, 3))
+    assert runtime.render_capture_ready()
 
 
 def test_direct_camera_is_owned_and_closed_by_returned_runtime(

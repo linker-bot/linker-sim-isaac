@@ -38,7 +38,9 @@ def parse_args(argv=None):
     )
     parser.add_argument("--gui", action="store_true")
     parser.add_argument(
-        "--resolution", choices=("320x240", "640x320", "1920x1080"), default="320x240"
+        "--resolution",
+        choices=("320x240", "640x320", "640x360", "1920x1080"),
+        default="320x240",
     )
     parser.add_argument("--cameras", type=int, choices=(1, 3, 4), default=1)
     parser.add_argument("--record-root", type=Path)
@@ -234,9 +236,25 @@ def changed_pixels(before, after):
 
 def run(args):
     runtime = create_mirror_runtime(camera_config(args))
+    update_count = 0
+    render_update = runtime.physics_runtime.render_update
+    capture_updates = {}
+
+    def counted_update():
+        nonlocal update_count
+        update_count += 1
+        render_update()
+
+    def counted_capture(label):
+        before = update_count
+        result = capture(runtime)
+        capture_updates[label] = update_count - before
+        return result
+
+    runtime.physics_runtime.render_update = counted_update
     try:
         baseline = runtime.get_state()
-        owned, initial_meta, first_wall_s = capture(runtime)  # no warmup physics steps
+        owned, initial_meta, first_wall_s = counted_capture("initial")
         first = download(owned)
         layouts = cuda_layouts(runtime)
         moved = deepcopy(baseline)
@@ -256,7 +274,7 @@ def run(args):
             "linkerbot.snapshot.newton_solver_integration_state", None
         )
         runtime.set_state(moved)
-        second, moved_meta, moved_wall_s = capture(runtime)
+        second, moved_meta, moved_wall_s = counted_capture("moved")
         differences = changed_pixels(first, download(second))
         assert_retained(owned, first)
         assert all(count > 10 for count in differences.values()), differences
@@ -266,13 +284,14 @@ def run(args):
                 > initial_meta[name]["native_frame_id"]
             )
         runtime.restore_snapshot(baseline)
-        restored, restored_meta, restored_wall_s = capture(runtime)
+        restored, restored_meta, restored_wall_s = counted_capture("restored")
         restore_error = changed_pixels(first, download(restored))
         if "depth" in args.modalities:
             assert all(
                 count < max(10, np.asarray(first[name]["depth"]).size * 0.001)
                 for name, count in restore_error.items()
             ), restore_error
+        alternating = exercise_paused_alternation(runtime, baseline, moved)
         activation = exercise_product_selection(runtime)
         cameras = runtime.scene_resources.sensor_cameras
         counts = {camera.name: 0 for camera in cameras}
@@ -321,10 +340,10 @@ def run(args):
         automatic_counts = dict(counts)
         observer = getattr(runtime.rendering.cameras.output, "observer", None)
         deadlines = {} if observer is None else dict(observer._next_sample_time)
-        capture(runtime)
+        counted_capture("post_steps")
         assert observer is None or observer._next_sample_time == deadlines
         runtime.reset(hold_after_reset=False)
-        _, reset_meta, reset_wall_s = capture(runtime)
+        _, reset_meta, reset_wall_s = counted_capture("reset")
         report = {
             "profile": args.profile,
             "gui": args.gui,
@@ -340,6 +359,8 @@ def run(args):
             "reset": reset_meta,
             "cuda_layouts": layouts,
             "owned_cuda_frames": True,
+            "capture_render_updates": capture_updates,
+            "paused_alternation": alternating,
             "cuda_capture_wall_s": {
                 "initial": first_wall_s,
                 "moved": moved_wall_s,
@@ -357,6 +378,56 @@ def run(args):
         print(MARKER + " " + json.dumps(report), flush=True)
 
     runtime.close(before_session_close=closed_cameras)
+
+
+def exercise_paused_alternation(runtime, baseline, moved):
+    """Compare each immediate RGB/depth result to settled references of two poses."""
+    references = []
+
+    def place(index):
+        if index == 0:
+            runtime.restore_snapshot(baseline)
+        else:
+            runtime.set_state(moved)
+
+    for index in (0, 1):
+        place(index)
+        for _ in range(4):
+            frames, _, _ = capture(runtime)
+        references.append(download(frames))
+    rows = []
+    for index in (0, 1, 0, 1, 0, 1):
+        place(index)
+        frames, metadata, _ = capture(runtime)
+        actual = download(frames)
+        for name, modalities in actual.items():
+            for modality, pixels in modalities.items():
+                target = references[index][name][modality].astype(float)
+                other = references[1 - index][name][modality].astype(float)
+                mask = np.isfinite(target) & np.isfinite(other)
+                mask &= np.abs(target - other) > (1e-4 if modality == "depth" else 10)
+                assert np.count_nonzero(mask) > 10, (name, modality)
+                error = float(np.mean(np.abs(pixels[mask] - target[mask])))
+                opposite = float(np.mean(np.abs(pixels[mask] - other[mask])))
+                assert np.isfinite(error) and error < opposite, (
+                    name,
+                    modality,
+                    index,
+                    error,
+                    opposite,
+                )
+                rows.append(
+                    {
+                        "pose": index,
+                        "camera": name,
+                        "modality": modality,
+                        "reference_error": error,
+                        "opposite_error": opposite,
+                        "native_frame_id": metadata[name]["native_frame_id"],
+                    }
+                )
+    runtime.restore_snapshot(baseline)
+    return rows
 
 
 def main():

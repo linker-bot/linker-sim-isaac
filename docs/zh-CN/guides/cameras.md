@@ -58,7 +58,12 @@ CPU PhysX 与 Newton 每帧只调用一次 `pre_render()` 发布当前物理位�
 Kit SWH 帧号必须不小于状态发布后的第一个 update。Newton 没有 SWH stage-update owner，
 改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 150 次 app update，
 与 SyntheticData 的 render-simulation 等待上限一致；异步渲染的一帧可能跨多次应用更新。超时抛错，
-不返回旧画面。Newton 保留至少四次 update 的 history 预算，选中产品共同激活、共享更新，逐路等待
+不返回旧画面。Newton Render Kit 关闭异步渲染、等待 Hydra 完成，并将完成检查放在
+update order 1000，采用 Isaac Sim 的
+[zero-delay 配置](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/python_scripting/util_snippets.html#rendering-frame-delay)。
+此配置同时适用于 CPU/CUDA Newton 物理及 GUI 会话。采集从第一次 update 后检查原生就绪，
+不再固定等待四次；仍要求产品完成事件和所有配置模态的非空数据，不改变 Fabric history、
+画质或校准。选中产品共同激活、共享更新，逐路等待
 真实新帧完成；调用仍在 owner thread 上执行，不并发操作 USD。异常后
 也恢复为空闲停用状态。配置频率控制输出采样；显式 `render()` 在暂停时也请求当前状态的新帧。
 
@@ -77,7 +82,9 @@ Newton 为 `kit_render_product_frame`）、
 解码 RGB/depth 文件并检查原生身份、物理时间和频率。可选 `--gui`、
 `--resolution 1920x1080`、`--cameras 4`，或
 `--cameras 3 --frequencies 60 30 10 --steps 120`。
-`--modalities rgb` / `--modalities depth` 验证单模态。也提供 640×320 诊断分辨率，
+`--modalities rgb` / `--modalities depth` 验证单模态。报告记录实际 update 次数，并交替切换两个
+暂停物体位姿，将 RGB/depth 分别与稳定参考图比较，检出滞后一帧。
+也提供 640×320 / 640×360 诊断分辨率，
 它不是设备标定 preset。这些检查不代表墙钟吞吐达到 60 FPS。
 同时验证原生 CUDA 数组、后续渲染及相机关闭后仍有效的自有副本，以及同一曝光的显式 CPU 下载一致性。
 
