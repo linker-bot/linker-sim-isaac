@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- Newton Mirror 相机采用同步 Hydra 完成检查，从第一次 update 后检查原生就绪，替代固定四次更新的最低等待。保持新帧、RGB/depth 对齐、自有 CUDA 输出和冻结物理时间；相机 smoke 补充暂停位姿交替与 update 次数诊断。
+
 - 新增嵌入式 `MirrorRuntime.get_observation()`，读取独立关节/物体根节点观测而不捕获恢复元数据。缓存固定 runtime 指纹，复用 Newton CPU/CUDA 的 TIME/ACT/WARMSTART 打包 kernel，保持每步 canonical state 和现有 snapshot/restore 语义。
 
 - 新增可选 `MirrorVideoRecorder`：自有 CUDA RGB 输入、GPU 布局转换及 NVENC H.264/MP4 编码，校验连续物理时刻/原生帧，提供同步背压、帧数/字节配额与排空后完成标记。`video` extra 固定 PyNvVideoCodec 2.2.4，原仿真依赖不变，不静默采用 host 像素或软件编码。录像用于展示，不替代 depth 数值证据或完整状态恢复。

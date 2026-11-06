@@ -35,6 +35,11 @@ window.title = "LinkerBot Mirror (Newton Render)"
 settings.persistent = false
 useFabricSceneDelegate = false
 settings.fabricDefaultStageFrameHistoryCount = 3
+# Finish the current Hydra render before returning to the owner loop, matching
+# Isaac Sim's zero-delay experience without importing its physics dependencies.
+hydraEngine.waitIdle = true
+updateOrder.checkForHydraRenderComplete = 1000
+asyncRendering = false
 extensions.excluded = [
     "isaacsim.core.api",
     "isaacsim.core.cloner",

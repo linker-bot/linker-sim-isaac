@@ -763,14 +763,17 @@ def test_disabled_effort_output_ignores_retained_source() -> None:
     assert telemetry.foxglove_joint_effort_field == "none"
 
 
-def test_render_coordinator_waits_for_native_completion_without_stepping() -> None:
+@pytest.mark.parametrize("ready_after", (1, 3))
+def test_render_coordinator_waits_for_native_completion_without_stepping(
+    ready_after,
+) -> None:
     events = []
     ticks = []
     camera = SimpleNamespace(
         name="native",
         set_render_active=lambda _active: None,
         begin_render_capture=lambda: events.append("begin"),
-        render_capture_ready=lambda: len(ticks) >= 3,
+        render_capture_ready=lambda: len(ticks) >= ready_after,
         finish_render_capture=lambda **kw: events.append(kw),
     )
     physics = SimpleNamespace(
@@ -782,7 +785,7 @@ def test_render_coordinator_waits_for_native_completion_without_stepping() -> No
         physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
     )
     coordinator.render_frame(capture=False)
-    assert len(ticks) == 3
+    assert len(ticks) == ready_after
     assert events == ["begin", {"snapshot_index": 1, "physics_time_s": 0.125}]
 
 

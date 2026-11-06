@@ -224,6 +224,15 @@ def test_apps_directory_contains_exactly_seven_formal_kits() -> None:
     }
 
 
+def test_newton_camera_kit_completes_render_in_the_submitting_update() -> None:
+    # A one-update camera budget depends on these settings as one contract.
+    with app_module._experience_path(_mirror_newton(rendering=True)).open("rb") as f:
+        settings = tomllib.load(f)["settings"]["app"]
+    assert settings["asyncRendering"] is False
+    assert settings["hydraEngine"]["waitIdle"] is True
+    assert settings["updateOrder"]["checkForHydraRenderComplete"] == 1000
+
+
 def test_newton_runtime_kits_are_self_contained_and_exclude_physics_owners() -> None:
     required_base = {
         "isaacsim.simulation_app",

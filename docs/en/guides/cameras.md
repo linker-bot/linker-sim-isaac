@@ -105,8 +105,15 @@ number is at least the first update after publication. Newton has no SWH stage-u
 owner: it uses the native product frame number and a SyntheticData rational render-clock
 barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 150 application
 updates, matching SyntheticData’s render-simulation wait: asynchronous rendering
-can take several app updates per completed frame. A timeout raises instead of returning old data. Newton keeps its minimum
-four-update history budget. Selected products are activated together and share
+can take several app updates per completed frame. A timeout raises instead of returning old data.
+Newton's render Kit disables asynchronous rendering, waits for Hydra completion,
+and places that completion check at update order 1000, following Isaac Sim's
+[zero-delay configuration](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/python_scripting/util_snippets.html#rendering-frame-delay).
+This applies to both CPU and CUDA Newton physics, including GUI sessions. Capture
+checks native readiness after the first update rather than always waiting four
+updates; a completion event and nonempty data for every configured modality are
+still required. Fabric history, image quality and calibration stay unchanged.
+Selected products are activated together and share
 renderer updates until each has completed a fresh frame; all return to the inactive
 idle set even on failure. This uses the owner thread, not concurrent USD calls.
 Configured frequency controls output sampling; explicit
@@ -131,7 +138,9 @@ the supervisor decodes drained RGB/depth and checks native identities, physical 
 and cadence. Select `--gui`, `--resolution 1920x1080`, `--cameras 4`, or
 `--cameras 3 --frequencies 60 30 10 --steps 120` for focused variants.
 `--modalities rgb` or `--modalities depth` tests a single configured modality.
-A 640×320 diagnostic setting is also available; it is not a device calibration preset.
+A 640×320 or 640×360 diagnostic setting is also available; neither is a device calibration preset.
+The report includes update counts and alternates two paused object poses, checking
+both RGB and depth against settled reference images to catch one-frame lag.
 The smoke also verifies native CUDA arrays, owned copies surviving later renders and
 camera teardown, and explicit CPU downloads matching the same exposure. These checks
 do not establish 60 FPS wall-clock throughput.

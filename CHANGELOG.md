@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Newton Mirror cameras use synchronous Hydra completion and check native readiness after the first update, replacing the fixed four-update minimum. Preserve frame freshness, RGB/depth alignment, owned CUDA output and frozen physics time; add paused-pose alternation and update-count diagnostics to camera smoke.
+
 - Add embedded `MirrorRuntime.get_observation()` for owned joint/object root observations without recovery metadata. Cache fixed runtime fingerprints and reuse the Newton TIME/ACT/WARMSTART packing kernel on CPU/CUDA, preserving post-step canonical state and existing snapshot/restore semantics.
 
 - Add optional `MirrorVideoRecorder`: owned CUDA RGB inputs, GPU layout conversion and NVENC H.264/MP4, consecutive physical-time/native-frame checks, synchronous backpressure, frame/byte quotas and completion-after-drain. The `video` extra pins PyNvVideoCodec 2.2.4 without changing existing simulation dependencies; no host-pixel/software-encoder fallback. This is display recording, not depth evidence or full state recovery.

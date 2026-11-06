@@ -528,11 +528,11 @@ class _NewtonSyntheticDataCamera:
     solver，也不拥有 simulation time。
     """
 
-    # render Kit 保留三帧 history。一次新 Newton snapshot 发布后，前三个 app.update 仍可能
-    # 只推进 RTX/SyntheticData 内部流水线，第四次才包含完整输出帧；单相机也不能缩成一次。
-    # Mirror RenderCoordinator 共同激活选中产品、共享 update，并逐路等待原生新帧；期间
-    # physics state 与 clock 均冻结，物理 manager 不感知 camera 或 viewport。
-    render_update_count = 4
+    # The Newton render Kit finishes Hydra work in the submitting update. Check
+    # native product completion after that first update instead of draining an
+    # arbitrary number of history frames. The coordinator still waits for every
+    # selected product and modality, with physics state and clock frozen.
+    render_update_count = 1
 
     @property
     def render_product_path(self) -> str:
