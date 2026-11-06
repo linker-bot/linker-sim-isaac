@@ -763,12 +763,16 @@ def test_disabled_effort_output_ignores_retained_source() -> None:
     assert telemetry.foxglove_joint_effort_field == "none"
 
 
-@pytest.mark.parametrize("ready_after", (1, 3))
+@pytest.mark.parametrize("ready_after", (1, 3, 201))
 def test_render_coordinator_waits_for_native_completion_without_stepping(
     ready_after,
+    monkeypatch,
 ) -> None:
     events = []
     ticks = []
+    monkeypatch.setattr(
+        "linkerbot_sim.mirror.rendering.time.monotonic", lambda: len(ticks) * 0.01
+    )
     camera = SimpleNamespace(
         name="native",
         set_render_active=lambda _active: None,
@@ -789,10 +793,19 @@ def test_render_coordinator_waits_for_native_completion_without_stepping(
     assert events == ["begin", {"snapshot_index": 1, "physics_time_s": 0.125}]
 
 
-def test_render_coordinator_fails_bounded_stale_frame_wait() -> None:
+@pytest.mark.parametrize(
+    "update_s,expected_updates", ((0.125, 960), (30.0, 4), (121.0, 1))
+)
+def test_render_coordinator_fails_bounded_stale_frame_wait(
+    monkeypatch, update_s, expected_updates
+) -> None:
     ticks = []
+    monkeypatch.setattr(
+        "linkerbot_sim.mirror.rendering.time.monotonic", lambda: len(ticks) * update_s
+    )
     camera = SimpleNamespace(
         name="stale",
+        render_capture_status=lambda: {"readiness": "awaiting_fresh_frame"},
         set_render_active=lambda _: None,
         render_capture_ready=lambda: False,
     )
@@ -800,9 +813,12 @@ def test_render_coordinator_fails_bounded_stale_frame_wait() -> None:
     coordinator = RenderCoordinator(
         physics_runtime=physics, cameras=CameraBundle(cameras=(camera,))
     )
-    with pytest.raises(RuntimeError, match="fresh-frame timeout.*stale"):
+    with pytest.raises(
+        RuntimeError,
+        match="fresh-frame timeout.*budget=120.000s.*stale.*awaiting_fresh_frame",
+    ):
         coordinator.render_frame()
-    assert len(ticks) == 150
+    assert len(ticks) == expected_updates
 
 
 def test_render_coordinator_rejects_physics_advance_during_capture() -> None:
@@ -887,8 +903,14 @@ def test_subset_capture_only_activates_selected_camera_and_does_not_publish() ->
     assert len(seen) == 2  # A second paused request still renders a new frame.
 
 
-def test_partial_camera_failure_invalidates_entire_selected_transaction() -> None:
-    metadata = {}
+def test_partial_camera_failure_invalidates_entire_selected_transaction(
+    monkeypatch,
+) -> None:
+    ticks = []
+    monkeypatch.setattr(
+        "linkerbot_sim.mirror.rendering.time.monotonic", lambda: len(ticks) * 30.0
+    )
+    metadata = {"a": {"old": True}, "b": {"old": True}}
     active = {}
     cameras = tuple(
         SimpleNamespace(
@@ -904,7 +926,7 @@ def test_partial_camera_failure_invalidates_entire_selected_transaction() -> Non
         for name in ("a", "b")
     )
     coordinator = RenderCoordinator(
-        physics_runtime=SimpleNamespace(render=lambda: None),
+        physics_runtime=SimpleNamespace(render=lambda: ticks.append(1)),
         cameras=CameraBundle(cameras=cameras),
     )
     with pytest.raises(RuntimeError, match="fresh-frame timeout"):
@@ -990,3 +1012,51 @@ def test_observation_service_rejects_missing_or_invalid_adapter():
     service.observation_getter = lambda: None
     with pytest.raises(RuntimeError, match="mapping"):
         service.get_observation()
+
+
+@pytest.mark.parametrize("update_s", (120.0, 121.0))
+def test_capture_rejects_native_frame_returned_at_or_after_deadline(
+    monkeypatch, update_s
+):
+    ticks, published, active = [], [], []
+    monkeypatch.setattr(
+        "linkerbot_sim.mirror.rendering.time.monotonic", lambda: len(ticks) * update_s
+    )
+    camera = SimpleNamespace(
+        name="late",
+        set_render_active=active.append,
+        render_capture_ready=lambda: True,
+        render_capture_status=lambda: {"readiness": "ready"},
+        finish_render_capture=lambda **kw: published.append(kw),
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=SimpleNamespace(render=lambda: ticks.append(1)),
+        cameras=CameraBundle(cameras=(camera,)),
+    )
+    with pytest.raises(RuntimeError, match=r"renderer_updates=1.*pending=\[\].*ready"):
+        coordinator.render_frame(capture=False)
+    assert not published
+    assert active == [False, True, False]
+    # A failed transaction does not poison the next deadline.
+    monkeypatch.setattr("linkerbot_sim.mirror.rendering.time.monotonic", lambda: 1000.0)
+    coordinator.render_frame(capture=False)
+    assert len(published) == 1
+
+
+def test_minimum_update_requirement_does_not_extend_deadline(monkeypatch):
+    ticks = []
+    monkeypatch.setattr(
+        "linkerbot_sim.mirror.rendering.time.monotonic", lambda: len(ticks) * 30.0
+    )
+    camera = SimpleNamespace(
+        name="warming",
+        render_update_count=10,
+        set_render_active=lambda _: None,
+        render_capture_ready=lambda: pytest.fail("minimum updates not reached"),
+    )
+    coordinator = RenderCoordinator(
+        physics_runtime=SimpleNamespace(render=lambda: ticks.append(1)),
+        cameras=CameraBundle(cameras=(camera,)),
+    )
+    with pytest.raises(RuntimeError, match="renderer_updates=4, minimum_updates=10"):
+        coordinator.render_frame(capture=False)

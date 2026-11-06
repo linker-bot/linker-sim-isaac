@@ -56,9 +56,20 @@ headless 空闲且无需采集时不泵 Kit。可靠采集已服务 GUI，不立
 CPU PhysX 与 Newton 每帧只调用一次 `pre_render()` 发布当前物理位姿，然后调用
 `render_update()`，期间物理时间保持不变。原生相机等待所属 render product 的完成事件，且其
 Kit SWH 帧号必须不小于状态发布后的第一个 update。Newton 没有 SWH stage-update owner，
-改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。最多等待 150 次 app update，
-与 SyntheticData 的 render-simulation 等待上限一致；异步渲染的一帧可能跨多次应用更新。超时抛错，
-不返回旧画面。Newton Render Kit 关闭异步渲染、等待 Hydra 完成，并将完成检查放在
+改用原生 product 帧号及 SyntheticData 有理数渲染时钟屏障；该时钟与物理时间严格区分。
+选中产品的 update/就绪检查循环共享 **120 s 单调时钟期限**，不再限制 update 次数。
+冷 shader 工作会改变每次更新的耗时。所有产品必须在期限前通过原生新鲜度屏障且全部配置模态非空；
+到期或到期后返回的有效帧也会被拒绝。超时使整组选中采集失效并停用产品，后续调用重新计时。
+
+期限在原生调用返回后检查，不能中断卡住的 Kit/CUDA 调用，也不覆盖场景启动、`pre_render()`
+或像素复制；仍需外层进程超时回收不再返回的渲染器。错误报告 elapsed、budget、update 次数、
+最低更新数、待完成相机，以及每个选中产品的原生帧/时钟屏障和模态 shape。
+`readiness` 区分 `awaiting_native_frame`（无原生帧）、`awaiting_fresh_frame`（帧未通过新鲜度屏障）、
+`awaiting_modalities`（模态数据未齐）和 `ready`（仍可能迟到）。当前原生合同没有 renderer 级
+shader 就绪信号，所以 `renderer_readiness` 明确为 `unknown`；不能仅凭产品无帧断言仍在编译 shader，
+应结合 Kit 日志定位。缓存路径及归属不变。
+
+Newton Render Kit 关闭异步渲染、等待 Hydra 完成，并将完成检查放在
 update order 1000，采用 Isaac Sim 的
 [zero-delay 配置](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/python_scripting/util_snippets.html#rendering-frame-delay)。
 此配置同时适用于 CPU/CUDA Newton 物理及 GUI 会话。采集从第一次 update 后检查原生就绪，

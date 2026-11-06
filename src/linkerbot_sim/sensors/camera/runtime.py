@@ -108,20 +108,34 @@ class SensorCameraRuntime:
         tracker = self._frame_tracker
         if tracker is None:
             return {"native_tracking": False}
+        shapes = {
+            modality: tuple(
+                getattr(self.get_modality_data(modality, device=None), "shape", ())
+            )
+            for modality in self.settings.modalities
+        }
+        native_ready = tracker.ready
+        if tracker.frame_id is None or tracker.frame_id < 0:
+            readiness = "awaiting_native_frame"
+        elif not native_ready:
+            readiness = "awaiting_fresh_frame"
+        elif any(len(shape) < 2 or not all(shape) for shape in shapes.values()):
+            readiness = "awaiting_modalities"
+        else:
+            readiness = "ready"
         return {
+            "readiness": readiness,
+            # Missing product events do not prove that RTX is compiling shaders.
+            # Kit exposes no renderer-wide readiness signal in this contract.
+            "renderer_readiness": "unknown",
             "render_product_path": tracker.product_path,
             "native_frame_id": tracker.frame_id,
             "minimum_frame_id": tracker._minimum_frame,
             "native_frame_source": tracker.frame_source,
             "render_time": tracker._render_time,
             "minimum_render_time": tracker._minimum_render_time,
-            "native_ready": tracker.ready,
-            "modality_shapes": {
-                modality: tuple(
-                    getattr(self.get_modality_data(modality, device=None), "shape", ())
-                )
-                for modality in self.settings.modalities
-            },
+            "native_ready": native_ready,
+            "modality_shapes": shapes,
         }
 
     def finish_render_capture(

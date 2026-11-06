@@ -103,9 +103,25 @@ current physics poses, then pumps `render_update()` without advancing physics ti
 Native cameras wait for a matching render-product completion whose Kit SWH frame
 number is at least the first update after publication. Newton has no SWH stage-update
 owner: it uses the native product frame number and a SyntheticData rational render-clock
-barrier instead. That renderer clock is separate from physical simulation time. Warmup is bounded to 150 application
-updates, matching SyntheticData’s render-simulation wait: asynchronous rendering
-can take several app updates per completed frame. A timeout raises instead of returning old data.
+barrier instead. That renderer clock is separate from physical simulation time.
+The selected products share a **120 s monotonic deadline** for the update/readiness
+loop, rather than an update-count limit. Cold shader work can make one update much
+slower than another. Every product must pass its native freshness barrier and have
+nonempty data for all configured modalities before the deadline; even a valid frame
+returned at or after the deadline is rejected. Timeout invalidates the whole selected
+capture and deactivates the products; a later call starts a new deadline.
+
+The deadline is checked after native calls return. It cannot interrupt a blocked
+Kit/CUDA call and does not bound scene startup, `pre_render()` or pixel copying.
+Keep an outer process timeout for a renderer that stops returning. Diagnostics report
+elapsed seconds, the budget, update count, minimum required updates, pending cameras
+and each selected product's native frame/clock barriers and modality shapes.
+`readiness` distinguishes `awaiting_native_frame`, `awaiting_fresh_frame`,
+`awaiting_modalities` and `ready` (which can still arrive too late). The current native
+contract exposes no renderer-wide shader readiness signal: `renderer_readiness` is
+`unknown`. A missing product event alone is not evidence of shader compilation;
+inspect Kit logs alongside this status. Cache locations and ownership are unchanged.
+
 Newton's render Kit disables asynchronous rendering, waits for Hydra completion,
 and places that completion check at update order 1000, following Isaac Sim's
 [zero-delay configuration](https://docs.isaacsim.omniverse.nvidia.com/6.1.0/python_scripting/util_snippets.html#rendering-frame-delay).
