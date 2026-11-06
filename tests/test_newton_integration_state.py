@@ -113,6 +113,11 @@ def _install_fake_cuda_dependencies(
 
     mujoco_warp.get_state = get_state
     mujoco_warp.set_state = set_state
+    kernels = ModuleType("linkerbot_sim.isaac.physics.newton.integration_kernels")
+    kernels.pack_persistent_state = lambda data, output, active, **kwargs: get_state(
+        None, data, output, 41, active=active
+    )
+    monkeypatch.setitem(sys.modules, kernels.__name__, kernels)
     monkeypatch.setitem(sys.modules, "warp", warp)
     monkeypatch.setitem(sys.modules, "mujoco", mujoco)
     monkeypatch.setitem(sys.modules, "mujoco_warp", mujoco_warp)
@@ -259,3 +264,61 @@ def test_real_warp_state_round_trip_excludes_newton_owned_fields(execution):
     np.testing.assert_array_equal(wd.qpos.numpy(), [[7.0]])
     np.testing.assert_array_equal(wd.qvel.numpy(), [[8.0]])
     np.testing.assert_array_equal(wd.ctrl.numpy(), [[9.0]])
+
+
+@pytest.mark.parametrize("execution", ("cpu", "cuda"))
+def test_fixed_packer_matches_upstream_with_activation_and_selected_worlds(
+    execution, monkeypatch
+):
+    wp = pytest.importorskip("warp")
+    mujoco = pytest.importorskip("mujoco")
+    mjw = pytest.importorskip("mujoco_warp")
+    if execution == "cuda" and not wp.is_cuda_available():
+        pytest.skip("CUDA unavailable")
+    device = "cpu" if execution == "cpu" else "cuda:0"
+    stream = wp.Stream(device) if execution == "cuda" else None
+    model = mujoco.MjModel.from_xml_string(
+        '<mujoco><worldbody><body><joint name="j"/><geom type="sphere" size=".1" mass="1"/>'
+        '</body></worldbody><actuator><general joint="j" dyntype="filter"/></actuator></mujoco>'
+    )
+    with wp.ScopedDevice(device):
+        wm = mjw.put_model(model)
+        wd = mjw.make_data(model, nworld=3, nconmax=4, njmax=8)
+    solver = SimpleNamespace(
+        use_mujoco_cpu=False,
+        update_data_interval=1,
+        mj_model=model,
+        mjw_model=wm,
+        mjw_data=wd,
+    )
+    store = create_solver_integration_state_store(execution)
+    store.initialize(solver, world_count=3, device=device, stream=stream)
+    assert store.activation_width == 1
+    with store._scope():
+        wd.time.fill_(2.5)
+        wd.act.fill_(3.25)
+        wd.qacc_warmstart.fill_(4.5)
+        reference = wp.zeros((3, store.width), dtype=wp.float32, device=device)
+        mjw.get_state(wm, wd, reference, store.signature)
+        store.capture()
+    if stream is not None:
+        wp.synchronize_stream(stream)
+    np.testing.assert_array_equal(store.borrow().numpy(), reference.numpy())
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("hot capture rebuilt upstream get_state kernel")
+
+    monkeypatch.setattr(mjw, "get_state", forbidden)
+    with store._scope():
+        store.capture()
+        selected = wp.array([False, True, False], dtype=wp.bool, device=device)
+        wd.time.zero_()
+        wd.act.zero_()
+        wd.qacc_warmstart.zero_()
+        store.restore(reference, active_world_mask=selected)
+    if stream is not None:
+        wp.synchronize_stream(stream)
+    np.testing.assert_array_equal(wd.time.numpy(), [0, 2.5, 0])
+    np.testing.assert_array_equal(wd.act.numpy(), [[0], [3.25], [0]])
+    np.testing.assert_array_equal(wd.qacc_warmstart.numpy(), [[0], [4.5], [0]])
+    np.testing.assert_array_equal(store.borrow().numpy(), reference.numpy())

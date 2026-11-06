@@ -1081,3 +1081,75 @@ def test_mirror_newton_solver_state_rolls_back_after_late_failure() -> None:
         [[1.5, 8.0, 9.0]],
     ]
     assert physics.payload["values"] == [[1.5, 8.0, 9.0]]
+
+
+@pytest.mark.parametrize("prime_cache", (False, True))
+def test_light_observation_matches_mode_targets_without_restore_metadata(prime_cache):
+    from linkerbot_sim.mirror.state import read_mirror_observation
+
+    resources, articulation, _controller = _mode_aware_runtime(prime_cache=prime_cache)
+    resources.session.physics_runtime = SimpleNamespace(simulation_time=1.25)
+    resources.object_state_views = {}
+    expected = get_mirror_snapshot(resources).as_dict()
+
+    def forbidden_capture():
+        raise AssertionError("observation captured solver history")
+
+    resources.session.physics_runtime.capture_solver_integration_state_host = (
+        forbidden_capture
+    )
+    observed = read_mirror_observation(resources)
+    assert observed["simulation_time_s"] == 1.25
+    assert observed["coordinate_frame"] == "scene-local"
+    assert set(observed) == {
+        "simulation_time_s",
+        "coordinate_frame",
+        "robots",
+        "objects",
+    }
+    for robot, snapshot in zip(observed["robots"], expected["robots"], strict=True):
+        for field in (
+            "label",
+            "robot_id",
+            "joint_names",
+            "joint_positions",
+            "joint_velocities",
+            "command_joint_names",
+            "command_targets",
+        ):
+            assert robot[field] == snapshot[field]
+        assert robot["command_target_modes"] == ["position", "velocity", "effort"]
+        assert "asset_fingerprint" not in robot
+    observed["robots"][0]["joint_positions"][0] = -100
+    assert articulation.positions[0] != -100
+    assert read_mirror_observation(resources)["robots"][0]["joint_positions"][0] != -100
+
+
+def test_light_object_observation_skips_generalized_and_child_restore_payload():
+    from linkerbot_sim.mirror.state import read_mirror_observation
+
+    resources, _view, _snapshot = _partial_chain_runtime(
+        fail_collision_invalidation=False
+    )
+    body_view = _attach_generalized_chain(resources)
+    resources.session.physics_runtime = SimpleNamespace(simulation_time=0.0)
+    expected = get_mirror_snapshot(resources).as_dict()["objects"]["rope"]
+
+    def forbidden_capture(**kwargs):
+        raise AssertionError("observation captured generalized state")
+
+    body_view.get_generalized_state = forbidden_capture
+    observed = read_mirror_observation(resources)["objects"]["rope"]
+    for field in (
+        "positions_local",
+        "orientations_wxyz",
+        "linear_velocities",
+        "angular_velocities",
+    ):
+        assert observed[field] == expected[field]
+    assert not any(k.startswith(("generalized_", "body_")) for k in observed)
+    observed["positions_local"][0] = -100
+    assert (
+        read_mirror_observation(resources)["objects"]["rope"]["positions_local"][0]
+        != -100
+    )

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from functools import cached_property
 import hashlib
 import json
 from pathlib import Path
@@ -60,6 +61,7 @@ from linkerbot_sim.mirror.collision.registry import SceneCollisionRegistry
 from linkerbot_sim.planning.collision_validation import AllowedPlanningContact
 from linkerbot_sim.mirror.collision.robot_provider import RobotObstacleProvider
 from linkerbot_sim.mirror.scene_settings import MirrorSceneRuntimeSettings
+from linkerbot_sim.mirror.state import read_mirror_observation
 from linkerbot_sim.isaac.world import configure_visuals, set_physics_gravity
 from linkerbot_sim.isaac.session import (
     IsaacSession,
@@ -372,7 +374,7 @@ class MirrorSceneResources:
             result["telemetry"] = dict(telemetry_status())
         return result
 
-    @property
+    @cached_property
     def config_fingerprint(self) -> str:
         """计算 robot identity/profile/prim path 组合的 session 配置指纹。"""
 
@@ -1496,6 +1498,7 @@ def build_mirror_assembly(config: MirrorConfig) -> object:
     return MirrorAssembly(
         session=resources.session,
         state_getter=capture,
+        observation_getter=lambda: read_mirror_observation(resources),
         state_setter=lambda state, strict=True: restore(state, strict=strict),
         snapshot_capture=capture,
         snapshot_restore=restore,
