@@ -198,16 +198,14 @@ class WarpSolverIntegrationStateStore(_StoreMetadata):
                 dtype=wp.bool,
                 device=device,
             )
-            self._capture_on_owner_stream(mujoco_warp)
+            self._capture_on_owner_stream()
             wp.copy(self._baseline, self._state, stream=stream)
         self._initialized = True
 
     def capture(self) -> None:
         self._require_initialized()
-        import mujoco_warp
-
         with self._scope():
-            self._capture_on_owner_stream(mujoco_warp)
+            self._capture_on_owner_stream()
 
     def restore(
         self,
@@ -233,13 +231,7 @@ class WarpSolverIntegrationStateStore(_StoreMetadata):
                 active=active,
             )
             # 只有 engine 接受写入后才更新 canonical buffer；selected get 会保留未选行。
-            mujoco_warp.get_state(
-                self._solver.mjw_model,
-                self._solver.mjw_data,
-                self._state,
-                self._signature,
-                active=active,
-            )
+            self._capture_on_owner_stream(active=active)
 
     def reset(self, active_world_mask: object | None = None) -> None:
         self._require_initialized()
@@ -248,13 +240,12 @@ class WarpSolverIntegrationStateStore(_StoreMetadata):
 
     def commit(self) -> None:
         self._require_initialized()
-        import mujoco_warp
         import warp as wp
 
         assert self._baseline is not None
         assert self._state is not None
         with self._scope():
-            self._capture_on_owner_stream(mujoco_warp)
+            self._capture_on_owner_stream()
             wp.copy(self._baseline, self._state, stream=self._stream)
 
     def borrow(self) -> object:
@@ -308,16 +299,21 @@ class WarpSolverIntegrationStateStore(_StoreMetadata):
         with wp.ScopedDevice(self._device), stream_scope:
             yield
 
-    def _capture_on_owner_stream(self, mujoco_warp: object) -> None:
+    def _capture_on_owner_stream(self, *, active: object | None = None) -> None:
+        # Import lazily: CPU configuration tooling must not load Warp. The module
+        # owns one kernel; capture never rebuilds MuJoCo Warp's unique kernel.
+        from linkerbot_sim.isaac.physics.newton.integration_kernels import (
+            pack_persistent_state,
+        )
+
         assert self._solver is not None
         assert self._state is not None
         assert self._all_world_mask is not None
-        mujoco_warp.get_state(
-            self._solver.mjw_model,
+        pack_persistent_state(
             self._solver.mjw_data,
             self._state,
-            self._signature,
-            active=self._all_world_mask,
+            self._all_world_mask if active is None else active,
+            stream=self._stream,
         )
 
 

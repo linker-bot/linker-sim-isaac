@@ -10,6 +10,36 @@
 | `KaleidoscopeEpisodeSnapshot` | Kaleidoscope | owned CUDA tensor | K 个 env 的物理、task/history/counter/RNG episode 状态 |
 | Persistent checkpoint | Kaleidoscope 显式冷 API | CPU 文件 | 从 episode snapshot 选择字段进行磁盘 round-trip |
 
+## Mirror 每命令周期观测
+
+嵌入式 owner-thread 循环使用 `runtime.get_observation()` 读取当前机器人命令关节的位置、
+速度、active-mode 目标，以及物体根节点位姿/速度。返回独立的 CPU/JSON-compatible mapping：
+
+```python
+observation = runtime.get_observation()
+time_s = observation["simulation_time_s"]
+robot = observation["robots"][0]
+q = robot["joint_positions"]  # 顺序由 joint_names / command_joint_names 给出
+modes = robot["command_target_modes"]  # 每个目标对应 position、velocity 或 effort
+objects = observation["objects"]
+```
+
+`robots` 按场景顺序，包含 label、robot_id、joint_names、joint_positions、joint_velocities、
+command_joint_names、command_targets、command_target_modes。目标采用关节原生单位：旋转关节的位置、速度、力矩
+分别为 rad、rad/s、N·m；只含 command joints，不包含 passive/follower DOF。
+`objects` 按名称索引，包含 name、positions_local（m）、orientations_wxyz，以及可用的
+linear_velocities（m/s）和 angular_velocities（rad/s）。坐标为 `scene-local`，与 Mirror snapshot
+一致；静态物体延续现有状态读取器的速度语义。调用不推进物理、不渲染相机，只能由未关闭
+runtime 的 owner thread 执行；保留或修改返回值不会影响内部状态。
+
+这是观测，**不是恢复载荷**：不含 snapshot schema、配置/资产指纹、solver/controller history、
+物体 generalized coordinates 或 child-body 恢复状态。恢复仍使用 `get_state()` /
+`capture_snapshot()`，现有合同与 wire operation 不变；本轮不新增 observation wire operation。
+
+Newton 继续在每步之后、owner stream 上更新 TIME/ACT/WARMSTART canonical buffer，但复用
+打包 kernel，避免逐次构造。这保留 Kaleidoscope snapshot/clone 需要的当前状态可见性。
+Profile/session 指纹按已装配的固定 runtime 身份缓存；更换 profile/topology 必须重建 runtime。
+
 ## Mirror scene snapshot
 
 Wire operation：

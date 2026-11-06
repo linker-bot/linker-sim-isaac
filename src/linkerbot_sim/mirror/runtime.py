@@ -211,6 +211,12 @@ class MirrorRuntime:
         self._require_owner_thread("get_state")
         return self.state_service.get_state()
 
+    def get_observation(self) -> dict[str, object]:
+        """Read owned joint/object observations without capturing restore history."""
+        self._require_open("get_observation")
+        self._require_owner_thread("get_observation")
+        return self.state_service.get_observation()
+
     def set_state(self, state: Mapping[str, object], *, strict: bool = True) -> object:
         self._require_open("set_state")
         self._require_owner_thread("set_state")

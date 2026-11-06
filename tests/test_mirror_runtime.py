@@ -139,6 +139,7 @@ def _assembly(
     assembly = MirrorAssembly(
         session=session,
         state_getter=lambda: {"state": 1},
+        observation_getter=lambda: {"robots": [{"joint_positions": [1.0]}]},
         state_setter=lambda value, strict=True: {"strict": strict, **value},
         snapshot_capture=lambda: {"schema": "mirror-test", "state": 1},
         snapshot_restore=lambda value, **_kwargs: {"restored": value["state"]},
@@ -163,6 +164,9 @@ def test_runtime_owns_session_and_closes_in_strict_phase_order() -> None:
     runtime.attach_ingress(ingress)
 
     assert runtime.get_state() == {"state": 1}
+    observation = runtime.get_observation()
+    observation["robots"][0]["joint_positions"][0] = -1
+    assert runtime.get_observation()["robots"][0]["joint_positions"] == [1.0]
     assert runtime.set_state({"state": 2}, strict=True) == {
         "strict": True,
         "state": 2,
@@ -495,7 +499,8 @@ def test_newton_runtime_assertion_failure_rolls_back_session() -> None:
     assert "session:1" in events
 
 
-def test_runtime_rejects_engine_access_from_non_owner_thread() -> None:
+@pytest.mark.parametrize("operation", ("step", "get_observation"))
+def test_runtime_rejects_engine_access_from_non_owner_thread(operation) -> None:
     events: list[str] = []
     runtime = create_mirror_runtime(
         load_mirror_config(),
@@ -505,7 +510,7 @@ def test_runtime_rejects_engine_access_from_non_owner_thread() -> None:
 
     def worker() -> None:
         try:
-            runtime.step()
+            getattr(runtime, operation)()
         except BaseException as exc:
             errors.append(exc)
 
@@ -938,3 +943,47 @@ def test_shared_capture_waits_for_slowest_product_before_publishing_metadata() -
     assert not any(active.values())
     assert set(published) == {"a", "b"}
     assert published["a"]["snapshot_index"] == published["b"]["snapshot_index"]
+
+
+def test_observation_rejects_closed_runtime():
+    runtime = create_mirror_runtime(
+        load_mirror_config(), assembly_factory=lambda cfg: _assembly(cfg, events=[])
+    )
+    runtime.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        runtime.get_observation()
+
+
+def test_profile_fingerprints_are_cached_per_runtime(monkeypatch):
+    from linkerbot_sim.mirror import robots
+
+    calls = []
+
+    def fingerprint(value):
+        calls.append(value)
+        return str(value)
+
+    monkeypatch.setattr(robots, "semantic_config_fingerprint", fingerprint)
+    first = robots.RobotRuntime.__new__(robots.RobotRuntime)
+    first.profile_config = "profile-a"
+    first.controller_profiles = "controller-a"
+    second = robots.RobotRuntime.__new__(robots.RobotRuntime)
+    second.profile_config = "profile-b"
+    second.controller_profiles = None
+    for _ in range(3):
+        assert first.profile_fingerprint == "profile-a"
+        assert first.controller_profile_fingerprint == "controller-a"
+        assert second.profile_fingerprint == "profile-b"
+        assert second.controller_profile_fingerprint is None
+    assert calls == ["profile-a", "controller-a", "profile-b"]
+
+
+def test_observation_service_rejects_missing_or_invalid_adapter():
+    from linkerbot_sim.mirror.state import MirrorStateService
+
+    service = MirrorStateService(getter=lambda: {}, setter=lambda value: value)
+    with pytest.raises(RuntimeError, match="does not provide"):
+        service.get_observation()
+    service.observation_getter = lambda: None
+    with pytest.raises(RuntimeError, match="mapping"):
+        service.get_observation()

@@ -10,6 +10,8 @@ Git commit 标识。
 
 ## [Unreleased]
 
+- 新增嵌入式 `MirrorRuntime.get_observation()`，读取独立关节/物体根节点观测而不捕获恢复元数据。缓存固定 runtime 指纹，复用 Newton CPU/CUDA 的 TIME/ACT/WARMSTART 打包 kernel，保持每步 canonical state 和现有 snapshot/restore 语义。
+
 - 新增可选 `MirrorVideoRecorder`：自有 CUDA RGB 输入、GPU 布局转换及 NVENC H.264/MP4 编码，校验连续物理时刻/原生帧，提供同步背压、帧数/字节配额与排空后完成标记。`video` extra 固定 PyNvVideoCodec 2.2.4，原仿真依赖不变，不静默采用 host 像素或软件编码。录像用于展示，不替代 depth 数值证据或完整状态恢复。
 
 - Mirror `render()` 默认返回位于 `compute.cuda_device` 的自有 Warp 数组；NumPy 消费者需指定 `device="cpu"`。Newton RGB/depth 使用带布局校验的原生 SyntheticData CUDA buffer 出口，不经 host 图像往返。设备复制在返回前完成，相机关闭后数据仍有效；host 数据或设备不一致时报错。自动文件/live 输出继续显式下载；相机 smoke 默认 Newton CUDA，并验证 GPU 所有权、新帧和录制行为。

@@ -571,6 +571,7 @@ def _runtime_object_snapshots(
     stage: object | None,
     handles: Sequence[object],
     state_views: Mapping[str, SceneObjectStateView] | None = None,
+    include_articulation_state: bool = True,
 ) -> dict[str, ObjectSnapshot]:
     """读取 MirrorSceneResources object handles 对应的 scene-local 对象快照。
 
@@ -607,13 +608,13 @@ def _runtime_object_snapshots(
         )
         if velocities is not None:
             kwargs["linear_velocities"], kwargs["angular_velocities"] = velocities
-        if state_view is not None:
+        if state_view is not None and include_articulation_state:
             generalized = state_view.generalized_state()
             if generalized is not None:
                 # generalized_state() 已保证 signature/names/q/qd 五字段同时生成；不要把
                 # 它们拆成可选字段，否则序列化后将失去检测 q/qd 错列所需的 ABI 身份。
                 kwargs.update(generalized)
-        if body_names:
+        if body_names and include_articulation_state:
             # MirrorSceneResources 没有 env origin，root/child body 都按 scene-local pose 保存。
             body_positions = []
             body_orientations = []

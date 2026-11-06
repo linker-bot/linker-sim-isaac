@@ -16,6 +16,42 @@ serve different workloads. They are intentionally not interchangeable.
 | Clone operation | None; every capture is already owned | GPU row-to-row `clone_state` |
 | Persistence | JSON-compatible application boundary | Explicit NPZ cold checkpoint |
 
+## Mirror per-command observations
+
+Embedded owner-thread loops can call `runtime.get_observation()` for current joint
+and object root fields without capturing a recovery snapshot. The returned mapping
+owns its CPU/JSON values; editing or retaining it does not alias live state.
+
+```python
+observation = runtime.get_observation()
+time_s = observation["simulation_time_s"]
+robot = observation["robots"][0]
+q = robot["joint_positions"]
+modes = robot["command_target_modes"]
+objects = observation["objects"]
+```
+
+`robots` follows scene order and contains label, robot_id, joint_names,
+joint_positions, joint_velocities, command_joint_names, command_targets and
+command_target_modes. Only command joints are included, not passive/follower DOFs.
+Targets retain native joint units: for rotational joints, position/velocity/effort
+use rad, rad/s and N·m respectively. `objects` maps names to name, positions_local
+(m), orientations_wxyz, and available linear_velocities (m/s) and angular_velocities
+(rad/s). Pose and velocity semantics are the same as snapshots, including existing
+static-object behavior. The coordinate_frame is `scene-local`.
+
+Calls require an open runtime and its owner thread, advance no physics and render
+no cameras. This is **not a restore payload**: no snapshot schema, asset/config
+fingerprints, solver/controller history, generalized object coordinates or
+child-body restore state is captured. Existing get_state/capture/restore and wire
+operations remain unchanged; no observation wire operation is added.
+
+Newton continues updating its TIME/ACT/WARMSTART canonical buffer after every step
+on the owner stream, now with a reusable packing kernel. This preserves current
+state visibility for Kaleidoscope snapshot/clone without per-call kernel construction.
+Fingerprints are cached for the assembled, fixed runtime identity; changing
+profiles/topology requires a new runtime.
+
 ## Mirror State
 
 `MirrorRuntime.get_state()` returns an owned mapping. `set_state(state, strict=True)`

@@ -51,6 +51,7 @@ class MirrorAssembly:
     views: tuple[object, ...] = ()
     scene_resources: object | None = None
     control_bindings: tuple[MirrorControlBinding, ...] = ()
+    observation_getter: Callable[[], Mapping[str, object]] | None = None
 
 
 def _backend_value(value: object) -> str:
@@ -146,6 +147,7 @@ def create_mirror_runtime(
         state = MirrorStateService(
             getter=assembly.state_getter,
             setter=assembly.state_setter,
+            observation_getter=assembly.observation_getter,
         )
         snapshots = MirrorSnapshotService(
             capture=assembly.snapshot_capture,

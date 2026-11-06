@@ -11,6 +11,8 @@ their Git commit.
 
 ## [Unreleased]
 
+- Add embedded `MirrorRuntime.get_observation()` for owned joint/object root observations without recovery metadata. Cache fixed runtime fingerprints and reuse the Newton TIME/ACT/WARMSTART packing kernel on CPU/CUDA, preserving post-step canonical state and existing snapshot/restore semantics.
+
 - Add optional `MirrorVideoRecorder`: owned CUDA RGB inputs, GPU layout conversion and NVENC H.264/MP4, consecutive physical-time/native-frame checks, synchronous backpressure, frame/byte quotas and completion-after-drain. The `video` extra pins PyNvVideoCodec 2.2.4 without changing existing simulation dependencies; no host-pixel/software-encoder fallback. This is display recording, not depth evidence or full state recovery.
 
 - Mirror `render()` now defaults to owned Warp arrays on `compute.cuda_device`; request `device="cpu"` for NumPy. Newton RGB/depth use native SyntheticData CUDA buffer exports with layout checks, without a host image round trip. Device copies finish before return and survive camera teardown; a host payload or device mismatch fails. Automatic file/live output still downloads explicitly. Camera smoke defaults to Newton CUDA and validates GPU ownership as well as fresh-frame/recording behavior.

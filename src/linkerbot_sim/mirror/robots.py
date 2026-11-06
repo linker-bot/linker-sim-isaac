@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 import hashlib
 from pathlib import Path
 from threading import RLock
@@ -102,13 +103,13 @@ class RobotRuntime:
             },
         }
 
-    @property
+    @cached_property
     def profile_fingerprint(self) -> str:
         """计算稳定 profile 内容指纹，供 status 与 snapshot 兼容性校验使用。"""
 
         return semantic_config_fingerprint(self.profile_config)
 
-    @property
+    @cached_property
     def controller_profile_fingerprint(self) -> str | None:
         """Return the resolved controller bundle fingerprint when available."""
 
