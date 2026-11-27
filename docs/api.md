@@ -480,7 +480,7 @@ Calling `capture` or `restore` inside `env.step()` is not supported.
 ### `capture(env)`
 
 The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied to the CPU
-(size and copy time depend on the configured observations). Raises `SnapshotError` for
+(about 40 KB plus the observations). Raises `SnapshotError` for
 what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
 your own); an observation term with a history; an event term at intervals; command,
@@ -493,7 +493,8 @@ Writes the snapshot into `env` without a reset and returns the observations at t
 (also stored in `env.obs_buf`). First everything is checked: the same refusals as `capture`,
 the header (linker-lab's commit when running from a checkout, the versions of linker-lab,
 linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration fingerprint,
-the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
+the scene's entities, the action terms and their sizes), every tensor's shape and dtype, and
+that the saved random generators' states can be loaded.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
 The observations are copied back as they were captured, noise included; the observation
