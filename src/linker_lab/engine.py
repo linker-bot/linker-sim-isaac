@@ -26,6 +26,7 @@ import sys
 from dataclasses import dataclass
 
 _applied: list[str] = []
+_apply_failed = False
 
 
 def _actuator_clamping_alias() -> None:
@@ -145,7 +146,12 @@ the task packages, so a task package can call ``linker_lab.bootstrap()`` when im
 
 def apply() -> list[str]:
     """Apply every patch once. Must run before Isaac Lab's simulation modules are imported."""
-    if _applied:
+    global _apply_failed
+    if _apply_failed:
+        raise RuntimeError(
+            "linker_lab.bootstrap() previously failed; restart the process before retrying"
+        )
+    if len(_applied) == len(_PATCHES):
         return list(_applied)
     early = sorted(
         name
@@ -157,9 +163,13 @@ def apply() -> list[str]:
             "linker_lab.bootstrap() must be called before Isaac Lab is imported "
             f"(already imported: {', '.join(early[:3])}). Import linker_lab first in your script."
         )
-    for patch in _PATCHES:
-        patch()
-        _applied.append(patch.__name__.lstrip("_"))
+    try:
+        for patch in _PATCHES:
+            patch()
+            _applied.append(patch.__name__.lstrip("_"))
+    except Exception:
+        _apply_failed = True
+        raise
     return list(_applied)
 
 

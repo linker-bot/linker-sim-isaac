@@ -107,3 +107,62 @@ def test_fingerprint_is_the_same_in_a_new_process(cfg):
     code = "import linker_lab; linker_lab.bootstrap(); from linker_lab import snapshot, workstation; print(snapshot._fingerprint(workstation.LWv0EnvCfg()))"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout.split()[-1]
     assert out == snapshot._fingerprint(cfg())
+
+
+@pytest.mark.parametrize("bad", [["bad", None], [[1, 2, "bad"], None], [[1, 2, 3], "bad"]])
+def test_nested_rng_types_are_checked(bad):
+    current = {"rng_python": [[1, 2, 3], None]}
+    with pytest.raises(ValueError, match="rng_python"):
+        snapshot._check_tree(current, {"rng_python": bad}, "state.environment")
+
+
+@pytest.mark.parametrize("before, after", [(None, 0.5), (0.5, None)])
+def test_python_gaussian_cache_can_change_type(before, after):
+    snapshot._check_tree(
+        {"rng_python": [[1, 2], before]},
+        {"rng_python": [[1, 2], after]},
+        "state.environment",
+    )
+
+
+def test_observation_failure_marks_environment_modified(monkeypatch):
+    from types import SimpleNamespace
+
+    def fail(**kwargs):
+        raise RuntimeError("observation failed")
+
+    env = SimpleNamespace(observation_manager=SimpleNamespace(compute=fail))
+    monkeypatch.setattr(snapshot, "_refusals", lambda env: None)
+    monkeypatch.setattr(snapshot, "_header", lambda env: {})
+    monkeypatch.setattr(snapshot, "_check_header", lambda *args: None)
+    monkeypatch.setattr(snapshot, "_read", lambda env: {})
+    monkeypatch.setattr(snapshot, "_check_tree", lambda *args: None)
+    monkeypatch.setattr(snapshot, "_check_rng", lambda *args: None)
+    monkeypatch.setattr(snapshot, "_write", lambda *args: None)
+    env.device = "cpu"
+    with pytest.raises(snapshot.SnapshotError, match="observation failed") as error:
+        snapshot.restore(env, snapshot.Snapshot({}, {"environment": {}}))
+    assert error.value.physics_modified is True
+
+
+def test_invalid_rng_payload_is_refused_before_writing(monkeypatch):
+    import random
+    from types import SimpleNamespace
+
+    current = {"environment": {"rng_python": [list(random.getstate()[1]), None]}}
+    bad = {"environment": {"rng_python": [[1] * len(current["environment"]["rng_python"][0]), None]}}
+    # Correct shape and types, but the final integer is an invalid RNG index.
+    bad["environment"]["rng_python"][0][-1] = 9999
+    env = SimpleNamespace(device="cpu")
+    writes = []
+    monkeypatch.setattr(snapshot, "_refusals", lambda env: None)
+    monkeypatch.setattr(snapshot, "_header", lambda env: {})
+    monkeypatch.setattr(snapshot, "_check_header", lambda *args: None)
+    monkeypatch.setattr(snapshot, "_read", lambda env: current)
+    monkeypatch.setattr(snapshot, "_write", lambda *args: writes.append(True))
+    rng_before = random.getstate()
+    with pytest.raises(snapshot.SnapshotError) as error:
+        snapshot.restore(env, snapshot.Snapshot({}, bad))
+    assert not error.value.physics_modified
+    assert writes == []
+    assert random.getstate() == rng_before

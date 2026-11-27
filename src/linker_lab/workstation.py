@@ -381,6 +381,10 @@ def home_action(env):
                 raise ValueError(f"home_action: {name} does not take joint points")
             if term.cfg.stream == "points_velocity":
                 home = torch.cat((home, torch.zeros_like(home)), -1)
+        elif isinstance(term.cfg, hand.HandActionCfg) and term.cfg.normalized:
+            limits = robot.data.joint_pos_limits.torch[:, ids]
+            lower, upper = limits[..., 0], limits[..., 1]
+            home = 2 * (home - lower) / (upper - lower) - 1
         parts.append(home)
     return torch.cat(parts, dim=-1)
 

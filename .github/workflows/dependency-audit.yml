@@ -13,11 +13,11 @@ on:
       base_ref:
         description: Trusted base Git ref to compare
         required: true
-        default: master
+        default: main
       head_ref:
         description: Head Git ref to audit
         required: true
-        default: master
+        default: main
 
 permissions:
   contents: read

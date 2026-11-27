@@ -220,7 +220,7 @@ class HandAction(ActionTerm):
         target = actions
         if self.cfg.normalized:
             target = self._lower + (actions.clamp(-1, 1) + 1) * 0.5 * (self._upper - self._lower)
-        self._target = torch.where(torch.isfinite(target), target, self._target)
+        self._target = torch.where(torch.isfinite(actions), target, self._target)
         self.motor.decide(self._asset.data.joint_pos.torch[:, self._joint_ids], self._target)
 
     def apply_actions(self):

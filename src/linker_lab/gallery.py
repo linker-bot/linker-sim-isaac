@@ -21,6 +21,7 @@ Importing this module imports nothing from Isaac Lab.
 
 from __future__ import annotations
 
+import importlib.resources
 import importlib.util
 import shutil
 import sys
@@ -41,7 +42,14 @@ __all__ = [
     "GalleryError",
 ]
 
-ROOT = Path(__file__).resolve().parents[2] / "policy-gallery"
+# Wheels carry the entries inside the package; editable checkouts use the source
+# gallery so edits to a policy are visible without rebuilding the distribution.
+_PACKAGED_ROOT = Path(str(importlib.resources.files("linker_lab") / "_gallery"))
+ROOT = (
+    _PACKAGED_ROOT
+    if _PACKAGED_ROOT.is_dir()
+    else Path(__file__).resolve().parents[2] / "policy-gallery"
+)
 FIELDS = (
     "name",
     "version",

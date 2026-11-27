@@ -86,3 +86,29 @@ def test_presets():
     current = torch.tensor([hand.PRESETS["open"]])
     opposed = hand.thumb_oppose(current)
     assert opposed[0, 1] == pytest.approx(1.04) and (opposed[0, [0, 2, 3, 4, 5]] == 0).all()
+
+
+@pytest.mark.parametrize("normalized", [False, True])
+def test_action_nonfinite_values_keep_previous_targets(normalized):
+    """NaN and either infinity hold their shaft; finite normalized values still clamp."""
+    from types import SimpleNamespace
+
+    previous = torch.full((1, 6), 0.4)
+    measured = torch.zeros(1, 6)
+    calls = []
+    action = SimpleNamespace(
+        cfg=SimpleNamespace(normalized=normalized),
+        _raw=torch.zeros(1, 6),
+        _target=previous.clone(),
+        _lower=torch.tensor(LOWER),
+        _upper=torch.tensor(UPPER),
+        _joint_ids=list(range(6)),
+        _asset=SimpleNamespace(data=SimpleNamespace(joint_pos=SimpleNamespace(torch=measured))),
+        motor=SimpleNamespace(decide=lambda q, target: calls.append(target.clone())),
+    )
+    command = torch.tensor([[float("nan"), float("inf"), -float("inf"), -2.0, 0.0, 2.0]])
+    hand.HandAction.process_actions(action, command)
+    expected = previous.clone()
+    expected[:, 3:] = torch.tensor([[0.0, 0.8, 1.6]] if normalized else [[-2.0, 0.0, 2.0]])
+    torch.testing.assert_close(action._target, expected)
+    torch.testing.assert_close(calls[0], expected)

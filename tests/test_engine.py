@@ -105,3 +105,38 @@ def test_viewer_syncs_colors_only_when_they_change():
         "print(len(calls))"
     )
     assert out == "3"
+
+
+def test_bootstrap_failure_requires_a_fresh_process(monkeypatch):
+    calls = []
+
+    def first():
+        calls.append("first")
+
+    def failing():
+        calls.append("failing")
+        raise ValueError("patch failed")
+
+    monkeypatch.setattr(engine, "_applied", [])
+    monkeypatch.setattr(engine, "_apply_failed", False)
+    monkeypatch.setattr(engine, "_SIMULATION_MODULES", ())
+    monkeypatch.setattr(engine, "_PATCHES", (first, failing))
+    with pytest.raises(ValueError, match="patch failed"):
+        engine.apply()
+    with pytest.raises(RuntimeError, match="restart the process"):
+        engine.apply()
+    assert calls == ["first", "failing"]
+
+
+def test_bootstrap_first_patch_failure_also_prevents_retry(monkeypatch):
+    def failing():
+        raise ValueError("patch failed")
+
+    monkeypatch.setattr(engine, "_applied", [])
+    monkeypatch.setattr(engine, "_apply_failed", False)
+    monkeypatch.setattr(engine, "_SIMULATION_MODULES", ())
+    monkeypatch.setattr(engine, "_PATCHES", (failing,))
+    with pytest.raises(ValueError):
+        engine.apply()
+    with pytest.raises(RuntimeError, match="restart the process"):
+        engine.apply()

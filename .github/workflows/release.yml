@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing annotated tag to publish (for example, v0.3.0)
+        description: Existing annotated tag to publish (for example, v1.0.0)
         required: true
         type: string
       simulation_run_id:
@@ -61,11 +61,6 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Set up just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-        with:
-          just-version: "1.58.0"
-
       - name: Read Simulation acceptance evidence
         shell: bash
         run: |
@@ -79,10 +74,18 @@ jobs:
         run: uv lock --check
 
       - name: Sync CPU development environment
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --group dev
+
+      - name: Install wheel build test dependency
+        run: uv pip install --python .venv-dev/bin/python "hatchling>=1.27,<2"
+
+      - name: Verify installed wheel resources
+        run: uv run --no-sync python -m pytest tests/distribution --confcutdir=tests/distribution
 
       - name: Run CPU quality gate
-        run: just quality
+        run: |
+          uv run --no-sync ruff check .
+          uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distribution
 
       - name: Validate release and create source archive
         run: >-
@@ -100,12 +103,12 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${RELEASE_TAG#v}"
-          ARCHIVE="dist/linker-sim-isaac-${VERSION}.tar.gz"
+          ARCHIVE="dist/linker-lab-${VERSION}.tar.gz"
           args=(
             "$RELEASE_TAG"
             "$ARCHIVE#Source workspace (tar.gz)"
             "dist/SHA256SUMS#SHA-256 checksums"
-            --title "linker-sim-isaac ${RELEASE_TAG}"
+            --title "linker-lab ${RELEASE_TAG}"
             --notes-file dist/RELEASE_NOTES.md
             --target "$(git rev-parse HEAD)"
             --verify-tag

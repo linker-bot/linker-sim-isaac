@@ -164,3 +164,45 @@ def test_camera_cfg_rounds_either_side(ws):
 def test_episodes_never_end_by_themselves(ws):
     """No termination terms: an LW-v0 session runs until it is reset (tasks add their own)."""
     assert not ws.LWv0EnvCfg().terminations.to_dict()
+
+
+def test_home_action_maps_normalized_hands_without_changing_other_terms(ws):
+    """Mixed inputs hold the same home angles in either hand convention."""
+    from types import SimpleNamespace
+
+    import torch
+
+    from linker_lab import arm, hand
+
+    # Different limits per environment catch accidental use of row zero.
+    home = torch.tensor([[0.0, 0.25, 0.5, 0.75, 1.0, 0.5, 0.2],
+                         [0.1, 0.5, 0.75, 1.0, 1.25, 0.6, 0.3]])
+    lower = torch.tensor([[0.0] * 7, [0.1] * 7])
+    upper = lower + 2.0
+    robot = SimpleNamespace(
+        find_joints=lambda names, preserve_order: (list(range(len(names))), names),
+        data=SimpleNamespace(
+            default_joint_pos=SimpleNamespace(torch=home),
+            joint_pos_limits=SimpleNamespace(torch=torch.stack((lower, upper), -1)),
+        ),
+    )
+    terms = {
+        "arm": SimpleNamespace(cfg=arm.ArmActionCfg(
+            asset_name="robot", joint_names=[str(i) for i in range(7)],
+            interpolation=False, stream="points_velocity")),
+        "normalized_hand": SimpleNamespace(cfg=hand.HandActionCfg(
+            asset_name="robot", joint_names=[str(i) for i in range(6)], normalized=True)),
+        "radian_hand": SimpleNamespace(cfg=hand.HandActionCfg(
+            asset_name="robot", joint_names=[str(i) for i in range(6)])),
+    }
+    env = SimpleNamespace(
+        action_manager=SimpleNamespace(active_terms=list(terms), get_term=terms.__getitem__),
+        scene={"robot": robot},
+    )
+    result = ws.home_action(env)
+    torch.testing.assert_close(result[:, :7], home)
+    torch.testing.assert_close(result[:, 7:14], torch.zeros_like(home))
+    normalized = result[:, 14:20]
+    restored = lower[:, :6] + (normalized + 1) * 0.5 * (upper[:, :6] - lower[:, :6])
+    torch.testing.assert_close(restored, home[:, :6])
+    torch.testing.assert_close(result[:, 20:], home[:, :6])

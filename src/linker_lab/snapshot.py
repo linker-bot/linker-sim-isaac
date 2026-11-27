@@ -111,13 +111,14 @@ def restore(env, snapshot: Snapshot) -> dict:
     current = _cpu(_read(env))
     try:
         _check_tree(current, snapshot.state, "state")
-    except ValueError as error:
+        _check_rng(snapshot.state["environment"], env.device)
+    except (ValueError, TypeError, RuntimeError) as error:
         raise SnapshotError(str(error)) from error
     try:
         _write(env, snapshot.state)
+        env.obs_buf = env.observation_manager.compute(update_history=False)
     except Exception as error:
         raise SnapshotError(f"restore failed while writing: {error}", physics_modified=True) from error
-    env.obs_buf = env.observation_manager.compute(update_history=False)
     return env.obs_buf
 
 
@@ -278,7 +279,10 @@ def _cpu(tree):
 
 
 def _check_tree(current, saved, where: str) -> None:
-    if isinstance(current, torch.Tensor):
+    if where.endswith(".rng_python[1]"):
+        if saved is not None and type(saved) is not float:
+            raise ValueError(f"{where}: expected None or float")
+    elif isinstance(current, torch.Tensor):
         if not isinstance(saved, torch.Tensor) or saved.shape != current.shape or saved.dtype != current.dtype:
             got = (tuple(saved.shape), saved.dtype) if isinstance(saved, torch.Tensor) else type(saved).__name__
             raise ValueError(f"{where}: expected {(tuple(current.shape), current.dtype)}, got {got}")
@@ -293,8 +297,24 @@ def _check_tree(current, saved, where: str) -> None:
     elif isinstance(current, list):
         if not isinstance(saved, list) or len(saved) != len(current):
             raise ValueError(f"{where}: length differs")
-    elif current is not None and type(saved) is not type(current):
+        for index, (value, new) in enumerate(zip(current, saved)):
+            _check_tree(value, new, f"{where}[{index}]")
+    elif type(saved) is not type(current):
         raise ValueError(f"{where}: expected {type(current).__name__}, got {type(saved).__name__}")
+
+
+def _check_rng(environment: dict, device) -> None:
+    """Validate RNG payloads on private generators before touching the live environment."""
+    keys, gauss = environment["rng_python"]
+    random.Random().setstate((3, tuple(keys), gauss))
+    n = environment["rng_numpy"]
+    np.random.RandomState().set_state(
+        ("MT19937", n["keys"].numpy().astype(np.uint32), n["pos"], n["has_gauss"], n["gauss"])
+    )
+    torch.Generator(device="cpu").set_state(environment["rng_torch"])
+    if environment["rng_cuda"].numel():
+        # CPU and CUDA use different state layouts; validate CUDA on a private generator.
+        torch.Generator(device=device).set_state(environment["rng_cuda"])
 
 
 # ---------------------------------------------------------------------------- writing

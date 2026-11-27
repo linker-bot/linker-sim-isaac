@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - master
   workflow_dispatch:
 
@@ -28,10 +29,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # linker-robot-assets is a submodule; validate-config parses the
-          # composed workstation.urdf and test-pure reads workstation.xml from
-          # it. No LFS meshes are needed for the CPU gate (XML/text only).
-          submodules: recursive
+
 
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -41,16 +39,19 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
 
-      - name: Set up just
-        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-        with:
-          just-version: "1.58.0"
-
       - name: Verify dependency lock
         run: uv lock --check
 
       - name: Sync CPU development environment
-        run: uv sync --frozen --extra dev
+        run: uv sync --locked --group dev
+
+      - name: Install wheel build test dependency
+        run: uv pip install --python .venv-dev/bin/python "hatchling>=1.27,<2"
+
+      - name: Verify installed wheel resources
+        run: uv run --no-sync python -m pytest tests/distribution --confcutdir=tests/distribution
 
       - name: Run CPU quality gate
-        run: just quality
+        run: |
+          uv run --no-sync ruff check .
+          uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distribution
