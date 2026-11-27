@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing annotated tag to publish (for example, v1.0.0)
+        description: Existing annotated tag to publish (for example, v2.0.0)
         required: true
         type: string
       simulation_run_id:

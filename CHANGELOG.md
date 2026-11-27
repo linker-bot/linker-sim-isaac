@@ -1,15 +1,15 @@
 # Changelog
 
-linker-lab follows [semantic versions](https://semver.org/) from 1.0. The public API is
+linker-lab follows [semantic versions](https://semver.org/) from 2.0.0. The public API is
 what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major version, a
 removal first warns for one minor release, and a new version of LW-v0's files is a new minor
 version.
 
-## 1.0.0 (2026-11-27)
+## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
-like the real robot. It replaces this repository's earlier package, `linkerbot_sim` (last
-release `v0.3.0`).
+like the real robot. It replaces this repository's earlier package, `linkerbot_sim`, whose
+releases end at `v1.0.0`; hence 2.0.0.
 
 - **LW-v0** (two AR5 arms with O6 hands, the table and three cameras) from the files of
   linker-sim-assets `v1.0.0`, converted to USD on first use; the gym environment

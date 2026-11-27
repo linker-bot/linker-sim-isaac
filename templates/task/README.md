@@ -29,7 +29,7 @@ uv run python run.py --viewer   # 4 environments in the viewer
 To rename it, change the project `name` and the entry point in `pyproject.toml`, the folder
 `src/my_task`, the gym id in `__init__.py`, and the imports in `run.py`.
 
-`uv sync` installs `linker-lab` from its release tag `v1.0.0` in
+`uv sync` installs `linker-lab` from its release tag `v2.0.0` in
 [linker-bot/linker-sim-isaac](https://github.com/linker-bot/linker-sim-isaac)
 (`[tool.uv.sources]` in `pyproject.toml`). To move to a later release, change the tag and run
 `uv sync` again.

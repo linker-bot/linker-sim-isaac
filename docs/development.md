@@ -75,8 +75,8 @@ guides, and a line in the changelog under `## Unreleased`.
 
 A release is an annotated tag `vX.Y.Z` whose version is the one in `pyproject.toml`,
 `linker_lab.__version__` and a dated changelog section, and the task template installs
-linker-lab from that tag (`tests/test_release_links.py` checks both). Tags before `v1.0.0`
-belong to this repository's earlier package.
+linker-lab from that tag (`tests/test_release_links.py` checks both). Tags before `v2.0.0`
+(up to `v1.0.0`) belong to this repository's earlier package.
 
 The `Release` workflow takes an existing annotated tag plus a successful `Simulation` run
 for that exact commit. It reruns CPU/wheel checks and validates tag/version/evidence before

@@ -23,7 +23,7 @@ license: |
   (CC BY-NC 4.0).
   Objects: YCB Object and Model Set, CC BY 4.0 (Calli et al., "The YCB Object and Model
   Set", IEEE Robotics & Automation Magazine, 2015).
-linker_lab: ">=1.0.0,<2"
+linker_lab: ">=2.0.0,<3"
 artifacts:
   policy.npz:
     url: https://github.com/linker-bot/linker-sim-isaac/releases/download/ycb-grasp-0.3.0/policy.npz

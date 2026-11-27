@@ -1,7 +1,7 @@
 # API reference
 
 This page is linker-lab's public API: the modules, names and members listed here. From
-1.0 they follow semantic versions:
+2.0.0 they follow semantic versions:
 
 - a change that breaks code using them is a new major version;
 - a name to be removed first warns for one minor release;
@@ -62,7 +62,7 @@ The modules that need it call it when imported.
 
 ### `__version__`
 
-linker-lab's version, e.g. `"1.0.0"`.
+linker-lab's version, e.g. `"2.0.0"`.
 
 ## `linker_lab.workstation`
 

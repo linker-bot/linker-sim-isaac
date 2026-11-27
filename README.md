@@ -59,14 +59,14 @@ Isaac Lab and convert LW-v0's files). The GPU, viewer and wheel tests are in
 
 ## API and versions
 
-[docs/api.md](docs/api.md) is the public API: from 1.0 it follows semantic versions, and the
+[docs/api.md](docs/api.md) is the public API: from 2.0.0 it follows semantic versions, and the
 [changelog](CHANGELOG.md) lists every change to it. LW-v0's files come from
 [linker-sim-assets](https://github.com/linker-bot/linker-sim-assets) at the release tag
-`v1.0.0`, which keeps LW-v0 the same robot throughout 1.x.
+`v1.0.0`, which keeps LW-v0 the same robot throughout linker-sim-assets 1.x.
 
 ## Earlier releases of this repository
 
-Releases before 1.0.0 (the last one is `v0.3.0`) are a different package, `linkerbot_sim`
+Releases before 2.0.0 (the last one is `v1.0.0`) are a different package, `linkerbot_sim`
 with the Mirror and Kaleidoscope entry points. linker-lab does not include them or a
 compatibility layer: scripts written for them have to be rewritten against
 `linker_lab.workstation` and Isaac Lab's task API.

@@ -73,7 +73,7 @@ policy-gallery/<entry>/
 | `version` | the entry's own version |
 | `title`, `description` | what someone trying it sees |
 | `license` | the licences of the weights and of any data (objects, scenes) |
-| `linker_lab` | the linker-lab versions it runs on, a version range such as `">=1.0,<2"` |
+| `linker_lab` | the linker-lab versions it runs on, a version range such as `">=2.0,<3"` |
 | `artifacts` | file name → `url` and `sha256` of each file it needs (weights, object data) |
 
 `play.py` defines `run(artifacts)`, called with each artifact's local path; it owns
