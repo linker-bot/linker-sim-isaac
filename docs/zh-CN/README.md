@@ -6,7 +6,7 @@ linker-lab 是 Isaac Lab 的扩展，提供一台 Linker 工作站 **LW-v0**（�
 
 仓库名是 `linker-sim-isaac`；软件包和命令名是 `linker-lab`，Python 导入名是 `linker_lab`。
 
-本页是中文快速入门，内容与英文文档对应：安装、检查、playground、gallery、任务模板。完整说明见英文的 [getting started](../getting-started.md)、[LW-v0 环境](../environment.md) 和 [API 参考](../api.md)。英文文档是准确的版本；两者不一致时以英文为准。
+本页是中文快速入门，内容与英文文档对应：安装、检查、playground、gallery、任务模板、开发与排查。完整说明见英文的 [getting started](../getting-started.md)、[LW-v0 环境](../environment.md) 和 [API 参考](../api.md)。英文文档是准确的版本；两者不一致时以英文为准。
 
 ## 1. 安装
 
@@ -55,8 +55,6 @@ W/A/S/D、Q/E 和方向键移动视角，空格暂停，H 隐藏面板，Esc 退
 
 Playground 和 gallery 的窗口都需要可用的图形显示环境。`uv run linker-lab play --selftest` 也会打开窗口；加上 `--out tests/outputs/playground` 可保存报告和截图。
 
-在脚本中，需要先调用 `linker_lab.bootstrap()`，或先导入 `linker_lab.workstation`，再导入 Isaac Lab 的仿真模块。仅执行 `import linker_lab` 不会应用兼容补丁。
-
 ## 4. Gallery：预训练策略
 
 策略权重和物体数据不在仓库里：`run` 第一次运行时从本仓库的 release（如 `ycb-grasp-0.3.0`）下载，校验 sha256 后放入缓存。离线机器上手动放置文件的方法见 [gallery](../gallery.md#the-files)。
@@ -94,4 +92,4 @@ uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distri
 
 这些是不需要 GPU 的测试，但仍需要完整安装（会导入 Isaac Lab 并转换 LW-v0 的文件）；不代表项目支持 CPU 仿真。GPU、窗口和 wheel 测试见[开发指南](../development.md)。
 
-版本或导入失败后，先同步锁定依赖，再在新的 Python 进程里运行 doctor。缓存默认位于 `~/.cache/linker-lab/{usd,objects,gallery}/`，也可以通过 `XDG_CACHE_HOME` 指定根目录。快照恢复时，观测按保存时的值（包括噪声）返回，不重新计算；相机传感器缓存和运行中被随机化的模型参数不在恢复范围内。详见[排查说明](../getting-started.md#troubleshooting)。
+在自己的脚本中，先调用 `linker_lab.bootstrap()` 或先导入 `linker_lab.workstation`，再导入 Isaac Lab 的仿真模块；仅执行 `import linker_lab` 不会应用兼容补丁。版本或导入失败后，先同步锁定依赖，再在新的 Python 进程里运行 doctor。缓存默认位于 `~/.cache/linker-lab/{usd,objects,gallery}/`，也可以通过 `XDG_CACHE_HOME` 指定根目录。详见[排查说明](../getting-started.md#troubleshooting)。
