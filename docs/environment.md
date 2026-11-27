@@ -188,7 +188,7 @@ process or a new one, without a reset: the arm continues its motion, the hand ke
 from linker_lab import snapshot
 
 def save_moment(env, path):
-    snapshot.save(snapshot.capture(env), path)  # size includes the configured observation buffer
+    snapshot.save(snapshot.capture(env), path)  # about 40 KB, plus the observations
 
 def back_to(env, path):
     return snapshot.restore(env, snapshot.load(path))  # the observations at that moment
@@ -197,11 +197,8 @@ def back_to(env, path):
 A snapshot restores into an environment made with the same linker-lab, the same package
 versions and the same configuration (it checks, and refuses otherwise, before changing
 anything). The control state, counters and simulated time come back exactly, the physics within
-float32 rounding; after that, runs drift apart slowly, as any two GPU runs do. Schema 1 recomputes observations when restoring; noisy observations can therefore advance
-the random generators. Schema 2, supplied by
-[PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82), stores the already computed
-observation buffer and copies it back without recomputing it. When upgrading to schema 2,
-capture old snapshots again. Snapshot size depends on the configured observations.
+float32 rounding; after that, runs drift apart slowly, as any two GPU runs do. The
+observations come back as they were captured, noise included, without being computed again.
 Camera sensor buffers and model parameters changed while running (by randomization
 events) are not restored.
 [api.md](api.md#linker_labsnapshot) lists what is saved and what is refused.

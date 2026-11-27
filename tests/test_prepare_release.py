@@ -10,7 +10,7 @@ import pytest
 
 from scripts import prepare_release as release
 
-REPOSITORY = "linker-bot/linker-lab"
+REPOSITORY = "linker-bot/linker-sim-isaac"
 
 
 def _git(repository: Path, *arguments: str) -> str:

@@ -29,11 +29,10 @@ uv run python run.py --viewer   # 4 environments in the viewer
 To rename it, change the project `name` and the entry point in `pyproject.toml`, the folder
 `src/my_task`, the gym id in `__init__.py`, and the imports in `run.py`.
 
-`uv sync` installs `linker-lab` from the commit pinned in `[tool.uv.sources]` of this
-template's `pyproject.toml`: `44fabb5d7a6104b4850d203f7814f6353c0b8105` in
-[linker-bot/linker-sim-isaac](https://github.com/linker-bot/linker-sim-isaac). The repository's
-existing `v1.0.0` tag contains the previous workspace and cannot be used for this package.
-This pin does not automatically include later or uncommitted fixes.
+`uv sync` installs `linker-lab` from its release tag `v1.0.0` in
+[linker-bot/linker-sim-isaac](https://github.com/linker-bot/linker-sim-isaac)
+(`[tool.uv.sources]` in `pyproject.toml`). To move to a later release, change the tag and run
+`uv sync` again.
 
 The task project repeats the Newton override needed by Isaac Lab 3.0 and a
 `tinyobjloader` prerelease constraint. Keep those when renaming the template. It resolves
@@ -52,7 +51,7 @@ linker-lab = { path = "/absolute/path/to/linker-sim-isaac", editable = true }
 ```
 
 Run `uv sync` after changing it. Python and gallery source changes are then visible
-without rebuilding the package. Use a Git commit source again when sharing the task;
+without rebuilding the package. Use the release tag again when sharing the task;
 an absolute path is specific to your machine.
 
 ## The task

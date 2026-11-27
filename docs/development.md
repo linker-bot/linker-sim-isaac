@@ -48,10 +48,8 @@ uv run --no-sync linker-lab play --selftest --out tests/outputs/playground
 
 A CUDA device is required. Window tests also require a working display (`DISPLAY` in the
 current test suite). Headless scripts do not require it, but a GPU-only run without a
-display skips viewer tests. Read the skipped-test summary: a successful CPU run, or GPU
-checks that skipped, do not verify simulation/viewer acceptance. Gallery acceptance also
-requires the exact policy/object files from its manifest; see
-[artifact availability](gallery.md#artifact-availability).
+display skips viewer tests, so read the summary of skipped tests: a skipped test checked
+nothing. The gallery tests download the entries' files ([the files](gallery.md#the-files)).
 
 The `Quality` workflow runs CPU and wheel checks. The manually dispatched `Simulation`
 workflow runs on the configured self-hosted Linux x86_64 NVIDIA runner, requires a display,
@@ -63,36 +61,29 @@ terms. Local aarch64 use and the workflow's x86_64 runner are separate validatio
 - `assets`, `physics`, `objects`: robot data, conversion, solver configuration and rigid objects.
 - `workstation`: the scene, Gym registration, action configurations, frames and cameras.
 - `arm`, `hand`: controller models and Isaac Lab action terms.
-- `snapshot`: supported physics/control/environment state; schema 2 also stores observations.
+- `snapshot`: save and restore an environment between two steps.
 - `gallery`, `playground`, `cli`: policy discovery, interactive control and command dispatch.
 - `engine`: the pinned compatibility patches; an internal module rather than a public API.
 - `templates/task`: a separate task project; its sources and lock are independent of this checkout.
 
 The public contract is [api.md](api.md). New Python examples are collected by
 `tests/test_docs.py`; simulation examples execute separately in `tests/gpu/test_docs_gpu.py`.
-When changing runtime behavior, update the matching API/guide text and the Unreleased
-changelog section as well as adding a regression for the behavior.
+A change in behaviour comes with its test, the matching text in the API reference and the
+guides, and a line in the changelog under `## Unreleased`.
 
 ## Releases
 
-The existing repository tag `v1.0.0` is a legacy-workspace tag and does not contain the new
-`linker-lab` package. Do not use it as this package's install source or move it to new code.
-Choose a new, unused release version and keep `pyproject.toml`, `linker_lab.__version__` and
-the dated changelog section consistent.
+A release is an annotated tag `vX.Y.Z` whose version is the one in `pyproject.toml`,
+`linker_lab.__version__` and a dated changelog section, and the task template installs
+linker-lab from that tag (`tests/test_release_links.py` checks both). Tags before `v1.0.0`
+belong to this repository's earlier package.
 
 The `Release` workflow takes an existing annotated tag plus a successful `Simulation` run
 for that exact commit. It reruns CPU/wheel checks and validates tag/version/evidence before
-publishing the source archive, SHA-256 sums and release notes. It does not publish a PyPI
-wheel or policy weights. Gallery artifacts need their own published files and matching
-manifest URLs and hashes. The release validator is `scripts/prepare_release.py`.
+publishing the source archive, SHA-256 sums and release notes
+(`scripts/prepare_release.py`). It publishes no wheel and no gallery files.
 
-## Separate runtime corrections
-
-This documentation change does not include the implementation commits in
-[PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82) (snapshot schema 2),
-[PR #83](https://github.com/linker-bot/linker-sim-isaac/pull/83) (streamed motion limits),
-[PR #84](https://github.com/linker-bot/linker-sim-isaac/pull/84) (gallery loading/downloads), or
-[PR #85](https://github.com/linker-bot/linker-sim-isaac/pull/85) (doctor diagnostics).
-Descriptions of those behaviors apply to builds containing the corresponding correction.
-The task template's pinned commit predates them; use the local source option when testing
-an unmerged change.
+A gallery entry's files are published by hand as a release named `<entry>-<version>`,
+marked not latest, e.g.
+`gh release create ycb-grasp-0.3.0 --latest=false policy.npz objects.npz`; its manifest
+lists their URLs and sha256 (`tests/test_release_links.py` checks the URLs' form).

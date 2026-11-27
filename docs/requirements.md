@@ -22,8 +22,8 @@ are not supported by the compatibility patches; LW-v0 uses rigid bodies and impl
 actuators. Installing the package through a different project must preserve the Newton
 override; the task template provides it.
 
-The `linker-lw-v0` data dependency is installed with the project. Policy weights and YCB
-object data are separate: see [artifact availability](gallery.md#artifact-availability).
+LW-v0's files (the `linker-lw-v0` package) are installed with the project; the gallery
+downloads its policies' files when an entry first runs ([the files](gallery.md#the-files)).
 
 **Speed.** Reported measurements from the development workstation (a high-end desktop GPU); these
 are examples, not performance guarantees:

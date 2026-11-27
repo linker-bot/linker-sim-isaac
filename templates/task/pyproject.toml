@@ -1,6 +1,5 @@
 # Your task's own project. It installs linker-lab (and with it Isaac Lab and the pinned
-# engine) from a pinned commit of linker-sim-isaac; `uv sync` creates .venv.
-# The existing v1.0.0 repository tag contains the previous workspace, not linker-lab.
+# engine) from linker-lab's release tag in linker-sim-isaac; `uv sync` creates .venv.
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
@@ -18,7 +17,7 @@ dependencies = ["linker-lab"]
 my_task = "my_task"
 
 [tool.uv.sources]
-linker-lab = { git = "https://github.com/linker-bot/linker-sim-isaac.git", rev = "44fabb5d7a6104b4850d203f7814f6353c0b8105" }
+linker-lab = { git = "https://github.com/linker-bot/linker-sim-isaac.git", tag = "v1.0.0" }
 
 [tool.uv]
 # The platforms linker-lab supports.

@@ -462,9 +462,8 @@ def try_again(env, attempts):
 Saved: every articulation's and rigid object's root pose and velocity, every articulation's
 joint positions, velocities and drive targets; each action term's state (`get_state()`); the
 action manager's last two actions; the step counters, episode lengths, simulated time, reward
-sums and the random generators (torch, NumPy, Python). Schema 2 also saves the already
-computed observation buffer, including sampled noise (see the version note under `restore`).
-Not saved: contacts and the physics
+sums, the random generators (torch, NumPy, Python) and the observations as last computed
+(`env.obs_buf`, noise included). Not saved: contacts and the physics
 solver's buffers (nothing reads them before rewriting them; the solver starts cold), camera
 sensor buffers, renderer and viewer, and model parameters changed while running (masses, friction or
 gains set by an event): restoring where they differ gives a different simulation.
@@ -496,9 +495,8 @@ linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration 
 the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
-The stored observations, including sampled noise, are copied back without evaluating observation
-terms or advancing RNG state. Snapshot schema 2 adds these observations; schema 1 files are
-refused and must be captured again.
+The observations are copied back as they were captured, noise included; the observation
+terms are not computed again, so no random generator advances.
 
 ### `save(snapshot, path)`
 
@@ -507,7 +505,8 @@ Writes the snapshot to one file.
 ### `load(path)`
 
 Reads a file written by `save`; no code in the file is executed (`torch.load` with
-`weights_only=True`). `restore` checks it against the environment.
+`weights_only=True`). A file of another snapshot layout (`header["schema"]`) is refused;
+`restore` checks the rest against the environment.
 
 ### `Snapshot`
 
@@ -530,9 +529,8 @@ The policy gallery: pretrained policies that run on LW-v0. An entry is a folder
 `policy-gallery/<entry>/` of a linker-lab clone with a `manifest.yaml` (name, version, title, description,
 license, the linker-lab versions it runs on as `linker_lab`, and its `artifacts`: file name
 → `url` and `sha256`) and a `play.py` whose `run(artifacts)` opens the entry's scene.
-Editable installs use the source directory; wheels include these entries as package
-resources. Weights and object data remain separate downloads; see
-[artifact availability](gallery.md#artifact-availability).
+An editable install reads the entries from the clone's `policy-gallery/`; a wheel carries
+them inside the package. The weights and data are downloads ([the files](gallery.md#the-files)).
 
 ### `entries()`
 
@@ -559,16 +557,13 @@ Returns when the window is closed.
 
 ### `load(name)`
 
-The entry's `play.py` as a fresh module. [PR #84](https://github.com/linker-bot/linker-sim-isaac/pull/84)
-registers it before execution so annotation/dataclass lookups can resolve its namespace,
-and restores a previous registration if loading fails.
+The entry's `play.py`, loaded as a new module on each call.
 
 ### `fetch(name)`
 
 The entry's artifacts in the user cache, name → path: downloaded if missing, each checked
-against its sha256. [PR #84](https://github.com/linker-bot/linker-sim-isaac/pull/84)
-adds separate temporary files, verification before atomic publication and isolation from
-other runs' successful downloads.
+against its sha256 before it is moved into the cache (a mismatch raises `GalleryError` and
+keeps no file).
 
 ### `artifact_path(name, artifact)`
 

@@ -28,16 +28,9 @@ uv run linker-lab doctor
 If `install.sh` installed uv, this terminal does not find it yet (`uv: command not found`):
 open a new terminal, or run `source ~/.local/bin/env`.
 
-The doctor reports installed versions, GPU availability and engine patches, then runs a
-one-second LW-v0 simulation if the checks pass. A failed check returns exit status 1. The
-first simulation also compiles GPU kernels (about a minute).
-[PR #85](https://github.com/linker-bot/linker-sim-isaac/pull/85) moves dependency checks before
-bootstrap and turns initialization exceptions into readable failures. On older builds, an
-import failure can still stop the doctor with a traceback.
-
-The package is named `linker-lab`, although the repository folder is `linker-sim-isaac`.
-The script installs the `linker-lw-v0` robot-data dependency too; no `git submodule update`
-step is needed. macOS, Windows and CPU-only simulation are not supported here.
+The doctor checks the installed versions, the GPU and the engine patches, and, if they pass,
+simulates one second of LW-v0 (the first run also compiles GPU kernels, about a minute). Each
+check prints `ok` or `FAIL` with the reason; if any fails, the doctor exits with status 1.
 
 Run every command below with `uv run` from the `linker-sim-isaac` folder, or activate the
 environment first (`source .venv/bin/activate`).
@@ -80,11 +73,6 @@ uv run linker-lab play --selftest --out tests/outputs/playground
 
 ## 3. Run a pretrained policy: the gallery
 
-The policy files are separate from the source and robot-data package. Check
-[artifact availability](gallery.md#artifact-availability) first: the manifest currently
-points to an unavailable release location. Listing and inspecting entries do not download
-files; running one requires the exact files and checksums in its manifest.
-
 ```bash
 uv run linker-lab gallery list               # the entries
 uv run linker-lab gallery info ycb-grasp     # what it does, its licences, its files
@@ -100,8 +88,9 @@ status line says whether it held. **Reset** clears the table. More in [the galle
 
 ## Troubleshooting
 
-- **Unsupported platform or no CUDA device:** use the Linux/NVIDIA requirements in
-  [requirements.md](requirements.md). The CPU test subset is not a CPU simulation backend.
+- **Unsupported platform or no CUDA device:** linker-lab simulates on an NVIDIA GPU under
+  Linux only ([requirements](requirements.md)); on other computers use
+  [linker-sim](https://github.com/linker-bot/linker-sim), the same LW-v0 on the CPU.
 - **A missing package or wrong version:** from the repository root run `uv sync --locked`,
   then `uv run --no-sync linker-lab doctor`. Keep the pinned Newton/MuJoCo-Warp stack together;
   the compatibility patches target those versions. A failed bootstrap requires a fresh
@@ -112,16 +101,15 @@ status line says whether it held. **Reset** clears the table. More in [the galle
 - **Viewer cannot open:** check that a display is available. `play`, `play --selftest` and
   `gallery run` open windows and have no headless flag. Use a headless environment script
   or the task template for unattended simulation.
-- **Gallery download or checksum failure:** use `gallery info ENTRY` to inspect the URLs
-  and follow the [manual cache instructions](gallery.md#artifact-availability). Do not
-  substitute other weights or edit the expected hash to bypass the mismatch.
+- **Gallery download or checksum failure:** `gallery info ENTRY` shows the files' URLs;
+  download them by hand into the cache ([the gallery's files](gallery.md#the-files)). A file
+  whose sha256 differs from the manifest's is not used.
 - **USD conversion fails:** the error includes the affected part and cache location.
   Check the converter installation and glibc requirement. If using a compatible machine
   to prepare USDs, copy the entire indicated directory, including `Textures/`.
-- **Snapshot is refused:** check `num_envs == 1`, package/configuration compatibility and
-  the [supported state](api.md#linker_labsnapshot). When upgrading to schema 2
-  ([PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82)), capture schema 1 snapshots
-  again; changing a header does not convert their missing observation data.
+- **Snapshot is refused:** the error names the reason: `num_envs` is not 1, a package
+  version or the configuration differs from the snapshot's, or the environment has state a
+  snapshot cannot hold ([what is saved](api.md#linker_labsnapshot)).
 
 Robot USDs, generated object USDs and gallery downloads live in
 `~/.cache/linker-lab/{usd,objects,gallery}/`. If `XDG_CACHE_HOME` is set, its value replaces
