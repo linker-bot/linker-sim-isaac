@@ -1,25 +1,21 @@
-## Purpose and scope
+## What and why
 
-<!-- Explain the problem, the proposed change, and the affected product boundary. -->
+<!-- The problem, and how this change solves it. -->
 
-## Public contract and compatibility
+## Public API
 
-<!-- List API, config, protocol, CLI, asset, or runtime changes. Write "None" when applicable. -->
+<!-- What changes in what docs/api.md lists, or "None". A change that breaks it needs a new major version. -->
 
 ## Validation
 
-- [ ] `UV_PROJECT_ENVIRONMENT=.venv-dev just quality`
-- [ ] Relevant manual `Simulation` run is linked below, or the reason it was not run is stated
-- [ ] New or changed behavior has focused tests
-- [ ] English and Chinese documentation are synchronized
-- [ ] `CHANGELOG.md` and `CHANGELOG_zh.md` are updated, or this change has no user-visible impact
-- [ ] Dependency changes include both `pyproject.toml` and `uv.lock`, or no dependency changed
-- [ ] No credential, private path, generated output, or excluded third-party asset is committed
+- [ ] `uv run --no-sync ruff check .` and `uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distribution` pass
+- [ ] `uv run --no-sync python -m pytest tests/gpu -ra` passes on a computer with an NVIDIA GPU and a display (or a `Simulation` run is linked below), or the reason it was not run is stated
+- [ ] New or changed behaviour has a test, and `docs/api.md` and the guides describe it
+- [ ] `CHANGELOG.md` has a line under `## Unreleased`, or users see no change
+- [ ] `docs/zh-CN/README.md` still matches the English guides
+- [ ] A dependency change updates both `pyproject.toml` and `uv.lock`
+- [ ] No credentials, private paths, generated output or third-party files are committed
 
-Simulation run or reason not run:
+GPU tests or `Simulation` run (or why not run):
 
-<!-- Paste the Actions run URL, or explain why GPU/Isaac acceptance is not applicable. -->
-
-## Reviewer notes
-
-<!-- Call out security boundaries, lifecycle/ownership changes, compatibility risks, and follow-up work. -->
+<!-- Paste the test summary or the Actions run URL. -->
