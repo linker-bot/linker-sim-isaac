@@ -478,6 +478,10 @@ linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration 
 the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
+The stored observations, including sampled noise, are copied back without evaluating observation
+terms or advancing RNG state. Snapshot schema 2 adds these observations; schema 1 files are
+refused and must be captured again.
+
 ### `save(snapshot, path)`
 
 Writes the snapshot to one file.
