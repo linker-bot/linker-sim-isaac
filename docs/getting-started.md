@@ -11,8 +11,8 @@ newer (Ubuntu 22.04 or newer), `git`, internet access and 10 GB of free disk; se
 [requirements](requirements.md). Everything else is installed by the script.
 
 ```bash
-git clone https://github.com/linker-bot/linker-lab
-cd linker-lab
+git clone https://github.com/linker-bot/linker-sim-isaac.git
+cd linker-sim-isaac
 ./install.sh
 ```
 
@@ -28,10 +28,18 @@ uv run linker-lab doctor
 If `install.sh` installed uv, this terminal does not find it yet (`uv: command not found`):
 open a new terminal, or run `source ~/.local/bin/env`.
 
-The doctor checks the installed versions, the GPU, the engine patches, and simulates one second of
-LW-v0 (the first run also compiles GPU kernels, about a minute).
+The doctor reports installed versions, GPU availability and engine patches, then runs a
+one-second LW-v0 simulation if the checks pass. A failed check returns exit status 1. The
+first simulation also compiles GPU kernels (about a minute).
+[PR #85](https://github.com/linker-bot/linker-sim-isaac/pull/85) moves dependency checks before
+bootstrap and turns initialization exceptions into readable failures. On older builds, an
+import failure can still stop the doctor with a traceback.
 
-Run every command below with `uv run` from the `linker-lab` folder, or activate the
+The package is named `linker-lab`, although the repository folder is `linker-sim-isaac`.
+The script installs the `linker-lw-v0` robot-data dependency too; no `git submodule update`
+step is needed. macOS, Windows and CPU-only simulation are not supported here.
+
+Run every command below with `uv run` from the `linker-sim-isaac` folder, or activate the
 environment first (`source .venv/bin/activate`).
 
 ## 2. Drive the robot: the playground
@@ -63,9 +71,19 @@ move the palm point at most about 0.15 m/s. Goals at the edge of the arm's reach
 slowly.
 
 `uv run linker-lab play --selftest` runs a scripted session instead (a move, a turn, a pinch,
-the other arm, a reset) and reports whether the arm and hand followed.
+the other arm, a reset) and reports whether the arm and hand followed. It still needs a
+display. To save the JSON report and screenshots:
+
+```bash
+uv run linker-lab play --selftest --out tests/outputs/playground
+```
 
 ## 3. Run a pretrained policy: the gallery
+
+The policy files are separate from the source and robot-data package. Check
+[artifact availability](gallery.md#artifact-availability) first: the manifest currently
+points to an unavailable release location. Listing and inspecting entries do not download
+files; running one requires the exact files and checksums in its manifest.
 
 ```bash
 uv run linker-lab gallery list               # the entries
@@ -80,6 +98,36 @@ left half of the table, in a random resting pose and turn. When it has come to r
 policy looks at the object once and the left hand picks it up and holds it 15 cm up. The
 status line says whether it held. **Reset** clears the table. More in [the gallery](gallery.md).
 
+## Troubleshooting
+
+- **Unsupported platform or no CUDA device:** use the Linux/NVIDIA requirements in
+  [requirements.md](requirements.md). The CPU test subset is not a CPU simulation backend.
+- **A missing package or wrong version:** from the repository root run `uv sync --locked`,
+  then `uv run --no-sync linker-lab doctor`. Keep the pinned Newton/MuJoCo-Warp stack together;
+  the compatibility patches target those versions. A failed bootstrap requires a fresh
+  Python process after fixing the environment.
+- **Bootstrap/import-order error in a script:** call `linker_lab.bootstrap()` before
+  importing Isaac Lab simulation modules, or import `linker_lab.workstation` first.
+  Importing `linker_lab` alone does not apply the patches.
+- **Viewer cannot open:** check that a display is available. `play`, `play --selftest` and
+  `gallery run` open windows and have no headless flag. Use a headless environment script
+  or the task template for unattended simulation.
+- **Gallery download or checksum failure:** use `gallery info ENTRY` to inspect the URLs
+  and follow the [manual cache instructions](gallery.md#artifact-availability). Do not
+  substitute other weights or edit the expected hash to bypass the mismatch.
+- **USD conversion fails:** the error includes the affected part and cache location.
+  Check the converter installation and glibc requirement. If using a compatible machine
+  to prepare USDs, copy the entire indicated directory, including `Textures/`.
+- **Snapshot is refused:** check `num_envs == 1`, package/configuration compatibility and
+  the [supported state](api.md#linker_labsnapshot). When upgrading to schema 2
+  ([PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82)), capture schema 1 snapshots
+  again; changing a header does not convert their missing observation data.
+
+Robot USDs, generated object USDs and gallery downloads live in
+`~/.cache/linker-lab/{usd,objects,gallery}/`. If `XDG_CACHE_HOME` is set, its value replaces
+`~/.cache`. These directories can be copied for an offline run together with the installed
+environment; kernel compilation has its own Warp cache and may still run on first use.
+
 ## 4. Next
 
 - [The LW-v0 environment](environment.md): the scene, its frames, how the arm and hand are
@@ -87,3 +135,4 @@ status line says whether it held. **Reset** clears the table. More in [the galle
 - [The task template](../templates/task/README.md): your own task on LW-v0, as your own
   project, trained with Isaac Lab's trainers.
 - [API reference](api.md): everything linker-lab provides, and what stays stable.
+- [Development and validation](development.md): CPU, wheel, GPU and release checks.

@@ -10,8 +10,35 @@ uv run linker-lab gallery run ycb-grasp      # open it
 ```
 
 `run` checks that the entry is made for this linker-lab version, downloads its files into
-`~/.cache/linker-lab/gallery/<entry>/` (once), checks each against its sha256 and opens the
+`~/.cache/linker-lab/gallery/<entry>/` (or under `XDG_CACHE_HOME`), checks each against its sha256 and opens the
 entry's scene. It returns when you close the window.
+
+## Artifact availability
+
+The source checkout and the installed wheel contain the entry code and manifests, not
+`policy.npz` or `objects.npz`. As checked on 2026-11-27, the current `ycb-grasp` manifest
+points to a `linker-bot/linker-lab` release location that is unavailable, and the
+[project releases](https://github.com/linker-bot/linker-sim-isaac/releases) have no matching
+policy assets. Until matching files are published, `gallery run ycb-grasp` cannot download
+them automatically. The installation doctor and playground do not need those files.
+
+If you already have the exact files, copy them to
+`~/.cache/linker-lab/gallery/ycb-grasp/policy.npz` and
+`~/.cache/linker-lab/gallery/ycb-grasp/objects.npz`. With `XDG_CACHE_HOME` set, use that
+directory instead of `~/.cache`. Check the SHA-256 values against
+[`manifest.yaml`](../policy-gallery/ycb-grasp/manifest.yaml), then run the entry normally.
+For example, from the repository root on Linux:
+
+```bash
+sha256sum ~/.cache/linker-lab/gallery/ycb-grasp/policy.npz \
+          ~/.cache/linker-lab/gallery/ycb-grasp/objects.npz
+uv run linker-lab gallery run ycb-grasp
+```
+
+A filename alone does not establish compatibility. The runner checks each hash; a corrupt
+or different file is not used. [PR #84](https://github.com/linker-bot/linker-sim-isaac/pull/84)
+adds unique temporary files, verification before publication and isolation between concurrent
+runs. Builds without that correction should avoid concurrent first downloads of one artifact.
 
 ## `ycb-grasp`: grasp YCB objects with the left hand
 
@@ -42,8 +69,10 @@ licences of the weights and the objects.
 
 ## Writing an entry
 
-An entry is a folder in `policy-gallery/` of a linker-lab clone (the runner finds entries
-there, not in an installed package):
+Develop an entry in the `policy-gallery/` folder of a linker-lab clone. Editable installs
+read entries from that folder, so changes are visible without rebuilding. Wheels include
+the gallery inside the `linker_lab` package; ordinary installs read those packaged entries.
+Rebuild and reinstall the package to distribute a new or changed entry:
 
 ```
 policy-gallery/<entry>/
@@ -65,7 +94,14 @@ policy-gallery/<entry>/
 `play.py` defines `run(artifacts)`, called with each artifact's local path; it owns
 everything else: its scene (usually an `LWv0EnvCfg` with its own objects and actions), the
 policy's observations and actions, and the episode. The runner interprets nothing else.
+[PR #84](https://github.com/linker-bot/linker-sim-isaac/pull/84) registers the entry module
+before execution, which annotated dataclasses need.
+An entry that imports Isaac Lab must prepare the engine first, for example with
+`linker_lab.bootstrap()`. Each load creates a fresh module; with that correction, a failed
+load restores any previous registration.
+
 Keep the files out of git: publish them where `url` points, for example as release assets.
+Check that each URL serves the matching file before distributing the manifest.
 
 To try an entry before its files are published, put each file where the runner keeps it
 (`linker_lab.gallery.artifact_path(entry, file)`, i.e.

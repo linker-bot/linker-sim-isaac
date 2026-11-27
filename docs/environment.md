@@ -91,19 +91,28 @@ cfg.actions.left_arm = workstation.arm_action_cfg("left", command="pose", frame=
 cfg.actions.right_arm = workstation.arm_action_cfg("right", interpolation=False)
 ```
 
-**Limits.** By default (`limits="real"`) every command obeys the real controller's limits:
-joint speeds of 0.32-0.49 rad/s, acceleration 10 rad/s², jerk 40 rad/s³, the joint ranges and
-the wrist's octagonal (J6, J7) region (`arm.VELOCITY`, `arm.WRIST_OCTAGON`, ...). The palm point
-therefore moves at most about 0.15 m/s. A goal outside the limits is moved into them;
+**Limits.** By default (`limits="real"`), the trajectory generator respects joint speeds
+of 0.32-0.49 rad/s, acceleration 10 rad/s² and jerk 40 rad/s³. Goals and references are
+projected into the joint ranges and wrist octagon (`arm.VELOCITY`, `arm.WRIST_OCTAGON`, ...).
+Streamed paths are rate-limited for speed and acceleration; jerk violations are counted,
+not enforced. The palm point moves at about 0.15 m/s at most in the described setup.
+A goal outside the limits is moved into them;
 `ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each time a limit
 changed a command (one count per decision), so a policy that relies on impossible motion is
 visible. `limits=None`
-turns the limits off (for your own path only).
+turns the limits off (for your own path only). The streaming corrections in
+[PR #83](https://github.com/linker-bot/linker-sim-isaac/pull/83) additionally clamp supplied
+velocities and keep rate-limited references inside the position region. In that version,
+if a streamed path reaches a joint boundary or the wrist octagon too fast
+to stop within the acceleration limit, position safety takes priority: the reference
+stops on the boundary, the intervention is counted, and subsequent samples use its actual
+velocity and acceleration. Such a boundary stop may exceed the acceleration and jerk
+limits; callers should provide a path that brakes before the boundary.
 
 **Drives.** The arm's joints are position-controlled with the real arm's torque caps (120 N·m
 J1-J4, 100 N·m J5-J7). An arm pressed against the table lags its path, as the real one does.
 
-A **non-finite value** (`nan`) in a command keeps that value of the previous command; after the
+A **non-finite value** (`nan`, `+inf` or `-inf`) in a command keeps that value of the previous command; after the
 environment's first reset the previous command is home. An example: the left palm point moves 5 cm up while
 everything else holds.
 
@@ -139,7 +148,9 @@ with launch_simulation(cfg, {"headless": True}):
 Each hand action (`linker_lab.hand.HandAction`) takes six targets, one per motor: thumb
 pitch, thumb yaw, index, middle, ring, pinky (`hand.SHAFTS`), in radians or, with
 `hand_action_cfg(side, normalized=True)`, in [-1, 1] over each joint's range. The other five
-finger joints follow through fixed couplings.
+finger joints follow through fixed couplings. `workstation.home_action(env)` converts home
+angles to normalized inputs when that option is enabled. Non-finite values keep the
+previous shaft target in both input modes; finite normalized values are clipped to [-1, 1].
 
 The O6's motors drive through **self-locking gears**, and so does the model (motor model
 `geared-shaft-v1`): a motor moves toward its target as fast as its torque allows, and a load
@@ -179,7 +190,7 @@ process or a new one, without a reset: the arm continues its motion, the hand ke
 from linker_lab import snapshot
 
 def save_moment(env, path):
-    snapshot.save(snapshot.capture(env), path)  # about 40 KB
+    snapshot.save(snapshot.capture(env), path)  # size includes the configured observation buffer
 
 def back_to(env, path):
     return snapshot.restore(env, snapshot.load(path))  # the observations at that moment
@@ -188,8 +199,13 @@ def back_to(env, path):
 A snapshot restores into an environment made with the same linker-lab, the same package
 versions and the same configuration (it checks, and refuses otherwise, before changing
 anything). The control state, counters and simulated time come back exactly, the physics within
-float32 rounding; after that, runs drift apart slowly, as any two GPU runs do. Camera images and
-model parameters changed while running (by randomization events) are not saved.
+float32 rounding; after that, runs drift apart slowly, as any two GPU runs do. Schema 1 recomputes observations when restoring; noisy observations can therefore advance
+the random generators. Schema 2, supplied by
+[PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82), stores the already computed
+observation buffer and copies it back without recomputing it. When upgrading to schema 2,
+capture old snapshots again. Snapshot size depends on the configured observations.
+Camera sensor buffers and model parameters changed while running (by randomization
+events) are not restored.
 [api.md](api.md#linker_labsnapshot) lists what is saved and what is refused.
 
 ## Objects

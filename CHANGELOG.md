@@ -5,6 +5,16 @@ what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major ve
 removal first warns for one minor release, and a new version of LW-v0's files is a new minor
 version.
 
+## Unreleased
+
+- Correct repository checkout instructions and distinguish repository, package and import names.
+- Pin the task template to an available refactor commit instead of the legacy tag, and
+  document local editable development and the task project's independent dependency lock.
+- Document policy artifact availability and manual caching, environment requirements,
+  troubleshooting, validation commands, release prerequisites and migration.
+- Clarify which runtime improvements are supplied by the separate snapshot, motion-limit,
+  gallery-loading and diagnostic pull requests.
+
 ## 1.0.0 (2026-11-26)
 
 The first release: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving like the real
