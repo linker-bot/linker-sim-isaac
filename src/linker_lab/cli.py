@@ -11,10 +11,27 @@ def doctor() -> int:
     import linker_lab
     from linker_lab import engine
 
-    linker_lab.bootstrap()
-    checks = [*engine.check_versions(), engine.check_gpu(), engine.check_patches()]
+    def check(name, callback):
+        try:
+            return callback()
+        except Exception as error:
+            return engine.Check(name, False, f"{type(error).__name__}: {error}")
+
+    # Metadata checks work even when importing the installed runtime would fail.
+    try:
+        checks = engine.check_versions()
+    except Exception as error:
+        checks = [engine.Check("package versions", False, f"{type(error).__name__}: {error}")]
+    versions_ok = all(c.ok for c in checks)
+    checks.append(check("gpu", engine.check_gpu))
+    if versions_ok:
+        def prepare_engine():
+            linker_lab.bootstrap()
+            return engine.check_patches()
+
+        checks.append(check("engine patches", prepare_engine))
     if all(c.ok for c in checks):
-        checks.append(engine.check_simulation())
+        checks.append(check("simulation", engine.check_simulation))
     print(f"\nlinker-lab {linker_lab.__version__} doctor")
     for c in checks:
         print(f"  [{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}")
