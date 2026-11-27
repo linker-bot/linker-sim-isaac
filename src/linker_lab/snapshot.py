@@ -20,6 +20,8 @@ terms' controllers from rest. The state is a written list:
   actions.
 * **Environment**: the step counters, the episode lengths, the simulated time, the reward
   sums and the random generators (torch, NumPy, Python).
+* **Observations**: the already computed ``env.obs_buf``, including sampled noise; restoring
+  copies it back without evaluating observation terms or advancing any random generator.
 
 Not saved, because nothing reads them before rewriting them: contacts (found from scratch
 every physics step) and the physics solver's own buffers (MuJoCo-Warp's controls and applied
@@ -60,7 +62,7 @@ import torch
 
 __all__ = ["capture", "restore", "save", "load", "Snapshot", "SnapshotError"]
 
-SCHEMA = 1
+SCHEMA = 2
 """Version of the snapshot's layout; a snapshot of another schema is refused."""
 
 PACKAGES = ("linker-lab", "linker-lw-v0", "isaaclab", "newton", "mujoco-warp", "warp-lang", "torch")
@@ -116,7 +118,7 @@ def restore(env, snapshot: Snapshot) -> dict:
         raise SnapshotError(str(error)) from error
     try:
         _write(env, snapshot.state)
-        env.obs_buf = env.observation_manager.compute(update_history=False)
+        env.obs_buf = _on_device(snapshot.state["observations"], env.device)
     except Exception as error:
         raise SnapshotError(f"restore failed while writing: {error}", physics_modified=True) from error
     return env.obs_buf
@@ -265,7 +267,8 @@ def _read(env) -> dict:
                       "has_gauss": int(np_state[3]), "gauss": float(np_state[4])},
         "rng_python": [list(random.getstate()[1]), random.getstate()[2]],
     }
-    return {"physics": physics, "control": control, "environment": environment}
+    return {"physics": physics, "control": control, "environment": environment,
+            "observations": env.obs_buf}
 
 
 def _cpu(tree):
@@ -275,6 +278,17 @@ def _cpu(tree):
         return {k: _cpu(v) for k, v in tree.items()}
     if isinstance(tree, (list, tuple)):
         return [_cpu(v) for v in tree]
+    return tree
+
+
+def _on_device(tree, device):
+    """Copy stored observations to the environment without aliasing the snapshot tensors."""
+    if isinstance(tree, torch.Tensor):
+        return tree.to(device=device, copy=True)
+    if isinstance(tree, dict):
+        return {key: _on_device(value, device) for key, value in tree.items()}
+    if isinstance(tree, list):
+        return [_on_device(value, device) for value in tree]
     return tree
 
 
