@@ -213,7 +213,8 @@ commanded through the xCore SDK in one of two ways, and `ArmAction` models both:
 Then a servo model: LW-v0's drives track the per-step reference with velocity
 feed-forward, and the PD torque is kept 1 N·m below each joint's torque cap (120 N·m J1-J4,
 100 N·m J5-J7). With the real limits on, every command and reference is kept within the
-velocity, acceleration and jerk limits, the joint ranges and the wrist octagon; each
+velocity limits, the joint ranges and the wrist octagon. Acceleration is limited except
+when a boundary stop takes priority (see below); each
 intervention is counted (`ArmAction.limit_hits`).
 
 ### `ArmActionCfg`
@@ -230,12 +231,21 @@ side). Make it with `workstation.arm_action_cfg`.
 - `stream`: with `interpolation=False`: `"points"` (default; 7 positions, the point's
   velocity is the finite difference to the previous point), `"points_velocity"`
   (positions and velocities, 14 values) or `"samples"` (the 8 per-step positions, then the
-  8 per-step velocities, 112 values, used as given).
+  8 per-step velocities, 112 values, subject to `limits`).
 - `limits`: `"real"` (default): the real controller's limits. `None`: no limits; only with
   `interpolation=False`.
 - `body_name`, `body_offset`: pose commands: the commanded frame, a point in a body's
   frame. Filled in by `arm_action_cfg`.
 - `ik_damping`: the damping of the IK step (0.01).
+
+With `limits="real"` and streamed paths, supplied velocities are bounded by the speed limits. A boundary stop
+prioritizes the joint ranges and wrist octagon over acceleration and jerk, counts the
+intervention, and updates the reference state from the accepted motion. Jerk violations
+in streamed paths are counted rather than enforced.
+
+A reset projects measured joint positions into the feasible reference region, so solver
+drift outside a limit cannot leave the stream stuck there. Physical joint positions are
+not changed by the action term's reset.
 
 ### `ArmAction`
 

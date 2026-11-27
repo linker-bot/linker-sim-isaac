@@ -98,7 +98,12 @@ therefore moves at most about 0.15 m/s. A goal outside the limits is moved into 
 `ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each time a limit
 changed a command (one count per decision), so a policy that relies on impossible motion is
 visible. `limits=None`
-turns the limits off (for your own path only).
+turns the limits off (for your own path only). With the real limits on, supplied sample
+velocities are also clamped to the speed limits. If a streamed path reaches a joint boundary or the wrist octagon too fast
+to stop within the acceleration limit, position safety takes priority: the reference
+stops on the boundary, the intervention is counted, and subsequent samples use its actual
+velocity and acceleration. Such a boundary stop may exceed the acceleration and jerk
+limits; callers should provide a path that brakes before the boundary.
 
 **Drives.** The arm's joints are position-controlled with the real arm's torque caps (120 N·m
 J1-J4, 100 N·m J5-J7). An arm pressed against the table lags its path, as the real one does.

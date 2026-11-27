@@ -213,3 +213,88 @@ def test_rate_limit_holds_velocity_and_acceleration_and_counts_jerk():
     t = torch.arange(1, 9, **F64)[:, None] * dt
     ramp = (20 / 6 * t**3).expand(8, 7)[None].clone()
     assert not arm.rate_limit(ramp.clone(), torch.zeros_like(ramp), last, V, A, J, dt).item()
+
+
+def test_sample_feed_forward_speed_is_limited_even_when_positions_do_not_move():
+    last = torch.zeros(2, 7, 3, **F64)
+    q = torch.zeros(2, 8, 7, **F64)
+    v = torch.zeros_like(q)
+    v[0, :, ::2] = 1e6
+    v[0, :, 1::2] = -1e6
+    hit = arm.rate_limit(q, v, last, V, A, J, 1 / 480)
+    assert hit.tolist() == [True, False]
+    assert (v.abs() <= V).all()
+    assert (q == 0).all() and (last == 0).all()
+    torch.testing.assert_close(v[0, :, ::2], V[::2].expand(8, -1))
+    torch.testing.assert_close(v[0, :, 1::2], -V[1::2].expand(8, -1))
+
+
+@pytest.mark.parametrize("wrist_edge", [False, True], ids=["joint_range", "wrist_octagon"])
+def test_stream_reaches_a_boundary_from_rest_without_leaving_the_feasible_region(wrist_edge):
+    """Continuous accepted samples reach a boundary; stored derivatives match actual motion."""
+    dt = 1 / 480
+    lower, upper = -WIDE.clone(), WIDE.clone()
+    start = torch.zeros(1, 7, **F64)
+    goal = torch.zeros(1, 7, **F64)
+    if wrist_edge:
+        start[0, 5:] = torch.tensor(np.radians([20.0, 80.0]), **F64)
+        goal[0, 5:] = torch.tensor(np.radians([60.0, 90.0]), **F64)
+    else:
+        upper[0] = 1.0
+        start[0, 0] = 0.99
+        goal[0, 0] = 1.0
+    last = torch.zeros(1, 7, 3, **F64)
+    last[:, :, 0] = start
+    boundary_stop = False
+    for _ in range(120):
+        q = goal[:, None, :].expand(1, 8, 7).clone()
+        q, _ = arm.project(q, lower, upper)
+        v = torch.zeros_like(q)
+        before = last.clone()
+        arm.rate_limit(q, v, last, V, A, J, dt, lower, upper)
+        projected, _ = arm.project(q, lower, upper)
+        torch.testing.assert_close(q, projected, rtol=0, atol=1e-12)
+        fd = torch.diff(torch.cat((before[:, :, 0][:, None], q), dim=1), dim=1) / dt
+        acc = torch.diff(torch.cat((before[:, :, 1][:, None], fd), dim=1), dim=1) / dt
+        assert (fd.abs() <= V * (1 + TOL)).all()
+        boundary_stop |= bool((acc.abs() > A * (1 + TOL)).any())
+        torch.testing.assert_close(last[:, :, 0], q[:, -1])
+        torch.testing.assert_close(last[:, :, 1], fd[:, -1])
+        torch.testing.assert_close(last[:, :, 2], acc[:, -1])
+    assert boundary_stop, "the regression must exercise a position-priority boundary stop"
+    # The next command starts from the final feasible state, not an outward candidate.
+    q = start[:, None, :].expand(1, 8, 7).clone()
+    v = torch.zeros_like(q)
+    arm.rate_limit(q, v, last, V, A, J, dt, lower, upper)
+    projected, _ = arm.project(q, lower, upper)
+    torch.testing.assert_close(q, projected, rtol=0, atol=1e-12)
+
+
+def test_reset_projects_an_outside_measured_pose_before_starting_the_stream():
+    """Solver drift past a limit must not leave the limiter stuck outside the region."""
+    from types import SimpleNamespace
+
+    measured = torch.zeros(1, 7, **F64)
+    measured[0, 0] = 1.001
+    lower, upper = -WIDE.clone(), WIDE.clone()
+    upper[0] = 1.0
+    action = SimpleNamespace(
+        cfg=SimpleNamespace(limits="real", command="joint", stream="points"),
+        _asset=SimpleNamespace(data=SimpleNamespace(joint_pos=SimpleNamespace(torch=measured))),
+        _joint_ids=list(range(7)), _lower=lower, _upper=upper,
+        _plan=[torch.zeros(1, 7, **F64) for _ in range(3)],
+        _point=[torch.zeros(1, 7, **F64) for _ in range(2)],
+        _last=torch.zeros(1, 7, 3, **F64),
+        _ref_q=torch.zeros(1, 8, 7, **F64), _ref_v=torch.zeros(1, 8, 7, **F64),
+        _requested=torch.zeros(8, 1, 7), _raw=torch.zeros(1, 7),
+        limit_hits=torch.zeros(1, dtype=torch.long),
+    )
+    arm.ArmAction.reset(action)
+    assert action._last[0, 0, 0] == 1.0
+    assert action._plan[0][0, 0] == 1.0 and measured[0, 0] == 1.001
+    q = torch.zeros(1, 8, 7, **F64)
+    v = torch.zeros_like(q)
+    arm.rate_limit(q, v, action._last, V, A, J, 1 / 480, lower, upper)
+    assert q[0, 0, 0] < 1.0  # starts moving inward, rather than locking outside
+    projected, _ = arm.project(q, lower, upper)
+    torch.testing.assert_close(q, projected, rtol=0, atol=1e-12)
