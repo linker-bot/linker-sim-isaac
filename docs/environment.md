@@ -91,21 +91,18 @@ cfg.actions.left_arm = workstation.arm_action_cfg("left", command="pose", frame=
 cfg.actions.right_arm = workstation.arm_action_cfg("right", interpolation=False)
 ```
 
-**Limits.** By default (`limits="real"`), the trajectory generator respects joint speeds
-of 0.32-0.49 rad/s, acceleration 10 rad/s² and jerk 40 rad/s³. Goals and references are
-projected into the joint ranges and wrist octagon (`arm.VELOCITY`, `arm.WRIST_OCTAGON`, ...).
-Streamed paths are rate-limited for speed and acceleration; jerk violations are counted,
-not enforced. The palm point moves at about 0.15 m/s at most in the described setup.
-A goal outside the limits is moved into them;
-`ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each time a limit
-changed a command (one count per decision), so a policy that relies on impossible motion is
-visible. `limits=None`
-turns the limits off (for your own path only). With the real limits on, supplied sample
-velocities are also clamped to the speed limits. If a streamed path reaches a joint boundary or the wrist octagon too fast
-to stop within the acceleration limit, position safety takes priority: the reference
-stops on the boundary, the intervention is counted, and subsequent samples use its actual
-velocity and acceleration. Such a boundary stop may exceed the acceleration and jerk
-limits; callers should provide a path that brakes before the boundary.
+**Limits.** By default (`limits="real"`) the arm keeps the real controller's limits: joint
+speeds of 0.32-0.49 rad/s, acceleration 10 rad/s², jerk 40 rad/s³, the joint ranges and the
+wrist's octagonal (J6, J7) region (`arm.VELOCITY`, `arm.WRIST_OCTAGON`, ...). The palm point
+therefore moves at most about 0.15 m/s. A goal or path point outside the ranges is moved
+into them. With goals, the trajectory generator keeps every limit. With your own path, each
+physics step's reference is limited in speed and acceleration, velocities you give are
+limited in speed, and a jerk above the limit is counted but not changed. A path that reaches
+a joint range or the wrist region too fast to stop in time is stopped at the edge, faster
+than the acceleration limit: plan paths that slow down before the edge.
+`ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each decision in
+which a limit changed the command, so a policy that relies on impossible motion is visible.
+`limits=None` turns the limits off (for your own path only).
 
 **Drives.** The arm's joints are position-controlled with the real arm's torque caps (120 N·m
 J1-J4, 100 N·m J5-J7). An arm pressed against the table lags its path, as the real one does.
