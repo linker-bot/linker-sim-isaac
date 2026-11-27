@@ -33,7 +33,8 @@ linker-sim-assets keeps fixed throughout 1.x.
 - **Import linker-lab before Isaac Lab.** Importing `workstation`, `arm`, `hand` or `snapshot` calls
   `linker_lab.bootstrap()`, which prepares the pinned physics engine and must run before
   Isaac Lab simulation modules are imported. `objects`, `physics`, `gallery` and `assets` import
-  nothing from Isaac Lab.
+  nothing from Isaac Lab, but `objects.object_cfg`, `objects.fixed_cfg` and
+  `physics.simulation_cfg` do when called: call `bootstrap()` (or import `workstation`) first.
 
 ```python
 from linker_lab import workstation  # first: prepares the engine
@@ -479,7 +480,7 @@ Calling `capture` or `restore` inside `env.step()` is not supported.
 ### `capture(env)`
 
 The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied to the CPU
-(size and copy time depend on the configured observations). Raises `SnapshotError` for
+(about 40 KB plus the observations). Raises `SnapshotError` for
 what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
 your own); an observation term with a history; an event term at intervals; command,
@@ -492,7 +493,8 @@ Writes the snapshot into `env` without a reset and returns the observations at t
 (also stored in `env.obs_buf`). First everything is checked: the same refusals as `capture`,
 the header (linker-lab's commit when running from a checkout, the versions of linker-lab,
 linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration fingerprint,
-the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
+the scene's entities, the action terms and their sizes), every tensor's shape and dtype, and
+that the saved random generators' states can be loaded.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
 The observations are copied back as they were captured, noise included; the observation
@@ -526,7 +528,7 @@ failed: discard that environment's process.
 ## `linker_lab.gallery`
 
 The policy gallery: pretrained policies that run on LW-v0. An entry is a folder
-`policy-gallery/<entry>/` of a linker-lab clone with a `manifest.yaml` (name, version, title, description,
+`policy-gallery/<entry>/` of this repository with a `manifest.yaml` (name, version, title, description,
 license, the linker-lab versions it runs on as `linker_lab`, and its `artifacts`: file name
 → `url` and `sha256`) and a `play.py` whose `run(artifacts)` opens the entry's scene.
 An editable install reads the entries from the clone's `policy-gallery/`; a wheel carries

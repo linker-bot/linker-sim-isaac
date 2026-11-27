@@ -90,7 +90,7 @@ status line says whether it held. **Reset** clears the table. More in [the galle
 
 - **Unsupported platform or no CUDA device:** linker-lab simulates on an NVIDIA GPU under
   Linux only ([requirements](requirements.md)); on other computers use
-  [linker-sim](https://github.com/linker-bot/linker-sim), the same LW-v0 on the CPU.
+  [linker-sim-mujoco](https://github.com/linker-bot/linker-sim-mujoco), the same LW-v0 on the CPU.
 - **A missing package or wrong version:** from the repository root run `uv sync --locked`,
   then `uv run --no-sync linker-lab doctor`. Keep the pinned Newton/MuJoCo-Warp stack together;
   the compatibility patches target those versions. A failed bootstrap requires a fresh

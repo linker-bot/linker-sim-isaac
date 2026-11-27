@@ -54,7 +54,7 @@ licences of the weights and the objects.
 
 ## Writing an entry
 
-Develop an entry in the `policy-gallery/` folder of a linker-lab clone. Editable installs
+Develop an entry in the `policy-gallery/` folder of a clone of this repository. Editable installs
 read entries from that folder, so changes are visible without rebuilding. Wheels include
 the gallery inside the `linker_lab` package; ordinary installs read those packaged entries.
 Rebuild and reinstall the package to distribute a new or changed entry:
