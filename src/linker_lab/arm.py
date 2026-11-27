@@ -22,7 +22,7 @@ one reference (q_ref, v_ref) per physics step (480 Hz):
     ``"points"`` (7 joint positions; the point's velocity is the finite difference to the
     previous point, so the path never stops at a point), ``"points_velocity"`` (positions
     and velocities, 14 values), or ``"samples"`` (the 8 per-step positions, then the 8
-    per-step velocities: 112 values, used as given). Consecutive points are joined by a
+    per-step velocities: 112 values, subject to ``limits``). Consecutive points are joined by a
     cubic Hermite curve.
 
 Commands are joint positions [rad] (``command="joint"``) or a pose of a frame on the arm
@@ -46,9 +46,13 @@ jerk :data:`JERK`, the joint ranges in LW-v0's files, and the wrist octagon
 =====================  =================================  ==========================
 position               goal and reference projected       point and reference
                        into the limits                    projected into the limits
-velocity, acceleration respected by the generator         per-step reference rate-limited
+velocity, acceleration respected by the generator         per-step reference rate-limited*
 jerk                   respected by the generator         counted, not enforced
 =====================  =================================  ==========================
+
+At a position boundary, position safety takes priority over acceleration; the
+reference stops on the boundary and its actual velocity/acceleration state is retained.
+Supplied stream velocities are also clamped to the speed limits.
 
 Interventions are counted per environment in ``env.extras["arm_limit_hits"][asset]``
 (decisions in which a limit changed the command or one of its physics steps' references,
@@ -450,45 +454,114 @@ def _rate_limit_kernel(
     amax: wp.array(dtype=F64),
     jmax: wp.array(dtype=F64),
     dt: F64,
-    hit: wp.array2d(dtype=wp.int32),
+    lower: wp.array(dtype=F64),
+    upper: wp.array(dtype=F64),
+    corners: wp.array2d(dtype=F64),
+    position_limits: wp.int32,
+    hit: wp.array(dtype=wp.int32),
 ):
-    n, j = wp.tid()
-    last_q = last[n, j, 0]
-    last_v = last[n, j, 1]  # finite-difference velocity of the last step
-    last_a = last[n, j, 2]
+    n = wp.tid()
+    previous = _vec7()
+    previous_v = _vec7()
+    previous_a = _vec7()
+    for j in range(7):
+        previous[j] = last[n, j, 0]
+        previous_v[j] = last[n, j, 1]
+        previous_a[j] = last[n, j, 2]
     changed = wp.int32(0)
     for k in range(q.shape[1]):
-        wanted = (q[n, k, j] - last_q) / dt
-        vel = wp.clamp(wp.clamp(wanted, -vmax[j], vmax[j]), last_v - amax[j] * dt, last_v + amax[j] * dt)
-        if vel != wanted:
+        candidate = _vec7()
+        velocity = _vec7()
+        modified = _vec7()
+        for j in range(7):
+            wanted = (q[n, k, j] - previous[j]) / dt
+            speed = wp.clamp(
+                wp.clamp(wanted, -vmax[j], vmax[j]),
+                previous_v[j] - amax[j] * dt, previous_v[j] + amax[j] * dt,
+            )
+            candidate[j] = q[n, k, j]
+            velocity[j] = wp.clamp(v[n, k, j], -vmax[j], vmax[j])
+            if velocity[j] != v[n, k, j]:
+                changed = 1
+            if speed != wanted:
+                candidate[j] = previous[j] + speed * dt
+                modified[j] = F64(1.0)
+                changed = 1
+        # Restrict the whole step to the convex feasible region. Unlike projecting a
+        # completed batch, this keeps the next sample's velocity state consistent.
+        fraction = F64(1.0)
+        if position_limits != 0:
+            for j in range(7):
+                delta = candidate[j] - previous[j]
+                if candidate[j] > upper[j] and delta > F64(0.0):
+                    fraction = wp.min(fraction, (upper[j] - previous[j]) / delta)
+                if candidate[j] < lower[j] and delta < F64(0.0):
+                    fraction = wp.min(fraction, (lower[j] - previous[j]) / delta)
+            for edge in range(8):
+                ax = corners[edge, 0]
+                ay = corners[edge, 1]
+                ex = corners[(edge + 1) % 8, 0] - ax
+                ey = corners[(edge + 1) % 8, 1] - ay
+                before = ex * (previous[6] - ay) - ey * (previous[5] - ax)
+                after = ex * (candidate[6] - ay) - ey * (candidate[5] - ax)
+                if after > F64(0.0) and after > before:
+                    fraction = wp.min(fraction, -before / (after - before))
+            fraction = wp.clamp(fraction, F64(0.0), F64(1.0))
+        if fraction < F64(1.0):
             changed = 1
-            q[n, k, j] = last_q + vel * dt
-            v[n, k, j] = vel
-        acc = (vel - last_v) / dt
-        if wp.abs(acc - last_a) > jmax[j] * dt * F64(1.000000001):  # jerk: counted only
-            changed = 1
-        last_q = q[n, k, j]
-        last_v = vel
-        last_a = acc
-    last[n, j, 0] = last_q
-    last[n, j, 1] = last_v
-    last[n, j, 2] = last_a
-    hit[n, j] = changed
+        for j in range(7):
+            final = candidate[j]
+            if fraction < F64(1.0):
+                final = previous[j] + fraction * (candidate[j] - previous[j])
+            speed = (final - previous[j]) / dt
+            acceleration = (speed - previous_v[j]) / dt
+            if modified[j] != F64(0.0) or fraction < F64(1.0):
+                velocity[j] = speed
+            if wp.abs(acceleration) > amax[j] * F64(1.000000001):
+                changed = 1  # a boundary stop takes priority over acceleration
+            if wp.abs(acceleration - previous_a[j]) > jmax[j] * dt * F64(1.000000001):
+                changed = 1
+            q[n, k, j] = final
+            v[n, k, j] = velocity[j]
+            previous[j] = final
+            previous_v[j] = speed
+            previous_a[j] = acceleration
+    for j in range(7):
+        last[n, j, 0] = previous[j]
+        last[n, j, 1] = previous_v[j]
+        last[n, j, 2] = previous_a[j]
+    hit[n] = changed
 
 
-def rate_limit(q, v, last, vmax, amax, jmax, dt: float):
-    """The servo-mode limits on per-step references q, v (N, S, 7), in place: each step's
-    finite-difference velocity limited to ``vmax`` and its change to ``amax``·dt; the jerk
-    is only counted. ``last`` (N, 7, 3) holds the last step's position, finite-difference
-    velocity and acceleration and is updated. Returns where a limit acted (bool, N)."""
-    wp.init()  # no-op once Warp is initialized
-    hit = torch.empty(q.shape[0], 7, device=q.device, dtype=torch.int32)
+def rate_limit(q, v, last, vmax, amax, jmax, dt: float, lower=None, upper=None):
+    """Limit stream references in place, including supplied feed-forward speeds.
+
+    Per-step position differences obey velocity and acceleration limits. Supplied
+    velocities are bounded by ``vmax``; when a position is changed, its velocity is
+    replaced by the actual finite difference. Optional ``lower``/``upper`` also enforce
+    joint ranges and the wrist octagon (the previous position must be feasible).
+    At a boundary, position safety takes priority over acceleration and jerk: the step
+    is shortened, the intervention counted, and ``last`` records the resulting position,
+    finite-difference velocity and acceleration, not the rejected candidate.
+    Returns where a limit acted (bool, N). Jerk violations are counted, not enforced.
+    """
+    wp.init()
+    if (lower is None) != (upper is None):
+        raise ValueError("give both lower and upper, or neither")
+    hit = torch.empty(q.shape[0], device=q.device, dtype=torch.int32)
     device = wp.device_from_torch(q.device)
-    wp.launch(_rate_limit_kernel, dim=(q.shape[0], 7),
-              inputs=[wp.from_torch(x) for x in (q, v, last, vmax, amax, jmax)] + [float(dt)],
-              outputs=[wp.from_torch(hit)], device=device,
-              stream=wp.stream_from_torch(q.device) if device.is_cuda else None)
-    return hit.any(-1)
+    bounded = lower is not None
+    if not bounded:
+        lower, upper = torch.zeros_like(vmax), torch.zeros_like(vmax)
+    corners = torch.tensor(WRIST_OCTAGON, device=q.device, dtype=torch.float64)
+    wp.launch(
+        _rate_limit_kernel, dim=q.shape[0],
+        inputs=[wp.from_torch(x) for x in (q, v, last, vmax, amax, jmax)]
+        + [float(dt), wp.from_torch(lower), wp.from_torch(upper), wp.from_torch(corners), int(bounded)],
+        outputs=[wp.from_torch(hit)], device=device,
+        stream=wp.stream_from_torch(q.device) if device.is_cuda else None,
+    )
+    return hit.bool()
 
 
 # ------------------------------------------------------------- action term
@@ -608,7 +681,10 @@ class ArmAction(ActionTerm):
             hits |= changed.any(-1)
             if not self.cfg.interpolation:
                 ref_v = ref_v.contiguous()
-                hits |= rate_limit(ref_q, ref_v, self._last, self._vmax, self._amax, self._jmax, self._dt)
+                hits |= rate_limit(
+                    ref_q, ref_v, self._last, self._vmax, self._amax, self._jmax, self._dt,
+                    self._lower, self._upper,
+                )
         self._ref_q, self._ref_v = ref_q, ref_v
         data, ids = self._asset.data, self._joint_ids
         kp, kd = data.joint_stiffness.torch[:, ids], data.joint_damping.torch[:, ids]
@@ -630,6 +706,8 @@ class ArmAction(ActionTerm):
     def reset(self, env_ids=None):
         rows = slice(None) if env_ids is None else env_ids
         q = self._asset.data.joint_pos.torch[:, self._joint_ids].double()[rows]
+        if self.cfg.limits is not None:
+            q, _ = project(q, self._lower, self._upper)
         for state in (self._plan, self._point):
             state[0][rows] = q
             for derivative in state[1:]:
