@@ -1,105 +1,43 @@
 # Changelog
 
-Language: [English](CHANGELOG.md) | [中文](CHANGELOG_zh.md)
+linker-lab follows [semantic versions](https://semver.org/) from 1.0. The public API is
+what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major version, a
+removal first warns for one minor release, and a new version of LW-v0's files is a new minor
+version.
 
-All notable user-visible changes are recorded here. The project uses semantic
-versions for its workspace contract; exact development revisions are identified by
-their Git commit.
+## 1.0.0 (2026-11-26)
 
-[Unreleased]: https://github.com/linker-bot/linker-sim-isaac/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/linker-bot/linker-sim-isaac/releases/tag/v0.3.0
+The first release: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving like the real
+robot.
 
-## [Unreleased]
-
-- Newton Mirror cameras use synchronous Hydra completion and check native readiness after the first update, replacing the fixed four-update minimum. Preserve frame freshness, RGB/depth alignment, owned CUDA output and frozen physics time; add paused-pose alternation and update-count diagnostics to camera smoke.
-
-- Add embedded `MirrorRuntime.get_observation()` for owned joint/object root observations without recovery metadata. Cache fixed runtime fingerprints and reuse the Newton TIME/ACT/WARMSTART packing kernel on CPU/CUDA, preserving post-step canonical state and existing snapshot/restore semantics.
-
-- Add optional `MirrorVideoRecorder`: owned CUDA RGB inputs, GPU layout conversion and NVENC H.264/MP4, consecutive physical-time/native-frame checks, synchronous backpressure, frame/byte quotas and completion-after-drain. The `video` extra pins PyNvVideoCodec 2.2.4 without changing existing simulation dependencies; no host-pixel/software-encoder fallback. This is display recording, not depth evidence or full state recovery.
-
-- Mirror `render()` now defaults to owned Warp arrays on `compute.cuda_device`; request `device="cpu"` for NumPy. Newton RGB/depth use native SyntheticData CUDA buffer exports with layout checks, without a host image round trip. Device copies finish before return and survive camera teardown; a host payload or device mismatch fails. Automatic file/live output still downloads explicitly. Camera smoke defaults to Newton CUDA and validates GPU ownership as well as fresh-frame/recording behavior.
-
-- Add versioned Kaleidoscope reset templates and CPU-only seed sampling for `tblock_push_v1`. Restore sampled rows through the normal reset transaction in another process, GPU index, or environment batch size while retaining their logical RNG stream. Require matching task/backend/control configuration and assets; export imported nominal inputs once before offline sampling. Existing snapshots/checkpoints remain separate.
-
-- Integrate merged AR5/O6 assembly physics from linker-sim-assets PR #23: synchronized native MJCF dynamics/materials and exact ±60° J6/J7 limits in runtime and planning resources. Keep the selected compliant controller, original geometry and 60/480/240 Hz command/integration/collision defaults. Standalone MJCF torque motors do not implement the runtime virtual controller.
-
-- Default both Newton executions to configurable 240 Hz collision refresh while preserving 60 Hz commands and 480 Hz integration. Scale Newton contact/triangle allocations (1024/16384) by world count; use mesh work-grid multiplier 8 on both devices (CPU 64/512-block timings were nearly equal). Preserve buffer checks, geometry and solver budgets. Track collision phases across CUDA graph replay and refresh after state reset/restore. This changes contact freshness; see PR #66 for retained penetration/release limitations.
-
-- Enable the selected contact policy on Newton CPU/CUDA whenever an AR5/O6 assembly is present: scene-wide elliptic cone/impratio 100, role-scoped friction/impedance, and condim 4 for every covered material. Other robots keep their materials; shared objects/table and global solver settings still affect mixed scenes. Preserve asset-explicit gap, original geometry, drive settings and 100/50 iteration limits. See the configuration reference for mixing and override scope.
-
-- Make virtual motors and compliant output the Newton default for AR5/O6 and camera assemblies. Bind controller vectors by declared names and standardize L6/O6 command order to thumb flexion, thumb lateral motion, then index/middle/ring/pinky flexion. Preserve actual names (L6 `thumb_cmc_roll`, O6 `thumb_cmc_yaw`); existing L6 flat arrays must be reordered. L6 drive settings and PhysX dynamics remain unchanged.
-- Unify Newton CPU/CUDA on Newton collisions + MuJoCo Warp, removing the native MuJoCo CPU path and `contact_pipeline` selector. Use shared Warp integration-state storage. Keep iteration limits 100/50, solver determinism off, collision determinism on, contact matching disabled; default unauthored gap to 0.0001 m while preserving explicit asset values (including zero). Revalidate CPU performance and task outcomes; friction/impedance and asset corrections follow separately.
-
-- Pin Newton to the verified 1.8 development revision and MuJoCo 3.15; both PhysX and Newton load the same Warp 1.17 wheel. Ordinary profiles default to configurable 60 Hz control / 480 Hz physics; the dedicated hybrid profile retains 60 Hz commands / 240 Hz feedback / 480 Hz physics. Mirror scenes add `control_frequency_hz`; Newton leaves remove `substeps` / `max_substep_dt_s` and automatic subdivision. Hybrid renames `minimum_physics_frequency_hz` to `minimum_feedback_frequency_hz` and retains its 200 Hz minimum; hybrid gains, filters, tick counts and feedback timing are unchanged. Contact and asset defaults are unchanged in this step. Recreate the locked environment and revalidate task behavior.
-
-- Integrate O6 1014_v4 mirrored structure, 369.98 g/hand and corrected left inertia, simplified colliders, symmetric 20.5 mm AR5_08 mounting, and the upstream passive-coupling fix. Revalidate camera-clearance paths; controller gains remain unchanged.
-
-- Added common L6/O6 flanges, optional Gemini 335L wrist assemblies and a top ZED module with named optical mounts and separate camera presets. Corrected USD pose readback and preserved live root rotation topology during snapshot restoration.
-
-### Changed
-
-- Set the Newton CPU/CUDA contact-response default to 10 ms in profiles and programmatic specs. Keep the 2 ms internal timestep bound, per-substep contact refresh and explicit source settings; revalidate task contact behavior after changing this numerical default.
-
-- Move the supported runtime to Isaac Sim 6.1.0, Newton 1.5, Warp 1.16 and MuJoCo 3.11. Newton controls use the new target fields with an explicit DOF-layout requirement; model notifications and control snapshots follow the matched runtime. Recreate the simulation environment from the updated lockfile.
-
-- Mirror now samples only due cameras with output consumers; `step(render=True)` permits scheduled acquisition rather than forcing every sensor each step. `render(camera_ids=...)` captures fresh selected cameras without advancing physics or recording. Idle sensor products stop rendering, and pause, estop and continuous queries service GUI independently.
-
-- The GPU/Isaac `Simulation` workflow is temporarily manual-only while the
-  self-hosted runner is stabilized.
-- A maintainer-only release workflow now verifies an annotated version tag, CPU
-  quality, and a successful Simulation run from the same commit before publishing a
-  checksummed source workspace archive.
-- Public contribution entry points now include a pull-request template and a support
-  routing guide.
-- The declared default-branch ruleset policy file is present for its tests and
-  scheduled drift audit.
-
-### Fixed
-
-- Bound Mirror camera readiness waits by 120 s of monotonic time instead of 150 updates. Reject late/partial captures, retain native freshness checks, and report missing frames, stale frames or incomplete modalities with timing and product details. Shader readiness remains explicitly unknown; the cooperative deadline requires an outer process timeout for blocked native calls. Cache paths are unchanged.
-
-- Share renderer updates across selected Mirror Newton cameras while preserving per-product fresh-frame checks, frozen physics, recording cadence and idle/failure cleanup. Multi-camera capture no longer repeats the history wait for each product; the shared wait uses the monotonic deadline described below.
-
-- Preserve the configured Newton contact fallback through Isaac 6.1 MJCF conversion. Prepare an owned temporary source with the missing default, retaining explicitly authored and inherited `solref` values; source assets and PhysX imports are unchanged.
-
-- Repair Isaac 6.1 PhysX imports so MJCF mimic targets and coefficients survive physics-variant routing, and existing MJCF/URDF world anchors carry the articulation-root metadata. Fixed camera assemblies stay fixed during integration. Task-space binding follows exact body relationships when the root is a joint.
-
-- Renamed the AR5 arm-hand default `AR5V2_L/R_pinch_tcp` frames to
-  `AR5V2_L/R_flange_tcp` to describe their zero-offset arm-flange reference.
-  Explicit TCP selectors must use the new names; no old-name aliases remain.
-  Frame transforms, physics, and separately configured task TCPs are unchanged.
-
-- Newton refreshes contacts on every internal step and bounds internal timesteps to 2 ms by default; unauthored contacts use the configured response, now defaulting to 10 ms. Outer control/render clocks and authored per-shape contact parameters are preserved; diagnostics report effective integration settings.
-  Existing Newton physics YAML leaves must add `max_substep_dt_s` and `default_contact_time_constant_s`; increased internal integration reduces throughput and changes contact trajectories.
-
-- Joint effort telemetry identifies commanded, applied and projected sources,
-  per-joint validity and missing-data reasons using the actual physics clock.
-  Newton projected effort remains explicitly unsupported; gains, gravity and armature are unchanged.
-
-- Planning now uses the measured fixed hand shape and mounted hardware, imported fixture bounds and carried-object geometry. Corrected world-to-base obstacle conversion, added scoped contact allowances and sampled path coverage diagnostics.
-
-- Remove the USD parser serialization and Warp `func(module=...)` workaround now covered by the matched runtime. Newton equality audits read the MuJoCo namespace and preserve the native joint-equality executor; unauthored contact defaults no longer require resolver patches.
-
-- Mirror cameras now refresh paused poses and headless captures using native frame completion, without stepping physics; records retain native render identity and stale frames are not retimestamped.
-
-- Kaleidoscope PhysX CUDA seeded resets now restore native mimic-follower joint
-  positions and velocities, then refresh derived articulation link poses. Repeating
-  a seed is independent of the preceding episode's joint history.
-
-## [0.3.0] - 2026-08-26
-
-### Added
-
-- Mirror provides a single-world reality-replay product with strict versioned JSON
-  protocols, explicit runtime ownership, planning, cameras, telemetry, and bounded
-  shutdown behavior.
-- Kaleidoscope provides PhysX CUDA and project-owned Newton multi-world training
-  backends with CUDA-resident state, snapshots, cloning, batched IK, Gymnasium, and
-  skrl adapters.
-- CPU quality, static typing, pure-module coverage, dependency audit, architecture
-  inventory, repository ruleset, and dedicated GPU/Isaac acceptance contracts are
-  maintained in the repository.
-- Runtime and project metadata expose the same workspace version, while diagnostics
-  and support requests retain the exact Git commit.
-
-[中文变更记录](https://github.com/linker-bot/linker-sim-isaac/blob/v0.3.0/CHANGELOG_zh.md)
+- **LW-v0** (two AR5 arms with O6 hands, the table and three cameras) from the files of
+  linker-sim-assets `v1.0.0`, converted to USD on first use; the gym environment
+  `Linker-LW-v0` (`workstation.LWv0EnvCfg`) for tasks to subclass.
+- **Physics** from LW-v0's files: 480 Hz with collision detection every step, actions at
+  60 Hz, on Newton 1.8 with MuJoCo-Warp 3.17 (pinned; `linker_lab.bootstrap()` prepares
+  Isaac Lab 3.0 for it).
+- **Arm actions** (`arm.ArmAction`) as the real arm is commanded through the xCore SDK: joint
+  goals through a jerk-limited trajectory generator (tracking mode), or your own path
+  (servo mode); joint or pose commands; the real controller's velocity, acceleration and
+  jerk limits, joint ranges and wrist region; the servo model with the real torque caps.
+- **Hand actions** (`hand.HandAction`): the O6's self-locking motors (motor model
+  `geared-shaft-v1`).
+- **Objects** from meshes (`objects`), cameras with the real resolution, intrinsics and rates,
+  or a smaller image of the same aspect ratio (`workstation.camera_cfg(name, width, height)`).
+- **Playground** (`linker-lab play`): drive either arm and hand from the keyboard and mouse.
+- **Policy gallery** (`linker-lab gallery`): `ycb-grasp`, the left hand grasping 31 YCB
+  objects it has not seen in training, dropped anywhere on the left half of the table.
+- **Installation** (`install.sh`, one `uv.lock`) and `linker-lab doctor`, on Linux x86_64 and
+  aarch64 (Jetson Thor).
+- **No time limit by default:** `LWv0EnvCfg` has no termination terms, so an LW-v0
+  environment runs until you reset it; tasks add their own (the task template adds a 5 s
+  time limit).
+- **Snapshots** (`linker_lab.snapshot`): save an environment between two steps and restore it,
+  in the same or a new process, without a reset; `get_state()` / `set_state()` on `ArmAction` and
+  `HandAction`.
+- **Documentation** (`docs/`): getting started, the LW-v0 environment, the gallery,
+  requirements, the API reference, and a Chinese quick start. Every code block runs in the tests.
+- **Task template** (`templates/task/`): a task as its own project, with linker-lab as a
+  dependency, an `LWv0EnvCfg` subclass and Isaac Lab's `isaaclab.tasks` entry point, so
+  `isaaclab train` and `isaaclab play` can run it once a learner configuration is added.
+  `linker_lab.bootstrap()` works after Isaac Lab's command line is imported.

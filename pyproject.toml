@@ -1,148 +1,85 @@
 [build-system]
-requires = []
-build-backend = "workspace_build"
-backend-path = ["."]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
 
 [project]
-name = "linker-sim-isaac"
-version = "0.3.0"
-description = "Isaac Sim workspace for robotic manipulation, reality replay, and GPU-parallel reinforcement learning (Mirror and Kaleidoscope)"
-requires-python = "==3.12.*"
+name = "linker-lab"
+version = "1.0.0"
+description = "The Linker LW-v0 workstation for Isaac Lab"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "src/linker_lab/NOTICE"]
+authors = [{name = "Ryan Zhou"}]
+# The engine is pinned exactly; see src/linker_lab/engine.py for why it differs from
+# the Newton version Isaac Lab 3.0 was released with.
 dependencies = [
-  "numpy>=2,<3",
-  "PyYAML==6.0.3",
-  "scipy==1.17.0",
-  "websockets==13.1",
+    "isaaclab==3.0.0",
+    "newton[sim]==1.8.0",
+    "mujoco==3.17.0",
+    "mujoco-warp==3.17.0",
+    "warp-lang==1.17.0",
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "gymnasium>=1",
+    "packaging>=24",
+    "pyyaml>=6",
+    "scipy>=1.11",
+    "trimesh>=4",
+    # LW-v0's robot files (data only), from linker-sim-assets at a release tag; converted to
+    # USD on first use (linker_lab.assets).
+    "linker-lw-v0 @ git+https://github.com/linker-bot/linker-sim-assets@v1.0.0",
+    "mujoco-usd-converter==0.9.1",
 ]
 
-[project.optional-dependencies]
-# Test tooling is compatible with both the CPU-only and Isaac environments. Keep it
-# separate from dev because dev's usd-core must never share an environment with Kit.
-test = [
-  "coverage==7.4.4",
-  "pytest==9.1.1",
-]
+[project.scripts]
+linker-lab = "linker_lab.cli:main"
+
+[dependency-groups]
 dev = [
-  "coverage==7.4.4",
-  "pyright==1.1.411",
-  "pytest==9.1.1",
-  "ruff==0.16.4",
-  # CPU-only USD tests use PyPI USD. Never combine this extra with simulation:
-  # Isaac runtime must load pxr from Kit's isaacsim-kernel distribution.
-  "usd-core==26.8",
-]
-visualization = [
-  "foxglove-sdk==0.26.0",
-]
-video = [
-  # Optional Mirror CUDA-to-NVENC writer; does not change the Isaac runtime graph.
-  "PyNvVideoCodec==2.2.4",
-]
-training = [
-  # Gymnasium is deliberately kept at the NumPy process boundary. Native
-  # Kaleidoscope and skrl paths exchange CUDA tensors directly.
-  "gymnasium==1.3.0",
-  "skrl[torch]==2.1.0",
-]
-simulation = [
-  # Core simulator, its offline extension cache, and matching PyTorch release.
-  "isaacsim[all,extscache]==6.1.0.0",
-  # isaacsim-core pins this release candidate; declaring it directly lets uv
-  # admit the exact candidate without enabling unrelated pre-release packages.
-  "tinyobjloader==2.0.0rc13",
-  "torch==2.11.0",
-  "torchvision==0.26.0",
-  "torchaudio==2.11.0",
-  # GPU memory acceptance reads the simulator process through the official
-  # CUDA NVML bindings; keep this a direct dependency instead of relying on
-  # cuRobo's transitive CUDA toolchain.
-  "cuda-bindings[all]==12.9.7",
-
-  # PyPI's nvidia-curobo 0.1 is an unrelated placeholder package. Pin the
-  # immutable v0.8.0 commit. Its cu12 extra selects the cuda-core CUDA 12
-  # runtime compilation stack while Torch remains pinned to Isaac's cu128 build.
-  "nvidia-curobo[cu12] @ git+https://github.com/NVlabs/curobo.git@4ea77366ca48ee453e7df139e39fa6532af49f3b",
-
-  # Both PhysX and project-owned Newton load this locked wheel before Kit.
-  "warp-lang==1.17.0",
+    "pytest>=8.3,<10",
+    "ruckig==0.19.4",
+    "ruff>=0.11,<1",
 ]
 
 [tool.uv]
-# Isaac 6.1 pins its own Newton extension to 1.5 / MuJoCo 3.11. Our Newton
-# experiences exclude that extension and own the solver directly. Keep this
-# override narrow and pinned to the AR5/O6 reference run; do not upgrade Isaac.
-override-dependencies = [
-  "newton[sim] @ git+https://github.com/newton-physics/newton.git@55caec0e05718c33f0fe29e80a55af1be69baf07",
-  "mujoco==3.15.0",
-  "mujoco-warp==3.15.0",
-]
-# This is a repository application: runtime profiles and assets live beside src/.
-package = false
-# dev 与 simulation 互斥：dev 带来 PyPI usd-core，simulation 依赖 Kit 提供的 pxr，
-# 两者混装会让 Isaac 运行时从错误来源加载 USD。声明冲突后 uv 会直接拒绝
-# `--all-extras` 与 `--extra dev --extra simulation`，把这条约束从文档纪律升级为
-# 工具强制，而不是静默混装。
-conflicts = [[{ extra = "dev" }, { extra = "simulation" }]]
-# NVIDIA publishes Linux Isaac wheels separately from PyPI. Searching both
-# trusted indexes is required because the placeholder metadata differs.
-index-strategy = "unsafe-best-match"
+# Linux with an NVIDIA GPU: x86_64, or aarch64 (e.g. Jetson Thor on JetPack 7).
 environments = [
-  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
 ]
-required-environments = [
-  "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
-
-[tool.uv.sources]
-torch = { index = "pytorch-cu128" }
-torchvision = { index = "pytorch-cu128" }
-torchaudio = { index = "pytorch-cu128" }
+# Isaac Lab 3.0 requires newton[sim]==1.6.1; replace that requirement with our engine.
+override-dependencies = ["newton[sim]==1.8.0"]
 
 [[tool.uv.index]]
-name = "nvidia"
-url = "https://pypi.nvidia.com"
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
 explicit = true
 
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+
+[tool.hatch.metadata]
+allow-direct-references = true  # linker-lw-v0 from git
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/linker_lab"]
+
 [tool.pytest.ini_options]
-pythonpath = ["src", "."]
 testpaths = ["tests"]
-
-[tool.coverage.run]
-source = ["linkerbot_sim"]
-
-[tool.coverage.report]
-fail_under = 75
-show_missing = true
-skip_covered = true
-
-# CPU CI cannot import the Isaac/CUDA owners. Its coverage scope is derived from
-# architecture/module_disposition.yaml entries whose runtime is explicitly pure.
-# The all-source simulation test recipe continues to use tool.coverage.report above.
-[tool.linkerbot_sim.coverage]
-pure_fail_under = 84
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning:torch.*"]
 
 [tool.ruff]
+line-length = 100
 target-version = "py312"
-# linker-robot-assets is a pinned Git submodule with its own formatting/lint CI.
-# Do not apply this repo's Ruff contract to vendored external source (applies to
-# both `ruff format` and `ruff check`).
-extend-exclude = ["packages/linker-robot-assets"]
 
 [tool.ruff.lint]
-# Keep the accepted lint contract independent from Ruff release defaults. Rule-set
-# expansion is a reviewed code-quality change, not an implicit dependency side effect.
-select = ["E4", "E7", "E9", "F"]
+select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/*.py" = ["E402"]
-"tests/test_system_configs.py" = ["E402"]
-"tools/object_assets/*/*/build_asset.py" = ["E402"]
-
-[tool.ruff.format]
-# Ruff 0.16 started formatting Markdown code fences by default. Documentation has a
-# separate maintained contract; keep this recipe scoped to Python source.
-exclude = ["*.md"]
+# Applies linker_lab.bootstrap() before its Isaac Lab imports.
+"src/linker_lab/{arm,hand,playground,snapshot,workstation}.py" = ["E402"]
+# Gallery entries apply linker_lab.bootstrap() the same way.
+"policy-gallery/*/play.py" = ["E402"]

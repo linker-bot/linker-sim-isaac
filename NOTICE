@@ -1,0 +1,8 @@
+linker-lab
+Copyright 2026 Linkerbot (Beijing) Technology Co., Ltd.
+
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+The arm servo model and the hand motor model (src/linker_lab/arm.py, src/linker_lab/hand.py)
+are derived from the Linker drive models in linker-sim-isaac, under the MIT License; its
+notice is in src/linker_lab/NOTICE.
