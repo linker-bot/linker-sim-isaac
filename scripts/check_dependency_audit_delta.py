@@ -4,13 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
+import sys
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import json
 from pathlib import Path
-import subprocess
-import sys
 from typing import Literal, cast, overload
 
 

@@ -1,236 +1,59 @@
-# linker-sim-isaac
+# linker-lab
 
-[![Quality](https://github.com/linker-bot/linker-sim-isaac/actions/workflows/quality.yml/badge.svg)](https://github.com/linker-bot/linker-sim-isaac/actions/workflows/quality.yml)
+An Isaac Lab extension providing one Linker workstation, **LW-v0**: two AR5 arms with O6
+hands, a table and three cameras, behaving like the real robot. The robot's files, its
+drives, the real controller's motion limits and one validated physics setup are built in, so
+what you do in simulation is what the real workstation can do.
 
-Language: [English](README.md) | [中文](README_zh.md)
+Use it to
 
-Start here: [Installation](docs/en/getting-started/installation.md) ·
-[Choose a product and API](docs/en/getting-started/choose-runtime-and-api.md) ·
-[Documentation](docs/en/index.md)
+- **drive the robot** by hand in the playground (`linker-lab play`);
+- **run pretrained policies** from the gallery (`linker-lab gallery run ycb-grasp`);
+- **write your own tasks** and train on them with Isaac Lab's trainers (`templates/task/`).
 
-linker-sim-isaac is an Isaac Sim workspace for robotic manipulation, reality
-replay, and GPU-parallel reinforcement learning. The repository exposes two product
-modes with deliberately different contracts:
+## Quick start
 
-- **Mirror** maps one real workspace into one simulation world. It owns interactive
-  control, full motion planning and collision avoidance, cameras, telemetry, and
-  JSON transports.
-- **Kaleidoscope** runs many homogeneous reinforcement-learning environments through
-  either PhysX CUDA or the project's multi-world Newton runtime. Both backends
-  keep a headless GPU-native training path and offer an explicit single-environment
-  debug viewport. The product owns device-resident state, snapshots and
-  cloning, batched IK, synchronous linear end-effector actions, Gymnasium integration,
-  and a CUDA-native skrl path. It has no batch trajectory planner, avoidance service,
-  camera, SyntheticData, Replicator, recording, transport, or telemetry.
-
-Choose the product before choosing a physics backend or client API:
-
-| If you need... | Start with |
-| --- | --- |
-| One reality-mapped workcell, interactive control, motion planning, cameras, or JSON | **Mirror** |
-| Many homogeneous GPU environments for reinforcement learning | **Kaleidoscope** |
-| Language-neutral process control | **Mirror JSON** |
-| CUDA-resident training | **Kaleidoscope native Torch or skrl** |
-| Gymnasium compatibility | **Kaleidoscope Gymnasium adapter** |
-
-These names are the public API. There is no compatibility contract for the retired
-mode names or entrypoints.
-
-The product factory selects exactly one of seven formal Kit experiences:
-
-| Product | Engine / execution | Render closure | Formal Kit experience |
-| --- | --- | --- | --- |
-| Mirror | PhysX / CPU | Controlled by the outputs profile | `apps/linkerbot_sim.mirror.physx.python.kit` |
-| Mirror | Newton / CPU or CUDA | Disabled | `apps/linkerbot_sim.mirror.newton.python.kit` |
-| Mirror | Newton / CPU or CUDA | Enabled | `apps/linkerbot_sim.mirror.newton_render.python.kit` |
-| Kaleidoscope | PhysX / CUDA | Training headless | `apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit` |
-| Kaleidoscope | Newton / CUDA | Training headless | `apps/linkerbot_sim.kaleidoscope.newton.python.kit` |
-| Kaleidoscope | PhysX / CUDA | Explicit selected-environment viewport | `apps/linkerbot_sim.kaleidoscope.physx_cuda_viewport.python.kit` |
-| Kaleidoscope | Newton / CUDA | Explicit selected-environment viewport | `apps/linkerbot_sim.kaleidoscope.newton_viewport.python.kit` |
-
-Call a Mirror or Kaleidoscope product entrypoint rather than assembling Kit manually;
-the factory makes the unique choice from the validated physics and render specification.
-Public selectors state the legal execution explicitly: Mirror provides `physx_cpu`,
-`physx_cpu_hybrid`, `newton_cpu`, and `newton_cuda`; Kaleidoscope provides `physx_cuda` and `newton_cuda`.
-The roots reference the product-namespaced scene selectors `mirror/scene3` and
-`kaleidoscope/tblock_push`, respectively.
-
-## Requirements
-
-- Linux x86_64
-- Python 3.12
-- Isaac Sim 6.1.0
-- PyTorch 2.11 with CUDA 12.8
-- NVIDIA cuRobo 0.8.0 for planning or end-effector actions
-- A compatible NVIDIA GPU for Kaleidoscope and Newton
-
-For cloning, `uv` setup, dependency extras, GPU preflight, and the optional NVIDIA
-Warehouse payload, read the
-[installation guide](docs/en/getting-started/installation.md).
-
-Install the complete simulation workspace from the checkout root:
+Needs Linux (x86_64 or aarch64) with glibc 2.34 or newer (Ubuntu 22.04 or newer), git, an NVIDIA GPU with
+driver 580 or newer and 10 GB of free disk ([requirements](docs/requirements.md)).
 
 ```bash
-uv sync --extra simulation --extra visualization --extra training
+git clone https://github.com/linker-bot/linker-lab
+cd linker-lab
+./install.sh                              # installs everything into .venv, then checks it
+uv run linker-lab play                    # drive LW-v0 with the keyboard and mouse
+uv run linker-lab gallery run ycb-grasp   # a pretrained grasp policy
 ```
 
-Keep the CPU development environment separate because its `usd-core` package must
-not shadow Kit's `pxr` modules:
-
-```bash
-UV_PROJECT_ENVIRONMENT=.venv-dev uv sync --extra dev --extra visualization
-```
-
-Accept the Isaac EULA before starting either product:
-
-```bash
-export OMNI_KIT_ACCEPT_EULA=Y
-```
-
-This repository is a workspace application, not an installable wheel. Run commands
-from the checkout root with `PYTHONPATH=src`.
-
-> The default Mirror `scene3` references an NVIDIA Industrial Warehouse payload that
-> is not redistributed by this repository. The project-owned wrapper and analytic
-> floor remain in the checkout, but install the licensed payload at the documented path
-> before relying on warehouse visuals. Kaleidoscope does not require this payload.
-
-## Validate Configuration Without Starting Isaac
-
-```bash
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode mirror --profile physx_cpu
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode mirror --profile physx_cpu_hybrid
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode mirror --profile newton_cpu
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode mirror --profile newton_cuda
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode kaleidoscope --profile physx_cuda
-PYTHONPATH=src .venv/bin/python scripts/validate_mode_config.py \
-  --mode kaleidoscope --profile newton_cuda
-```
-
-The validator reports the exact source files and a deterministic configuration
-fingerprint. Mode roots live under `configs/modes/`; referenced leaf profiles remain
-the only owners of their facts.
-
-All Mirror physics profiles share `configs/control/mirror.yaml`; `physics.engine` derives the
-default PhysX or Newton controller bundle. Kaleidoscope has no control slot at all:
-its roots contain `scene`, `physics`, and `task`, plus optional `curobo` only for
-end-effector or linear actions. Mirror logging is configured only under
-`outputs.logging`. The cuRobo backend fixes its validated 0.8.0 task bundle and
-float32 dtypes; YAML profiles contain only real numerical capacity choices.
-
-## Start Mirror
-
-```bash
-export OMNI_KIT_ACCEPT_EULA=Y
-PYTHONPATH=src .venv/bin/python scripts/mirror.py --profile physx_cpu
-```
-
-Mirror accepts strict `linkerbot.mirror.v1`, `v2`, and `v3` JSON through stdin. Optional TCP JSONL
-and WebSocket listeners are loopback-only and provide neither authentication nor
-TLS. See the [Mirror quickstart](docs/en/getting-started/mirror-quickstart.md).
-
-## Start Kaleidoscope
-
-```python
-import torch
-
-from linkerbot_sim.kaleidoscope import make_torch_env
-
-env = make_torch_env(profile="physx_cuda", num_envs=256)
-observations, info = env.reset()
-actions = torch.zeros(
-    (env.num_envs, env.action_dim), device=env.device, dtype=torch.float32
-)
-observations, rewards, terminated, truncated, info = env.step(actions)
-env.close()
-```
-
-The native interface returns CUDA tensors. Its debug `step` performs one synchronous
-done-scalar guard so an unreset terminal row is rejected before physics advances; the
-skrl SAME_STEP path does not execute that guard. Use the Gymnasium adapter only when a
-NumPy boundary is required. See the
-[Kaleidoscope quickstart](docs/en/getting-started/kaleidoscope-quickstart.md).
-
-Select `profile="newton_cuda"` for Newton. The factory selects
-`apps/linkerbot_sim.kaleidoscope.physx_cuda.python.kit` or
-`apps/linkerbot_sim.kaleidoscope.newton.python.kit` from the profile. The
-Newton experience uses the project's Python runtime as the multi-world physics owner;
-it does not load the Isaac Newton extension.
-
-Run the real-physics smoke for both profiles:
-
-```bash
-PYTHONPATH=src .venv/bin/python scripts/smoke_kaleidoscope_physics.py \
-  --profile physx_cuda --num-envs 2 --steps 2
-PYTHONPATH=src .venv/bin/python scripts/smoke_kaleidoscope_physics.py \
-  --profile newton_cuda --num-envs 2 --steps 2 \
-  --exercise-training-adapters
-```
-
-`just smoke-kaleidoscope` also exercises real Newton batch IK and synchronized linear
-actions. See the [Kaleidoscope quickstart](docs/en/getting-started/kaleidoscope-quickstart.md)
-for the full commands.
-
-Launch the explicit viewport for either backend with:
-
-```bash
-PYTHONPATH=src .venv/bin/python scripts/kaleidoscope_viewer.py \
-  --profile physx_cuda --viewport-profile kaleidoscope --num-envs 4 --selected-env 0
-PYTHONPATH=src .venv/bin/python scripts/kaleidoscope_viewer.py \
-  --profile newton_cuda --viewport-profile kaleidoscope --num-envs 4 --selected-env 0
-```
-
-The viewer reads `configs/visualization/kaleidoscope.yaml` separately from
-the task/physics graph, so display choices do not change episode snapshot/clone
-compatibility. Training steps still use `render=False`; only explicit `env.render()`
-calls update the viewport. No camera, SyntheticData, Replicator, or recording pipeline
-is added.
+If `install.sh` installed uv, open a new terminal (or `source ~/.local/bin/env`) before
+the `uv run` commands.
 
 ## Documentation
 
-- [Documentation index](docs/en/index.md)
-- [Installation and environment setup](docs/en/getting-started/installation.md)
-- [Project overview](docs/en/getting-started/project-overview.md)
-- [Choose a mode and API](docs/en/getting-started/choose-runtime-and-api.md)
-- [Mirror CLI](docs/en/reference/mirror-cli.md)
-- [Mirror JSON](docs/en/reference/mirror-json.md)
-- [Kaleidoscope API](docs/en/reference/kaleidoscope-api.md)
-- [Configuration reference](docs/en/reference/configuration.md)
-- [Python API](docs/en/reference/python-api.md)
-- [Troubleshooting](docs/en/operations/troubleshooting.md)
-- [Releases](docs/en/operations/releases.md)
-- [Source module map](docs/en/development/module-map.md)
-- [Contributing](CONTRIBUTING.md)
-- [Support](SUPPORT.md)
-- [Changelog](CHANGELOG.md)
+- [Getting started](docs/getting-started.md): install, the playground, the gallery
+- [The LW-v0 environment](docs/environment.md): the scene, frames, arm and hand commands,
+  objects, cameras, in your own scripts
+- [The task template](templates/task/README.md): your own task, as your own project
+- [The policy gallery](docs/gallery.md): the entries, and how to write one
+- [API reference](docs/api.md): everything linker-lab provides, and what stays stable
+- [Requirements](docs/requirements.md), [changelog](CHANGELOG.md)
+- [中文快速入门](docs/zh-CN/README.md)
 
-## Quality Checks
+## Develop
 
 ```bash
-UV_PROJECT_ENVIRONMENT=.venv-dev just quality
+uv sync --locked
+uv run ruff check .
+uv run pytest           # GPU tests in tests/gpu skip themselves without CUDA
 ```
 
-Run the Isaac, CUDA, real-physics, Newton-capacity, and PhysX process-memory gates in
-the simulation environment:
+## API and versions
 
-```bash
-just test-simulation
-```
-
-The aggregate includes `smoke-runtime-kits` for all seven formal Kit closures,
-`smoke-mirror` for all four Mirror mode profiles, both Kaleidoscope backends and action
-variants, Newton's 256-world capacity, and the PhysX process-memory budget.
-Trusted NVIDIA-runner automation, triggers, and setup requirements are documented in
-[Simulation CI](docs/en/operations/simulation-ci.md).
-The workflow is currently manual-only while runner stability issues are resolved.
+[docs/api.md](docs/api.md) is the public API: from 1.0 it follows semantic versions, and the
+[changelog](CHANGELOG.md) lists every change to it. LW-v0's files come from
+[linker-sim-assets](https://github.com/linker-bot/linker-sim-assets) at the release tag
+`v1.0.0`, which keeps LW-v0 the same robot throughout 1.x.
 
 ## License
 
-Released under the [MIT License](LICENSE), © Linkerbot (Beijing) Technology Co., Ltd.
-Third-party software and asset licenses are documented in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE)). The gallery's policy weights
+and objects have their own licences, shown by `linker-lab gallery info`.

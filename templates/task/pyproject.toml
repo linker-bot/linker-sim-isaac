@@ -1,0 +1,36 @@
+# Your task's own project. It installs linker-lab (and with it Isaac Lab and the pinned
+# engine) from linker-lab's release tag; `uv sync` creates the environment in .venv.
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "my-task"
+version = "0.1.0"
+description = "A task on the Linker LW-v0 workstation"
+requires-python = ">=3.12,<3.13"
+dependencies = ["linker-lab"]
+
+# Isaac Lab's command line (`isaaclab train`, `isaaclab play`) imports this package to find
+# its tasks.
+[project.entry-points."isaaclab.tasks"]
+my_task = "my_task"
+
+[tool.uv.sources]
+linker-lab = { git = "https://github.com/linker-bot/linker-lab", tag = "v1.0.0" }
+
+[tool.uv]
+# The platforms linker-lab supports.
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+# linker-lab pins a newer physics engine than Isaac Lab 3.0 asks for (see linker-lab's
+# pyproject.toml); a project depending on linker-lab repeats this override.
+override-dependencies = ["newton[sim]==1.8.0"]
+# A pre-release that LW-v0's USD conversion needs; uv allows pre-releases of indirect
+# dependencies only when the project names them.
+constraint-dependencies = ["tinyobjloader>=2.0.0rc13"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_task"]

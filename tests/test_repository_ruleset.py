@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 import copy
-from pathlib import Path
 import re
+from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 import yaml
 
 from scripts import check_repository_ruleset as ruleset
-
 
 POLICY_PATH = Path(".github/rulesets/master.json")
 WORKFLOW_PATH = Path(".github/workflows/repository-policy.yml")

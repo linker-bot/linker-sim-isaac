@@ -5,21 +5,20 @@ from __future__ import annotations
 
 import argparse
 import ast
-from collections.abc import Mapping, Sequence
 import hashlib
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tomllib
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import cast
 from urllib.parse import urlparse
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_FILE = REPO_ROOT / "pyproject.toml"
-PACKAGE_FILE = REPO_ROOT / "src" / "linkerbot_sim" / "__init__.py"
+PACKAGE_FILE = REPO_ROOT / "src" / "linker_lab" / "__init__.py"
 CHANGELOG_FILE = REPO_ROOT / "CHANGELOG.md"
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[.a-zA-Z0-9-]+)?$")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -68,18 +67,18 @@ def runtime_version() -> str:
             value = ast.literal_eval(node.value)
             if isinstance(value, str):
                 return value
-    raise ReleaseError("linkerbot_sim.__version__ must be a string literal")
+    raise ReleaseError("linker_lab.__version__ must be a string literal")
 
 
 def changelog_notes(version: str, content: str) -> str:
     heading = re.compile(
-        rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}\s*$",
+        rf"^## {re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\s*$",
         re.MULTILINE,
     )
     match = heading.search(content)
     if match is None:
         raise ReleaseError(f"CHANGELOG.md has no dated [{version}] release section")
-    next_heading = re.search(r"^## \[", content[match.end() :], re.MULTILINE)
+    next_heading = re.search(r"^## ", content[match.end() :], re.MULTILINE)
     end = match.end() + next_heading.start() if next_heading else len(content)
     notes = content[match.end() : end].strip()
     if not notes:
@@ -174,13 +173,13 @@ def prepare_release(
     if REPO_ROOT not in resolved_output.parents:
         raise ReleaseError("output directory must be inside the repository")
     resolved_output.mkdir(parents=True, exist_ok=True)
-    archive = resolved_output / f"linker-sim-isaac-{version}.tar.gz"
+    archive = resolved_output / f"linker-lab-{version}.tar.gz"
     notes_file = resolved_output / "RELEASE_NOTES.md"
     checksums = resolved_output / "SHA256SUMS"
     _run_git(
         "archive",
         "--format=tar.gz",
-        f"--prefix=linker-sim-isaac-{version}/",
+        f"--prefix=linker-lab-{version}/",
         f"--output={archive}",
         tag,
     )

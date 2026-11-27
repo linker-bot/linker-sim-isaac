@@ -4,16 +4,15 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Mapping, Sequence
 import json
 import os
-from pathlib import Path
 import re
 import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_POLICY = REPO_ROOT / ".github" / "rulesets" / "master.json"
@@ -134,7 +133,7 @@ def validate_policy(policy: Mapping[str, object]) -> None:
 def _fetch_json(url: str) -> object:
     headers = {
         "Accept": "application/vnd.github+json",
-        "User-Agent": "linker-sim-isaac-ruleset-audit",
+        "User-Agent": "linker-lab-ruleset-audit",
         "X-GitHub-Api-Version": API_VERSION,
     }
     token = os.environ.get("GITHUB_TOKEN")

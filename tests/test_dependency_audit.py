@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
-from pathlib import Path
 import re
+from collections.abc import Mapping
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 
 from scripts import check_dependency_audit_delta as audit
-
 
 DEPENDABOT_PATH = Path(".github/dependabot.yml")
 WORKFLOW_PATH = Path(".github/workflows/dependency-audit.yml")
