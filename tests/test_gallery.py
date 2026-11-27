@@ -1,6 +1,9 @@
 """The gallery (CPU): every entry's manifest, artifact download and verification, the CLI."""
 
 import hashlib
+import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import yaml
@@ -70,3 +73,99 @@ def test_cli_list_and_info(capsys):
     assert "License:" in capsys.readouterr().out
     with pytest.raises(SystemExit):
         cli.main(["gallery", "run", "ycb-grasp", "--headless"])  # no headless option
+
+
+def test_load_registers_annotations_and_reloads_a_fresh_module(fake_gallery, monkeypatch):
+    make_entry(fake_gallery, "typed")
+    module_name = "linker_lab_gallery_typed"
+    monkeypatch.setitem(sys.modules, module_name, None)
+    (fake_gallery / "typed" / "play.py").write_text(
+        "from __future__ import annotations\n"
+        "from dataclasses import dataclass\n"
+        "@dataclass\nclass Settings:\n    title: str = 'demo'\n"
+        "def run(artifacts): pass\n"
+    )
+    first = gallery.load("typed")
+    assert sys.modules[module_name] is first
+    assert first.Settings().title == "demo"
+    second = gallery.load("typed")
+    assert second is not first
+    assert sys.modules[module_name] is second
+    assert second.Settings().title == "demo"
+
+
+def test_failed_load_removes_partial_module_and_preserves_previous(fake_gallery, monkeypatch):
+    make_entry(fake_gallery, "broken")
+    module_name = "linker_lab_gallery_broken"
+    monkeypatch.setitem(sys.modules, module_name, None)
+    source = fake_gallery / "broken" / "play.py"
+    good_source = source.read_text()
+    source.write_text("raise RuntimeError('failed import')\n")
+    with pytest.raises(RuntimeError, match="failed import"):
+        gallery.load("broken")
+    assert module_name not in sys.modules
+    source.write_text(good_source)
+    previous = gallery.load("broken")
+    source.write_text("raise RuntimeError('failed reload')\n")
+    with pytest.raises(RuntimeError, match="failed reload"):
+        gallery.load("broken")
+    assert sys.modules[module_name] is previous
+
+
+def test_concurrent_fetches_use_independent_temporary_files(fake_gallery, monkeypatch):
+    make_entry(fake_gallery)
+    barrier = threading.Barrier(2)
+    copy = gallery.shutil.copyfileobj
+    temporary_files = []
+
+    def simultaneous_copy(response, destination):
+        temporary_files.append(destination.name)
+        copy(response, destination)
+        destination.flush()
+        barrier.wait(timeout=5)
+
+    monkeypatch.setattr(gallery.shutil, "copyfileobj", simultaneous_copy)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(gallery.fetch, "demo") for _ in range(2)]
+        paths = [future.result(timeout=10)["weights.bin"] for future in futures]
+    assert len(set(temporary_files)) == 2
+    assert paths[0] == paths[1]
+    assert paths[0].read_bytes() == b"weights"
+    assert list(paths[0].parent.iterdir()) == [paths[0]]
+
+
+@pytest.mark.parametrize("failure", ["checksum", "network"])
+def test_failed_competing_download_does_not_remove_valid_cache(tmp_path, monkeypatch, failure):
+    bad, good = tmp_path / "bad", tmp_path / "good"
+    bad.write_bytes(b"bad")
+    good.write_bytes(b"weights")
+    target = tmp_path / "cache" / "weights.bin"
+    checksum = hashlib.sha256(b"weights").hexdigest()
+    bad_started, good_published = threading.Event(), threading.Event()
+
+    def competing_copy(response, destination):
+        data = response.read()
+        destination.write(data)
+        if data == b"bad":
+            bad_started.set()
+            assert good_published.wait(timeout=5)
+            if failure == "network":
+                raise OSError("connection interrupted")
+
+    def publish_good():
+        assert bad_started.wait(timeout=5)
+        try:
+            gallery._download(good.as_uri(), target, checksum)
+        finally:
+            good_published.set()
+
+    monkeypatch.setattr(gallery.shutil, "copyfileobj", competing_copy)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        failed = pool.submit(gallery._download, bad.as_uri(), target, checksum)
+        passed = pool.submit(publish_good)
+        passed.result(timeout=10)
+        expected = "sha256" if failure == "checksum" else "connection interrupted"
+        with pytest.raises(gallery.GalleryError, match=expected):
+            failed.result(timeout=10)
+    assert target.read_bytes() == b"weights"
+    assert list(target.parent.iterdir()) == [target]

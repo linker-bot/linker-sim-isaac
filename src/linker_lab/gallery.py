@@ -25,6 +25,7 @@ import importlib.resources
 import importlib.util
 import shutil
 import sys
+import tempfile
 import urllib.request
 from pathlib import Path
 
@@ -140,27 +141,33 @@ def fetch(name: str) -> dict[str, Path]:
     for artifact, spec in data["artifacts"].items():
         path = artifact_path(name, artifact)
         if not (path.is_file() and assets.sha256(path) == spec["sha256"]):
-            _download(spec["url"], path)
-            if assets.sha256(path) != spec["sha256"]:
-                path.unlink()
-                raise GalleryError(f"{spec['url']} does not match the sha256 in {name}'s manifest")
+            _download(spec["url"], path, spec["sha256"])
         paths[artifact] = path
     return paths
 
 
-def _download(url: str, destination: Path) -> None:
+def _download(url: str, destination: Path, expected_sha256: str) -> None:
+    """Verify a private temporary download before atomically publishing it to the cache."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     print(f"linker-lab: downloading {url}", file=sys.stderr)
-    partial = destination.with_suffix(destination.suffix + ".partial")
+    partial = None
     try:
-        with urllib.request.urlopen(url, timeout=60) as response, partial.open("wb") as f:
-            shutil.copyfileobj(response, f)
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent, prefix=f".{destination.name}-", suffix=".partial", delete=False
+        ) as f:
+            partial = Path(f.name)
+            with urllib.request.urlopen(url, timeout=60) as response:
+                shutil.copyfileobj(response, f)
+        if assets.sha256(partial) != expected_sha256:
+            raise GalleryError(f"{url} does not match the sha256 in the gallery manifest")
+        partial.replace(destination)
     except OSError as error:
-        partial.unlink(missing_ok=True)
         raise GalleryError(
             f"could not download {url} ({error}); download it by hand to {destination}"
         ) from error
-    partial.replace(destination)
+    finally:
+        if partial is not None:
+            partial.unlink(missing_ok=True)
 
 
 def run(name: str) -> None:
@@ -172,10 +179,23 @@ def run(name: str) -> None:
 
 
 def load(name: str):
-    """An entry's ``play.py`` as a module (importing it prepares the engine)."""
+    """Load a fresh module for the entry (importing it prepares the engine).
+
+    Register it before execution so annotations and dataclasses can resolve its namespace.
+    If execution fails, restore the previous module registration, if any.
+    """
     spec = importlib.util.spec_from_file_location(
         f"linker_lab_gallery_{name}", ROOT / name / "play.py"
     )
     play = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(play)
+    previous = sys.modules.get(spec.name)
+    sys.modules[spec.name] = play
+    try:
+        spec.loader.exec_module(play)
+    except BaseException:
+        if previous is None:
+            sys.modules.pop(spec.name, None)
+        else:
+            sys.modules[spec.name] = previous
+        raise
     return play
