@@ -13,7 +13,7 @@
 `install.sh` checks the system, glibc, the free disk, `git` and the GPU driver (not the network
 or the display), and installs uv (into `~/.local/bin`) and Python 3.12 itself. macOS, Windows and
 computers without an NVIDIA GPU are not supported: for those there is
-[linker-sim](https://github.com/linker-bot/linker-sim), the same LW-v0 on the CPU with MuJoCo.
+[linker-sim-mujoco](https://github.com/linker-bot/linker-sim-mujoco), the same LW-v0 on the CPU with MuJoCo.
 
 Isaac Lab 3.0 is paired with the project's exact Newton 1.8.0, MuJoCo/MuJoCo-Warp 3.17.0,
 Warp 1.17.0 and Torch 2.11.0 pins. `pyproject.toml` declares the requirements and `uv.lock`
