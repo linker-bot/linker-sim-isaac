@@ -1,6 +1,6 @@
 ---
 name: Question
-about: Ask a usage or setup question about linker-sim-isaac
+about: Ask a usage or setup question about linker-lab
 title: "[Question] "
 labels:
   - question
@@ -9,21 +9,19 @@ assignees: []
 
 ## What you're trying to do
 
-<!-- Describe your goal (e.g. running Mirror, launching a Kaleidoscope training env, validating a profile). -->
+<!-- Describe your goal (e.g. driving LW-v0, running a gallery policy, or training your own task). -->
 
 ## What you've tried
 
-<!-- Commands, profiles, docs you followed, and what happened. -->
+<!-- Commands, task settings, docs you followed, and what happened. -->
 
 ## Environment
 
 - **OS** (e.g. Ubuntu 22.04):
 - **Python version** (3.12.x):
-- **Isaac Sim version** (e.g. 6.1.0):
-- **linker-sim-isaac version** (`python scripts/mirror.py --version`):
+- **Installation diagnostics** (paste the output of `uv run linker-lab doctor`):
 - **Commit** (`git rev-parse HEAD`):
-- **Product** (mirror / kaleidoscope):
-- **Profile** (if relevant):
+- **Command or task** (`play`, `gallery`, or your own task):
 
 ## Additional context
 

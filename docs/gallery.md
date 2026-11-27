@@ -42,8 +42,10 @@ licences of the weights and the objects.
 
 ## Writing an entry
 
-An entry is a folder in `policy-gallery/` of a linker-lab clone (the runner finds entries
-there, not in an installed package):
+Develop an entry in the `policy-gallery/` folder of a linker-lab clone. Editable installs
+read entries from that folder, so changes are visible without rebuilding. Wheels include
+the gallery inside the `linker_lab` package; ordinary installs read those packaged entries.
+Rebuild and reinstall the package to distribute a new or changed entry:
 
 ```
 policy-gallery/<entry>/
