@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with linker-sim-isaac (Isaac Sim Mirror/Kaleidoscope simulation)
+about: Report a problem with linker-lab (LW-v0 on Isaac Lab)
 title: "[Bug] "
 labels:
   - bug
@@ -29,20 +29,18 @@ assignees: []
 
 - **OS** (e.g. Ubuntu 22.04):
 - **Python version** (3.12.x):
-- **Isaac Sim version** (e.g. 6.1.0):
-- **linker-sim-isaac version** (`python scripts/mirror.py --version`):
+- **Installation diagnostics** (paste the output of `uv run linker-lab doctor`):
 - **Commit** (`git rev-parse HEAD`):
-- **Product** (mirror / kaleidoscope):
-- **Profile** (`physx_cpu` / `physx_cpu_hybrid` / `newton_cpu` / `newton_cuda` / `physx_cuda`):
+- **Command or task** (`play`, `gallery`, or your own task):
 - **GPU** (model + driver, if relevant):
 
 ## Logs
 
-<!-- Paste relevant terminal output, stack traces, or config validation dumps. Use code blocks. -->
+<!-- Paste relevant terminal output, stack traces, or doctor diagnostics. Use code blocks. -->
 
 ```
 ```
 
 ## Additional context
 
-<!-- Screenshots, profile/scene YAML snippets, episode data, or anything else that helps reproduce or explain the issue. -->
+<!-- Screenshots, task configuration, episode data, or anything else that helps reproduce or explain the issue. -->

@@ -15,7 +15,8 @@ def example() -> snapshot.Snapshot:
     header = {"schema": snapshot.SCHEMA, "packages": {"torch": "2.11.0"}, "config": "abc", "linker_lab_commit": None,
               "scene": {"articulations": ["left"], "rigid_objects": []}, "actions": {"left_arm": 7}, "created": "now"}
     state = {"control": {"left_arm": {"raw": torch.arange(7.0)[None], "step": 3}},
-             "environment": {"rng_python": [[1, 2, 3], None], "sim_time": 6.0}}
+             "environment": {"rng_python": [[1, 2, 3], None], "sim_time": 6.0},
+             "observations": {"policy": torch.tensor([[0.25, -0.75]])}}
     return snapshot.Snapshot(header, state)
 
 
@@ -27,6 +28,7 @@ def test_save_and_load_round_trip(tmp_path):
     assert torch.equal(loaded.state["control"]["left_arm"]["raw"], s.state["control"]["left_arm"]["raw"])
     assert loaded.state["control"]["left_arm"]["step"] == 3
     assert loaded.state["environment"] == s.state["environment"]
+    assert torch.equal(loaded.state["observations"]["policy"], s.state["observations"]["policy"])
 
 
 def test_load_refuses_other_files_and_schemas(tmp_path):
@@ -125,13 +127,14 @@ def test_python_gaussian_cache_can_change_type(before, after):
     )
 
 
-def test_observation_failure_marks_environment_modified(monkeypatch):
+def test_observation_copy_failure_marks_environment_modified(monkeypatch):
     from types import SimpleNamespace
 
-    def fail(**kwargs):
-        raise RuntimeError("observation failed")
+    def fail(*args):
+        raise RuntimeError("observation copy failed")
 
-    env = SimpleNamespace(observation_manager=SimpleNamespace(compute=fail))
+    env = SimpleNamespace(device="cpu")
+    monkeypatch.setattr(snapshot, "_on_device", fail)
     monkeypatch.setattr(snapshot, "_refusals", lambda env: None)
     monkeypatch.setattr(snapshot, "_header", lambda env: {})
     monkeypatch.setattr(snapshot, "_check_header", lambda *args: None)
@@ -140,8 +143,8 @@ def test_observation_failure_marks_environment_modified(monkeypatch):
     monkeypatch.setattr(snapshot, "_check_rng", lambda *args: None)
     monkeypatch.setattr(snapshot, "_write", lambda *args: None)
     env.device = "cpu"
-    with pytest.raises(snapshot.SnapshotError, match="observation failed") as error:
-        snapshot.restore(env, snapshot.Snapshot({}, {"environment": {}}))
+    with pytest.raises(snapshot.SnapshotError, match="observation copy failed") as error:
+        snapshot.restore(env, snapshot.Snapshot({}, {"environment": {}, "observations": {}}))
     assert error.value.physics_modified is True
 
 
@@ -166,3 +169,60 @@ def test_invalid_rng_payload_is_refused_before_writing(monkeypatch):
     assert not error.value.physics_modified
     assert writes == []
     assert random.getstate() == rng_before
+
+
+def test_restore_keeps_noisy_observations_and_rng_without_recomputing(monkeypatch):
+    import random
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    saved_rng = (random.getstate(), np.random.get_state(), torch.get_rng_state())
+    try:
+        random.seed(123)
+        np.random.seed(123)
+        torch.manual_seed(123)
+        observed = torch.tensor([[random.random(), float(np.random.random()), float(torch.rand(()))]])
+        captured_rng = (random.getstate(), np.random.get_state(), torch.get_rng_state())
+        expected = random.random(), float(np.random.random()), torch.rand(3)
+        stored = {"policy": observed.clone()}
+        state = snapshot.Snapshot({}, {"environment": {}, "observations": stored})
+
+        def unexpected_compute(**kwargs):
+            pytest.fail("restore recomputed a stochastic observation")
+
+        env = SimpleNamespace(device="cpu", obs_buf={"policy": torch.zeros_like(observed)},
+                              observation_manager=SimpleNamespace(compute=unexpected_compute))
+        monkeypatch.setattr(snapshot, "_refusals", lambda env: None)
+        monkeypatch.setattr(snapshot, "_header", lambda env: {})
+        monkeypatch.setattr(snapshot, "_check_header", lambda *args: None)
+        monkeypatch.setattr(snapshot, "_read", lambda env: state.state)
+        monkeypatch.setattr(snapshot, "_check_rng", lambda *args: None)
+
+        def write(env, state):
+            random.setstate(captured_rng[0])
+            np.random.set_state(captured_rng[1])
+            torch.set_rng_state(captured_rng[2])
+
+        monkeypatch.setattr(snapshot, "_write", write)
+        for _ in range(2):
+            restored = snapshot.restore(env, state)
+            assert restored is env.obs_buf
+            assert torch.equal(restored["policy"], observed)
+            assert random.random() == expected[0]
+            assert float(np.random.random()) == expected[1]
+            assert torch.equal(torch.rand(3), expected[2])
+            restored["policy"].zero_()
+            assert torch.equal(stored["policy"], observed), "restore aliased the saved observations"
+    finally:
+        random.setstate(saved_rng[0])
+        np.random.set_state(saved_rng[1])
+        torch.set_rng_state(saved_rng[2])
+
+
+def test_load_refuses_schema_one_without_saved_observations(tmp_path):
+    path = tmp_path / "old.pt"
+    state = example()
+    snapshot.save(snapshot.Snapshot({**state.header, "schema": 1}, state.state), path)
+    with pytest.raises(snapshot.SnapshotError, match="snapshot schema 1"):
+        snapshot.load(path)

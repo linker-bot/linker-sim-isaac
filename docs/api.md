@@ -216,8 +216,8 @@ commanded through the xCore SDK in one of two ways, and `ArmAction` models both:
 Then a servo model: LW-v0's drives track the per-step reference with velocity
 feed-forward, and the PD torque is kept 1 N·m below each joint's torque cap (120 N·m J1-J4,
 100 N·m J5-J7). With the real limits on, every command and reference is kept within the
-limits applied by the generator or streaming path. The streaming corrections and their
-position-priority boundary behavior are described below; each
+velocity limits, the joint ranges and the wrist octagon. Acceleration is limited except
+when a boundary stop takes priority (see below); each
 intervention is counted (`ArmAction.limit_hits`).
 
 ### `ArmActionCfg`
@@ -241,14 +241,12 @@ side). Make it with `workstation.arm_action_cfg`.
   frame. Filled in by `arm_action_cfg`.
 - `ik_damping`: the damping of the IK step (0.01).
 
-The streamed-limit corrections in [PR #83](https://github.com/linker-bot/linker-sim-isaac/pull/83)
-bound supplied velocities when `limits="real"`. A boundary stop
+With `limits="real"` and streamed paths, supplied velocities are bounded by the speed limits. A boundary stop
 prioritizes the joint ranges and wrist octagon over acceleration and jerk, counts the
 intervention, and updates the reference state from the accepted motion. Jerk violations
 in streamed paths are counted rather than enforced.
 
-That correction also projects measured joint positions into the feasible reference region
-on reset, so solver
+A reset projects measured joint positions into the feasible reference region, so solver
 drift outside a limit cannot leave the stream stuck there. Physical joint positions are
 not changed by the action term's reset.
 
@@ -498,11 +496,9 @@ linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration 
 the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
-Schema 1 recomputes observations during restore, which can advance random generators when
-observations contain noise. Schema 2, proposed in [PR #82](https://github.com/linker-bot/linker-sim-isaac/pull/82),
-stores and copies back the captured observations instead. A schema 2 build refuses schema 1
-files: capture them again rather than changing the header. This documentation does not itself
-upgrade the installed snapshot implementation.
+The stored observations, including sampled noise, are copied back without evaluating observation
+terms or advancing RNG state. Snapshot schema 2 adds these observations; schema 1 files are
+refused and must be captured again.
 
 ### `save(snapshot, path)`
 

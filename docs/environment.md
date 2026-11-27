@@ -100,10 +100,8 @@ A goal outside the limits is moved into them;
 `ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each time a limit
 changed a command (one count per decision), so a policy that relies on impossible motion is
 visible. `limits=None`
-turns the limits off (for your own path only). The streaming corrections in
-[PR #83](https://github.com/linker-bot/linker-sim-isaac/pull/83) additionally clamp supplied
-velocities and keep rate-limited references inside the position region. In that version,
-if a streamed path reaches a joint boundary or the wrist octagon too fast
+turns the limits off (for your own path only). With the real limits on, supplied sample
+velocities are also clamped to the speed limits. If a streamed path reaches a joint boundary or the wrist octagon too fast
 to stop within the acceleration limit, position safety takes priority: the reference
 stops on the boundary, the intervention is counted, and subsequent samples use its actual
 velocity and acceleration. Such a boundary stop may exceed the acceleration and jerk
