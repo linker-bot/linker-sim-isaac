@@ -1,3 +1,5 @@
+![LinkerBot and NVIDIA Isaac Lab banner](docs/images/banner.png)
+
 # linker-lab
 
 The repository is `linker-sim-isaac`; the package and its command are `linker-lab`, the Python
