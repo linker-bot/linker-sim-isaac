@@ -46,13 +46,14 @@ jerk :data:`JERK`, the joint ranges in LW-v0's files, and the wrist octagon
 =====================  =================================  ==========================
 position               goal and reference projected       point and reference
                        into the limits                    projected into the limits
-velocity, acceleration respected by the generator         per-step reference rate-limited*
+velocity, acceleration respected by the generator         per-step reference rate-limited
 jerk                   respected by the generator         counted, not enforced
 =====================  =================================  ==========================
 
-At a position boundary, position safety takes priority over acceleration; the
-reference stops on the boundary and its actual velocity/acceleration state is retained.
-Supplied stream velocities are also clamped to the speed limits.
+With your own path, at a joint range or the wrist octagon the position limit wins: the
+reference stops on the boundary, faster than the acceleration limit if it comes too fast,
+and the stream continues from the velocity and acceleration it actually had. Supplied
+stream velocities are also clamped to the speed limits.
 
 Interventions are counted per environment in ``env.extras["arm_limit_hits"][asset]``
 (decisions in which a limit changed the command or one of its physics steps' references,
