@@ -527,7 +527,7 @@ failed: discard that environment's process.
 ## `linker_lab.gallery`
 
 The policy gallery: pretrained policies that run on LW-v0. An entry is a folder
-`policy-gallery/<entry>/` of a linker-lab clone with a `manifest.yaml` (name, version, title, description,
+`policy-gallery/<entry>/` of this repository with a `manifest.yaml` (name, version, title, description,
 license, the linker-lab versions it runs on as `linker_lab`, and its `artifacts`: file name
 → `url` and `sha256`) and a `play.py` whose `run(artifacts)` opens the entry's scene.
 An editable install reads the entries from the clone's `policy-gallery/`; a wheel carries
