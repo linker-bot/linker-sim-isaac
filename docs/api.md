@@ -33,7 +33,8 @@ linker-sim-assets keeps fixed throughout 1.x.
 - **Import linker-lab before Isaac Lab.** Importing `workstation`, `arm`, `hand` or `snapshot` calls
   `linker_lab.bootstrap()`, which prepares the pinned physics engine and must run before
   Isaac Lab simulation modules are imported. `objects`, `physics`, `gallery` and `assets` import
-  nothing from Isaac Lab.
+  nothing from Isaac Lab, but `objects.object_cfg`, `objects.fixed_cfg` and
+  `physics.simulation_cfg` do when called: call `bootstrap()` (or import `workstation`) first.
 
 ```python
 from linker_lab import workstation  # first: prepares the engine
