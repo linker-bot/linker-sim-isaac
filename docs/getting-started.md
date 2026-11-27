@@ -11,8 +11,8 @@ newer (Ubuntu 22.04 or newer), `git`, internet access and 10 GB of free disk; se
 [requirements](requirements.md). Everything else is installed by the script.
 
 ```bash
-git clone https://github.com/linker-bot/linker-lab
-cd linker-lab
+git clone https://github.com/linker-bot/linker-sim-isaac.git
+cd linker-sim-isaac
 ./install.sh
 ```
 
@@ -28,10 +28,11 @@ uv run linker-lab doctor
 If `install.sh` installed uv, this terminal does not find it yet (`uv: command not found`):
 open a new terminal, or run `source ~/.local/bin/env`.
 
-The doctor checks the installed versions, the GPU, the engine patches, and simulates one second of
-LW-v0 (the first run also compiles GPU kernels, about a minute).
+The doctor checks the installed versions, the GPU and the engine patches, and, if they pass,
+simulates one second of LW-v0 (the first run also compiles GPU kernels, about a minute). Each
+check prints `ok` or `FAIL` with the reason; if any fails, the doctor exits with status 1.
 
-Run every command below with `uv run` from the `linker-lab` folder, or activate the
+Run every command below with `uv run` from the `linker-sim-isaac` folder, or activate the
 environment first (`source .venv/bin/activate`).
 
 ## 2. Drive the robot: the playground
@@ -63,7 +64,12 @@ move the palm point at most about 0.15 m/s. Goals at the edge of the arm's reach
 slowly.
 
 `uv run linker-lab play --selftest` runs a scripted session instead (a move, a turn, a pinch,
-the other arm, a reset) and reports whether the arm and hand followed.
+the other arm, a reset) and reports whether the arm and hand followed. It still needs a
+display. To save the JSON report and screenshots:
+
+```bash
+uv run linker-lab play --selftest --out tests/outputs/playground
+```
 
 ## 3. Run a pretrained policy: the gallery
 
@@ -80,6 +86,36 @@ left half of the table, in a random resting pose and turn. When it has come to r
 policy looks at the object once and the left hand picks it up and holds it 15 cm up. The
 status line says whether it held. **Reset** clears the table. More in [the gallery](gallery.md).
 
+## Troubleshooting
+
+- **Unsupported platform or no CUDA device:** linker-lab simulates on an NVIDIA GPU under
+  Linux only ([requirements](requirements.md)); on other computers use
+  [linker-sim](https://github.com/linker-bot/linker-sim), the same LW-v0 on the CPU.
+- **A missing package or wrong version:** from the repository root run `uv sync --locked`,
+  then `uv run --no-sync linker-lab doctor`. Keep the pinned Newton/MuJoCo-Warp stack together;
+  the compatibility patches target those versions. A failed bootstrap requires a fresh
+  Python process after fixing the environment.
+- **Bootstrap/import-order error in a script:** call `linker_lab.bootstrap()` before
+  importing Isaac Lab simulation modules, or import `linker_lab.workstation` first.
+  Importing `linker_lab` alone does not apply the patches.
+- **Viewer cannot open:** check that a display is available. `play`, `play --selftest` and
+  `gallery run` open windows and have no headless flag. Use a headless environment script
+  or the task template for unattended simulation.
+- **Gallery download or checksum failure:** `gallery info ENTRY` shows the files' URLs;
+  download them by hand into the cache ([the gallery's files](gallery.md#the-files)). A file
+  whose sha256 differs from the manifest's is not used.
+- **USD conversion fails:** the error includes the affected part and cache location.
+  Check the converter installation and glibc requirement. If using a compatible machine
+  to prepare USDs, copy the entire indicated directory, including `Textures/`.
+- **Snapshot is refused:** the error names the reason: `num_envs` is not 1, a package
+  version or the configuration differs from the snapshot's, or the environment has state a
+  snapshot cannot hold ([what is saved](api.md#linker_labsnapshot)).
+
+Robot USDs, generated object USDs and gallery downloads live in
+`~/.cache/linker-lab/{usd,objects,gallery}/`. If `XDG_CACHE_HOME` is set, its value replaces
+`~/.cache`. These directories can be copied for an offline run together with the installed
+environment; kernel compilation has its own Warp cache and may still run on first use.
+
 ## 4. Next
 
 - [The LW-v0 environment](environment.md): the scene, its frames, how the arm and hand are
@@ -87,3 +123,4 @@ status line says whether it held. **Reset** clears the table. More in [the galle
 - [The task template](../templates/task/README.md): your own task on LW-v0, as your own
   project, trained with Isaac Lab's trainers.
 - [API reference](api.md): everything linker-lab provides, and what stays stable.
+- [Development and validation](development.md): CPU, wheel, GPU and release checks.

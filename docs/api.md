@@ -1,7 +1,7 @@
 # API reference
 
 This page is linker-lab's public API: the modules, names and members listed here. From
-1.0 they follow semantic versions:
+2.0.0 they follow semantic versions:
 
 - a change that breaks code using them is a new major version;
 - a name to be removed first warns for one minor release;
@@ -32,7 +32,7 @@ linker-sim-assets keeps fixed throughout 1.x.
 - A **decision** is 1/60 s: one action per decision, held for 8 physics steps of 1/480 s.
 - **Import linker-lab before Isaac Lab.** Importing `workstation`, `arm`, `hand` or `snapshot` calls
   `linker_lab.bootstrap()`, which prepares the pinned physics engine and must run before
-  any Isaac Lab module is imported. `objects`, `physics`, `gallery` and `assets` import
+  Isaac Lab simulation modules are imported. `objects`, `physics`, `gallery` and `assets` import
   nothing from Isaac Lab.
 
 ```python
@@ -56,11 +56,13 @@ with launch_simulation(cfg, {"headless": True}):
 Prepares the pinned physics engine (Newton 1.8 with MuJoCo-Warp 3.17) for Isaac Lab 3.0.
 Call it before importing Isaac Lab; it raises if Isaac Lab's simulation modules are already
 imported (Isaac Lab's own command line, `isaaclab train`, may be imported first). Calling it
-again does nothing. The modules that need it call it when imported.
+again after a successful call does nothing. If a patch fails, repair the environment and
+restart the Python process before retrying; partial initialization cannot be reused.
+The modules that need it call it when imported.
 
 ### `__version__`
 
-linker-lab's version, e.g. `"1.0.0"`.
+linker-lab's version, e.g. `"2.0.0"`.
 
 ## `linker_lab.workstation`
 
@@ -144,7 +146,8 @@ e.g. `normalized=True`.
 ### `home_action(env)`
 
 The action (N, dim) that holds every arm and hand at home. For arms with joint commands
-(any stream but `"samples"`) and every hand; raises for other arm commands.
+(any stream but `"samples"`) and every hand, converting home angles to normalized hand
+inputs when configured; raises for other arm commands.
 
 ### `palm_pose_w(robot)`
 
@@ -349,6 +352,8 @@ decomposition, or one mesh); each part collides as its convex hull. Files are wr
 into the user cache, named by their content.
 
 ```python
+import linker_lab
+linker_lab.bootstrap()  # object_cfg imports Isaac Lab
 import trimesh
 from linker_lab import objects
 
@@ -457,9 +462,10 @@ def try_again(env, attempts):
 Saved: every articulation's and rigid object's root pose and velocity, every articulation's
 joint positions, velocities and drive targets; each action term's state (`get_state()`); the
 action manager's last two actions; the step counters, episode lengths, simulated time, reward
-sums and the random generators (torch, NumPy, Python). Not saved: contacts and the physics
+sums, the random generators (torch, NumPy, Python) and the observations as last computed
+(`env.obs_buf`, noise included). Not saved: contacts and the physics
 solver's buffers (nothing reads them before rewriting them; the solver starts cold), camera
-images, renderer and viewer, and model parameters changed while running (masses, friction or
+sensor buffers, renderer and viewer, and model parameters changed while running (masses, friction or
 gains set by an event): restoring where they differ gives a different simulation.
 
 Accuracy: the action terms' state, the drive targets, the counters and the simulated time are
@@ -473,7 +479,8 @@ Calling `capture` or `restore` inside `env.step()` is not supported.
 ### `capture(env)`
 
 The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied to the CPU
-(about 40 KB, about 10 ms). Raises `SnapshotError` for what it cannot account for:
+(size and copy time depend on the configured observations). Raises `SnapshotError` for
+what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
 your own); an observation term with a history; an event term at intervals; command,
 curriculum or recorder terms; rigid object collections, deformable objects, cables or surface
@@ -488,9 +495,8 @@ linker-lw-v0, Isaac Lab, Newton, MuJoCo-Warp, Warp and torch, the configuration 
 the scene's entities, the action terms and their sizes) and every tensor's shape and dtype.
 A mismatch raises `SnapshotError` naming it, with nothing changed.
 
-The stored observations, including sampled noise, are copied back without evaluating observation
-terms or advancing RNG state. Snapshot schema 2 adds these observations; schema 1 files are
-refused and must be captured again.
+The observations are copied back as they were captured, noise included; the observation
+terms are not computed again, so no random generator advances.
 
 ### `save(snapshot, path)`
 
@@ -499,7 +505,8 @@ Writes the snapshot to one file.
 ### `load(path)`
 
 Reads a file written by `save`; no code in the file is executed (`torch.load` with
-`weights_only=True`). `restore` checks it against the environment.
+`weights_only=True`). A file of another snapshot layout (`header["schema"]`) is refused;
+`restore` checks the rest against the environment.
 
 ### `Snapshot`
 
@@ -522,6 +529,8 @@ The policy gallery: pretrained policies that run on LW-v0. An entry is a folder
 `policy-gallery/<entry>/` of a linker-lab clone with a `manifest.yaml` (name, version, title, description,
 license, the linker-lab versions it runs on as `linker_lab`, and its `artifacts`: file name
 → `url` and `sha256`) and a `play.py` whose `run(artifacts)` opens the entry's scene.
+An editable install reads the entries from the clone's `policy-gallery/`; a wheel carries
+them inside the package. The weights and data are downloads ([the files](gallery.md#the-files)).
 
 ### `entries()`
 
@@ -548,12 +557,13 @@ Returns when the window is closed.
 
 ### `load(name)`
 
-The entry's `play.py` as a module.
+The entry's `play.py`, loaded as a new module on each call.
 
 ### `fetch(name)`
 
 The entry's artifacts in the user cache, name → path: downloaded if missing, each checked
-against its sha256.
+against its sha256 before it is moved into the cache (a mismatch raises `GalleryError` and
+keeps no file).
 
 ### `artifact_path(name, artifact)`
 

@@ -10,8 +10,20 @@ uv run linker-lab gallery run ycb-grasp      # open it
 ```
 
 `run` checks that the entry is made for this linker-lab version, downloads its files into
-`~/.cache/linker-lab/gallery/<entry>/` (once), checks each against its sha256 and opens the
+`~/.cache/linker-lab/gallery/<entry>/` (or under `XDG_CACHE_HOME`), checks each against its sha256 and opens the
 entry's scene. It returns when you close the window.
+
+## The files
+
+An entry's weights and data (for `ycb-grasp`: `policy.npz` and `objects.npz`) are not in the
+repository or the package. Each entry version is a release of this repository named
+`<entry>-<version>` (for example `ycb-grasp-0.3.0`) holding those files; the manifest lists
+their URLs and sha256. A download goes to a temporary file and is moved into the cache only
+when its sha256 matches, so an interrupted or wrong download never replaces a good file.
+
+Without internet access on the machine, download the files elsewhere and copy them into
+`~/.cache/linker-lab/gallery/<entry>/` (with `XDG_CACHE_HOME` set, under that directory
+instead of `~/.cache`); `run` uses them if their sha256 matches.
 
 ## `ycb-grasp`: grasp YCB objects with the left hand
 
@@ -61,13 +73,17 @@ policy-gallery/<entry>/
 | `version` | the entry's own version |
 | `title`, `description` | what someone trying it sees |
 | `license` | the licences of the weights and of any data (objects, scenes) |
-| `linker_lab` | the linker-lab versions it runs on, a version range such as `">=1.0,<2"` |
+| `linker_lab` | the linker-lab versions it runs on, a version range such as `">=2.0,<3"` |
 | `artifacts` | file name → `url` and `sha256` of each file it needs (weights, object data) |
 
 `play.py` defines `run(artifacts)`, called with each artifact's local path; it owns
 everything else: its scene (usually an `LWv0EnvCfg` with its own objects and actions), the
 policy's observations and actions, and the episode. The runner interprets nothing else.
+An entry that imports Isaac Lab prepares the engine first, with `linker_lab.bootstrap()` or
+by importing `linker_lab.workstation`.
+
 Keep the files out of git: publish them where `url` points, for example as release assets.
+Check that each URL serves the matching file before distributing the manifest.
 
 To try an entry before its files are published, put each file where the runner keeps it
 (`linker_lab.gallery.artifact_path(entry, file)`, i.e.

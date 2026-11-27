@@ -15,6 +15,10 @@ run.py                runs the task with the robot holding home
 
 ## Start
 
+Use the same [Linux/NVIDIA requirements](https://github.com/linker-bot/linker-sim-isaac/blob/main/docs/requirements.md) as the main project.
+Run the copy command from the `linker-sim-isaac` checkout; the `my-task` folder is a
+separate project with its own virtual environment and dependency lock.
+
 ```bash
 cp -r templates/task ~/my-task && cd ~/my-task
 uv sync                         # creates .venv with linker-lab, Isaac Lab and the engine (~8 GB)
@@ -25,9 +29,30 @@ uv run python run.py --viewer   # 4 environments in the viewer
 To rename it, change the project `name` and the entry point in `pyproject.toml`, the folder
 `src/my_task`, the gym id in `__init__.py`, and the imports in `run.py`.
 
-`uv sync` installs linker-lab from its release tag (`[tool.uv.sources]` in
-`pyproject.toml`). Your project resolves its own versions of the packages linker-lab does not
-pin. Keep its `uv.lock` in your repository so every machine gets the same ones.
+`uv sync` installs `linker-lab` from its release tag `v2.0.0` in
+[linker-bot/linker-sim-isaac](https://github.com/linker-bot/linker-sim-isaac)
+(`[tool.uv.sources]` in `pyproject.toml`). To move to a later release, change the tag and run
+`uv sync` again.
+
+The task project repeats the Newton override needed by Isaac Lab 3.0 and a
+`tinyobjloader` prerelease constraint. Keep those when renaming the template. It resolves
+its own versions of unpinned dependencies; commit its generated `uv.lock`, then use
+`uv sync --locked` on other machines. The main project's lock and dev dependencies are
+not inherited by a project depending on it.
+
+### Use a local checkout
+
+For development against your current source, replace the template's `linker-lab` source
+entry with an absolute path (keep the other sections):
+
+```toml
+[tool.uv.sources]
+linker-lab = { path = "/absolute/path/to/linker-sim-isaac", editable = true }
+```
+
+Run `uv sync` after changing it. Python and gallery source changes are then visible
+without rebuilding the package. Use the release tag again when sharing the task;
+an absolute path is specific to your machine.
 
 ## The task
 
@@ -46,7 +71,7 @@ way, one configuration class per part:
 | Terminations | 5 s time limit, the box falling off the table | your task's success and failure conditions |
 
 Positions are in the environment frame: x forward over the table, z up, the table top
-0.5 m below the origin. [docs/api.md](../../docs/api.md) lists everything linker-lab provides.
+0.5 m below the origin. [docs/api.md](https://github.com/linker-bot/linker-sim-isaac/blob/main/docs/api.md) lists everything linker-lab provides.
 
 An arm action takes absolute joint goals (or poses), like the real controller. A learned
 policy usually outputs small numbers around zero, so map its output to goals around the home

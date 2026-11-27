@@ -1,14 +1,15 @@
 # Changelog
 
-linker-lab follows [semantic versions](https://semver.org/) from 1.0. The public API is
+linker-lab follows [semantic versions](https://semver.org/) from 2.0.0. The public API is
 what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major version, a
 removal first warns for one minor release, and a new version of LW-v0's files is a new minor
 version.
 
-## 1.0.0 (2026-11-26)
+## 2.0.0 (2026-11-27)
 
-The first release: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving like the real
-robot.
+The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
+like the real robot. It replaces this repository's earlier package, `linkerbot_sim`, whose
+releases end at `v1.0.0`; hence 2.0.0.
 
 - **LW-v0** (two AR5 arms with O6 hands, the table and three cameras) from the files of
   linker-sim-assets `v1.0.0`, converted to USD on first use; the gym environment
@@ -35,8 +36,9 @@ robot.
 - **Snapshots** (`linker_lab.snapshot`): save an environment between two steps and restore it,
   in the same or a new process, without a reset; `get_state()` / `set_state()` on `ArmAction` and
   `HandAction`.
-- **Documentation** (`docs/`): getting started, the LW-v0 environment, the gallery,
-  requirements, the API reference, and a Chinese quick start. Every code block runs in the tests.
+- **Documentation** (`docs/`): getting started and troubleshooting, the LW-v0 environment, the
+  gallery, requirements, the API reference, development and validation, and a Chinese quick
+  start. Every code block runs in the tests.
 - **Task template** (`templates/task/`): a task as its own project, with linker-lab as a
   dependency, an `LWv0EnvCfg` subclass and Isaac Lab's `isaaclab.tasks` entry point, so
   `isaaclab train` and `isaaclab play` can run it once a learner configuration is added.

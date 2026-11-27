@@ -18,4 +18,4 @@ def test_import_does_not_load_optional_runtimes():
         capture_output=True,
         text=True,
     )
-    assert result.stdout.strip() == "1.0.0"
+    assert result.stdout.strip() == "2.0.0"

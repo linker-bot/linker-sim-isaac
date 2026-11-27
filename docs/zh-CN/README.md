@@ -4,6 +4,8 @@ linker-lab 是 Isaac Lab 的扩展，提供一台 Linker 工作站 **LW-v0**（�
 
 它有三种用法：用 **playground** 手动操作机器人；用 **gallery** 运行预训练策略；用 **任务模板** 编写自己的任务，并用 Isaac Lab 的训练器训练。
 
+仓库名是 `linker-sim-isaac`；软件包和命令名是 `linker-lab`，Python 导入名是 `linker_lab`。
+
 本页是中文快速入门，内容与英文文档对应：安装、检查、playground、gallery、任务模板。完整说明见英文的 [getting started](../getting-started.md)、[LW-v0 环境](../environment.md) 和 [API 参考](../api.md)。英文文档是准确的版本；两者不一致时以英文为准。
 
 ## 1. 安装
@@ -11,8 +13,8 @@ linker-lab 是 Isaac Lab 的扩展，提供一台 Linker 工作站 **LW-v0**（�
 需要：Linux（x86_64 或 aarch64，如 Jetson Thor），glibc 2.34 或更新（Ubuntu 22.04 或更新）；`git`；NVIDIA GPU，驱动 580 或更新；约 10 GB 可用磁盘空间；网络连接。详见 [requirements](../requirements.md)。
 
 ```bash
-git clone https://github.com/linker-bot/linker-lab
-cd linker-lab
+git clone https://github.com/linker-bot/linker-sim-isaac.git
+cd linker-sim-isaac
 ./install.sh
 ```
 
@@ -28,7 +30,7 @@ LW-v0 的机器人模型文件随安装一起装好：来自 [linker-sim-assets]
 uv run linker-lab doctor
 ```
 
-它检查已安装的版本、GPU、引擎补丁，并仿真 LW-v0 一秒钟。最后一行是 `All checks passed.`。第一次运行还会编译 GPU 内核（约一分钟，之后有缓存）。
+它报告已安装的版本、GPU 和引擎补丁；检查通过后，再仿真 LW-v0 一秒钟。每项检查显示 `ok` 或 `FAIL` 及原因；全部通过时最后一行是 `All checks passed.`，有失败时退出码为 1。第一次运行还会编译 GPU 内核（约一分钟，之后有缓存）。
 
 所有命令都通过 `uv run` 在本目录的环境中运行；也可以在每个终端中先执行一次 `source .venv/bin/activate`，之后省去 `uv run`。
 
@@ -51,9 +53,13 @@ uv run linker-lab play
 
 W/A/S/D、Q/E 和方向键移动视角，空格暂停，H 隐藏面板，Esc 退出。面板显示机械臂的工具（TCP）位姿（与控制器报告的一致）、掌心点离目标多远、接触和仿真速度。机械臂的速度受真实控制器限位约束，掌心点最快约 0.15 m/s。
 
-`uv run linker-lab play --selftest` 运行一段脚本化的操作并报告机械臂和手是否跟随。
+Playground 和 gallery 的窗口都需要可用的图形显示环境。`uv run linker-lab play --selftest` 也会打开窗口；加上 `--out tests/outputs/playground` 可保存报告和截图。
+
+在脚本中，需要先调用 `linker_lab.bootstrap()`，或先导入 `linker_lab.workstation`，再导入 Isaac Lab 的仿真模块。仅执行 `import linker_lab` 不会应用兼容补丁。
 
 ## 4. Gallery：预训练策略
+
+策略权重和物体数据不在仓库里：`run` 第一次运行时从本仓库的 release（如 `ycb-grasp-0.3.0`）下载，校验 sha256 后放入缓存。离线机器上手动放置文件的方法见 [gallery](../gallery.md#the-files)。
 
 ```bash
 uv run linker-lab gallery list               # 所有条目
@@ -70,7 +76,22 @@ uv run linker-lab gallery run ycb-grasp      # 打开
 ```bash
 cp -r templates/task ~/my-task && cd ~/my-task
 uv sync
+uv run python run.py             # 无窗口，机器人保持初始姿态
 uv run python run.py --viewer
 ```
 
-加入学习器配置后，可以直接用 Isaac Lab 自带的 `isaaclab train` / `isaaclab play` 训练和回放，见模板的 README。
+模板从本仓库的发布标签 `v2.0.0` 安装 linker-lab。要针对本地修改联调，按[模板 README](../../templates/task/README.md#use-a-local-checkout)改为本地路径依赖。
+
+加入学习器配置后，可以用 Isaac Lab 自带的 `isaaclab train` / `isaaclab play` 训练和回放，见模板的 README。
+
+## 6. 开发与排查
+
+```bash
+uv sync --locked --group dev
+uv run --no-sync ruff check .
+uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distribution
+```
+
+这些是不需要 GPU 的测试，但仍需要完整安装（会导入 Isaac Lab 并转换 LW-v0 的文件）；不代表项目支持 CPU 仿真。GPU、窗口和 wheel 测试见[开发指南](../development.md)。
+
+版本或导入失败后，先同步锁定依赖，再在新的 Python 进程里运行 doctor。缓存默认位于 `~/.cache/linker-lab/{usd,objects,gallery}/`，也可以通过 `XDG_CACHE_HOME` 指定根目录。快照恢复时，观测按保存时的值（包括噪声）返回，不重新计算；相机传感器缓存和运行中被随机化的模型参数不在恢复范围内。详见[排查说明](../getting-started.md#troubleshooting)。

@@ -1,9 +1,12 @@
 # linker-lab
 
+The repository is `linker-sim-isaac`; the package and its command are `linker-lab`, the Python
+import is `linker_lab`.
+
 An Isaac Lab extension providing one Linker workstation, **LW-v0**: two AR5 arms with O6
 hands, a table and three cameras, behaving like the real robot. The robot's files, its
-drives, the real controller's motion limits and one validated physics setup are built in, so
-what you do in simulation is what the real workstation can do.
+drives, the real controller's motion limits and one physics setup are built in. Simulation
+models these constraints; task performance still needs validation on the real workstation.
 
 Use it to
 
@@ -17,15 +20,18 @@ Needs Linux (x86_64 or aarch64) with glibc 2.34 or newer (Ubuntu 22.04 or newer)
 driver 580 or newer and 10 GB of free disk ([requirements](docs/requirements.md)).
 
 ```bash
-git clone https://github.com/linker-bot/linker-lab
-cd linker-lab
+git clone https://github.com/linker-bot/linker-sim-isaac.git
+cd linker-sim-isaac
 ./install.sh                              # installs everything into .venv, then checks it
 uv run linker-lab play                    # drive LW-v0 with the keyboard and mouse
-uv run linker-lab gallery run ycb-grasp   # a pretrained grasp policy
+uv run linker-lab gallery run ycb-grasp   # a pretrained grasp policy (downloads its files once)
 ```
 
 If `install.sh` installed uv, open a new terminal (or `source ~/.local/bin/env`) before
 the `uv run` commands.
+
+The playground and the gallery open a window, so they need a display; the doctor and your own
+scripts run headless.
 
 ## Documentation
 
@@ -35,23 +41,35 @@ the `uv run` commands.
 - [The task template](templates/task/README.md): your own task, as your own project
 - [The policy gallery](docs/gallery.md): the entries, and how to write one
 - [API reference](docs/api.md): everything linker-lab provides, and what stays stable
-- [Requirements](docs/requirements.md), [changelog](CHANGELOG.md)
+- [Requirements](docs/requirements.md), [troubleshooting](docs/getting-started.md#troubleshooting)
+- [Development and validation](docs/development.md), [changelog](CHANGELOG.md)
 - [中文快速入门](docs/zh-CN/README.md)
 
 ## Develop
 
 ```bash
-uv sync --locked
-uv run ruff check .
-uv run pytest           # GPU tests in tests/gpu skip themselves without CUDA
+uv sync --locked --group dev
+uv run --no-sync ruff check .
+uv run --no-sync python -m pytest tests --ignore=tests/gpu --ignore=tests/distribution
 ```
+
+These are the tests that need no GPU; they still need the full installation (they import
+Isaac Lab and convert LW-v0's files). The GPU, viewer and wheel tests are in
+[the development guide](docs/development.md).
 
 ## API and versions
 
-[docs/api.md](docs/api.md) is the public API: from 1.0 it follows semantic versions, and the
+[docs/api.md](docs/api.md) is the public API: from 2.0.0 it follows semantic versions, and the
 [changelog](CHANGELOG.md) lists every change to it. LW-v0's files come from
 [linker-sim-assets](https://github.com/linker-bot/linker-sim-assets) at the release tag
-`v1.0.0`, which keeps LW-v0 the same robot throughout 1.x.
+`v1.0.0`, which keeps LW-v0 the same robot throughout linker-sim-assets 1.x.
+
+## Earlier releases of this repository
+
+Releases before 2.0.0 (the last one is `v1.0.0`) are a different package, `linkerbot_sim`
+with the Mirror and Kaleidoscope entry points. linker-lab does not include them or a
+compatibility layer: scripts written for them have to be rewritten against
+`linker_lab.workstation` and Isaac Lab's task API.
 
 ## License
 

@@ -6,7 +6,7 @@ starts nothing and imports neither Isaac Lab nor the physics engine.
 
 __all__ = ["bootstrap", "__version__"]
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 
 def bootstrap() -> None:
