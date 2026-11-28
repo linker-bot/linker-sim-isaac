@@ -2,7 +2,7 @@
 
 | | Needed |
 | --- | --- |
-| Operating system | Linux on x86_64 or aarch64 (tested on a Jetson Thor with JetPack 7), with glibc 2.34 or newer (Ubuntu 22.04 or newer) |
+| Operating system | Linux on x86_64 or aarch64 (tested on a Jetson Thor with JetPack 7), with glibc 2.35 or newer (Ubuntu 22.04 or newer) |
 | Python | Python 3.12 only (`>=3.12,<3.13`); installed by uv |
 | GPU | an NVIDIA GPU with driver 580 or newer (CUDA 13); the simulation runs on it |
 | Tools | `uv >=0.11.0` (installed if missing); `git` (uv fetches LW-v0's files with it); `curl` or `wget` if uv is not installed |
@@ -14,6 +14,9 @@
 or the display), and installs uv (into `~/.local/bin`) and Python 3.12 itself. macOS, Windows and
 computers without an NVIDIA GPU are not supported: for those there is
 [linker-sim-mujoco](https://github.com/linker-bot/linker-sim-mujoco), the same LW-v0 on the CPU with MuJoCo.
+
+The locked `omniverseclient` wheels require glibc 2.35 on both architectures; the locked
+`open3d` wheel requires it on x86_64. The installation check uses the same minimum.
 
 Isaac Lab 3.0 is paired with the project's exact Newton 1.8.0, MuJoCo/MuJoCo-Warp 3.17.0,
 Warp 1.17.0 and Torch 2.11.0 pins. `pyproject.toml` declares the requirements and `uv.lock`

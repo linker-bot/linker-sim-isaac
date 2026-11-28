@@ -26,6 +26,10 @@ snapshot files, gallery loading/downloads and repository/release policy. They ne
 installed Isaac Lab/Newton/USD stack, but do not require a CUDA simulation. The top-level
 `tests/conftest.py` prepares the compatibility patches before test collection.
 
+The `Installation platforms` workflow also resolves the locked runtime in dry-run mode
+for x86_64 and aarch64 at the minimum glibc version. It checks distribution availability;
+it does not run either architecture's simulation.
+
 ## Installed wheel resources
 
 ```bash
