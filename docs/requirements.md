@@ -15,6 +15,11 @@ or the display), and installs uv (into `~/.local/bin`) and Python 3.12 itself. m
 computers without an NVIDIA GPU are not supported: for those there is
 [linker-sim-mujoco](https://github.com/linker-bot/linker-sim-mujoco), the same LW-v0 on the CPU with MuJoCo.
 
+The default installation includes only runtime dependencies. Development tools, including
+the Ruckig reference used by controller tests, require `uv sync --locked --group dev`.
+Building that reference on aarch64 also requires a C++20 compiler; it is not needed to run
+the workstation.
+
 Isaac Lab 3.0 is paired with the project's exact Newton 1.8.0, MuJoCo/MuJoCo-Warp 3.17.0,
 Warp 1.17.0 and Torch 2.11.0 pins. `pyproject.toml` declares the requirements and `uv.lock`
 records the resolved graph. Isaac Lab's Newton-native actuators and deformable-body path

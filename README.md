@@ -32,6 +32,9 @@ uv run linker-lab gallery run ycb-grasp   # a pretrained grasp policy (downloads
 If `install.sh` installed uv, open a new terminal (or `source ~/.local/bin/env`) before
 the `uv run` commands.
 
+Installation and `uv run` use the runtime dependencies. Test tools are installed separately
+with `uv sync --locked --group dev`.
+
 The playground and the gallery open a window, so they need a display; the doctor and your own
 scripts run headless.
 
