@@ -102,7 +102,7 @@ def test_every_public_module_is_documented():
     public = {"linker_lab"} | {
         f"linker_lab.{p.stem}"
         for p in (ROOT / "src" / "linker_lab").glob("*.py")
-        if p.stem not in {"__init__", "engine", "playground", "cli"}
+        if not p.stem.startswith("_") and p.stem not in {"engine", "playground", "cli"}
     }
     assert documented == public
 
