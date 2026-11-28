@@ -7,9 +7,8 @@ version.
 
 ## Unreleased
 
-- Validate object mass, centre of mass and inertia before writing USD, including shapes,
-  finite real values, symmetry, physical principal moments and float representability.
-  `mass_properties` also rejects invalid mass and empty or non-finite hull volumes.
+- `object_cfg`, `write_usd` and `mass_properties` reject a mass that is not positive, and a
+  given `com` or `inertia` that is malformed or (for the inertia) not symmetric.
 
 ## 2.0.0 (2026-11-27)
 

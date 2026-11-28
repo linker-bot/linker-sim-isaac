@@ -74,33 +74,10 @@ def load_mesh(path: str | Path, scale: float = 1.0) -> list[Part]:
     return [(np.asarray(mesh.vertices, dtype=np.float64) * scale, np.asarray(mesh.faces))]
 
 
-def _finite_array(value, shape: tuple[int, ...], name: str) -> np.ndarray:
-    """Convert physical inputs without discarding imaginary components or non-finite values."""
-    try:
-        if np.iscomplexobj(value):
-            raise ValueError("complex values are not physical parameters")
-        result = np.asarray(value, dtype=np.float64)
-    except (TypeError, ValueError, OverflowError) as error:
-        raise ValueError(f"{name} must contain finite real values with shape {shape}") from error
-    if result.shape != shape or not np.isfinite(result).all():
-        raise ValueError(f"{name} must contain finite real values with shape {shape}")
-    return result
-
-
-def _usd_values(value, name: str, *, positive: bool = False) -> None:
-    """USD stores mass, centre of mass and principal moments as single-precision floats."""
-    with np.errstate(over="ignore", under="ignore"):
-        rounded = np.asarray(value, dtype=np.float32)
-    if not np.isfinite(rounded).all() or (positive and np.any(rounded <= 0)):
-        condition = "finite and positive" if positive else "finite"
-        raise ValueError(f"{name} must remain {condition} at USD float precision")
-
-
-def _mass(value) -> float:
-    mass = float(_finite_array(value, (), "mass"))
-    if mass <= 0:
-        raise ValueError("mass must be positive")
-    _usd_values(mass, "mass", positive=True)
+def _check_mass(mass) -> float:
+    mass = float(mass)
+    if not (np.isfinite(mass) and mass > 0):
+        raise ValueError(f"mass must be positive and finite, not {mass}")
     return mass
 
 
@@ -108,19 +85,13 @@ def mass_properties(parts: Sequence[Part], mass: float) -> tuple[np.ndarray, np.
     """Centre of mass and 3x3 inertia about it [kg m^2], uniform density over the parts' hulls."""
     import trimesh
 
-    mass = _mass(mass)
-    if len(parts) == 0:
-        raise ValueError("mass properties need at least one mesh part")
+    mass = _check_mass(mass)
     hulls = [trimesh.convex.convex_hull(np.asarray(v, dtype=np.float64)) for v, _ in parts]
     volumes = np.array([h.volume for h in hulls])
-    if not np.isfinite(volumes).all() or np.any(volumes <= 0):
-        raise ValueError("every part needs a convex hull with finite positive volume")
-    with np.errstate(over="ignore"):
-        volume = volumes.sum()
-    if not np.isfinite(volume):
-        raise ValueError("the combined hull volume must be finite")
-    density = mass / volume
-    com = sum(h.volume * h.center_mass for h in hulls) / volume
+    if np.any(volumes <= 0):
+        raise ValueError("every part needs a convex hull with positive volume")
+    density = mass / volumes.sum()
+    com = sum(h.volume * h.center_mass for h in hulls) / volumes.sum()
     inertia = np.zeros((3, 3))
     for hull in hulls:
         m, d = density * hull.volume, hull.center_mass - com
@@ -149,24 +120,20 @@ def write_usd(
             raise ValueError("a fixed object (mass None) has no centre of mass or inertia")
         body = None
     else:
-        mass = _mass(mass)
+        mass = _check_mass(mass)
         if com is None:
             com, inertia = mass_properties(parts, mass)
-        com = _finite_array(com, (3,), "com")
-        inertia = _finite_array(inertia, (3, 3), "inertia")
-        _usd_values(com, "com")
-        _usd_values(inertia, "inertia")
-        # Accept rounding at the scale of float32 inputs, but do not let eigh silently
-        # discard a contradictory upper triangle. The stage uses the symmetric matrix.
-        scale = float(np.abs(inertia).max())
-        if not np.allclose(inertia, inertia.T, rtol=0, atol=1e-7 * scale):
-            raise ValueError("inertia must be symmetric")
-        inertia = 0.5 * inertia + 0.5 * inertia.T
+        com, inertia = np.asarray(com, dtype=np.float64), np.asarray(inertia, dtype=np.float64)
+        if com.shape != (3,) or not np.isfinite(com).all():
+            raise ValueError(f"com must be 3 finite numbers, not {com}")
+        # eigh reads one triangle only, so an asymmetric matrix would be used without notice
+        symmetric = inertia.shape == (3, 3) and np.allclose(inertia, inertia.T, rtol=1e-6, atol=1e-12)
+        if not (symmetric and np.isfinite(inertia).all()):
+            raise ValueError(f"inertia must be a finite symmetric 3x3 matrix, not {inertia.tolist()}")
         principal, axes = np.linalg.eigh(inertia)
         a, b, c = principal
         if a <= 0 or a + b < c:  # eigh sorts ascending, so this covers every triangle inequality
             raise ValueError(f"not a physical inertia (principal moments {principal})")
-        _usd_values(principal, "inertia principal moments", positive=True)
         if np.linalg.det(axes) < 0:
             axes[:, 0] *= -1
         body = (mass, com, principal, axes)
