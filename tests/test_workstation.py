@@ -161,6 +161,23 @@ def test_camera_cfg_rounds_either_side(ws):
         assert (cfg.width, cfg.height) == (width, height)
 
 
+@pytest.mark.parametrize("offset", [0.0, 0.003, -0.002])
+def test_camera_optical_offset_keeps_intrinsics_and_other_cameras(ws, offset):
+    calibrated = ws.camera_cfg("top", optical_offset=offset)
+    default = ws.camera_cfg("top")
+    assert calibrated.offset.pos == (0.0, 0.0, offset)
+    assert calibrated.offset.rot == default.offset.rot
+    assert calibrated.spawn.distortion.to_dict() == default.spawn.distortion.to_dict()
+    assert default.offset.pos == (0.0, 0.0, 0.006)
+    assert ws.camera_cfg("left_rgb").offset.pos == default.offset.pos
+
+
+@pytest.mark.parametrize("offset", [float("nan"), float("inf"), -float("inf")])
+def test_camera_refuses_nonfinite_optical_offset(ws, offset):
+    with pytest.raises(ValueError, match="optical_offset must be finite"):
+        ws.camera_cfg("top", optical_offset=offset)
+
+
 def test_episodes_never_end_by_themselves(ws):
     """No termination terms: an LW-v0 session runs until it is reset (tasks add their own)."""
     assert not ws.LWv0EnvCfg().terminations.to_dict()

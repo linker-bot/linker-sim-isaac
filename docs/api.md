@@ -155,13 +155,20 @@ inputs when configured; raises for other arm commands.
 World pose of an arm unit's palm point: position (N, 3) and quaternion (N, 4).
 `robot` is the unit's articulation, `env.scene["left"]` or `env.scene["right"]`.
 
-### `camera_cfg(name, width=None, height=None)`
+### `camera_cfg(name, width=None, height=None, *, optical_offset=0.006)`
 
 An Isaac Lab `CameraCfg` for the camera stream `name` (a key of `CAMERAS`): the real
 camera's resolution, intrinsics, rate and image types, rendered by Newton's Warp renderer.
 `width` and `height` [px], given together, set another image size of the real camera's
 aspect ratio, and the intrinsics are scaled to it; another aspect ratio (or only one of the
 two) raises `ValueError`. Add it to a scene: `cfg.scene.top = camera_cfg("top")`.
+
+`optical_offset` [m] moves the sensor along its optical frame's forward axis. The default
+6 mm clears the camera housing in the current renderer; it changes the optical centre
+without changing the intrinsics. Use the sensor's actual pose when projecting pixels or
+comparing depths. Set `optical_offset=0` to retain the calibrated centre when the renderer
+or scene excludes the housing. Otherwise the camera can see the inside of its housing.
+Non-finite offsets raise `ValueError`.
 
 ### `body_path(part, body)`
 

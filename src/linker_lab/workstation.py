@@ -30,6 +30,7 @@ import linker_lab
 linker_lab.bootstrap()
 
 from functools import cache
+from math import isfinite
 
 import gymnasium as gym
 from isaaclab.actuators import ImplicitActuatorCfg
@@ -164,8 +165,10 @@ CAMERA_FORWARD = 0.006
 The optical frames lie inside the camera housings' visual meshes (the wrist cameras' front
 face is 2-4 mm ahead, the top camera's under 1 mm), and Newton's ray-traced renderer has
 no near clipping plane, so a camera exactly on its optical frame sees only the inside of
-its own housing. 6 mm clears every housing; the error is far below the real cameras'
-hand-eye calibration error. Set it to 0 once the renderer honours the near plane."""
+its own housing. The default 6 mm clears the housings but changes the simulated optical
+centre. Use the sensor's actual pose for projection, or set ``camera_cfg(optical_offset=0)``
+when the renderer or scene can exclude the housing. This offset is not a calibration
+accuracy estimate."""
 
 
 @cache
@@ -187,7 +190,13 @@ def body_path(part: str, body: str) -> str:
     return str(found[0].GetPath().MakeRelativePath(root.GetPath()))
 
 
-def camera_cfg(name: str, width: int | None = None, height: int | None = None):
+def camera_cfg(
+    name: str,
+    width: int | None = None,
+    height: int | None = None,
+    *,
+    optical_offset: float = CAMERA_FORWARD,
+):
     """An Isaac Lab camera sensor for one of :data:`CAMERAS`, on its optical body.
 
     Resolution, intrinsics (the ``<camera>`` in LW-v0's files), rate and image types are the
@@ -195,7 +204,10 @@ def camera_cfg(name: str, width: int | None = None, height: int | None = None):
     the same aspect ratio (e.g. 640 x 400 for a 1280 x 800 camera): the intrinsics are scaled
     to it, so the image shows the same view with fewer or more pixels. Another aspect ratio
     is another mode of the real camera, with its own calibration, so it raises
-    ``ValueError``. The sensor sits :data:`CAMERA_FORWARD` in front of the optical frame.
+    ``ValueError``. ``optical_offset`` is the signed distance [m] along the optical frame's
+    forward axis. It defaults to :data:`CAMERA_FORWARD` to clear the camera housing;
+    zero keeps the calibrated optical centre. It must be finite. At zero, a renderer
+    without near clipping may see the housing unless it is excluded from rendering.
     Images are rendered with Newton's Warp renderer. Add it to a scene with e.g.
     ``cfg.scene.top = camera_cfg("top")``.
     """
@@ -203,6 +215,8 @@ def camera_cfg(name: str, width: int | None = None, height: int | None = None):
     from isaaclab.sim import OpenCvPinholeDistortionCfg, PinholeCameraCfg
     from isaaclab_newton.renderers import NewtonWarpRendererCfg
 
+    if not isfinite(optical_offset):
+        raise ValueError("camera optical_offset must be finite")
     part, body, rate_hz, data = CAMERAS[name]
     k = assets.camera(part, body)
     real_width, real_height = k["resolution"]
@@ -242,7 +256,7 @@ def camera_cfg(name: str, width: int | None = None, height: int | None = None):
         # The mount body's axes are the optical axes (OpenCV: z forward, y down), which
         # Isaac Lab calls the "ros" convention.
         offset=CameraCfg.OffsetCfg(
-            pos=(0.0, 0.0, CAMERA_FORWARD), rot=(0.0, 0.0, 0.0, 1.0), convention="ros"
+            pos=(0.0, 0.0, float(optical_offset)), rot=(0.0, 0.0, 0.0, 1.0), convention="ros"
         ),
     )
 

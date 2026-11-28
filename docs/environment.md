@@ -238,6 +238,12 @@ cfg.scene.top = workstation.camera_cfg("top", width=640, height=360)
 
 Images are rendered by ray tracing on the GPU; each camera costs simulation speed.
 
+The default sensor is 6 mm forward of the optical frame to clear its housing. This is a
+rendering workaround, not a hand-eye calibration correction. Use the sensor's actual pose
+for geometric comparisons. `camera_cfg("top", optical_offset=0)` keeps the calibrated
+optical centre; it requires a renderer or scene that excludes the housing from the image.
+The offset is independent for each camera and does not change its intrinsics.
+
 ## Many environments
 
 `cfg.scene.num_envs` sets how many workstations run in parallel on the GPU. With the arms
