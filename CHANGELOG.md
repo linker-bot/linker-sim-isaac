@@ -7,8 +7,8 @@ version.
 
 ## Unreleased
 
-- Require glibc 2.35, matching the locked runtime wheels, and check dependency installation
-  plans for both supported architectures at that minimum in CI.
+- Require glibc 2.35 (Ubuntu 22.04's): some locked wheels need it, so `install.sh` no longer
+  accepts 2.34.
 
 ## 2.0.0 (2026-11-27)
 
