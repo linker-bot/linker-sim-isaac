@@ -483,7 +483,8 @@ The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied t
 (about 40 KB plus the observations). Raises `SnapshotError` for
 what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
-your own); an observation term with a history; an event term at intervals; command,
+your own); an observation term with a history, a delay, or a modifier or noise model that is
+a class; an event term at intervals, or a reset event with a cooldown; command,
 curriculum or recorder terms; rigid object collections, deformable objects, cables or surface
 grippers; a sensor other than a camera; a permanent external wrench.
 

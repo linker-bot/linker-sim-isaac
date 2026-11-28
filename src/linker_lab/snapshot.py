@@ -157,8 +157,17 @@ def _refusals(env) -> None:
         for cfg in cfgs:
             if (cfg.history_length or 0) > 0:
                 refuse(f"observation group {group!r} has a term with a history")
+            if cfg.delay_max_lag > 0:
+                refuse(f"observation group {group!r} has a term with a delay (its buffer is not saved)")
+    # Isaac Lab keeps every modifier or noise model that is a class (a filter, an integrator,
+    # a noise bias) here, with its own buffers; function modifiers and plain noise keep none.
+    if env.observation_manager._group_obs_class_instances:
+        refuse("an observation term has a modifier or noise model with state (it is not saved)")
     if "interval" in env.event_manager.available_modes:
         refuse("an event term runs at intervals (its timers are not saved)")
+    for name in env.event_manager.active_terms.get("reset", []):
+        if env.event_manager.get_term_cfg(name).min_step_count_between_reset > 0:
+            refuse(f"the reset event {name!r} has a cooldown (its step counts are not saved)")
     for manager in ("command_manager", "curriculum_manager", "recorder_manager"):
         terms = getattr(getattr(env, manager, None), "active_terms", None)
         if terms:
