@@ -5,7 +5,7 @@ what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major ve
 removal first warns for one minor release, and a new version of LW-v0's files is a new minor
 version.
 
-## 2.0.0 (2026-11-27)
+## 2.0.0 (2026-11-28)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
 like the real robot. It replaces this repository's earlier package, `linkerbot_sim`, whose
