@@ -7,9 +7,9 @@ version.
 
 ## Unreleased
 
-- Search multiple feasible arm trajectory branches when a moving joint approaches its
-  braking distance, instead of assuming travel is monotone in peak velocity. Add
-  moving-state and repeated-planning regressions and state the profile search's limits.
+- With goals, a moving joint close to its goal now takes the fastest motion (Ruckig's): it
+  could brake and accelerate again (0.27 s instead of 0.22 s for 0.05 rad at 0.4 rad/s), and
+  replanning every decision could change the path.
 
 ## 2.0.0 (2026-11-27)
 

@@ -76,7 +76,7 @@ def test_generator_arrives_when_ruckig_does_within_the_limits(moving):
 
 
 def test_each_joint_alone_is_as_fast_as_ruckig():
-    """The independent profiles match Ruckig for these moving-state regression cases."""
+    """Without synchronization, every joint's own time-optimal profile has Ruckig's duration."""
     for q, v, a, goal in random_cases(7, 20, moving=True):
         duration, trajectory = ruckig_duration(q, v, a, goal, ruckig.Synchronization.No)
         for j in range(7):

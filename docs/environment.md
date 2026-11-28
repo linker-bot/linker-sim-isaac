@@ -70,9 +70,8 @@ The real AR5 is commanded through the xCore SDK in one of two ways, and each arm
 action vector.
 
 **Goals** (`interpolation=True`, the default; the SDK's tracking mode). Each decision's
-command is a goal. A jerk-limited trajectory generator moves toward the latest goal within
-the real controller's limits, all seven joints arriving together. Its bounded profile search
-compares feasible branches without a guarantee of global time optimality. A new goal
+command is a goal. A jerk-limited trajectory generator moves toward the latest goal, as fast
+as the real controller's limits allow, all seven joints arriving together. A new goal
 replaces the old one smoothly. Use it for scripted moves, teleoperation and policies that
 choose where to go.
 
