@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install linker-lab into ./.venv from uv.lock, then check the installation.
 #
-# Needs: Linux x86_64 or aarch64 with glibc >= 2.34 (Ubuntu 22.04 or newer), git (uv fetches LW-v0's
+# Needs: Linux x86_64 or aarch64 with glibc >= 2.35 (Ubuntu 22.04 or newer), git (uv fetches LW-v0's
 # robot files from linker-sim-assets with it), an NVIDIA GPU with driver >= 580 (CUDA 13),
 # internet access and 10 GB of free disk. Everything else (uv, Python 3.12, Isaac Lab, the
 # physics engine) is installed by this script. Run it from anywhere: ./install.sh
@@ -10,7 +10,7 @@ set -euo pipefail
 UV_VERSION="0.11.7"   # installed only if uv is missing
 MIN_UV="0.11.0"
 MIN_DRIVER=580
-MIN_GLIBC="2.34"
+MIN_GLIBC="2.35"
 MIN_DISK_GB=10
 
 fail() { echo "install.sh: $*" >&2; exit 1; }

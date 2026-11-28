@@ -2,7 +2,7 @@
 
 | | Needed |
 | --- | --- |
-| Operating system | Linux on x86_64 or aarch64 (tested on a Jetson Thor with JetPack 7), with glibc 2.34 or newer (Ubuntu 22.04 or newer) |
+| Operating system | Linux on x86_64 or aarch64 (tested on a Jetson Thor with JetPack 7), with glibc 2.35 or newer (Ubuntu 22.04 or newer) |
 | Python | Python 3.12 only (`>=3.12,<3.13`); installed by uv |
 | GPU | an NVIDIA GPU with driver 580 or newer (CUDA 13); the simulation runs on it |
 | Tools | `uv >=0.11.0` (installed if missing); `git` (uv fetches LW-v0's files with it); `curl` or `wget` if uv is not installed |
