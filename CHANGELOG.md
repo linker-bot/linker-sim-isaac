@@ -10,6 +10,9 @@ version.
 - Require glibc 2.35 (Ubuntu 22.04's): some locked wheels need it, so `install.sh` no longer
   accepts 2.34.
 
+- `install.sh` and `uv sync` no longer install the test tools (pytest, Ruff, Ruckig), so an
+  aarch64 installation no longer compiles Ruckig; `uv sync --locked --group dev` adds them.
+
 ## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
