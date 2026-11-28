@@ -28,6 +28,12 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Initialize acceptance evidence
+        shell: bash
+        run: |
+          mkdir -p artifacts/simulation
+          printf '%s\n' "$GITHUB_SHA" > artifacts/simulation/expected-sha.txt
+
       - name: Set up uv and Python
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -40,25 +46,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${OMNI_KIT_ACCEPT_EULA:-}" = Y || {
-            echo "::error::Set the simulation environment variable OMNI_KIT_ACCEPT_EULA=Y after reviewing NVIDIA's terms."
-            exit 1
-          }
-          test "$(uname -s)" = Linux
-          test "$(uname -m)" = x86_64
-          command -v nvidia-smi
-          nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+          {
+            test "${OMNI_KIT_ACCEPT_EULA:-}" = Y || {
+              echo "::error::Set the simulation environment variable OMNI_KIT_ACCEPT_EULA=Y after reviewing NVIDIA's terms."
+              exit 1
+            }
+            test "$(uname -s)" = Linux
+            test "$(uname -m)" = x86_64
+            command -v nvidia-smi
+            nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+          } 2>&1 | tee artifacts/simulation/runner.log
 
       - name: Verify dependency lock
-        run: uv lock --check
+        run: |
+          set -euo pipefail
+          uv lock --check 2>&1 | tee artifacts/simulation/lock.log
 
       - name: Sync simulation test environment
-        run: >-
-          uv sync --locked --group dev
+        id: sync
+        run: |
+          set -euo pipefail
+          uv sync --locked --group dev 2>&1 | tee artifacts/simulation/sync.log
 
       - name: Verify Python and CUDA stack
         run: |
-          .venv/bin/python - <<'PY'
+          set -euo pipefail
+          .venv/bin/python - <<'PY' 2>&1 | tee artifacts/simulation/cuda.log
           import pytest
           import torch
 
@@ -73,7 +86,51 @@ jobs:
           )
           PY
 
+      - name: Record source and runtime metadata
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_python=python
+          if test -x .venv/bin/python; then runner_python=.venv/bin/python; fi
+          "$runner_python" scripts/simulation_evidence.py record \
+            --expected-sha "$GITHUB_SHA" \
+            --sync-outcome "${{ steps.sync.outcome }}" \
+            --repository "$GITHUB_REPOSITORY" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --output artifacts/simulation/metadata.json \
+            2>&1 | tee artifacts/simulation/metadata.log
+
       - name: Run GPU and Isaac acceptance matrix
         run: |
-          test -n "${DISPLAY:-}" || { echo "A display is required for viewer acceptance tests"; exit 1; }
-          uv run --no-sync python -m pytest tests/gpu -ra
+          set -euo pipefail
+          {
+            test -n "${DISPLAY:-}" || { echo "A display is required for viewer acceptance tests"; exit 1; }
+            uv run --no-sync python -m pytest tests/gpu -ra --capture=tee-sys \
+              --junitxml=artifacts/simulation/junit.xml -o junit_logging=all \
+              --basetemp=artifacts/simulation/pytest-tmp
+          } 2>&1 | tee artifacts/simulation/pytest.log
+
+      - name: Require complete GPU acceptance evidence
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner_python=python
+          if test -x .venv/bin/python; then runner_python=.venv/bin/python; fi
+          "$runner_python" scripts/simulation_evidence.py check \
+            --expected-sha "$GITHUB_SHA" \
+            --metadata artifacts/simulation/metadata.json \
+            --junit artifacts/simulation/junit.xml \
+            --output artifacts/simulation/acceptance.json \
+            2>&1 | tee artifacts/simulation/acceptance.log
+
+      - name: Preserve simulation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: simulation-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/simulation/
+          if-no-files-found: error
+          retention-days: 30

@@ -56,6 +56,24 @@ workflow runs on the configured self-hosted Linux x86_64 NVIDIA runner, requires
 and requires `OMNI_KIT_ACCEPT_EULA=Y` in the simulation environment after reviewing NVIDIA's
 terms. Local aarch64 use and the workflow's x86_64 runner are separate validation targets.
 
+Each manual `Simulation` run records the checked-out commit and tree, hashes of `uv.lock`
+and `pyproject.toml`, Python and installed package versions, OS information, and the NVIDIA
+GPU model, driver and memory size. Metadata uses an explicit set of fields; it does not
+dump environment variables, hostnames, GPU UUIDs, package locations or package-source URLs.
+
+The run keeps the JUnit report, setup and test logs, and pytest's temporary outputs
+(including screenshots and snapshot fixtures) in an artifact named
+`simulation-<commit>-<run-id>-<attempt>`, retained for 30 days. Upload runs after failures
+as well as successful tests. The JSON acceptance summary is separate from the raw report.
+
+`scripts/simulation_evidence.py` requires a nonempty JUnit report with no skipped, failed
+or errored tests and consistent test counts. It also requires successful locked dependency
+installation, recorded GPU/runtime information, and an unchanged checkout matching the
+run's exact SHA. Thus an all-skipped run, a missing display or an incomplete report cannot
+produce successful `Simulation` evidence. Local headless runs can still skip viewer tests;
+they do not meet this full acceptance gate. The release workflow continues to require a
+successful `Simulation` run for the exact release-tag commit.
+
 ## Package layout
 
 - `assets`, `physics`, `objects`: robot data, conversion, solver configuration and rigid objects.
