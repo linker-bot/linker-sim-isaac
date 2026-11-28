@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
+import tempfile
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from functools import cache
@@ -146,9 +146,12 @@ def write_usd(
     path = cache_dir() / f"{digest.hexdigest()[:16]}.usda"
     if not path.is_file():
         path.parent.mkdir(parents=True, exist_ok=True)
-        partial = path.with_suffix(f".{os.getpid()}.usda")
-        _write_stage(partial, parts, body, visual)
-        partial.replace(path)
+        # Each caller owns a distinct USD layer path, including threads in one process.
+        # Publish only a completed stage; a failed caller removes only its own files.
+        with tempfile.TemporaryDirectory(dir=path.parent, prefix=f".{path.stem}-") as tmp:
+            partial = Path(tmp) / path.name
+            _write_stage(partial, parts, body, visual)
+            partial.replace(path)
     return path
 
 

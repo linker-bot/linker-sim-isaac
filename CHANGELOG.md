@@ -7,6 +7,19 @@ version.
 
 ## Unreleased
 
+- Require glibc 2.35 (Ubuntu 22.04's): some locked wheels need it, so `install.sh` no longer
+  accepts 2.34.
+
+- `install.sh` and `uv sync` no longer install the test tools (pytest, Ruff, Ruckig), so an
+  aarch64 installation no longer compiles Ruckig; `uv sync --locked --group dev` adds them.
+
+- `snapshot.capture` and `restore` refuse an observation delay, a modifier or noise model that
+  is a class, and a reset event with a cooldown: Isaac Lab keeps their state outside the
+  snapshot.
+
+- Use separate temporary USD layers for concurrent object conversions, including threads
+  in the same process, and remove temporary files when conversion fails.
+
 - `object_cfg`, `write_usd` and `mass_properties` reject a mass that is not positive, and a
   given `com` or `inertia` that is malformed or (for the inertia) not symmetric.
 

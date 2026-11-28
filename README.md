@@ -18,7 +18,7 @@ Use it to
 
 ## Quick start
 
-Needs Linux (x86_64 or aarch64) with glibc 2.34 or newer (Ubuntu 22.04 or newer), git, an NVIDIA GPU with
+Needs Linux (x86_64 or aarch64) with glibc 2.35 or newer (Ubuntu 22.04 or newer), git, an NVIDIA GPU with
 driver 580 or newer and 10 GB of free disk ([requirements](docs/requirements.md)).
 
 ```bash
