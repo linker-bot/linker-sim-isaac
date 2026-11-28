@@ -10,7 +10,7 @@ linker-lab 是 Isaac Lab 的扩展，提供一台 Linker 工作站 **LW-v0**（�
 
 ## 1. 安装
 
-需要：Linux（x86_64 或 aarch64，如 Jetson Thor），glibc 2.34 或更新（Ubuntu 22.04 或更新）；`git`；NVIDIA GPU，驱动 580 或更新；约 10 GB 可用磁盘空间；网络连接。详见 [requirements](../requirements.md)。
+需要：Linux（x86_64 或 aarch64，如 Jetson Thor），glibc 2.35 或更新（Ubuntu 22.04 或更新）；`git`；NVIDIA GPU，驱动 580 或更新；约 10 GB 可用磁盘空间；网络连接。详见 [requirements](../requirements.md)。
 
 ```bash
 git clone https://github.com/linker-bot/linker-sim-isaac.git
