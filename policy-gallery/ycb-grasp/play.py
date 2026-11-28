@@ -375,7 +375,8 @@ class GraspScene:
     object index, ``"grasp"``, ``"reset"``); :meth:`step` advances one decision.
 
     States: ``empty`` -> Drop -> ``settling`` -> ``ready`` -> Grasp -> ``grasping`` ->
-    ``done`` (result in :attr:`message`); Reset (or Drop) from any state."""
+    ``done`` (structured outcome in :attr:`result`, display text in :attr:`message`);
+    Reset (or Drop) from any state."""
 
     def __init__(self, env, items: list[dict], actor, demo: dict):
         self.env, self.items, self.actor, self.demo = env, items, actor, demo
@@ -414,6 +415,7 @@ class GraspScene:
         self._next_park = 0
         self.speed = 0.0  # simulated seconds per wall-clock second (set by the viewer loop)
         self.active = None  # index of the object on the table
+        self.result = None
         self.state, self.message, self.pending = "empty", "Pick an object and press Drop.", None
 
     # -- buttons
@@ -425,6 +427,7 @@ class GraspScene:
     def _reset(self):
         self.env.reset()  # robot home, every object back to its parking spot
         self.active = None
+        self.result = None
         self.state, self.message = "empty", "Pick an object and press Drop."
 
     def _drop(self, item: int):
@@ -461,6 +464,7 @@ class GraspScene:
         self.message = f"{self.items[self.active]['label']} ({self.pose_text}): settling..."
 
     def _grasp(self):
+        self.result = None
         self.settled_pos, self.settled_quat = self._object_pose()
         self.arm, self.hand, self.plan_valid = self.plan(self.actor(self.observe()))
         if not self.plan_valid[0]:  # not executed: the arm stays home
@@ -496,6 +500,7 @@ class GraspScene:
         _, _, terminated, _, _ = self.env.step(torch.cat((arm, hand), -1).float())
         if bool(terminated[0]):  # the viewer's own Reset button
             self.active, self.state, self.message = None, "empty", "Pick an object and press Drop."
+            self.result = None
         elif self.state == "settling":
             self._settle_check()
         elif self.state == "grasping":
@@ -573,6 +578,12 @@ class GraspScene:
         else:
             reason = next((text for key, text in failures.items() if not self.ok[key]), None)
         name = self.items[self.active]["label"]
+        self.result = {
+            "success": reason is None,
+            "plan_valid": bool(self.plan_valid[0]),
+            "checks": dict(self.ok),
+            "reason": reason,
+        }
         self.message = f"{name}: grasped." if reason is None else f"{name}: missed, {reason}."
         self.state = "done"
 
