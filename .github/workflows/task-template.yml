@@ -1,0 +1,81 @@
+name: Task template
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/task-template.yml
+      - templates/task/**
+      - pyproject.toml
+      - uv.lock
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/task-template.yml
+      - templates/task/**
+      - pyproject.toml
+      - uv.lock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: task-template-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standalone-install:
+    name: Standalone task installation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            templates/task/pyproject.toml
+            uv.lock
+
+      - name: Install and import the copied task
+        shell: bash
+        run: |
+          set -euo pipefail
+          task_dir="$(mktemp -d "${RUNNER_TEMP}/linker-task.XXXXXX")"
+          cp -R templates/task/. "$task_dir/"
+          uv sync --directory "$task_dir"
+          uv lock --check --directory "$task_dir"
+          cd "$task_dir"
+          env -u PYTHONPATH uv run --no-sync python - <<'PY'
+          import json
+          import os
+          import tomllib
+          from importlib.metadata import distribution, version
+          from pathlib import Path
+
+          import my_task
+          from my_task.env_cfg import MyTaskEnvCfg
+
+          import gymnasium as gym
+
+          root = Path(os.environ["GITHUB_WORKSPACE"])
+          expected = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+          source = tomllib.loads(Path("pyproject.toml").read_text())["tool"]["uv"]["sources"]["linker-lab"]
+          installed = distribution("linker-lab")
+          direct = json.loads(installed.read_text("direct_url.json"))
+          assert version("linker-lab") == expected
+          assert direct["url"].removesuffix(".git") == source["git"].removesuffix(".git")
+          assert direct["vcs_info"]["requested_revision"] == source.get("rev", source.get("tag"))
+          assert Path(my_task.__file__).is_relative_to(Path.cwd())
+          assert gym.spec("My-Task-LW-v0").entry_point == "isaaclab.envs:ManagerBasedRLEnv"
+          MyTaskEnvCfg()
+          print(f"Installed linker-lab {expected} from {direct['vcs_info']['commit_id']}")
+          print("The copied task imports and registers without a source-path override.")
+          PY

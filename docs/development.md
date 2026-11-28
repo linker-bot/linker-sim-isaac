@@ -38,6 +38,11 @@ its interpreter. This gate builds an actual wheel and exercises gallery discover
 isolated directory. Hatchling is installed explicitly so the test cannot silently skip.
 The separate conftest root keeps this distribution check independent of engine bootstrap.
 
+The `Task template` workflow copies `templates/task` outside the checkout, installs it in
+a new environment, checks the generated lock, and checks task registration and configuration
+imports. It checks the default source dependency as users receive it; no `PYTHONPATH`
+override or local library source is injected. Simulation still requires the GPU tests.
+
 ## GPU and viewer acceptance
 
 ```bash
@@ -74,9 +79,14 @@ guides, and a line in the changelog under `## Unreleased`.
 ## Releases
 
 A release is an annotated tag `vX.Y.Z` whose version is the one in `pyproject.toml`,
-`linker_lab.__version__` and a dated changelog section (`scripts/prepare_release.py` checks
-them), and the task template installs linker-lab from that tag
-(`tests/test_release_links.py` checks it). Tags before `v2.0.0`
+`linker_lab.__version__` and a dated changelog section. Before creating that tag, set the
+task template's `linker-lab` source to `tag = "vX.Y.Z"`.
+`scripts/prepare_release.py` requires all of these, including the matching template tag.
+Between releases the template may use an existing complete commit ID, so it remains
+installable before the next tag exists; `tests/test_release_links.py` rejects floating
+branches and mismatched release tags. Run the independent template check again after the
+candidate tag exists. The template does not carry a lockfile referencing its own release
+commit; the copied task generates and maintains its own lock. Tags before `v2.0.0`
 (up to `v1.0.0`) belong to this repository's earlier package.
 
 The `Release` workflow takes an existing annotated tag plus a successful `Simulation` run

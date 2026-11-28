@@ -20,6 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_FILE = REPO_ROOT / "pyproject.toml"
 PACKAGE_FILE = REPO_ROOT / "src" / "linker_lab" / "__init__.py"
 CHANGELOG_FILE = REPO_ROOT / "CHANGELOG.md"
+TEMPLATE_PROJECT_FILE = REPO_ROOT / "templates" / "task" / "pyproject.toml"
+REPOSITORY_URL = "https://github.com/linker-bot/linker-sim-isaac"
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[.a-zA-Z0-9-]+)?$")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -126,12 +128,33 @@ def validate_simulation_run(
         )
 
 
+def validate_template_release_source(version: str) -> None:
+    try:
+        with TEMPLATE_PROJECT_FILE.open("rb") as stream:
+            project = tomllib.load(stream)
+        source = project["tool"]["uv"]["sources"]["linker-lab"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
+        raise ReleaseError(f"cannot read the task template source: {exc}") from exc
+    if (
+        not isinstance(source, dict)
+        or set(source) != {"git", "tag"}
+        or not isinstance(source.get("git"), str)
+        or source["git"].removesuffix(".git") != REPOSITORY_URL
+        or source.get("tag") != f"v{version}"
+    ):
+        raise ReleaseError(
+            f"task template must install this repository's release tag v{version}; "
+            "replace its development revision before creating the release tag"
+        )
+
+
 def validate_repository(tag: str) -> tuple[str, str]:
     version = project_version()
     if runtime_version() != version:
         raise ReleaseError("project and runtime versions do not match")
     if tag != f"v{version}":
         raise ReleaseError(f"release tag must be exactly v{version}")
+    validate_template_release_source(version)
     if _run_git("cat-file", "-t", f"refs/tags/{tag}") != "tag":
         raise ReleaseError("release tag must exist and be annotated")
 

@@ -27,18 +27,20 @@ uv run python run.py --viewer   # 4 environments in the viewer
 ```
 
 To rename it, change the project `name` and the entry point in `pyproject.toml`, the folder
-`src/my_task`, the gym id in `__init__.py`, and the imports in `run.py`.
+`src/my_task`, the gym id in `__init__.py`, and the imports in `run.py`, then run `uv lock`.
 
-`uv sync` installs `linker-lab` from its release tag `v2.0.0` in
-[linker-bot/linker-sim-isaac](https://github.com/linker-bot/linker-sim-isaac)
-(`[tool.uv.sources]` in `pyproject.toml`). To move to a later release, change the tag and run
-`uv sync` again.
+Before the 2.0.0 release tag is available, this template installs the immutable
+[2.0.0 source snapshot `6190db30`](https://github.com/linker-bot/linker-sim-isaac/commit/6190db30e1618134e7d6f271ca84eac0aea317eb).
+The complete commit ID is in `[tool.uv.sources]` in `pyproject.toml`; it does not follow
+`main`. Once a release is published, replace `rev = "..."` with its `tag = "vX.Y.Z"` and
+run `uv lock` followed by `uv sync --locked`.
 
-The task project repeats the Newton override needed by Isaac Lab 3.0 and a
-`tinyobjloader` prerelease constraint. Keep those when renaming the template. It resolves
-its own versions of unpinned dependencies; commit its generated `uv.lock`, then use
-`uv sync --locked` on other machines. The main project's lock and dev dependencies are
-not inherited by a project depending on it.
+The task project repeats the Newton override needed by Isaac Lab 3.0, the CUDA 13 PyTorch
+index and a `tinyobjloader` prerelease constraint. Keep those when renaming the template.
+The first `uv sync` generates the task's own `uv.lock`; review and commit it, then use
+`uv sync --locked` on other machines. After changing dependencies, update that lock with
+`uv lock`. The main project's lock and dev dependencies are not inherited by a project
+depending on it.
 
 ### Use a local checkout
 
@@ -51,8 +53,8 @@ linker-lab = { path = "/absolute/path/to/linker-sim-isaac", editable = true }
 ```
 
 Run `uv sync` after changing it. Python and gallery source changes are then visible
-without rebuilding the package. Use the release tag again when sharing the task;
-an absolute path is specific to your machine.
+without rebuilding the package. Use the fixed revision or a published release tag again
+when sharing the task; an absolute path is specific to your machine.
 
 ## The task
 

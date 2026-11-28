@@ -78,7 +78,7 @@ uv run python run.py             # 无窗口，机器人保持初始姿态
 uv run python run.py --viewer
 ```
 
-模板从本仓库的发布标签 `v2.0.0` 安装 linker-lab。要针对本地修改联调，按[模板 README](../../templates/task/README.md#use-a-local-checkout)改为本地路径依赖。
+在 `v2.0.0` 发布前，模板使用本仓库的固定源码快照 `6190db30`，完整提交 ID 已包含在模板中，不依赖尚未创建的标签。首次 `uv sync` 会生成任务自己的 `uv.lock`，请提交这个文件，后续使用 `uv sync --locked`。发布后可将 `rev` 改为对应 `tag`，再更新任务的锁文件。要针对本地修改联调，按[模板 README](../../templates/task/README.md#use-a-local-checkout)改为本地路径依赖。
 
 加入学习器配置后，可以用 Isaac Lab 自带的 `isaaclab train` / `isaaclab play` 训练和回放，见模板的 README。
 

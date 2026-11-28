@@ -1,8 +1,8 @@
 """Everything that points at this repository points at it, at the right release (CPU).
 
 - The clone commands in the user docs clone this repository.
-- The task template installs linker-lab from this repository's tag ``v<version>``, the version
-  being released.
+- The task template installs linker-lab from a fixed source snapshot or this repository's
+  tag ``v<version>``. Release preparation additionally requires the tag.
 - Each gallery artifact is a file of this repository's release ``<entry>-<entry version>``.
 """
 
@@ -26,11 +26,16 @@ def test_clone_commands_clone_this_repository():
         assert url.removesuffix(".git") == REPOSITORY, f"{doc.relative_to(ROOT)} clones {url}"
 
 
-def test_task_template_installs_this_release():
+def test_task_template_uses_a_fixed_source():
     project = tomllib.loads((ROOT / "templates" / "task" / "pyproject.toml").read_text())
     source = project["tool"]["uv"]["sources"]["linker-lab"]
     assert source["git"].removesuffix(".git") == REPOSITORY
-    assert source.get("tag") == f"v{__version__}", f"the template installs {source}, not tag v{__version__}"
+    if "rev" in source:
+        assert set(source) == {"git", "rev"}
+        assert re.fullmatch(r"[0-9a-f]{40}", source["rev"]), "use a complete commit ID"
+    else:
+        assert set(source) == {"git", "tag"}
+        assert source.get("tag") == f"v{__version__}", f"the template installs {source}, not tag v{__version__}"
 
 
 @pytest.mark.parametrize("name", gallery.entries())

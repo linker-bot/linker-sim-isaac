@@ -40,6 +40,14 @@ def _release_repository(
         "# Changelog\n\n## [Unreleased]\n\n## 1.2.3 (2026-08-26)\n\n- Stable release.\n",
         encoding="utf-8",
     )
+    template = tmp_path / "templates" / "task" / "pyproject.toml"
+    template.parent.mkdir(parents=True)
+    template.write_text(
+        '[tool.uv.sources]\n'
+        'linker-lab = { git = "https://github.com/linker-bot/linker-sim-isaac.git", '
+        'tag = "v1.2.3" }\n',
+        encoding="utf-8",
+    )
     _git(tmp_path, "init")
     _git(tmp_path, "config", "commit.gpgsign", "false")
     _git(tmp_path, "config", "tag.gpgsign", "false")
@@ -54,6 +62,7 @@ def _release_repository(
     monkeypatch.setattr(release, "PROJECT_FILE", project)
     monkeypatch.setattr(release, "PACKAGE_FILE", package_file)
     monkeypatch.setattr(release, "CHANGELOG_FILE", changelog)
+    monkeypatch.setattr(release, "TEMPLATE_PROJECT_FILE", template)
     evidence = tmp_path / "simulation-run.json"
     evidence.write_text(
         json.dumps(
@@ -100,6 +109,26 @@ def test_release_tag_must_be_annotated(
     _git(tmp_path, "tag", "v1.2.3")
 
     with pytest.raises(release.ReleaseError, match="annotated"):
+        release.validate_repository("v1.2.3")
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        'git = "https://github.com/linker-bot/linker-sim-isaac.git", rev = "' + "a" * 40 + '"',
+        'git = "https://github.com/linker-bot/linker-sim-isaac.git", tag = "v1.2.2"',
+        'git = "https://github.com/other/repository.git", tag = "v1.2.3"',
+        'git = "https://github.com/linker-bot/linker-sim-isaac.git", tag = "v1.2.3", branch = "main"',
+    ),
+)
+def test_release_rejects_a_template_that_does_not_install_its_tag(
+    source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _release_repository(tmp_path, monkeypatch)
+    release.TEMPLATE_PROJECT_FILE.write_text(
+        "[tool.uv.sources]\nlinker-lab = { " + source + " }\n", encoding="utf-8"
+    )
+    with pytest.raises(release.ReleaseError, match="task template.*release tag v1.2.3"):
         release.validate_repository("v1.2.3")
 
 
