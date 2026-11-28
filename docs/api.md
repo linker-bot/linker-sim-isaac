@@ -209,9 +209,10 @@ commanded through the xCore SDK in one of two ways, and `ArmAction` models both:
 
 - **Interpolation on** (`interpolation=True`, default; the SDK's PP tracking): each command
   is a **goal**. A jerk-limited trajectory generator moves toward the latest goal,
-  under the limits, all seven joints arriving together, replanned every decision. The
-  bounded profile search compares feasible branches; it does not guarantee global
-  time optimality or numerical equivalence to every xCore/Ruckig trajectory.
+  under the limits, all seven joints arriving together. New goals are considered every
+  decision; unchanged goals keep their accepted path. The bounded profile search does
+  not guarantee global time optimality or numerical equivalence to every xCore/Ruckig
+  trajectory.
 - **Interpolation off** (`interpolation=False`; the SDK's CSP servo): each command is the
   **next point of your own path**, joined to the previous one by a cubic Hermite curve.
 
@@ -221,6 +222,16 @@ feed-forward, and the PD torque is kept 1 N·m below each joint's torque cap (12
 velocity limits, the joint ranges and the wrist octagon. Acceleration is limited except
 when a boundary stop takes priority (see below); each
 intervention is counted (`ArmAction.limit_hits`).
+
+Interpolated paths are checked over their complete duration, including extrema between
+physics samples. From rest, if independent joint profiles would leave the wrist region,
+all joints instead follow shared progress along the feasible straight line to the goal.
+While moving, a new goal whose candidate path fails the checks leaves the previous
+accepted path in effect. The latest command is retried each decision and can be deferred
+until the arm reaches rest. This preserves the position, velocity, acceleration and jerk
+limits without projecting a moving position independently of its derivatives. Both
+fallbacks and deferred retargets are counted in `limit_hits`; this is not a collision
+avoidance planner or an emergency stop.
 
 ### `ArmActionCfg`
 
@@ -266,7 +277,7 @@ The Isaac Lab `ActionTerm` made from an `ArmActionCfg`; get it with
   limit changed the command or one of its physics steps' references, or the jerk was
   exceeded. Also in `env.extras["arm_limit_hits"][side]`.
 - `get_state()`, `set_state(state)`: everything the term carries from one decision to the
-  next (the generator's and the stream's state, this decision's references and servo targets,
+  next (the accepted complete path, the generator's and the stream's state, this decision's references and servo targets,
   the last command, `limit_hits`, the IK's command), as a dict of copied tensors and ints, and
   its restoration in place; `set_state` raises `ValueError` before changing anything if the
   keys, shapes or dtypes differ. Used by `linker_lab.snapshot`.

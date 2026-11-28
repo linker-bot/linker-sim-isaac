@@ -73,8 +73,11 @@ action vector.
 command is a goal. A jerk-limited trajectory generator moves toward the latest goal within
 the real controller's limits, all seven joints arriving together. Its bounded profile search
 compares feasible branches without a guarantee of global time optimality. A new goal
-replaces the old one smoothly. Use it for scripted moves, teleoperation and policies that
-choose where to go.
+replaces the old one when its complete candidate path passes the bounds checks. An
+infeasible retarget keeps the accepted motion while the latest goal is retried every
+decision; near a boundary it may wait until the arm reaches rest. Repeated unchanged
+goals do not restart the path. Use it for scripted moves, teleoperation and policies
+that choose where to go.
 
 **Your own path** (`interpolation=False`; the SDK's servo mode). Each command is the next
 point of a path you compute, one per decision; consecutive points are joined by a smooth
@@ -96,13 +99,18 @@ cfg.actions.right_arm = workstation.arm_action_cfg("right", interpolation=False)
 speeds of 0.32-0.49 rad/s, acceleration 10 rad/s², jerk 40 rad/s³, the joint ranges and the
 wrist's octagonal (J6, J7) region (`arm.VELOCITY`, `arm.WRIST_OCTAGON`, ...). The palm point
 therefore moves at most about 0.15 m/s. A goal or path point outside the ranges is moved
-into them. With goals, the trajectory generator keeps every limit. With your own path, each
+into them. With goals, complete reference paths are checked at all phase extrema, including
+between physics samples. If independent joint profiles from rest would leave the wrist
+region, shared progress along the straight line to the goal keeps the path inside the
+convex region. Positions and their derivatives always come from the accepted path.
+With your own path, each
 physics step's reference is limited in speed and acceleration, velocities you give are
 limited in speed, and a jerk above the limit is counted but not changed. A path that reaches
 a joint range or the wrist region too fast to stop in time is stopped at the edge, faster
 than the acceleration limit: plan paths that slow down before the edge.
 `ArmAction.limit_hits` (also `env.extras["arm_limit_hits"][side]`) counts each decision in
-which a limit changed the command, so a policy that relies on impossible motion is visible.
+which a limit changed the command, including a straight-path fallback or a deferred
+retarget, so a policy that relies on impossible motion is visible.
 `limits=None` turns the limits off (for your own path only).
 
 **Drives.** The arm's joints are position-controlled with the real arm's torque caps (120 N·m

@@ -13,10 +13,10 @@ servo; smoothing happens before the servo, and the caller chooses who does it:
 one reference (q_ref, v_ref) per physics step (480 Hz):
 
 ``interpolation=True`` (default)
-    The command is a **goal**. :func:`plan` (a GPU trajectory generator) moves the reference
-    toward the latest goal under the velocity, acceleration and jerk limits,
-    all seven joints arriving together, replanned every decision from the
-    reference's own position, velocity and acceleration.
+    The command is a **goal**. A GPU trajectory generator moves the reference
+    toward the latest goal under the velocity, acceleration and jerk limits.
+    Complete candidate paths are checked against the position bounds before they
+    replace the accepted path. See :class:`ArmAction` for retargeting at a boundary.
 ``interpolation=False``
     The command is the **next point of the caller's own path** (``stream``):
     ``"points"`` (7 joint positions; the point's velocity is the finite difference to the
@@ -44,8 +44,8 @@ jerk :data:`JERK`, the joint ranges in LW-v0's files, and the wrist octagon
 =====================  =================================  ==========================
                        interpolation=True                 interpolation=False
 =====================  =================================  ==========================
-position               goal and reference projected       point and reference
-                       into the limits                    projected into the limits
+position               goal projected; complete            point and reference
+                       reference path checked              projected into the limits
 velocity, acceleration respected by the generator         per-step reference rate-limited
 jerk                   respected by the generator         counted, not enforced
 =====================  =================================  ==========================
@@ -611,7 +611,15 @@ def rate_limit(q, v, last, vmax, amax, jmax, dt: float, lower=None, upper=None):
 
 class ArmAction(ActionTerm):
     """Joint or pose commands for one AR5 arm, through the trajectory generator or the
-    Hermite stream, into the servo model. See :mod:`linker_lab.arm`."""
+    Hermite stream, into the servo model. See :mod:`linker_lab.arm`.
+
+    Interpolated goals use complete paths verified against the joint ranges and
+    wrist region. From rest, a shared straight-line progress is the fallback when
+    independent joint profiles would leave the region. An infeasible retarget
+    while moving keeps the previous accepted path; the latest goal is retried
+    each decision. No position projection changes a moving reference or leaves
+    its feed-forward velocity and planning state inconsistent.
+    """
 
     cfg: ArmActionCfg
 
@@ -645,6 +653,14 @@ class ArmAction(ActionTerm):
         self._last = torch.zeros((n, 7, 3), **f64)  # last reference: q, velocity, acceleration
         self.limit_hits = torch.zeros(n, device=self.device, dtype=torch.long)
         self._raw = torch.zeros((n, self.action_dim), device=self.device)
+        self._bounded = None
+        if cfg.interpolation:
+            from linker_lab._arm_path import BoundedPlanner
+
+            self._bounded = BoundedPlanner(
+                self._plan[0], self._vmax, self._amax, self._jmax, self._lower, self._upper,
+                torch.tensor(WRIST_OCTAGON, **f64),
+            )
 
         if cfg.command == "pose":
             from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
@@ -705,10 +721,11 @@ class ArmAction(ActionTerm):
                 point, changed = project(point, self._lower, self._upper)
                 hits |= changed
             if self.cfg.interpolation:
-                ref_q, ref_v, ref_a = plan(
-                    *self._plan, point, self._vmax, self._amax, self._jmax, self._dt, self._steps
+                ref_q, ref_v, ref_a, changed = self._bounded.sample(
+                    *self._plan, point, self._dt, self._steps
                 )
                 self._plan = [x[:, -1].clone() for x in (ref_q, ref_v, ref_a)]
+                hits |= changed
             else:
                 q0, v0 = self._point
                 if self.cfg.stream == "points_velocity":
@@ -718,15 +735,14 @@ class ArmAction(ActionTerm):
                 ref_q, ref_v = hermite(q0, point, v0, v1, self._u, self._decision_dt)
                 self._point = [point, v1]
 
-        if limits:
+        if limits and not self.cfg.interpolation:
             ref_q, changed = project(ref_q, self._lower, self._upper)
             hits |= changed.any(-1)
-            if not self.cfg.interpolation:
-                ref_v = ref_v.contiguous()
-                hits |= rate_limit(
-                    ref_q, ref_v, self._last, self._vmax, self._amax, self._jmax, self._dt,
-                    self._lower, self._upper,
-                )
+            ref_v = ref_v.contiguous()
+            hits |= rate_limit(
+                ref_q, ref_v, self._last, self._vmax, self._amax, self._jmax, self._dt,
+                self._lower, self._upper,
+            )
         self._ref_q, self._ref_v = ref_q, ref_v
         data, ids = self._asset.data, self._joint_ids
         kp, kd = data.joint_stiffness.torch[:, ids], data.joint_damping.torch[:, ids]
@@ -754,6 +770,8 @@ class ArmAction(ActionTerm):
             state[0][rows] = q
             for derivative in state[1:]:
                 derivative[rows] = 0
+        if getattr(self, "_bounded", None) is not None:
+            self._bounded.reset(self._plan[0], rows)
         self._last[rows] = 0
         self._last[rows, :, 0] = q
         self._ref_q[rows] = q[:, None, :]
@@ -784,6 +802,8 @@ class ArmAction(ActionTerm):
             "ref_q": self._ref_q, "ref_v": self._ref_v, "requested": self._requested,
             "target": self._target, "raw": self._raw, "limit_hits": self.limit_hits,
         }
+        if self._bounded is not None:
+            state |= self._bounded.state
         if self.cfg.command == "pose":
             state |= {"ik_command": self._ik._command, "ik_pos": self._ik.ee_pos_des, "ik_quat": self._ik.ee_quat_des}
         return {**{k: v.clone() for k, v in state.items()}, "step": self._step}
@@ -798,6 +818,8 @@ class ArmAction(ActionTerm):
             "ref_q": self._ref_q, "ref_v": self._ref_v, "requested": self._requested,
             "target": self._target, "raw": self._raw, "limit_hits": self.limit_hits,
         }
+        if self._bounded is not None:
+            targets |= self._bounded.state
         if self.cfg.command == "pose":
             targets |= {"ik_command": self._ik._command, "ik_pos": self._ik.ee_pos_des, "ik_quat": self._ik.ee_quat_des}
         for key, tensor in targets.items():

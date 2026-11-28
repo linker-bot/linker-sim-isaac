@@ -7,6 +7,10 @@ version.
 
 ## Unreleased
 
+- Check complete interpolated arm paths against position and derivative bounds before
+  accepting them. Use shared progress along a straight path from rest when needed;
+  defer infeasible moving retargets while retaining the accepted path and its snapshot
+  state. Remove position-only projection of moving interpolated references.
 - Search multiple feasible arm trajectory branches when a moving joint approaches its
   braking distance, instead of assuming travel is monotone in peak velocity. Add
   moving-state and repeated-planning regressions and state the profile search's limits.
