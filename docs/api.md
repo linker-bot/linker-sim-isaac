@@ -370,6 +370,12 @@ An Isaac Lab `RigidObjectCfg` for the object at `pos` / `rot` in the environment
 Give each object of a scene its own `prim_path` (e.g. `"{ENV_REGEX_NS}/box"`).
 Given only `mass` [kg], the centre of mass and inertia are those of a uniform density over
 the parts' hulls; give `com` and `inertia` (3×3, about the centre of mass) to set them.
+Mass must be a finite positive scalar, `com` a finite real vector of shape `(3,)`, and
+`inertia` a finite real symmetric matrix of shape `(3, 3)`, with positive principal moments
+satisfying the inertia triangle inequalities. Symmetry differences up to `1e-7` times the
+largest absolute matrix entry are treated as rounding and averaged. Mass and principal moments must
+remain finite and positive in USD's float precision; the centre of mass must remain finite.
+Invalid values raise `ValueError` before a file is written.
 `visual` (a `Part`) is shown instead of the parts and never collides.
 
 ### `fixed_cfg(parts, *, pos=(0, 0, 0), rot=(0, 0, 0, 1), prim_path="{ENV_REGEX_NS}/fixed")`
@@ -381,6 +387,7 @@ with the object material but never move.
 
 The object's USD file, written into the user cache (e.g. for Isaac Lab's
 `MultiUsdFileCfg`, a different object per environment). `mass=None` writes a fixed object.
+Dynamic objects use the same physical-parameter checks as `object_cfg`.
 
 ### `load_mesh(path, scale=1.0)`
 
@@ -390,6 +397,8 @@ A mesh file (STL, OBJ, PLY, ...) as a list of one `Part`, in metres after `scale
 
 Centre of mass (3,) and inertia about it (3×3) [kg m²] for a uniform density over the
 parts' hulls.
+The parts must be nonempty, each hull must have finite positive volume, and `mass` must
+satisfy the positive finite scalar checks above.
 
 ### `on_table(parts, xy, rot=(0, 0, 0, 1), clearance=0.001)`
 
