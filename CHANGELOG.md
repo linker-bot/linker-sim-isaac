@@ -23,6 +23,10 @@ version.
 - `object_cfg`, `write_usd` and `mass_properties` reject a mass that is not positive, and a
   given `com` or `inertia` that is malformed or (for the inertia) not symmetric.
 
+- With goals, a moving joint close to its goal now takes the fastest motion (Ruckig's): it
+  could brake and accelerate again (0.27 s instead of 0.22 s for 0.05 rad at 0.4 rad/s), and
+  replanning every decision could change the path.
+
 ## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving

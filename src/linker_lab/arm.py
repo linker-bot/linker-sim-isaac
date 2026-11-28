@@ -107,15 +107,19 @@ TORQUE_GUARD_MARGIN = 1.0
 #
 # One joint, state (p, v, a), goal g at rest. The time-optimal jerk-limited motion to g
 # has 7 phases of constant jerk: change the velocity to a peak vp (jerk +-J, 0, -+J;
-# acceleration limited to A), cruise at vp, change the velocity back to 0. Its travel
-# grows with vp, so vp is found by bisection: vp = +-V with a cruise if even the fastest
-# peak does not overshoot, else the vp whose travel without cruise is exactly g - p.
+# acceleration limited to A), cruise at vp, change the velocity back to 0. vp = +-V with
+# a cruise if even the fastest peak does not overshoot. Otherwise vp is a peak whose
+# travel without cruise is exactly g - p, or the velocity the joint coasts at once its
+# acceleration is ramped to 0, with a cruise; while the joint moves, travel is not
+# monotone in vp, so _fastest compares the candidates (see there).
 # The joints are then synchronized: every joint is slowed to the slowest one's
 # duration T by lowering its peak velocity (and cruising longer) until it takes T.
 
 F64 = wp.float64
 _vec7 = wp.types.vector(length=7, dtype=wp.float64)
 _BISECTIONS = 50  # vp to 2^-50 of its range
+_PROFILE_INTERVALS = 8  # per side of the coast velocity
+_PROFILE_INTERVAL_FRACTION = 1.0 / _PROFILE_INTERVALS
 
 
 @wp.struct
@@ -192,6 +196,19 @@ def _travel(v0: F64, a0: F64, vp: F64, amax: F64, jmax: F64) -> wp.vec2d:
 
 
 @wp.func
+def _travel_root(e: F64, v0: F64, a0: F64, lo: F64, hi: F64, amax: F64, jmax: F64) -> F64:
+    """One bracketed travel root; either increasing or decreasing branches are valid."""
+    below = _travel(v0, a0, lo, amax, jmax)[0] <= e
+    for _ in range(_BISECTIONS):
+        mid = F64(0.5) * (lo + hi)
+        if (_travel(v0, a0, mid, amax, jmax)[0] <= e) == below:
+            lo = mid
+        else:
+            hi = mid
+    return F64(0.5) * (lo + hi)
+
+
+@wp.func
 def _fastest(e: F64, v0: F64, a0: F64, vmax: F64, amax: F64, jmax: F64) -> wp.vec3d:
     """Peak velocity, cruise time and duration of the time-optimal motion over distance e."""
     zero = F64(0.0)
@@ -204,16 +221,49 @@ def _fastest(e: F64, v0: F64, a0: F64, vmax: F64, amax: F64, jmax: F64) -> wp.ve
         elif e <= down[0]:
             result = wp.vec3d(-vmax, (e - down[0]) / (-vmax), down[1] + (e - down[0]) / (-vmax))
         else:
-            lo = -vmax
-            hi = vmax
-            for _ in range(_BISECTIONS):
-                mid = F64(0.5) * (lo + hi)
-                if _travel(v0, a0, mid, amax, jmax)[0] < e:
-                    lo = mid
-                else:
-                    hi = mid
-            vp = F64(0.5) * (lo + hi)
-            result = wp.vec3d(vp, zero, _travel(v0, a0, vp, amax, jmax)[1])
+            # Travel is not monotone in vp while the joint moves, so the motion can have
+            # several roots. The velocity change reverses at the coast velocity; on each
+            # side of it, scan for the intervals where travel crosses e and solve the one
+            # whose ends are fastest; the faster of the two is the fastest root.
+            split = wp.clamp(v0 + a0 * wp.abs(a0) / (F64(2.0) * jmax), -vmax, vmax)
+            result = wp.vec3d(zero, zero, F64(1.0e30))
+            for side in range(2):
+                start = -vmax
+                end = split
+                if side == 1:
+                    start = split
+                    end = vmax
+                best = F64(1.0e30)
+                best_lo = start
+                best_hi = start
+                lo = start
+                at_lo = _travel(v0, a0, lo, amax, jmax)
+                for i in range(_PROFILE_INTERVALS):
+                    hi = start + (end - start) * F64(i + 1) * F64(_PROFILE_INTERVAL_FRACTION)
+                    at_hi = _travel(v0, a0, hi, amax, jmax)
+                    if (at_lo[0] <= e and e <= at_hi[0]) or (at_hi[0] <= e and e <= at_lo[0]):
+                        if wp.min(at_lo[1], at_hi[1]) < best:
+                            best = wp.min(at_lo[1], at_hi[1])
+                            best_lo = lo
+                            best_hi = hi
+                    lo = hi
+                    at_lo = at_hi
+                if best < F64(1.0e30):
+                    vp = _travel_root(e, v0, a0, best_lo, best_hi, amax, jmax)
+                    duration = _travel(v0, a0, vp, amax, jmax)[1]
+                    if duration < result[2]:
+                        result = wp.vec3d(vp, zero, duration)
+            if result[2] == F64(1.0e30):  # e lies between travel(-vmax) and travel(vmax)
+                vp = _travel_root(e, v0, a0, -vmax, vmax, amax, jmax)
+                result = wp.vec3d(vp, zero, _travel(v0, a0, vp, amax, jmax)[1])
+        # Ramping the current acceleration to zero and coasting is also feasible, and keeps
+        # a moving joint's cruise instead of braking and accelerating again near its goal.
+        coast = v0 + a0 * wp.abs(a0) / (F64(2.0) * jmax)
+        if coast != zero and wp.abs(coast) <= vmax:
+            travel = _travel(v0, a0, coast, amax, jmax)
+            duration = (e - travel[0]) / coast
+            if duration >= zero and travel[1] + duration < result[2]:
+                result = wp.vec3d(coast, duration, travel[1] + duration)
     return result
 
 
