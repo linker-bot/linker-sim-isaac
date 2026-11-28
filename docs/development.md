@@ -11,9 +11,8 @@ uv run --no-sync ruff check .
 ```
 
 The `dev` dependency group adds pytest, Ruff and Ruckig; it is not a `--extra dev` feature.
-It is not installed by default. Ruckig has no aarch64 wheel in the lockfile, so developers
-on aarch64 need a C++20 compiler to build it. Use `--no-sync` for subsequent development
-commands as shown here, or include `--group dev` when allowing `uv run` to synchronize.
+Only `--group dev` installs it; `install.sh` and a plain `uv sync` leave it out. On aarch64,
+Ruckig has no wheel and is built from source, which needs a C++20 compiler.
 The simulation runtime is still installed. CPU checks do not provide a CPU-only backend or
 make this project usable on macOS/Windows. Keep `uv.lock` unchanged unless intentionally
 updating dependencies; `uv lock --check` checks consistency without resolving a new graph.

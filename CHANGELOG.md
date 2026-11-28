@@ -7,8 +7,8 @@ version.
 
 ## Unreleased
 
-- Install runtime dependencies by default; opt in to development tools with `--group dev`.
-  Normal aarch64 installation no longer builds the Ruckig controller-test reference.
+- `install.sh` and `uv sync` no longer install the test tools (pytest, Ruff, Ruckig), so an
+  aarch64 installation no longer compiles Ruckig; `uv sync --locked --group dev` adds them.
 
 ## 2.0.0 (2026-11-27)
 

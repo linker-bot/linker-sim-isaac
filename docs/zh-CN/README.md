@@ -20,8 +20,6 @@ cd linker-sim-isaac
 
 `install.sh` 先检查上述要求，在需要时把 uv（Python 包管理器）安装到 `~/.local/bin`，再把 Python 3.12、Isaac Lab 3.0 和物理引擎按 `uv.lock` 中锁定的版本安装到本目录的 `.venv` 中（首次需下载约 4 GB），最后运行 `linker-lab doctor`。
 
-默认安装和 `uv run` 只使用运行依赖；测试工具需另用 `uv sync --locked --group dev` 安装。
-
 如果安装程序安装了 uv，当前终端还找不到它（`uv: command not found`）：打开一个新终端，或运行 `source ~/.local/bin/env`。
 
 LW-v0 的机器人模型文件随安装一起装好：来自 [linker-sim-assets](https://github.com/linker-bot/linker-sim-assets) 的软件包 `linker-lw-v0`，版本标签 `v1.0.0`。
