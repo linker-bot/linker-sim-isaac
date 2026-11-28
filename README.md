@@ -6,9 +6,10 @@ The repository is `linker-sim-isaac`; the package and its command are `linker-la
 import is `linker_lab`.
 
 An Isaac Lab extension providing one Linker workstation, **LW-v0**: two AR5 arms with O6
-hands, a table and three cameras, behaving like the real robot. The robot's files, its
-drives, the real controller's motion limits and one physics setup are built in. Simulation
-models these constraints; task performance still needs validation on the real workstation.
+hands, a table and three cameras. The robot's files, drive models, controller motion limits
+and one physics setup are built in. These model selected workstation constraints;
+task performance still needs validation on the real workstation. See the
+[validation scope](docs/validation-scope.md) for the supported claims and remaining gaps.
 
 Use it to
 
@@ -45,6 +46,7 @@ scripts run headless.
 - [API reference](docs/api.md): everything linker-lab provides, and what stays stable
 - [Requirements](docs/requirements.md), [troubleshooting](docs/getting-started.md#troubleshooting)
 - [Development and validation](docs/development.md), [changelog](CHANGELOG.md)
+- [Validation scope](docs/validation-scope.md): observations, collision coverage and policy evidence
 - [中文快速入门](docs/zh-CN/README.md)
 
 ## Develop

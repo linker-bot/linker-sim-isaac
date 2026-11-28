@@ -112,6 +112,10 @@ One action term per arm and hand, in this order in the action vector.
   the right unit, then their velocities [rad/s] (terms `left_joint_pos`, `right_joint_pos`,
   `left_joint_vel`, `right_joint_vel`).
 
+These 52 joint-state values omit the arm trajectory generator's and hand motors' internal
+state. They are not a complete Markov state. Tasks can add observation/action history or
+their own controller-state terms; see [the observation example](environment.md#observations-resets-episodes).
+
 ### `EventsCfg`
 
 - `reset_to_home`: on reset, every asset back to its default state (the robot at home)

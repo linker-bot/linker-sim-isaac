@@ -1,7 +1,8 @@
 # The policy gallery
 
-The gallery is for trying pretrained policies on LW-v0, interactively, in the viewer.
-Measuring a policy belongs to the repository it was trained in; the gallery shows it.
+The gallery runs pretrained policies on LW-v0, interactively, in the viewer. Its results
+apply to the supplied objects, placement distribution and simulation settings. A completed
+viewer sequence alone does not establish grasp success or a success rate.
 
 ```bash
 uv run linker-lab gallery list               # the entries
@@ -47,6 +48,21 @@ One workstation and a panel:
 Thin and flat objects (cutlery, markers, dice, screwdrivers) and the bowl are not in the
 list: the policy does not grasp them reliably yet. The scene runs at about 0.5-0.8× real time: fastest with the object
 at rest, slower while it settles or is grasped (contacts cost time).
+
+### Inputs and evaluation scope
+
+The 512 points are sampled from the complete object geometry in `objects.npz`; they are
+not camera measurements. The observation also uses simulation poses, velocities and robot
+state. Occlusion, depth noise, segmentation and pose estimation are outside this entry's
+input pipeline. The actor runs once before the grasp, and execution is open loop.
+
+The manifest describes 31 objects and their resting poses selected after a training-side
+evaluation reported at least 95% success over the specified placement region. That is a
+selection criterion, not a measured success rate for all YCB objects or this checkout.
+This repository distributes inference code and hashed artifacts, but does not include the
+training implementation, its evaluation records or a reproduction of the reported rate.
+See [validation scope](validation-scope.md#policy-evidence) for the records needed to
+support a new evaluation claim.
 
 **Licences.** The objects are CC BY 4.0 (Calli et al., "The YCB Object and Model Set", 2015).
 The policy weights are for research use only (non-commercial). `gallery info` shows the

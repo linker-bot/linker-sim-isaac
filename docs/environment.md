@@ -40,9 +40,11 @@ minute, cached too).
 | `env.scene["support"]` | The table and the column the arms are mounted on, fixed |
 
 They are LW-v0's files from [linker-sim-assets](https://github.com/linker-bot/linker-sim-assets),
-unchanged: masses, joint ranges, drives, collision shapes and contact settings. Within a unit
-only different fingers collide with each other; everything else collides as on the real
-robot. There is no floor (the playground adds one) and no camera sensor until you add one.
+unchanged: masses, joint ranges, drives, collision shapes and contact settings. Within a unit,
+only different fingers collide with each other. Other pairs in the same articulation are
+filtered out, so the model does not provide full arm or hand-to-arm self-collision checking.
+Use a separate collision check before executing a planned path on hardware. There is no
+floor (the playground adds one) and no camera sensor until you add one.
 
 **Timing.** The physics runs at 480 Hz with collision detection every step. One action is
 a **decision**, applied for 8 physics steps: 60 decisions per second (`env.step_dt` = 1/60 s).
@@ -160,6 +162,25 @@ each unit (group `policy`) and resets every environment to home on `env.reset()`
 rewards and no terminations: an episode never ends by itself, so a script can drive the robot
 for as long as it likes. Tasks add their own rewards and terminations. Tasks subclass `LWv0EnvCfg` and replace its parts; the
 [task template](../templates/task/README.md) shows each one.
+
+The default 52 values are a joint-state observation, not the complete simulation state.
+The arm trajectory generator and hand motors retain internal state, so the same joint
+positions and velocities can produce different next states after different command
+histories. A policy may need recent observations and actions, or explicit task-specific
+controller state. For example, this adds the last action and eight decisions of history:
+
+```python
+from isaaclab.envs import mdp
+from isaaclab.managers import ObservationTermCfg
+
+cfg.observations.policy.last_action = ObservationTermCfg(func=mdp.last_action)
+cfg.observations.policy.history_length = 8
+cfg.observations.policy.flatten_history_dim = True
+```
+
+This changes the policy input shape and requires a policy trained for that shape. A fixed
+history can help a policy infer hidden state; it does not guarantee a Markov observation.
+Snapshots currently reject observation history because its buffers are not saved.
 
 **Terminations reset inside `env.step()`.** When a task's termination term fires (a time
 limit, an object dropped), Isaac Lab resets that environment in the same `env.step()`: the
