@@ -483,17 +483,10 @@ The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied t
 (about 40 KB plus the observations). Raises `SnapshotError` for
 what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
-your own); an observation term with a history or delay; callable objects or bound methods
-used as observation, reward, termination or event terms, observation modifiers or noise
-models (their internal state is not saved); an event term at intervals or with a reset
-cooldown; command,
+your own); an observation term with a history, a delay, or a modifier or noise model that is
+a class; an event term at intervals, or a reset event with a cooldown; command,
 curriculum or recorder terms; rigid object collections, deformable objects, cables or surface
 grippers; a sensor other than a camera; a permanent external wrench.
-
-Plain functions and `functools.partial` wrappers of them are supported for these terms,
-modifiers and noise. They must be stateless: state kept in a closure, mutable parameters or
-extra environment attributes is not captured. Stateless random noise using the saved
-random generators remains supported.
 
 ### `restore(env, snapshot)`
 

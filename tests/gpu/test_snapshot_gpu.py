@@ -63,9 +63,9 @@ def test_restore_in_a_new_process(directory, mode):
     [
         ("two_envs", {"capture": "num_envs is 2", "restore": "num_envs is 2"}),
         ("no_contract", {"capture": "no get_state", "restore": "no get_state"}),
-        ("delay", {"capture": "observation delay", "restore": "observation delay"}),
-        ("modifier", {"capture": "modifier uses a callable", "restore": "modifier uses a callable"}),
-        ("cooldown", {"capture": "reset cooldown", "restore": "reset cooldown"}),
+        ("delay", {"capture": "with a delay", "restore": "with a delay"}),
+        ("modifier", {"capture": "noise model with state", "restore": "noise model with state"}),
+        ("cooldown", {"capture": "has a cooldown", "restore": "has a cooldown"}),
         ("config", {"restore": "configuration differs", "versions": "other package versions", "shape": "episode_length"}),
     ],
 )

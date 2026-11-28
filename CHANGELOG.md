@@ -7,9 +7,9 @@ version.
 
 ## Unreleased
 
-- Refuse snapshots with observation delays, callable state in manager terms, modifiers or
-  noise models, or reset-event cooldowns; these states are not included in a snapshot.
-  Stateless function terms and noise remain supported.
+- `snapshot.capture` and `restore` refuse an observation delay, a modifier or noise model that
+  is a class, and a reset event with a cooldown: Isaac Lab keeps their state outside the
+  snapshot.
 
 ## 2.0.0 (2026-11-27)
 
