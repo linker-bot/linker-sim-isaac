@@ -17,6 +17,9 @@ version.
   is a class, and a reset event with a cooldown: Isaac Lab keeps their state outside the
   snapshot.
 
+- Use separate temporary USD layers for concurrent object conversions, including threads
+  in the same process, and remove temporary files when conversion fails.
+
 ## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
