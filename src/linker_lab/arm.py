@@ -14,8 +14,8 @@ one reference (q_ref, v_ref) per physics step (480 Hz):
 
 ``interpolation=True`` (default)
     The command is a **goal**. :func:`plan` (a GPU trajectory generator) moves the reference
-    toward the latest goal: time-optimal under the velocity, acceleration and jerk
-    limits, all seven joints arriving together, replanned every decision from the
+    toward the latest goal under the velocity, acceleration and jerk limits,
+    all seven joints arriving together, replanned every decision from the
     reference's own position, velocity and acceleration.
 ``interpolation=False``
     The command is the **next point of the caller's own path** (``stream``):
@@ -105,17 +105,21 @@ TORQUE_GUARD_MARGIN = 1.0
 
 # ------------------------------------------------------------- trajectory generator
 #
-# One joint, state (p, v, a), goal g at rest. The time-optimal jerk-limited motion to g
+# One joint, state (p, v, a), goal g at rest. A jerk-limited motion to g
 # has 7 phases of constant jerk: change the velocity to a peak vp (jerk +-J, 0, -+J;
 # acceleration limited to A), cruise at vp, change the velocity back to 0. Its travel
-# grows with vp, so vp is found by bisection: vp = +-V with a cruise if even the fastest
-# peak does not overshoot, else the vp whose travel without cruise is exactly g - p.
+# is not monotone in vp when the joint already moves. Search bracketed roots in
+# separate intervals and keep the shortest feasible candidate, including a coast
+# after the initial acceleration has ramped to zero. This bounded search is not a
+# proof of global time optimality or equivalence to every Ruckig trajectory.
 # The joints are then synchronized: every joint is slowed to the slowest one's
 # duration T by lowering its peak velocity (and cruising longer) until it takes T.
 
 F64 = wp.float64
 _vec7 = wp.types.vector(length=7, dtype=wp.float64)
 _BISECTIONS = 50  # vp to 2^-50 of its range
+_PROFILE_INTERVALS = 64
+_PROFILE_INTERVAL_FRACTION = 1.0 / _PROFILE_INTERVALS
 
 
 @wp.struct
@@ -192,8 +196,21 @@ def _travel(v0: F64, a0: F64, vp: F64, amax: F64, jmax: F64) -> wp.vec2d:
 
 
 @wp.func
+def _travel_root(e: F64, v0: F64, a0: F64, lo: F64, hi: F64, amax: F64, jmax: F64) -> F64:
+    """One bracketed travel root; either increasing or decreasing branches are valid."""
+    below = _travel(v0, a0, lo, amax, jmax)[0] <= e
+    for _ in range(_BISECTIONS):
+        mid = F64(0.5) * (lo + hi)
+        if (_travel(v0, a0, mid, amax, jmax)[0] <= e) == below:
+            lo = mid
+        else:
+            hi = mid
+    return F64(0.5) * (lo + hi)
+
+
+@wp.func
 def _fastest(e: F64, v0: F64, a0: F64, vmax: F64, amax: F64, jmax: F64) -> wp.vec3d:
-    """Peak velocity, cruise time and duration of the time-optimal motion over distance e."""
+    """Peak, cruise and duration of the shortest feasible profile found by the search."""
     zero = F64(0.0)
     result = wp.vec3d(zero, zero, zero)  # at rest at the goal: nothing to do
     if e != zero or v0 != zero or a0 != zero:
@@ -204,16 +221,40 @@ def _fastest(e: F64, v0: F64, a0: F64, vmax: F64, amax: F64, jmax: F64) -> wp.ve
         elif e <= down[0]:
             result = wp.vec3d(-vmax, (e - down[0]) / (-vmax), down[1] + (e - down[0]) / (-vmax))
         else:
-            lo = -vmax
-            hi = vmax
-            for _ in range(_BISECTIONS):
-                mid = F64(0.5) * (lo + hi)
-                if _travel(v0, a0, mid, amax, jmax)[0] < e:
-                    lo = mid
-                else:
-                    hi = mid
-            vp = F64(0.5) * (lo + hi)
+            # The endpoints bracket at least one root, even if a narrow pair of
+            # other roots falls between the search intervals below.
+            vp = _travel_root(e, v0, a0, -vmax, vmax, amax, jmax)
             result = wp.vec3d(vp, zero, _travel(v0, a0, vp, amax, jmax)[1])
+        # Ramping the current acceleration to zero gives a useful feasible coast
+        # velocity. In particular this retains a moving joint's cruise instead of
+        # selecting an unnecessary deceleration/acceleration branch near its goal.
+        coast = v0 + a0 * wp.abs(a0) / (F64(2.0) * jmax)
+        if coast != zero and wp.abs(coast) <= vmax:
+            travel = _travel(v0, a0, coast, amax, jmax)
+            duration = (e - travel[0]) / coast
+            if duration >= zero and travel[1] + duration < result[2]:
+                result = wp.vec3d(coast, duration, travel[1] + duration)
+        # Include the coast velocity as a partition boundary: roots close to it
+        # must not disappear into one uniform interval as a0 approaches zero.
+        split = wp.clamp(coast, -vmax, vmax)
+        for side in range(2):
+            start = -vmax
+            end = split
+            if side == 1:
+                start = split
+                end = vmax
+            lo = start
+            distance = _travel(v0, a0, lo, amax, jmax)[0]
+            for i in range(_PROFILE_INTERVALS):
+                hi = start + (end - start) * F64(i + 1) * F64(_PROFILE_INTERVAL_FRACTION)
+                next_distance = _travel(v0, a0, hi, amax, jmax)[0]
+                if (distance <= e and e <= next_distance) or (next_distance <= e and e <= distance):
+                    vp = _travel_root(e, v0, a0, lo, hi, amax, jmax)
+                    duration = _travel(v0, a0, vp, amax, jmax)[1]
+                    if duration < result[2]:
+                        result = wp.vec3d(vp, zero, duration)
+                lo = hi
+                distance = next_distance
     return result
 
 
@@ -297,8 +338,8 @@ def plan(q, v, a, goal, vmax, amax, jmax, dt: float, steps: int):
     All inputs are float64 torch tensors on one device: states and goal (N, 7), limits (7,).
     The state must be within the limits and able to stop within them (any state on a
     previous plan is). Returns positions, velocities and accelerations (N, steps, 7):
-    time-optimal under the limits with every joint arriving at its goal together, at
-    rest from then on.
+    bounded by the limits with every joint arriving at its goal together, at rest
+    from then on. The profile search does not guarantee global time optimality.
     """
     wp.init()  # no-op once Warp is initialized
     n = q.shape[0]

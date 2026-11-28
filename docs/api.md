@@ -209,8 +209,9 @@ commanded through the xCore SDK in one of two ways, and `ArmAction` models both:
 
 - **Interpolation on** (`interpolation=True`, default; the SDK's PP tracking): each command
   is a **goal**. A jerk-limited trajectory generator moves toward the latest goal,
-  time-optimal under the limits, all seven joints arriving together, replanned every
-  decision.
+  under the limits, all seven joints arriving together, replanned every decision. The
+  bounded profile search compares feasible branches; it does not guarantee global
+  time optimality or numerical equivalence to every xCore/Ruckig trajectory.
 - **Interpolation off** (`interpolation=False`; the SDK's CSP servo): each command is the
   **next point of your own path**, joined to the previous one by a cubic Hermite curve.
 

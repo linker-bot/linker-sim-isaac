@@ -76,7 +76,7 @@ def test_generator_arrives_when_ruckig_does_within_the_limits(moving):
 
 
 def test_each_joint_alone_is_as_fast_as_ruckig():
-    """Without synchronization, every joint's own time-optimal profile has Ruckig's duration."""
+    """The independent profiles match Ruckig for these moving-state regression cases."""
     for q, v, a, goal in random_cases(7, 20, moving=True):
         duration, trajectory = ruckig_duration(q, v, a, goal, ruckig.Synchronization.No)
         for j in range(7):
@@ -88,6 +88,38 @@ def test_each_joint_alone_is_as_fast_as_ruckig():
             assert arrival(qs, vs, single_goal) == pytest.approx(
                 trajectory.independent_min_durations[j], abs=1.5 * DT
             )
+
+
+@pytest.mark.parametrize("direction", [-1.0, 1.0])
+@pytest.mark.parametrize("acceleration", [-0.5, 0.0, 0.5])
+def test_moving_joint_near_braking_distance_uses_the_shorter_branch(direction, acceleration):
+    """Travel is not monotone in peak velocity: a root below v0 need not be fastest."""
+    q, v, a, goal = ([0.0] * 7 for _ in range(4))
+    v[6], a[6], goal[6] = direction * 0.4, direction * acceleration, direction * 0.05
+    expected, _ = ruckig_duration(q, v, a, goal)
+    qs, vs, as_ = one_plan(q, v, a, goal, seconds=0.6)
+    assert arrival(qs, vs, goal) == pytest.approx(expected, abs=1.5 * DT)
+    assert_within_limits(q, v, a, qs, vs, as_)
+    if acceleration == 0:
+        # Coast for 25 ms at 0.4 rad/s, then brake with jerk +/-40 for 100 ms
+        # each: this feasible 225 ms motion was faster than the old 277 ms root.
+        assert arrival(qs, vs, goal) <= 0.225 + DT
+
+
+def test_replanning_a_synchronized_cruise_does_not_restart_braking():
+    """The shorter joint reaches the non-monotone travel region while cruising."""
+    goal = torch.zeros(1, 7, **F64)
+    goal[0, 5:] = torch.tensor(np.radians([37.0, -41.0]), **F64)
+    initial = [torch.zeros_like(goal) for _ in range(3)]
+    dt, steps = 1 / 480, 8
+    whole = arm.plan(*initial, goal, V, A, J, dt, 8 * 120)
+    state = initial
+    pieces = []
+    for _ in range(120):
+        out = arm.plan(*state, goal, V, A, J, dt, steps)
+        pieces.append(out[0])
+        state = [x[:, -1].clone() for x in out]
+    torch.testing.assert_close(torch.cat(pieces, 1), whole[0], rtol=0, atol=1e-9)
 
 
 def test_no_overshoot_from_rest_and_straight_line_in_joint_space():
