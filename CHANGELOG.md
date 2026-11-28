@@ -5,6 +5,12 @@ what [docs/api.md](docs/api.md) lists. A change that breaks it is a new major ve
 removal first warns for one minor release, and a new version of LW-v0's files is a new minor
 version.
 
+## Unreleased
+
+- Refuse snapshots with observation delays, callable state in manager terms, modifiers or
+  noise models, or reset-event cooldowns; these states are not included in a snapshot.
+  Stateless function terms and noise remain supported.
+
 ## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving

@@ -38,6 +38,9 @@ One environment (``num_envs == 1``). :func:`capture` refuses (:class:`SnapshotEr
 cannot account for rather than skipping it. Calling these functions inside ``env.step()`` is not
 supported.
 
+Observation delays and stateful manager callbacks are refused. Plain function callbacks
+must not retain state in closures, mutable parameters or extra environment attributes.
+
 Importing this module applies ``linker_lab.bootstrap()``, so import it before Isaac Lab.
 """
 
@@ -50,11 +53,13 @@ linker_lab.bootstrap()
 import datetime
 import hashlib
 import importlib.metadata as metadata
+import inspect
 import json
 import random
 import re
 import subprocess
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -147,6 +152,16 @@ def _refusals(env) -> None:
     def refuse(what: str):
         raise SnapshotError(f"cannot snapshot this environment: {what}")
 
+    def require_function(func, what: str):
+        # Callable objects and bound methods can retain state outside env.obs_buf and
+        # the manager's counters. Plain functions (including partials) must be stateless.
+        while isinstance(func, partial):
+            func = func.func
+        owner = getattr(func, "__self__", None)
+        builtin = inspect.isbuiltin(func) and (owner is None or inspect.ismodule(owner))
+        if not (inspect.isfunction(func) or builtin):
+            refuse(f"{what} uses a callable with unsaved state ({type(func).__name__})")
+
     if env.num_envs != 1:
         refuse(f"num_envs is {env.num_envs}; a snapshot holds one environment")
     for name in env.action_manager.active_terms:
@@ -154,11 +169,32 @@ def _refusals(env) -> None:
         if not (callable(getattr(term, "get_state", None)) and callable(getattr(term, "set_state", None))):
             refuse(f"action term {name!r} ({type(term).__name__}) has no get_state() / set_state()")
     for group, cfgs in env.observation_manager._group_obs_term_cfgs.items():
-        for cfg in cfgs:
+        for index, cfg in enumerate(cfgs):
+            what = f"observation group {group!r} term {index}"
             if (cfg.history_length or 0) > 0:
                 refuse(f"observation group {group!r} has a term with a history")
+            if cfg.delay_max_lag > 0:
+                refuse(f"{what} has an observation delay (its buffer is not saved)")
+            require_function(cfg.func, what)
+            for modifier in cfg.modifiers or ():
+                require_function(modifier.func, f"{what} modifier")
+            if cfg.noise is not None:
+                require_function(cfg.noise.func, f"{what} noise")
     if "interval" in env.event_manager.available_modes:
         refuse("an event term runs at intervals (its timers are not saved)")
+    for manager_name in ("reward_manager", "termination_manager", "event_manager"):
+        manager = getattr(env, manager_name, None)
+        if manager is None:
+            continue
+        names = manager.active_terms
+        if isinstance(names, dict):
+            names = [name for group in names.values() for name in group]
+        for name in names:
+            cfg = manager.get_term_cfg(name)
+            what = f"{manager_name.removesuffix('_manager')} term {name!r}"
+            require_function(cfg.func, what)
+            if manager_name == "event_manager" and cfg.min_step_count_between_reset > 0:
+                refuse(f"{what} has a reset cooldown (its trigger state is not saved)")
     for manager in ("command_manager", "curriculum_manager", "recorder_manager"):
         terms = getattr(getattr(env, manager, None), "active_terms", None)
         if terms:
