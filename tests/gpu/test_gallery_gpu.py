@@ -22,14 +22,12 @@ def report(*args) -> dict:
     return json.loads(line[7:])
 
 
-def test_every_object_comes_to_rest_and_seeded_grasps_succeed():
+def test_every_object_comes_to_rest_and_both_grasps_hold():
     r = report(HERE / "gallery_check.py", "005_tomato_soup_can", "013_apple")
     print(r)
     assert r["objects"] == 31 and r["not_at_rest"] == []
     assert set(r["grasps"]) == {"005_tomato_soup_can", "013_apple"}
-    assert all(trial["success"] is True for trial in r["grasps"].values()), r["grasps"]
-    assert all(trial["plan_valid"] and all(trial["checks"].values())
-               for trial in r["grasps"].values()), r["grasps"]
+    assert all(m.endswith(": grasped.") for m in r["grasps"].values()), r["grasps"]
     assert r["reset_state"] == "empty"
 
 

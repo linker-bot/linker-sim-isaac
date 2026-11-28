@@ -52,36 +52,6 @@ at rest, slower while it settles or is grasped (contacts cost time).
 The policy weights are for research use only (non-commercial). `gallery info` shows the
 licences of the weights and the objects.
 
-## Headless evaluation from a source checkout
-
-Run the same scene and success checks without opening the viewer:
-
-```bash
-uv run --no-sync python scripts/evaluate_gallery.py \
-  --objects 005_tomato_soup_can 013_apple --seeds 0 1 2 3 4 \
-  --output tests/outputs/gallery-evaluation.json
-```
-
-Omit `--objects` to evaluate all 31 selected objects. The default seeds are 0 through 9.
-Each object/seed pair starts from reset with its own random generator; changing the object
-order does not change the placement samples. The simulation can still differ across GPU
-and software configurations. The JSON records source and artifact hashes, software and GPU
-versions, settled poses, per-trial checks and reasons, and per-object and aggregate rates.
-It verifies that the loaded package and gallery entry belong to this checkout and records
-their source hashes; run `uv sync` here if another installation is being imported.
-Placement failures, infeasible plans and timeouts remain in the denominator. The scene
-retains its existing maximum of two placement retries and records how many were used.
-
-The report is saved after each trial. An interrupted run keeps `complete: false` and must
-not be treated as a completed benchmark. To apply an acceptance threshold chosen before
-running, pass `--min-success-rate 0.95`; the command exits nonzero below that rate. This is
-an example threshold, not a measured baseline. The two seeded GPU regression cases also
-require actual grasp success, separately from the viewer's button/state checks.
-
-This evaluates the selected gallery distribution using complete geometry and simulation
-state. It does not reproduce training, evaluate a camera perception pipeline or establish
-performance on unselected YCB objects or physical hardware.
-
 ## Writing an entry
 
 Develop an entry in the `policy-gallery/` folder of a clone of this repository. Editable installs
