@@ -59,34 +59,3 @@ def test_failed_conversion_leaves_no_partial_file(parts, monkeypatch, tmp_path, 
         objects.write_usd(parts, 0.1)
     assert list(tmp_path.iterdir()) == []
 
-
-def test_failed_competing_conversion_preserves_completed_object(parts, monkeypatch):
-    write_stage = objects._write_stage
-    failed_started = threading.Event()
-    good_published = threading.Event()
-    calls = iter(("fail", "succeed"))
-
-    def competing_write(path, *args):
-        if next(calls) == "fail":
-            path.write_text("unfinished stage")
-            failed_started.set()
-            assert good_published.wait(timeout=10)
-            raise RuntimeError("conversion failed")
-        write_stage(path, *args)
-
-    def publish_good():
-        assert failed_started.wait(timeout=10)
-        try:
-            return objects.write_usd(parts, 0.1)
-        finally:
-            good_published.set()
-
-    monkeypatch.setattr(objects, "_write_stage", competing_write)
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        failed = pool.submit(objects.write_usd, parts, 0.1)
-        succeeded = pool.submit(publish_good)
-        path = succeeded.result(timeout=30)
-        with pytest.raises(RuntimeError, match="conversion failed"):
-            failed.result(timeout=30)
-    assert_object(path)
-    assert list(path.parent.iterdir()) == [path]

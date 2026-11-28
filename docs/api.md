@@ -381,9 +381,6 @@ with the object material but never move.
 
 The object's USD file, written into the user cache (e.g. for Isaac Lab's
 `MultiUsdFileCfg`, a different object per environment). `mass=None` writes a fixed object.
-Concurrent conversions use separate temporary USD layers and publish only completed files.
-An unsuccessful conversion cleans its temporary files without removing another caller's
-completed object from the cache.
 
 ### `load_mesh(path, scale=1.0)`
 
