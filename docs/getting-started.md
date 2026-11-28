@@ -6,7 +6,7 @@ playground (5 minutes), the gallery (10 minutes).
 
 ## 1. Install
 
-You need a Linux computer (x86_64, or aarch64 such as a Jetson Thor) with an NVIDIA GPU (driver 580 or newer), glibc 2.34 or
+You need a Linux computer (x86_64, or aarch64 such as a Jetson Thor) with an NVIDIA GPU (driver 580 or newer), glibc 2.35 or
 newer (Ubuntu 22.04 or newer), `git`, internet access and 10 GB of free disk; see
 [requirements](requirements.md). Everything else is installed by the script.
 

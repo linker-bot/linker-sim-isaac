@@ -43,6 +43,8 @@ dev = [
 ]
 
 [tool.uv]
+# Running the workstation does not require the test tools. Developers opt in with --group dev.
+default-groups = []
 # Linux with an NVIDIA GPU: x86_64, or aarch64 (e.g. Jetson Thor on JetPack 7).
 environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",

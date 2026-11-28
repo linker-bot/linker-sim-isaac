@@ -243,6 +243,15 @@ def refuse(case, directory) -> dict:
         cfg.actions.right_hand = mdp.JointPositionActionCfg(asset_name="right", joint_names=list(workstation.HAND_JOINTS["right"]))
     if case == "config":
         cfg.episode_length_s = 20.0
+    if case == "delay":
+        cfg.observations.policy.left_joint_pos.delay_min_lag = 2
+        cfg.observations.policy.left_joint_pos.delay_max_lag = 2
+    if case == "modifier":
+        from isaaclab.utils.modifiers import IntegratorCfg
+
+        cfg.observations.policy.left_joint_pos.modifiers = [IntegratorCfg(dt=1 / 60)]
+    if case == "cooldown":
+        cfg.events.reset_to_home.min_step_count_between_reset = 10
     raised = []
     with launch_simulation(cfg, {"headless": True}):
         env = gym.make("Linker-LW-v0", cfg=cfg).unwrapped
@@ -252,7 +261,7 @@ def refuse(case, directory) -> dict:
         before = scene_state(env), control(env) if case != "no_contract" else None, clock(env)
         saved = snapshot.load(d / "pose.pt")
         attempts = {"restore": lambda: snapshot.restore(env, saved)}
-        if case in ("two_envs", "no_contract"):
+        if case in ("two_envs", "no_contract", "delay", "modifier", "cooldown"):
             attempts["capture"] = lambda: snapshot.capture(env)
         if case == "config":
             edited = snapshot.Snapshot({**saved.header, "packages": {**saved.header["packages"], "linker-lw-v0": "0.9.0"}}, saved.state)

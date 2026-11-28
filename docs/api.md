@@ -370,6 +370,8 @@ An Isaac Lab `RigidObjectCfg` for the object at `pos` / `rot` in the environment
 Give each object of a scene its own `prim_path` (e.g. `"{ENV_REGEX_NS}/box"`).
 Given only `mass` [kg], the centre of mass and inertia are those of a uniform density over
 the parts' hulls; give `com` and `inertia` (3×3, about the centre of mass) to set them.
+A mass that is not positive, a `com` that is not 3 numbers, or an `inertia` that is not a
+symmetric 3×3 matrix of a physical body raises `ValueError`.
 `visual` (a `Part`) is shown instead of the parts and never collides.
 
 ### `fixed_cfg(parts, *, pos=(0, 0, 0), rot=(0, 0, 0, 1), prim_path="{ENV_REGEX_NS}/fixed")`
@@ -483,7 +485,8 @@ The state of `env` (the unwrapped `ManagerBasedRLEnv`) as a `Snapshot`, copied t
 (about 40 KB plus the observations). Raises `SnapshotError` for
 what it cannot account for:
 `num_envs != 1`; an action term without `get_state()` / `set_state()` (add them to a term of
-your own); an observation term with a history; an event term at intervals; command,
+your own); an observation term with a history, a delay, or a modifier or noise model that is
+a class; an event term at intervals, or a reset event with a cooldown; command,
 curriculum or recorder terms; rigid object collections, deformable objects, cables or surface
 grippers; a sensor other than a camera; a permanent external wrench.
 
