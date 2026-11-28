@@ -96,6 +96,28 @@ def test_rejects_unphysical_inertia():
         objects.write_usd([box((0.05, 0.05, 0.05))], 0.1, (0, 0, 0), np.diag([1e-4, 1e-4, 3e-4]))
 
 
+@pytest.mark.parametrize("mass", [0, -0.1, float("nan"), float("inf")])
+@pytest.mark.parametrize("given_inertia", [False, True])
+def test_rejects_a_mass_that_is_not_positive(mass, given_inertia):
+    com_inertia = ((0, 0, 0), np.diag([1e-4, 1e-4, 1e-4])) if given_inertia else ()
+    with pytest.raises(ValueError, match="mass must be positive"):
+        objects.write_usd([box((0.05, 0.05, 0.05))], mass, *com_inertia)
+
+
+@pytest.mark.parametrize(
+    "com, inertia, message",
+    [
+        ((0, 0), np.diag([1e-4, 1e-4, 1e-4]), "com must be"),
+        ((0, float("nan"), 0), np.diag([1e-4, 1e-4, 1e-4]), "com must be"),
+        ((0, 0, 0), np.diag([1e-4, 1e-4]), "inertia must be"),
+        ((0, 0, 0), np.array([[1e-4, 1e-5, 0], [0, 1e-4, 0], [0, 0, 1e-4]]), "inertia must be"),
+    ],
+)
+def test_rejects_a_malformed_com_or_inertia(com, inertia, message):
+    with pytest.raises(ValueError, match=message):
+        objects.write_usd([box((0.05, 0.05, 0.05))], 0.1, com, inertia)
+
+
 def test_table_and_placement():
     table = objects.table()
     assert table["top"] == pytest.approx(-0.4998)  # 0.5 m below the arm-base origin

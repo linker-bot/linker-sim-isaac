@@ -74,10 +74,18 @@ def load_mesh(path: str | Path, scale: float = 1.0) -> list[Part]:
     return [(np.asarray(mesh.vertices, dtype=np.float64) * scale, np.asarray(mesh.faces))]
 
 
+def _check_mass(mass) -> float:
+    mass = float(mass)
+    if not (np.isfinite(mass) and mass > 0):
+        raise ValueError(f"mass must be positive and finite, not {mass}")
+    return mass
+
+
 def mass_properties(parts: Sequence[Part], mass: float) -> tuple[np.ndarray, np.ndarray]:
     """Centre of mass and 3x3 inertia about it [kg m^2], uniform density over the parts' hulls."""
     import trimesh
 
+    mass = _check_mass(mass)
     hulls = [trimesh.convex.convex_hull(np.asarray(v, dtype=np.float64)) for v, _ in parts]
     volumes = np.array([h.volume for h in hulls])
     if np.any(volumes <= 0):
@@ -112,9 +120,16 @@ def write_usd(
             raise ValueError("a fixed object (mass None) has no centre of mass or inertia")
         body = None
     else:
+        mass = _check_mass(mass)
         if com is None:
             com, inertia = mass_properties(parts, mass)
         com, inertia = np.asarray(com, dtype=np.float64), np.asarray(inertia, dtype=np.float64)
+        if com.shape != (3,) or not np.isfinite(com).all():
+            raise ValueError(f"com must be 3 finite numbers, not {com}")
+        # eigh reads one triangle only, so an asymmetric matrix would be used without notice
+        symmetric = inertia.shape == (3, 3) and np.allclose(inertia, inertia.T, rtol=1e-6, atol=1e-12)
+        if not (symmetric and np.isfinite(inertia).all()):
+            raise ValueError(f"inertia must be a finite symmetric 3x3 matrix, not {inertia.tolist()}")
         principal, axes = np.linalg.eigh(inertia)
         a, b, c = principal
         if a <= 0 or a + b < c:  # eigh sorts ascending, so this covers every triangle inequality

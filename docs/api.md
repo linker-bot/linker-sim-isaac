@@ -370,6 +370,8 @@ An Isaac Lab `RigidObjectCfg` for the object at `pos` / `rot` in the environment
 Give each object of a scene its own `prim_path` (e.g. `"{ENV_REGEX_NS}/box"`).
 Given only `mass` [kg], the centre of mass and inertia are those of a uniform density over
 the parts' hulls; give `com` and `inertia` (3×3, about the centre of mass) to set them.
+A mass that is not positive, a `com` that is not 3 numbers, or an `inertia` that is not a
+symmetric 3×3 matrix of a physical body raises `ValueError`.
 `visual` (a `Part`) is shown instead of the parts and never collides.
 
 ### `fixed_cfg(parts, *, pos=(0, 0, 0), rot=(0, 0, 0, 1), prim_path="{ENV_REGEX_NS}/fixed")`

@@ -20,6 +20,9 @@ version.
 - Use separate temporary USD layers for concurrent object conversions, including threads
   in the same process, and remove temporary files when conversion fails.
 
+- `object_cfg`, `write_usd` and `mass_properties` reject a mass that is not positive, and a
+  given `com` or `inertia` that is malformed or (for the inertia) not symmetric.
+
 ## 2.0.0 (2026-11-27)
 
 The first release of linker-lab: one Linker workstation, LW-v0, in Isaac Lab 3.0, behaving
